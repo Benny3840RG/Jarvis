@@ -230,8 +230,10 @@ recovery.
 
 The Local V1 gate is `proveLocalV1Recovery`. It calls `restoreLocalV1Archive`
 into a new JSON directory and an injected empty database, then requires two
-calls to the injected reader to return the same non-empty ids. It does not
-restart an operating-system process, write the live data directory, or
+calls to the injected reader to return the same non-empty ids. A node test
+opens two HTTP apps on scratch stores. The required restarted-process proof
+is **NOT YET MET**. It is still owed as a host or dogfood step under LV1-10
+or LV1-11. This gate does not write the live data directory and it does not
 construct a client from `CONVEX_URL`. `completeness` stays `partial`. This is
 not a recovery.
 

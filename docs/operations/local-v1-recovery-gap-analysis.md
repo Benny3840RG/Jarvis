@@ -324,7 +324,13 @@ Reread is through `JsonClientStore`, `JsonQuoteStore`, `JsonInvoiceStore`, `Conv
 
 Landed as `proveLocalV1Recovery` in `typescript/src/backup/v4/localV1Proof.ts`. It calls `restoreLocalV1Archive` and does not add a second apply path. `clear-local` refuses a classic verify receipt that omits business checksums. The explicit skip remains. `completeness` stays `partial`. Operator text names that gate in `archive-v4.md` and `persistence-settings.md`.
 
-`proveLocalV1Recovery` returns success only when these checks pass. It does not restart an operating-system process, and it does not serve HTTP itself.
+The proof criteria are unchanged. They still require a restarted process before the GET results are matched:
+
+`capture/export → validate → isolated restore → normal store/API reread → reference/artifact checks → runtime restart → rollback proof`
+
+Runtime restart means a restarted process serves `GET` for a client, a task, a build, and a quote, and those results match the read taken before the restart. That criterion is **NOT YET MET**. What exists today is two isolated reads through the injected reader, plus the node test that opens two HTTP apps on scratch stores. The restarted-process proof is still owed, as a host or dogfood step under LV1-10 or LV1-11.
+
+`proveLocalV1Recovery` does not meet that criterion. Recovery is not complete. The function returns success only when these partial checks pass:
 
 - The caller passed `readIsolated`.
 - `restoreLocalV1Archive` is the only apply. The live data directory digest is the same before and after, including when restore throws.
@@ -335,9 +341,7 @@ Landed as `proveLocalV1Recovery` in `typescript/src/backup/v4/localV1Proof.ts`. 
 - Each captured PDF artifact has a blob file that is not a symlink, and the file's sha256 and length match the manifest.
 - Two calls to the injected `readIsolated` callback return the same client, task, build, and quote ids, and an empty id fails the gate. A capture with no client, no task, no build, or no quote therefore does not pass.
 
-Convex tests supply that callback and read the scratch stores. A node test calls `rereadIsolatedHttp`, which opens two `createJarvisHttpApp` instances on scratch stores and compares `GET` for a client, a task, a build, and a quote. Those apps are not a restarted operating-system process.
-
-Not yet met, and not part of this gate: a restarted OS process that serves those four GETs again and matches the first read. That remains an open follow-up.
+Convex tests supply that callback. The node test calls `rereadIsolatedHttp`, which opens two `createJarvisHttpApp` instances on scratch stores and compares those four GETs. That is the partial stand-in named above. It is not the restarted-process criterion.
 
 The gate fails closed if any row was skipped for size, if any PDF byte is missing, or if the Convex target URL equals the configured live URL. It does not flip `completeness` to `complete`. Recovery is not complete.
 
@@ -387,4 +391,4 @@ Closed by the integration lead on 2026-10-07. See the decision list at the top o
 
 ## 8. What this file is not
 
-It is not a recovery drill and not a claim that any archive on disk is restorable. PR 1 locks the split. PR 2 writes a partial capture only. PR 3 restores that capture into scratch JSON and an injected empty database. PR 4 names the proof gate `proveLocalV1Recovery`. The function checks two isolated reads through the injected reader. A node test opens two `createJarvisHttpApp` instances on scratch stores. A restarted OS process that serves the four GETs is not yet met. It does not flip `completeness` to `complete`. Recovery is not complete. PR 5 records that gate in the operator docs. `assertRecoverable` still refuses the archive.
+It is not a recovery drill and not a claim that any archive on disk is restorable. PR 1 locks the split. PR 2 writes a partial capture only. PR 3 restores that capture into scratch JSON and an injected empty database. PR 4 names the proof gate `proveLocalV1Recovery`. The restarted-process criterion stays required and is **NOT YET MET**. What exists today is two isolated reads through the injected reader, plus the node test that opens two HTTP apps on scratch stores. That proof is still owed as a host or dogfood step under LV1-10 or LV1-11. It does not flip `completeness` to `complete`. Recovery is not complete. PR 5 records that gate in the operator docs. `assertRecoverable` still refuses the archive.
