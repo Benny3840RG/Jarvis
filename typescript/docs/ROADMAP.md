@@ -4,7 +4,7 @@
 
 `GET /api/v1/quotes/{quoteId}/revisions/{revision}/pdf` returns the stored artifact from the existing `quotePdfArtifacts` reader. The reader still checks the revision fingerprint and sha256 digest before any bytes leave the process. No second blob store.
 
-When the quote lifecycle repository is configured, the daily brief and the HUD snapshot both read `listQuotes` plus `getQuote` through `readLifecycleQuoteRegister`. An open finalized revision is projected as `sent` so it shows in the brief pipeline. The flat quote file is used only when that repository is absent. JSON mode is unchanged.
+When the quote lifecycle repository is configured, the daily brief and the HUD snapshot both read `listQuotes` plus `getQuote` through `readLifecycleQuoteRegister`. An open finalized revision is `sent` only when the existing delivery ledger has a succeeded receipt for that revision. A finalized quote with no succeeded receipt stays `draft` and is not awaiting a response. The flat quote file is used only when that repository is absent. JSON mode is unchanged.
 
 Voice query briefs still take the flat quote store passed into `createAuthoritativeVoiceQueries`. That path was left alone.
 

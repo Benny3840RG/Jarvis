@@ -2,6 +2,7 @@ import { Controller, Get, HttpStatus, Inject } from "@nestjs/common";
 
 import { readLifecycleQuoteRegister } from "../briefs/lifecycleBriefQuotes.js";
 import { composeDailyBrief, type DailyBrief } from "../briefs/brief.js";
+import type { QuoteDeliveryRepository } from "../quotes/quoteDeliveryRepository.js";
 import type { QuoteRepository } from "../quotes/quoteRepository.js";
 import type { PersistenceProvider } from "../persistence/persistence.js";
 import { resolveReminderTimezone } from "../reminders/due.js";
@@ -18,6 +19,7 @@ import {
   HTTP_PERSISTENCE,
   HTTP_PROJECT_STORE,
   HTTP_QUOTE_STORE,
+  HTTP_QUOTE_DELIVERY_REPOSITORY,
   HTTP_QUOTE_REPOSITORY,
   HTTP_ASSET_STORE,
   HTTP_ENQUIRY_STORE,
@@ -50,6 +52,8 @@ export class BriefController {
     @Inject(HTTP_PROJECT_STORE) private readonly projects: ProjectStore,
     @Inject(HTTP_QUOTE_STORE) private readonly quotes: QuoteStore,
     @Inject(HTTP_QUOTE_REPOSITORY) private readonly quoteRepository: QuoteRepository | null,
+    @Inject(HTTP_QUOTE_DELIVERY_REPOSITORY)
+    private readonly quoteDeliveries: QuoteDeliveryRepository | null,
     @Inject(HTTP_ASSET_STORE) private readonly assets: AssetStore,
     @Inject(HTTP_ENQUIRY_STORE) private readonly enquiries: EnquiryStore,
     @Inject(HTTP_INVOICE_STORE) private readonly invoices: InvoiceStore,
@@ -104,6 +108,8 @@ export class BriefController {
   private briefQuotes(): Promise<Quote[]> {
     const repository = this.quoteRepository;
     if (!repository) return this.quotes.list();
-    return readLifecycleQuoteRegister(repository).then((register) => register.quotes);
+    return readLifecycleQuoteRegister(repository, this.quoteDeliveries).then(
+      (register) => register.quotes,
+    );
   }
 }

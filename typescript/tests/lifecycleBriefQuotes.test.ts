@@ -8,12 +8,17 @@ import {
   briefQuoteStatus,
   quoteFromLifecycleSnapshot,
   readLifecycleQuoteRegister,
+  succeededDeliveryReceiptForRevision,
 } from "../src/briefs/lifecycleBriefQuotes.js";
 import type { DailyBrief } from "../src/briefs/brief.js";
 import { createJarvisHttpApp } from "../src/http/app.js";
 import type { HttpAppConfig } from "../src/http/config.js";
 import type { PersistenceProvider } from "../src/persistence/persistence.js";
 import { InMemoryQuoteStore } from "../src/quotes/inMemoryQuoteStore.js";
+import type {
+  QuoteDeliveryAttempt,
+  QuoteDeliveryRepository,
+} from "../src/quotes/quoteDeliveryRepository.js";
 import type { QuoteAggregate, QuoteRevision, QuoteSnapshot } from "../src/quotes/quoteLifecycle.js";
 import type { QuoteRepository, QuoteSummary } from "../src/quotes/quoteRepository.js";
 import { captureCredentials, type CredentialsRuntime } from "../src/settings/credentialsStatus.js";
@@ -122,6 +127,50 @@ function repositoryFor(
   };
 }
 
+function deliveryAttempt(overrides: Partial<QuoteDeliveryAttempt> = {}): QuoteDeliveryAttempt {
+  return {
+    deliveryAttemptId: "delivery-1",
+    ownerId: "owner-1",
+    quoteId: "lifecycle-1",
+    revision: 1,
+    revisionId: "revision-1",
+    revisionFingerprint: "quote-revision:v1:sha256:abc",
+    recipient: "client@example.com",
+    channel: "email",
+    sendFingerprint: "quote-send-fingerprint:v1:sha256:bbbb",
+    idempotencyKey: "execute-send-1",
+    approvalId: "execute-send-1",
+    actionFingerprint: "jarvis-action-fingerprint:v1:cccc",
+    status: "succeeded",
+    provider: "test-email-provider",
+    createdAt: 50,
+    updatedAt: 50,
+    completedAt: 50,
+    ...overrides,
+  };
+}
+
+function deliveryRepository(
+  attempts: QuoteDeliveryAttempt[],
+  overrides: Partial<QuoteDeliveryRepository> = {},
+): QuoteDeliveryRepository {
+  const unused = (): Promise<never> => Promise.reject(new Error("unused quote delivery method"));
+  return {
+    getBySendScope: unused,
+    createPending: unused,
+    markExecuting: unused,
+    bindProviderReference: unused,
+    complete: unused,
+    markIndeterminate: unused,
+    reconcile: unused,
+    async listForQuote(input) {
+      return attempts.filter((attempt) => attempt.quoteId === input.quoteId);
+    },
+    cleanup: unused,
+    ...overrides,
+  };
+}
+
 function persistence(): PersistenceProvider {
   const forbidden = (): never => {
     throw new Error("mutations must not be reached");
@@ -163,14 +212,26 @@ afterEach(async () => {
 });
 
 describe("lifecycle quotes in the daily brief", () => {
-  it("maps an open finalized revision to sent and keeps line items from the snapshot", () => {
+  it("keeps an open finalized revision as draft until that revision was delivered", () => {
     const row = snapshot();
-    const quote = quoteFromLifecycleSnapshot(row);
+    const quote = quoteFromLifecycleSnapshot(row, { hasSucceededDelivery: false });
     assert.equal(
-      briefQuoteStatus({ revisionStatus: "finalized", commercialStatus: "open" }),
+      briefQuoteStatus({
+        revisionStatus: "finalized",
+        commercialStatus: "open",
+        hasSucceededDelivery: false,
+      }),
+      "draft",
+    );
+    assert.equal(
+      briefQuoteStatus({
+        revisionStatus: "finalized",
+        commercialStatus: "open",
+        hasSucceededDelivery: true,
+      }),
       "sent",
     );
-    assert.equal(quote.status, "sent");
+    assert.equal(quote.status, "draft");
     assert.equal(quote.id, "lifecycle-1");
     assert.equal(quote.total, 627);
     assert.equal(quote.subtotal, 570);
@@ -184,22 +245,106 @@ describe("lifecycle quotes in the daily brief", () => {
 
   it("keeps reviewed work as draft and closed commercial outcomes out of the pipeline", () => {
     assert.equal(
-      briefQuoteStatus({ revisionStatus: "reviewed", commercialStatus: "open" }),
+      briefQuoteStatus({
+        revisionStatus: "reviewed",
+        commercialStatus: "open",
+        hasSucceededDelivery: false,
+      }),
       "draft",
     );
-    assert.equal(briefQuoteStatus({ revisionStatus: "draft", commercialStatus: "open" }), "draft");
     assert.equal(
-      briefQuoteStatus({ revisionStatus: "finalized", commercialStatus: "accepted" }),
+      briefQuoteStatus({
+        revisionStatus: "draft",
+        commercialStatus: "open",
+        hasSucceededDelivery: true,
+      }),
+      "draft",
+    );
+    assert.equal(
+      briefQuoteStatus({
+        revisionStatus: "finalized",
+        commercialStatus: "accepted",
+        hasSucceededDelivery: true,
+      }),
       "accepted",
     );
     assert.equal(
-      briefQuoteStatus({ revisionStatus: "finalized", commercialStatus: "declined" }),
+      briefQuoteStatus({
+        revisionStatus: "finalized",
+        commercialStatus: "declined",
+        hasSucceededDelivery: false,
+      }),
       "declined",
     );
     assert.equal(
-      briefQuoteStatus({ revisionStatus: "finalized", commercialStatus: "expired" }),
+      briefQuoteStatus({
+        revisionStatus: "finalized",
+        commercialStatus: "expired",
+        hasSucceededDelivery: false,
+      }),
       "declined",
     );
+  });
+
+  it("accepts only a succeeded receipt for the current revision", () => {
+    const row = snapshot().revision;
+    assert.equal(succeededDeliveryReceiptForRevision(deliveryAttempt(), row), true);
+    assert.equal(
+      succeededDeliveryReceiptForRevision(
+        deliveryAttempt({ status: "reconciled", reconciledOutcome: "succeeded" }),
+        row,
+      ),
+      true,
+    );
+    for (const status of ["pending", "executing", "failed", "indeterminate"] as const) {
+      assert.equal(succeededDeliveryReceiptForRevision(deliveryAttempt({ status }), row), false);
+    }
+    assert.equal(
+      succeededDeliveryReceiptForRevision(
+        deliveryAttempt({ status: "reconciled", reconciledOutcome: "failed" }),
+        row,
+      ),
+      false,
+    );
+    assert.equal(
+      succeededDeliveryReceiptForRevision(
+        deliveryAttempt({ revision: 2, revisionId: "revision-2" }),
+        row,
+      ),
+      false,
+    );
+    assert.equal(
+      succeededDeliveryReceiptForRevision(deliveryAttempt({ revisionId: "revision-other" }), row),
+      false,
+    );
+    assert.equal(
+      succeededDeliveryReceiptForRevision(
+        deliveryAttempt({ revisionFingerprint: "quote-revision:v1:sha256:other" }),
+        row,
+      ),
+      false,
+    );
+  });
+
+  it("does not invent a delivery when the ledger is absent", async () => {
+    const register = await readLifecycleQuoteRegister(repositoryFor([snapshot()]), null);
+    assert.equal(register.summaries[0]?.revisionStatus, "finalized");
+    assert.equal(register.quotes[0]?.status, "draft");
+  });
+
+  it("projects a succeeded receipt for the current revision as sent", async () => {
+    const register = await readLifecycleQuoteRegister(
+      repositoryFor([snapshot()]),
+      deliveryRepository([deliveryAttempt()]),
+    );
+    assert.equal(register.quotes[0]?.status, "sent");
+    const reconciled = await readLifecycleQuoteRegister(
+      repositoryFor([snapshot()]),
+      deliveryRepository([
+        deliveryAttempt({ status: "reconciled", reconciledOutcome: "succeeded" }),
+      ]),
+    );
+    assert.equal(reconciled.quotes[0]?.status, "sent");
   });
 
   it("fails closed when a listed quote has no matching snapshot", async () => {
@@ -212,12 +357,13 @@ describe("lifecycle quotes in the daily brief", () => {
               return null;
             },
           }),
+          deliveryRepository([deliveryAttempt()]),
         ),
       LifecycleQuoteRegisterError,
     );
   });
 
-  it("shows a finalized lifecycle quote on the brief and ignores the flat quote store", async () => {
+  it("does not count a finalized quote as sent when no delivery succeeded", async () => {
     const flat = new InMemoryQuoteStore();
     await flat.add({
       clientId: "client-flat",
@@ -232,6 +378,51 @@ describe("lifecycle quotes in the daily brief", () => {
       logger: false,
       quoteStore: flat,
       quoteRepository: repositoryFor([snapshot()]),
+      quoteDeliveryRepository: deliveryRepository([
+        deliveryAttempt({ status: "failed", providerErrorCode: "rejected" }),
+        deliveryAttempt({
+          deliveryAttemptId: "delivery-old",
+          revision: 2,
+          revisionId: "revision-2",
+          status: "succeeded",
+        }),
+      ]),
+    });
+    openApps.push(app);
+
+    const response = await app.inject({ method: "GET", url: "/api/v1/brief", headers: AUTH });
+    assert.equal(response.statusCode, 200);
+    const brief = response.json<{ data: DailyBrief }>().data;
+    assert.equal(brief.quotes.countsByStatus.sent, 0);
+    assert.equal(brief.quotes.countsByStatus.draft, 1);
+    assert.equal(brief.quotes.pipelineTotal, 0);
+    assert.equal(brief.quotes.awaitingResponse.length, 0);
+    assert.equal(brief.quotes.drafts[0]?.id, "lifecycle-1");
+    assert.equal(brief.quotes.drafts[0]?.number, "Q-LIFE");
+    assert.equal(brief.quotes.drafts[0]?.status, "draft");
+    assert.equal(brief.quotes.drafts[0]?.total, 627);
+    assert.equal(brief.headline.includes("1 quote awaiting response"), false);
+    assert.equal(brief.headline.includes("0 quotes awaiting response"), true);
+    assert.equal(JSON.stringify(brief).includes("Q-FLAT"), false);
+  });
+
+  it("counts a finalized revision as sent when that revision has a succeeded delivery receipt", async () => {
+    const flat = new InMemoryQuoteStore();
+    await flat.add({
+      clientId: "client-flat",
+      number: "Q-FLAT",
+      status: "draft",
+      lineItems: [{ description: "Old file", quantity: 1, unitPrice: 10 }],
+    });
+    const app = await createJarvisHttpApp({
+      persistence: persistence(),
+      providerName: "json",
+      config: CONFIG,
+      credentialsRuntime: credentials(),
+      logger: false,
+      quoteStore: flat,
+      quoteRepository: repositoryFor([snapshot()]),
+      quoteDeliveryRepository: deliveryRepository([deliveryAttempt()]),
     });
     openApps.push(app);
 
@@ -244,10 +435,21 @@ describe("lifecycle quotes in the daily brief", () => {
     assert.equal(brief.quotes.awaitingResponse.length, 1);
     assert.equal(brief.quotes.awaitingResponse[0]?.id, "lifecycle-1");
     assert.equal(brief.quotes.awaitingResponse[0]?.number, "Q-LIFE");
+    assert.equal(brief.quotes.awaitingResponse[0]?.status, "sent");
     assert.equal(brief.quotes.awaitingResponse[0]?.total, 627);
     assert.equal(brief.quotes.awaitingResponse[0]?.lineItems[0]?.description, "Deck boards");
     assert.equal(brief.headline.includes("1 quote awaiting response"), true);
     assert.equal(JSON.stringify(brief).includes("Q-FLAT"), false);
+
+    const hud = await app.inject({ method: "GET", url: "/api/v1/hud/snapshot" });
+    assert.equal(hud.statusCode, 200);
+    const body = hud.json<{
+      brief: DailyBrief;
+      quoteRegister: { status: string; quotes: QuoteSummary[] };
+    }>();
+    assert.equal(body.quoteRegister.quotes[0]?.revisionStatus, "finalized");
+    assert.equal(body.brief.quotes.awaitingResponse[0]?.id, "lifecycle-1");
+    assert.equal(body.brief.quotes.countsByStatus.sent, 1);
   });
 
   it("returns 503 when the lifecycle register cannot be read", async () => {
@@ -286,6 +488,7 @@ describe("lifecycle quotes in the daily brief", () => {
       credentialsRuntime: credentials(),
       logger: false,
       quoteRepository: repositoryFor([snapshot()]),
+      quoteDeliveryRepository: deliveryRepository([]),
     });
     openApps.push(app);
 
@@ -298,7 +501,40 @@ describe("lifecycle quotes in the daily brief", () => {
     assert.equal(body.quoteRegister.status, "ready");
     assert.equal(body.quoteRegister.quotes[0]?.quoteId, "lifecycle-1");
     assert.equal(body.quoteRegister.quotes[0]?.revisionStatus, "finalized");
-    assert.equal(body.brief.quotes.awaitingResponse[0]?.id, body.quoteRegister.quotes[0]?.quoteId);
-    assert.equal(body.brief.quotes.pipelineTotal, body.quoteRegister.quotes[0]?.total);
+    assert.equal(body.brief.quotes.countsByStatus.sent, 0);
+    assert.equal(body.brief.quotes.awaitingResponse.length, 0);
+    assert.equal(body.brief.quotes.pipelineTotal, 0);
+    assert.equal(body.brief.quotes.drafts[0]?.id, body.quoteRegister.quotes[0]?.quoteId);
+    assert.equal(body.brief.headline.includes("1 quote awaiting response"), false);
+  });
+
+  it("returns 503 when the delivery ledger cannot be read for a finalized quote", async () => {
+    const flat = new InMemoryQuoteStore();
+    await flat.add({
+      clientId: "client-flat",
+      number: "Q-FLAT",
+      status: "sent",
+      lineItems: [{ description: "Old file", quantity: 1, unitPrice: 10 }],
+    });
+    const app = await createJarvisHttpApp({
+      persistence: persistence(),
+      providerName: "json",
+      config: CONFIG,
+      logger: false,
+      quoteStore: flat,
+      quoteRepository: repositoryFor([snapshot()]),
+      quoteDeliveryRepository: deliveryRepository([], {
+        async listForQuote() {
+          throw new Error("delivery ledger offline");
+        },
+      }),
+    });
+    openApps.push(app);
+
+    const response = await app.inject({ method: "GET", url: "/api/v1/brief", headers: AUTH });
+    assert.equal(response.statusCode, 503);
+    assert.equal(response.json<{ type: string }>().type, "urn:jarvis:problem:brief-unavailable");
+    assert.equal(response.body.includes("Q-FLAT"), false);
+    assert.equal(response.body.includes("Q-LIFE"), false);
   });
 });

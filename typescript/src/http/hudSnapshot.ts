@@ -14,6 +14,7 @@ import type { ErrandStore } from "../errands/errand.js";
 import type { InvoiceStore } from "../invoices/invoice.js";
 import type { ProjectStore } from "../projects/project.js";
 import type { QuoteStore } from "../quotes/quote.js";
+import type { QuoteDeliveryRepository } from "../quotes/quoteDeliveryRepository.js";
 import type { QuoteRepository } from "../quotes/quoteRepository.js";
 import { resolveReminderTimezone } from "../reminders/due.js";
 import type { CredentialsRuntime } from "../settings/credentialsStatus.js";
@@ -35,6 +36,7 @@ export type HudSnapshotSources = {
   invoices: InvoiceStore;
   errands: ErrandStore;
   quoteRepository: QuoteRepository | null;
+  quoteDeliveryRepository: QuoteDeliveryRepository | null;
   activity: ActivityEventReader | null;
   liveWork: DevelopmentLiveWorkSource | null;
   credentials: CredentialsRuntime;
@@ -50,7 +52,7 @@ export async function readHudSnapshot(input: HudSnapshotSources): Promise<Dashbo
   const timezone = resolveReminderTimezone(input.config.timezone);
   const now = Date.now();
   const registerPromise = input.quoteRepository
-    ? readLifecycleQuoteRegister(input.quoteRepository)
+    ? readLifecycleQuoteRegister(input.quoteRepository, input.quoteDeliveryRepository)
     : null;
   const [tasks, reminders, projects, flatQuotes, assets, enquiries, invoices, errands, register] =
     await Promise.all([
