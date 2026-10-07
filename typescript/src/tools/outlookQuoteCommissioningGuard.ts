@@ -65,13 +65,74 @@ function parseHttpUrl(value: string, name: string): URL {
   return url;
 }
 
-function isEmail(value: string): boolean {
-  return value.length <= 320 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(value);
+const DEPLOYMENT_SLUG = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/u;
+
+function developmentSlug(deployment: string): string {
+  if (deployment.startsWith("prod:") || !deployment.startsWith("dev:")) {
+    throw refused("CONVEX_DEPLOYMENT must identify a development deployment (dev:...).");
+  }
+  const slug = deployment.slice("dev:".length).trim().toLowerCase();
+  if (!DEPLOYMENT_SLUG.test(slug)) {
+    throw refused("CONVEX_DEPLOYMENT must identify a development deployment (dev:...).");
+  }
+  return slug;
+}
+
+function authorityHasExplicitPort(value: string): boolean {
+  const scheme = value.indexOf("://");
+  const rest = scheme === -1 ? value : value.slice(scheme + 3);
+  const end = rest.search(/[/?#]/u);
+  const authority = end === -1 ? rest : rest.slice(0, end);
+  const at = authority.lastIndexOf("@");
+  const hostport = at === -1 ? authority : authority.slice(at + 1);
+  if (hostport.startsWith("[")) return hostport.includes("]:");
+  return hostport.includes(":");
+}
+
+function assertDevelopmentConvexUrl(raw: string, url: URL, slug: string): void {
+  if (url.username !== "" || url.password !== "") {
+    throw refused("CONVEX_URL must be loopback or exactly the dev deployment host.");
+  }
+  if (isLoopbackHost(url.hostname)) return;
+  if (url.port !== "" || authorityHasExplicitPort(raw)) {
+    throw refused("CONVEX_URL must be loopback or exactly the dev deployment host.");
+  }
+  if (url.hostname !== `${slug}.convex.cloud`) {
+    throw refused("CONVEX_URL must be loopback or exactly the dev deployment host.");
+  }
+}
+
+function stripMailto(value: string): string {
+  return value.toLowerCase().startsWith("mailto:") ? value.slice("mailto:".length).trim() : value;
+}
+
+/** Addr-spec after display-name, mailto, case, and one trailing-dot fold. Plus-tags stay. */
+function exactMailbox(value: string): string | null {
+  let text = stripMailto(value.trim());
+  const wrapped = text.match(/<([^<>]+)>/u);
+  if (wrapped?.[1]) text = stripMailto(wrapped[1].trim());
+  text = text.trim().toLowerCase();
+  if (text.endsWith(".")) text = text.slice(0, -1);
+  if (text.length > 320 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(text)) return null;
+  return text;
+}
+
+/** Customer-contact key: exact mailbox with one `+tag` removed from the local part. */
+function contactKey(value: string): string | null {
+  const mailbox = exactMailbox(value);
+  if (!mailbox) return null;
+  const at = mailbox.lastIndexOf("@");
+  const local = mailbox.slice(0, at);
+  const domain = mailbox.slice(at + 1);
+  const plus = local.indexOf("+");
+  const base = plus > 0 ? local.slice(0, plus) : local;
+  if (!base) return null;
+  return `${base}@${domain}`;
 }
 
 /**
- * Refuses production, a non-dev Convex deployment, a non-loopback API, and a
- * recipient that is not the explicit non-customer commissioning mailbox.
+ * Refuses production, a Convex URL that is not loopback or this dev deployment,
+ * a non-loopback API, and a recipient that is not an email address.
  * Returns before any quote, send, or reconciliation call.
  */
 export function assessOutlookQuoteCommissioningGuard(
@@ -86,14 +147,11 @@ export function assessOutlookQuoteCommissioningGuard(
   }
 
   const deployment = required(environment, "CONVEX_DEPLOYMENT");
-  if (deployment.startsWith("prod:") || !deployment.startsWith("dev:")) {
-    throw refused("CONVEX_DEPLOYMENT must identify a development deployment (dev:...).");
-  }
+  const slug = developmentSlug(deployment);
 
-  const convexUrl = parseHttpUrl(required(environment, "CONVEX_URL"), "CONVEX_URL");
-  if (!isLoopbackHost(convexUrl.hostname) && !convexUrl.hostname.endsWith(".convex.cloud")) {
-    throw refused("CONVEX_URL must be loopback or a Convex cloud development host.");
-  }
+  const convexRaw = required(environment, "CONVEX_URL");
+  const convexUrl = parseHttpUrl(convexRaw, "CONVEX_URL");
+  assertDevelopmentConvexUrl(convexRaw, convexUrl, slug);
 
   const apiBaseUrl = parseHttpUrl(
     required(environment, "JARVIS_API_BASE_URL"),
@@ -120,8 +178,8 @@ export function assessOutlookQuoteCommissioningGuard(
     );
   }
 
-  const recipient = required(environment, "JARVIS_OUTLOOK_COMMISSIONING_RECIPIENT");
-  if (!isEmail(recipient)) {
+  const recipient = exactMailbox(required(environment, "JARVIS_OUTLOOK_COMMISSIONING_RECIPIENT"));
+  if (!recipient) {
     throw refused("JARVIS_OUTLOOK_COMMISSIONING_RECIPIENT must be an email address.");
   }
 
@@ -138,8 +196,9 @@ export function recipientCollidesWithContacts(
   recipient: string,
   contactValues: readonly string[],
 ): boolean {
-  const normalized = recipient.trim().toLowerCase();
-  return contactValues.some((value) => value.trim().toLowerCase() === normalized);
+  const recipientKey = contactKey(recipient);
+  if (!recipientKey) return false;
+  return contactValues.some((value) => contactKey(value) === recipientKey);
 }
 
 /**

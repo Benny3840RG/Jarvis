@@ -6,14 +6,18 @@ issues stay open until that host run is reviewed.
 
 Run it once, on the host, against the pinned development deployment and a
 mailbox that is not a customer. The kit refuses `JARVIS_ENVIRONMENT=production`,
-any `CONVEX_DEPLOYMENT` that does not start with `dev:`, a non-loopback Jarvis
-API, and a recipient that is missing the `non-customer` confirmation or that
-matches a client contact. Those checks happen before a quote is created.
+a `CONVEX_DEPLOYMENT` that is not `dev:` plus one deployment slug, a
+`CONVEX_URL` whose host is not loopback or exactly `<slug>.convex.cloud`, a
+non-loopback Jarvis API, and a recipient that is missing the `non-customer`
+confirmation or that matches a client contact. Those checks happen before a
+quote is created.
 
 The recipient is `JARVIS_OUTLOOK_COMMISSIONING_RECIPIENT`. It must be an email
-address, and `JARVIS_OUTLOOK_COMMISSIONING_CONFIRM` must be exactly
-`non-customer`. `JARVIS_OUTLOOK_COMMISSIONING_PROJECT_KEY` must already be a
-Convex totality project. This kit does not create that project.
+address. Display names, `mailto:`, case, and one trailing dot are folded away,
+and that exact mailbox is what the quote uses. A `+tag` is ignored only when
+comparing the mailbox with client contacts. `JARVIS_OUTLOOK_COMMISSIONING_CONFIRM`
+must be exactly `non-customer`. `JARVIS_OUTLOOK_COMMISSIONING_PROJECT_KEY` must
+already be a Convex totality project. This kit does not create that project.
 
 From `typescript/`, with Jarvis HTTP already listening on loopback and
 reconciliation enabled:
@@ -26,7 +30,7 @@ Required environment (shell or ignored `.env.local`, never a command argument):
 
 - `JARVIS_ENVIRONMENT=development`
 - `CONVEX_DEPLOYMENT=dev:...`
-- `CONVEX_URL` loopback or `*.convex.cloud`
+- `CONVEX_URL` loopback, or exactly `https://<slug>.convex.cloud` for `dev:<slug>`
 - `JARVIS_API_BASE_URL` loopback
 - `JARVIS_RECONCILIATION_ENABLED=true`
 - `JARVIS_SERVICE_TOKEN`

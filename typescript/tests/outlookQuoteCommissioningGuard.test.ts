@@ -37,6 +37,42 @@ describe("outlook quote commissioning guard", () => {
     assert.equal(plan.convexUrl, "http://127.0.0.1:3210/");
   });
 
+  it("binds CONVEX_URL to the dev deployment slug before any client read", async () => {
+    const plan = assessOutlookQuoteCommissioningGuard(READY);
+    assert.equal(plan.convexUrl, "https://outgoing-ram-798.convex.cloud/");
+
+    const refused = [
+      "https://other.convex.cloud",
+      "https://pleasant-octopus-123.convex.cloud",
+      "https://evil.outgoing-ram-798.convex.cloud",
+      "https://outgoing-ram-798.convex.cloud.evil.example",
+      "https://user:pass@outgoing-ram-798.convex.cloud",
+      "https://outgoing-ram-798.convex.cloud@evil.example",
+      "https://outgoing-ram-798.convex.cloud:443",
+      "https://outgoing-ram-798.convex.cloud:8443",
+    ];
+    for (const convexUrl of refused) {
+      assert.throws(
+        () => assessOutlookQuoteCommissioningGuard({ ...READY, CONVEX_URL: convexUrl }),
+        /CONVEX_URL must be loopback or exactly the dev deployment host/,
+        convexUrl,
+      );
+      let loaded = false;
+      await assert.rejects(
+        () =>
+          beginOutlookQuoteCommissioning({
+            environment: { ...READY, CONVEX_URL: convexUrl },
+            loadClientContactValues: () => {
+              loaded = true;
+              return Promise.resolve([]);
+            },
+          }),
+        /CONVEX_URL must be loopback or exactly the dev deployment host/,
+      );
+      assert.equal(loaded, false, convexUrl);
+    }
+  });
+
   it("refuses production and a prod deployment before any client read", async () => {
     assert.throws(
       () => assessOutlookQuoteCommissioningGuard({ ...READY, JARVIS_ENVIRONMENT: "production" }),
@@ -79,12 +115,16 @@ describe("outlook quote commissioning guard", () => {
       /development deployment/,
     );
     assert.throws(
+      () => assessOutlookQuoteCommissioningGuard({ ...READY, CONVEX_DEPLOYMENT: "dev:" }),
+      /development deployment/,
+    );
+    assert.throws(
       () =>
         assessOutlookQuoteCommissioningGuard({
           ...READY,
           CONVEX_URL: "https://jarvis.example",
         }),
-      /CONVEX_URL must be loopback or a Convex cloud/,
+      /CONVEX_URL must be loopback or exactly the dev deployment host/,
     );
     assert.throws(
       () =>
@@ -128,6 +168,59 @@ describe("outlook quote commissioning guard", () => {
         }),
       /matches a client contact/,
     );
+  });
+
+  it("keeps the confirmed mailbox exact after normalisation", () => {
+    const plan = assessOutlookQuoteCommissioningGuard({
+      ...READY,
+      JARVIS_OUTLOOK_COMMISSIONING_RECIPIENT: "Mailto:Ops <Commissioning@Example.invalid.>",
+    });
+    assert.equal(plan.recipient, "commissioning@example.invalid");
+    const tagged = assessOutlookQuoteCommissioningGuard({
+      ...READY,
+      JARVIS_OUTLOOK_COMMISSIONING_RECIPIENT: "commissioning+tag@example.invalid",
+    });
+    assert.equal(tagged.recipient, "commissioning+tag@example.invalid");
+  });
+
+  it("refuses a normalised client contact before a quote is created", async () => {
+    const cases = [
+      {
+        recipient: "customer@example.com",
+        contacts: ["Name <customer@example.com>"],
+      },
+      {
+        recipient: "customer@example.com",
+        contacts: ["mailto:customer@example.com"],
+      },
+      {
+        recipient: "customer+commission@example.com",
+        contacts: ["customer@example.com"],
+      },
+      {
+        recipient: "customer@example.com.",
+        contacts: ["customer@example.com"],
+      },
+    ];
+    for (const entry of cases) {
+      assert.equal(recipientCollidesWithContacts(entry.recipient, entry.contacts), true);
+      let loaded = false;
+      await assert.rejects(
+        () =>
+          beginOutlookQuoteCommissioning({
+            environment: {
+              ...READY,
+              JARVIS_OUTLOOK_COMMISSIONING_RECIPIENT: entry.recipient,
+            },
+            loadClientContactValues: () => {
+              loaded = true;
+              return Promise.resolve(entry.contacts);
+            },
+          }),
+        /matches a client contact/,
+      );
+      assert.equal(loaded, true);
+    }
   });
 
   it("records one terminal reconciliation and leaves #294 and #297 open", () => {
