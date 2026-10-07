@@ -11,6 +11,7 @@ import {
   DangerZoneRefusal,
   DangerZoneService,
   RESET_JSON_BASENAMES,
+  businessFileChecksums,
   writeBackupVerifyReceipt,
 } from "../src/settings/dangerZone/index.js";
 import { dangerZoneCardHref } from "../src/settings/credentials/endOverlap.js";
@@ -395,6 +396,23 @@ describe("clear local", () => {
     const archive = path.join(backups, "jarvis-backup.json");
     await fs.writeFile(archive, "{}\n", "utf8");
     await writeBackupVerifyReceipt(archive, new Date(Date.now() - 60 * 60 * 1000));
+    await assert.rejects(
+      () =>
+        zone.execute("clear-local", {
+          confirmation: "CLEAR LOCAL",
+          backup: { mode: "verified", path: archive },
+        }),
+      (error: unknown) =>
+        error instanceof DangerZoneRefusal &&
+        error.code === "backup" &&
+        /business file checksums/.test(error.message),
+    );
+    assert.equal(await fs.readFile(path.join(dataDir, "jarvis-clients.json"), "utf8"), "[]");
+    await writeBackupVerifyReceipt(
+      archive,
+      new Date(Date.now() - 60 * 60 * 1000),
+      await businessFileChecksums(dataDir),
+    );
     const verified = await zone.execute("clear-local", {
       confirmation: "CLEAR LOCAL",
       backup: { mode: "verified", path: archive },
@@ -410,6 +428,36 @@ describe("clear local", () => {
     }
     assert.ok(CLEAR_LOCAL_BASENAMES.includes("jarvis-business-settings.json"));
     assert.equal(CLEAR_LOCAL_BASENAMES.includes("unrelated.json"), false);
+  });
+
+  it("refuses a verified receipt whose business checksum does not match the live file", async () => {
+    const dataDir = await tempDir();
+    const backups = await tempDir();
+    const clients = path.join(dataDir, "jarvis-clients.json");
+    await fs.writeFile(clients, "[]", "utf8");
+    const archive = path.join(backups, "jarvis-backup.json");
+    await fs.writeFile(archive, "{}\n", "utf8");
+    await writeBackupVerifyReceipt(archive, new Date(), await businessFileChecksums(dataDir));
+    await fs.writeFile(clients, '{"id":"changed"}\n', "utf8");
+    const zone = service({ dataDir, backups });
+    await assert.rejects(
+      () =>
+        zone.execute("clear-local", {
+          confirmation: "CLEAR LOCAL",
+          backup: { mode: "verified", path: archive },
+        }),
+      (error: unknown) =>
+        error instanceof DangerZoneRefusal &&
+        error.code === "backup" &&
+        /does not match/.test(error.message),
+    );
+    assert.equal(await fs.readFile(clients, "utf8"), '{"id":"changed"}\n');
+    const names = await fs.readdir(dataDir);
+    assert.equal(names.includes("jarvis-clients.json"), true);
+    assert.equal(
+      names.some((name) => name.includes(".corrupt-")),
+      false,
+    );
   });
 
   it("quarantines local files when the operator explicitly skips backup", async () => {

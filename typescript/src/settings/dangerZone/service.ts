@@ -4,7 +4,11 @@ import path from "node:path";
 import { JARVIS_DATA_DIR } from "../../persistence/jarvisDataPaths.js";
 import { resolvePersistenceProviderName } from "../../persistence/providerSelection.js";
 import { appendDangerZoneAudit, type DangerZoneAuditRecord } from "./audit.js";
-import { assertVerifiedBackup, findRecentVerifiedBackup } from "./backupReceipt.js";
+import {
+  assertBusinessChecksumsForClear,
+  assertVerifiedBackup,
+  findRecentVerifiedBackup,
+} from "./backupReceipt.js";
 import {
   AUDIT_BASENAME,
   basenamesFor,
@@ -286,6 +290,10 @@ export class DangerZoneService {
         directories: this.options.backupDirectories,
         dataDir: this.options.dataDir,
         now: this.now(),
+      });
+      await assertBusinessChecksumsForClear({
+        archivePath: request.backup.path,
+        dataDir: this.options.dataDir,
       });
     }
     const quarantined = await quarantineNamedFiles({

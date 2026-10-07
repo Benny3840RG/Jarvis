@@ -14,7 +14,7 @@ export {
   RESET_JSON_BASENAMES,
   type DangerZoneModel,
 } from "./catalog.js";
-export { writeBackupVerifyReceipt } from "./backupReceipt.js";
+export { businessFileChecksums, writeBackupVerifyReceipt } from "./backupReceipt.js";
 export {
   createDangerZoneFromEnv,
   createInactiveDangerZone,
