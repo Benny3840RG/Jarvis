@@ -33,7 +33,9 @@ import { InMemoryQuoteStore } from "../quotes/inMemoryQuoteStore.js";
 import { JsonQuoteStore } from "../quotes/jsonQuoteStore.js";
 import { createQuoteRepositoryFromEnv } from "../quotes/quoteRepositoryFactory.js";
 import { createQuoteDeliveryRepositoryFromEnv } from "../quotes/quoteDeliveryRepositoryFactory.js";
+import { createQuotePdfArtifactRepositoryFromEnv } from "../quotes/quotePdfArtifactRepository.js";
 import type { QuoteDeliveryRepository } from "../quotes/quoteDeliveryRepository.js";
+import type { QuotePdfArtifactRepository } from "../quotes/quotePdfArtifactRepository.js";
 import type { QuoteRepository } from "../quotes/quoteRepository.js";
 import type { ErrandStore } from "../errands/errand.js";
 import { InMemoryErrandStore } from "../errands/inMemoryErrandStore.js";
@@ -140,6 +142,7 @@ export type CreateJarvisHttpAppOptions = (
   quoteStore?: QuoteStore;
   quoteRepository?: QuoteRepository | null;
   quoteDeliveryRepository?: QuoteDeliveryRepository | null;
+  quotePdfArtifactRepository?: QuotePdfArtifactRepository | null;
   errandStore?: ErrandStore;
   buildStore?: BuildStore;
   buildLogStore?: BuildLogStore;
@@ -291,6 +294,12 @@ export async function createJarvisHttpApp(
       : usesEnvironment
         ? createQuoteDeliveryRepositoryFromEnv()
         : null;
+  const quotePdfArtifactRepository =
+    options.quotePdfArtifactRepository !== undefined
+      ? options.quotePdfArtifactRepository
+      : usesEnvironment
+        ? createQuotePdfArtifactRepositoryFromEnv()
+        : null;
   const errandStore =
     options.errandStore ?? (usesEnvironment ? new JsonErrandStore() : new InMemoryErrandStore());
   const buildStore = selectMemoryStore(options.buildStore, usesEnvironment, providerName, {
@@ -434,6 +443,7 @@ export async function createJarvisHttpApp(
       quoteStore,
       quoteRepository,
       quoteDeliveryRepository,
+      quotePdfArtifactRepository,
       errandStore,
       buildStore,
       buildLogStore,

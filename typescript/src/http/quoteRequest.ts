@@ -47,6 +47,10 @@ function positiveInteger(value: unknown, field: string): number {
   return value;
 }
 
+export function parseQuoteRevisionParam(revisionParam: string): number {
+  return positiveInteger(Number(revisionParam), "Revision");
+}
+
 function nonNegativeInteger(value: unknown, field: string): number {
   if (typeof value !== "number" || !Number.isInteger(value) || value < 0) {
     throw new Error(`${field} must be a non-negative integer.`);

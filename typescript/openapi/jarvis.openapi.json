@@ -4130,6 +4130,81 @@
         }
       }
     },
+    "/api/v1/quotes/{quoteId}/revisions/{revision}/pdf": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/QuoteId"
+        },
+        {
+          "$ref": "#/components/parameters/QuoteRevisionNumber"
+        }
+      ],
+      "get": {
+        "operationId": "readQuoteRevisionPdf",
+        "summary": "Read a finalized revision's stored PDF",
+        "description": "Returns the stored client-ready PDF for the current finalized revision. The existing quote PDF artifact reader verifies the revision fingerprint and sha256 digest before any bytes are returned. Read-only: this route does not render or store a new artifact. A non-current or non-finalized revision is not found. Requires the Convex persistence provider and the quote PDF artifact reader.",
+        "tags": ["Quotes"],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Verified stored PDF artifact.",
+            "headers": {
+              "Content-Disposition": {
+                "description": "Attachment filename recorded with the stored artifact.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Quote-Pdf-Digest": {
+                "description": "Verified quote-pdf:v1 sha256 digest of the response bytes.",
+                "schema": {
+                  "type": "string",
+                  "pattern": "^quote-pdf:v1:sha256:[a-f0-9]{64}$"
+                }
+              },
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "contentMediaType": "application/pdf",
+                  "contentEncoding": "binary"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
     "/api/v1/quotes/{quoteId}/revisions/{revision}/fork": {
       "parameters": [
         {
