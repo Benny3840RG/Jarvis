@@ -2625,8 +2625,12 @@
         function voiceWakeGate(raw, isFinal, wakeWord) {
           var word = normalizeVoicePhrase(wakeWord || "jarvis");
           var text = normalizeVoicePhrase(raw);
-          if (text !== word && text.indexOf(word + " ") !== 0) return { status: "idle" };
-          var rest = text === word ? "" : text.slice(word.length + 1).trim();
+          if (text === word) return { status: "awake" };
+          if (text.indexOf(word) !== 0) return { status: "idle" };
+          var after = text.slice(word.length);
+          var separator = /^[\s.,!?;:]+/.exec(after);
+          if (!separator) return { status: "idle" };
+          var rest = after.slice(separator[0].length).trim();
           if (!rest) return { status: "awake" };
           return { status: "command", transcript: rest, isFinal: !!isFinal };
         }

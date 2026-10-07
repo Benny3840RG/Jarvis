@@ -11,6 +11,8 @@ import type { ToolActionService } from "../actions/toolActions.js";
 import { normalizeUtterance, type VoiceCommand } from "./voiceCommands.js";
 
 const WAKE_WORD = "jarvis";
+/** Punctuation or whitespace that may sit between the wake word and the command. */
+const WAKE_SEPARATOR = /^[\s.,!?;:]+/;
 
 /** Executors that already exist on ToolExecutionService. Errands are absent. */
 const SAFE_EXECUTORS = new Set(["tasks:create", "reminders:create"]);
@@ -29,10 +31,11 @@ export type VoiceWriteCapture = Readonly<{
 export function splitVoiceWakeWord(raw: string): { heard: boolean; rest: string } {
   const text = normalizeUtterance(raw);
   if (text === WAKE_WORD) return { heard: true, rest: "" };
-  if (text.startsWith(`${WAKE_WORD} `)) {
-    return { heard: true, rest: text.slice(WAKE_WORD.length + 1).trim() };
-  }
-  return { heard: false, rest: text };
+  if (!text.startsWith(WAKE_WORD)) return { heard: false, rest: text };
+  const after = text.slice(WAKE_WORD.length);
+  const separator = WAKE_SEPARATOR.exec(after);
+  if (!separator) return { heard: false, rest: text };
+  return { heard: true, rest: after.slice(separator[0].length).trim() };
 }
 
 export function voiceUtteranceForSession(input: {
@@ -88,6 +91,7 @@ function voiceSafeWriteActionId(input: {
   sessionId: string;
   commandId: string;
   projectId: string;
+  expectedRevision: number;
   tool: string;
   operation: string;
   arguments: Record<string, unknown>;
@@ -116,6 +120,7 @@ export async function stageVoiceSafeWrite(input: {
     sessionId: input.sessionId,
     commandId: input.command.id,
     projectId: input.projectId,
+    expectedRevision: input.expectedRevision,
     tool,
     operation,
     arguments: argumentsValue,

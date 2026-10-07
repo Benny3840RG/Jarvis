@@ -580,6 +580,123 @@ describe("voice safe writes", () => {
     assert.equal(actions.approveCalls, 0);
   });
 
+  it("accepts punctuation or whitespace right after the wake word", async () => {
+    const actions = new MemoryActions();
+    const app = await makeApp(actions);
+    const sessionId = await openSession(app);
+    const capture = { title: "Buy timber", category: "workshop" };
+
+    const comma = await utter(app, sessionId, {
+      transcript: "Jarvis, add a task",
+      isFinal: true,
+      ...TARGET,
+      capture,
+    });
+    assert.equal(comma.statusCode, 200);
+    assert.equal(comma.json().dispatch.decision, "proposed");
+    const actionId = comma.json().dispatch.toolActionId;
+    assert.equal(typeof actionId, "string");
+    assert.equal(actions.rows.size, 1);
+    assert.equal(actions.approveCalls, 0);
+
+    const marked = await utter(app, sessionId, {
+      transcript: "Jarvis! add a task",
+      isFinal: true,
+      ...TARGET,
+      capture,
+    });
+    assert.equal(marked.json().dispatch.toolActionId, actionId);
+    assert.equal(actions.rows.size, 1);
+
+    const heard = await utter(app, sessionId, {
+      transcript: "add a task",
+      heardTranscript: "Jarvis, add a task",
+      isFinal: true,
+      ...TARGET,
+      capture,
+    });
+    assert.equal(heard.json().dispatch.toolActionId, actionId);
+    assert.equal(actions.rows.size, 1);
+    assert.equal(actions.approveCalls, 0);
+  });
+
+  it("does not stage when the wake word is a longer word or is absent", async () => {
+    const actions = new MemoryActions();
+    const app = await makeApp(actions);
+    const sessionId = await openSession(app);
+    const capture = { title: "Buy timber", category: "workshop" };
+
+    const prefixed = await utter(app, sessionId, {
+      transcript: "Jarvisx add a task",
+      isFinal: true,
+      ...TARGET,
+      capture,
+    });
+    assert.equal(prefixed.statusCode, 200);
+    assert.equal(prefixed.json().dispatch.decision, "unrecognized");
+    assert.equal(prefixed.json().dispatch.toolActionId, undefined);
+    assert.equal(actions.rows.size, 0);
+
+    const disguised = await utter(app, sessionId, {
+      transcript: "add a task",
+      heardTranscript: "Jarvisx add a task",
+      isFinal: true,
+      ...TARGET,
+      capture,
+    });
+    assert.equal(disguised.json().dispatch.decision, "proposed");
+    assert.equal(disguised.json().dispatch.toolActionId, undefined);
+    assert.match(disguised.json().dispatch.reason, /wake word/i);
+    assert.equal(actions.rows.size, 0);
+
+    const bare = await utter(app, sessionId, {
+      transcript: "add a task",
+      isFinal: true,
+      ...TARGET,
+      capture,
+    });
+    assert.equal(bare.json().dispatch.toolActionId, undefined);
+    assert.match(bare.json().dispatch.reason, /wake word/i);
+    assert.equal(actions.rows.size, 0);
+    assert.equal(actions.approveCalls, 0);
+  });
+
+  it("keeps the same revision idempotent and separates a different revision", async () => {
+    const actions = new MemoryActions();
+    const app = await makeApp(actions);
+    const sessionId = await openSession(app);
+    const capture = { title: "Buy timber", category: "workshop" };
+    const payload = {
+      transcript: "jarvis add a task",
+      isFinal: true,
+      projectId: "project-1",
+      capture,
+    };
+
+    const first = await utter(app, sessionId, { ...payload, expectedRevision: 4 });
+    assert.equal(first.statusCode, 200);
+    const firstId = first.json().dispatch.toolActionId;
+    assert.equal(typeof firstId, "string");
+    assert.equal(actions.rows.get(firstId)?.baseRevision, 4);
+    assert.equal(actions.rows.size, 1);
+
+    const retry = await utter(app, sessionId, { ...payload, expectedRevision: 4 });
+    assert.equal(retry.statusCode, 200);
+    assert.equal(retry.json().dispatch.toolActionId, firstId);
+    assert.equal(actions.rows.size, 1);
+    assert.equal(actions.approveCalls, 0);
+
+    const next = await utter(app, sessionId, { ...payload, expectedRevision: 5 });
+    assert.equal(next.statusCode, 200);
+    const nextId = next.json().dispatch.toolActionId;
+    assert.equal(typeof nextId, "string");
+    assert.notEqual(nextId, firstId);
+    assert.equal(actions.rows.size, 2);
+    assert.equal(actions.rows.get(nextId)?.baseRevision, 5);
+    assert.equal(actions.rows.get(firstId)?.baseRevision, 4);
+    assert.equal(actions.approveCalls, 0);
+  });
+
   it("stages a microphone write only when the original transcript carried the wake word", async () => {
     const actions = new MemoryActions();
     const app = await makeApp(actions);

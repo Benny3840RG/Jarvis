@@ -74,6 +74,16 @@ describe("voice HUD console logic (extracted from dashboard-v1.html)", () => {
 
     it("does not treat a word merely containing the wake word as awake", () => {
       assert.equal(logic.voiceWakeGate("jarvisland tour", true).status, "idle");
+      assert.equal(logic.voiceWakeGate("Jarvisx add a task", true).status, "idle");
+    });
+
+    it("treats punctuation or whitespace right after the wake word as a separator", () => {
+      const comma = logic.voiceWakeGate("Jarvis, add a task", true);
+      assert.equal(comma.status, "command");
+      assert.equal(comma.transcript, "add a task");
+      const marked = logic.voiceWakeGate("Jarvis! add a task", true);
+      assert.equal(marked.status, "command");
+      assert.equal(marked.transcript, "add a task");
     });
 
     it("never prepares a bare confirm or cancel for microphone dispatch", () => {
