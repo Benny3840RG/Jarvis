@@ -89,21 +89,27 @@ function businessRecordsEntry(payload: BusinessRecordsPayload): ArchiveGroupEntr
 }
 
 /**
- * Assembles a v4 archive from a JSON capture. Both groups are marked
- * `consistentSnapshot: true` because `captureJsonGroups` held every covered
- * file's lock for the whole read. Groups this stage does not implement are
- * simply absent, which makes the manifest `partial` — that is the honest state,
- * not an exclusion, so `exclusions` stays empty.
+ * Assembles a v4 archive from a JSON capture. Groups are marked
+ * `consistentSnapshot: true` when `captureJsonGroups` held every covered
+ * file's lock for the whole read. A capture that reads business files and
+ * Convex separately passes `consistentSnapshot: false`. Groups this stage
+ * does not implement are simply absent, which makes the manifest `partial`.
  */
-export function buildArchiveV4(capture: JsonCapture, createdAt: Date): ArchiveV4 {
+export function buildArchiveV4(
+  capture: JsonCapture,
+  createdAt: Date,
+  options?: { consistentSnapshot?: boolean; blobs?: ArchiveManifest["blobs"] },
+): ArchiveV4 {
+  const consistentSnapshot = options?.consistentSnapshot ?? true;
   return {
     manifest: buildManifest({
       createdAt,
       groups: [
-        coreEntry(capture.core),
-        memoryEntry(capture.memory),
-        businessRecordsEntry(capture.businessRecords),
+        { ...coreEntry(capture.core), consistentSnapshot },
+        { ...memoryEntry(capture.memory), consistentSnapshot },
+        { ...businessRecordsEntry(capture.businessRecords), consistentSnapshot },
       ],
+      blobs: options?.blobs,
       unresolvedReferences: unresolvedReferencesFor(capture),
     }),
     groups: {

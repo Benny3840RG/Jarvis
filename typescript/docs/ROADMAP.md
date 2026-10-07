@@ -1,5 +1,13 @@
 # Jarvis TypeScript Roadmap
 
+## Local V1 recovery (LV1-09)
+
+Tracker #697. PR 1 locks the live persistence split. PR 2 adds
+`captureLocalV1Archive`: one partial archive of business JSON, the classic
+Convex snapshot, the existing S6 quote inventory, idempotency receipts, and
+PDF bytes. `completeness` stays `partial`. The function is read-only against
+live stores and is not wired to `export-v4`. Isolated restore is still open.
+
 ## Guarded voice lifecycle review repairs (2026-10-05)
 
 Bounded repairs for #567 / PR #696 (successor to #687), prepared on an isolated
