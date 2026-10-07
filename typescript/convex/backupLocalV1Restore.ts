@@ -10,7 +10,7 @@ import {
 import { S6_TABLES, type S6Table } from "../src/backup/v4/s6MutableQuotes.js";
 import { requireApprovalToken, requireOwner } from "./authHelpers.js";
 import type { Id, TableNames } from "./_generated/dataModel.js";
-import { action, internalMutation, type MutationCtx } from "./_generated/server.js";
+import { internalAction, internalMutation, type MutationCtx } from "./_generated/server.js";
 import schema from "./schema.js";
 
 const DIGEST = /^sha256:[a-f0-9]{64}$/;
@@ -186,9 +186,13 @@ export function prepareLocalV1Restore(payloadJson: string, now: number): Prepare
     }
     reconciliationIds.add(row.reconciliationId);
   }
+  const terminalDelivery = new Set(["succeeded", "failed", "reconciled"]);
   for (const delivery of s6.get("quoteDeliveryAttempts") ?? []) {
     if (!text(delivery.reconciliationId) || !reconciliationIds.has(delivery.reconciliationId)) {
       throw new Error("Local V1 restore delivery does not match a reconciliation.");
+    }
+    if (typeof delivery.status !== "string" || !terminalDelivery.has(delivery.status)) {
+      throw new Error("Local V1 restore delivery is not terminal evidence.");
     }
   }
   for (const actionRow of s6.get("toolActions") ?? []) {
@@ -451,7 +455,7 @@ export const insertIsolated = internalMutation({
  * Stores PDF bytes, checks the digest against the bytes just stored, then
  * applies documents. A failed apply deletes the blobs it stored.
  */
-export const restoreLocalV1 = action({
+export const restoreLocalV1 = internalAction({
   args: {
     serviceToken: v.string(),
     approvalToken: v.string(),

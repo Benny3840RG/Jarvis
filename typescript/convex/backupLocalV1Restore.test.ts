@@ -22,6 +22,8 @@ import { JsonInvoiceStore } from "../src/invoices/jsonInvoiceStore.js";
 import { JsonQuoteStore } from "../src/quotes/jsonQuoteStore.js";
 import { ConvexQuoteRepository } from "../src/quotes/convexQuoteRepository.js";
 import type { ConvexClientLike } from "../src/persistence/convexPersistence.js";
+import { readLocalV1Blobs } from "./backupS6.js";
+import { restoreLocalV1 } from "./backupLocalV1Restore.js";
 import { api } from "./_generated/api.js";
 import schema from "./schema.js";
 import { modules } from "./test.setup.js";
@@ -61,6 +63,24 @@ beforeEach(() => {
   vi.stubEnv("CONVEX_URL", "https://live.example");
 });
 afterEach(() => vi.unstubAllEnvs());
+
+it("keeps Local V1 restore off the public Convex API", () => {
+  const registered = restoreLocalV1 as {
+    isAction?: boolean;
+    isInternal?: boolean;
+    isPublic?: boolean;
+  };
+  const readable = readLocalV1Blobs as { isPublic?: boolean };
+  expect(registered.isAction).toBe(true);
+  expect(registered.isInternal).toBe(true);
+  expect(registered.isPublic).not.toBe(true);
+  expect(readable.isPublic).toBe(true);
+  expect(() => {
+    if (registered.isPublic !== true) {
+      throw new Error("Could not find public function for 'backupLocalV1Restore:restoreLocalV1'.");
+    }
+  }).toThrow(/Could not find public function/);
+});
 
 function clientFor(t: ReturnType<typeof convexTest>): ConvexClientLike {
   return {
@@ -754,6 +774,69 @@ it("fails closed on a missing PDF, a live target, an executable approval, and a 
         (await ctx.db.query("tasks").collect()).map((row) => row.title),
       ),
     ).toEqual(["already"]);
+
+    const { symlink } = await import("node:fs/promises");
+    const alias = path.join(root, "capture-alias");
+    await symlink(capturedDir, alias);
+    await expect(
+      restoreLocalV1Archive({
+        captureDirectory: capturedDir,
+        jsonDirectory: path.join(alias, "restored"),
+        client,
+        serviceToken,
+        approvalToken,
+        convexUrl: endpoint,
+        now,
+        liveDataDir: live,
+      }),
+    ).rejects.toThrow(/overlaps live data/);
+    await expect(readdir(path.join(capturedDir, "restored"))).rejects.toThrow();
+
+    const deliveries = payload.tables.find((table) => table.table === "quoteDeliveryAttempts") as
+      { documents: Array<{ status?: string }> } | undefined;
+    if (!deliveries?.documents[0]) throw new Error("missing delivery");
+    const deliveryRuntimeToken = "lv1-restore-delivery-token-000000000000";
+    vi.stubEnv("JARVIS_DELIVERY_RUNTIME_TOKEN", deliveryRuntimeToken);
+    for (const status of ["pending", "executing", "indeterminate"] as const) {
+      deliveries.documents[0].status = status;
+      const nonTerminal = JSON.stringify(payload);
+      await writeFile(
+        sidecarPath,
+        `${JSON.stringify({
+          ...sidecar,
+          payloadJson: nonTerminal,
+          payloadSha256: sha256Hex(nonTerminal),
+        })}\n`,
+      );
+      const blocked = convexTest(schema, modules);
+      const blockedDir = path.join(root, `delivery-${status}`);
+      await expect(
+        restoreLocalV1Archive({
+          captureDirectory: capturedDir,
+          jsonDirectory: blockedDir,
+          client: { action: blocked.action.bind(blocked) },
+          serviceToken,
+          approvalToken,
+          convexUrl: endpoint,
+          now,
+          liveDataDir: live,
+        }),
+      ).rejects.toThrow(/not terminal/);
+      await expect(readdir(blockedDir)).rejects.toThrow();
+      expect(
+        await blocked.run(async (ctx) => ctx.db.query("quoteDeliveryAttempts").collect()),
+      ).toEqual([]);
+      if (status === "pending") {
+        await expect(
+          blocked.mutation(api.quoteDeliveries.markExecuting, {
+            serviceToken,
+            deliveryRuntimeToken,
+            deliveryAttemptId: "delivery-1",
+            expectedStatus: "pending",
+          }),
+        ).rejects.toThrow(/not found/);
+      }
+    }
   } finally {
     await rm(root, { recursive: true, force: true });
   }

@@ -87,6 +87,32 @@ function isInside(parent: string, child: string): boolean {
   return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
 }
 
+function isNodeError(error: unknown): error is NodeJS.ErrnoException {
+  return error instanceof Error && "code" in error;
+}
+
+/** Resolve existing ancestors even when the final JSON directory is absent. */
+async function physicalPath(target: string): Promise<string> {
+  const absolute = path.resolve(target);
+  try {
+    return await fs.realpath(absolute);
+  } catch (error: unknown) {
+    if (!isNodeError(error) || error.code !== "ENOENT") throw error;
+    const entry = await fs.lstat(absolute).catch((statError: unknown) => {
+      if (isNodeError(statError) && statError.code === "ENOENT") return null;
+      throw statError;
+    });
+    if (entry?.isSymbolicLink()) {
+      throw new LocalV1RestoreError(
+        `Cannot establish restore isolation through dangling symbolic link ${absolute}.`,
+      );
+    }
+    const parent = path.dirname(absolute);
+    if (parent === absolute) throw error;
+    return path.join(await physicalPath(parent), path.basename(absolute));
+  }
+}
+
 function assertTarget(request: LocalV1RestoreRequest): void {
   const url = request.convexUrl.trim();
   if (url.length === 0)
@@ -111,11 +137,18 @@ async function assertJsonDestination(request: LocalV1RestoreRequest): Promise<st
     capture,
     ...(request.forbiddenWriteRoots ?? []).map((root) => path.resolve(root)),
   ];
-  for (const root of roots) {
-    if (isInside(root, destination) || isInside(destination, root)) {
-      throw new LocalV1RestoreError(
-        "Local V1 restore refuses a JSON directory that overlaps live data.",
-      );
+  const physicalDestination = await physicalPath(destination);
+  const compared = [
+    [destination, roots],
+    [physicalDestination, await Promise.all(roots.map((root) => physicalPath(root)))],
+  ] as const;
+  for (const [child, parents] of compared) {
+    for (const root of parents) {
+      if (isInside(root, child) || isInside(child, root)) {
+        throw new LocalV1RestoreError(
+          "Local V1 restore refuses a JSON directory that overlaps live data.",
+        );
+      }
     }
   }
   const stat = await fs.lstat(destination).catch((error: unknown) => {
