@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -26,6 +26,7 @@ import {
 import { readArchiveV4File } from "../src/backup/v4/archive.js";
 import type { BusinessPaths } from "../src/backup/v4/businessSource.js";
 import { S6_CAPTURE_VERSION, S6_TABLES } from "../src/backup/v4/s6MutableQuotes.js";
+import { JARVIS_DATA_DIR } from "../src/persistence/jarvisDataPaths.js";
 
 const SERVICE = "lv1-capture-service-token-000000000000";
 const APPROVAL = "lv1-capture-approval-token-00000000000";
@@ -562,21 +563,21 @@ describe("Local V1 partial capture", () => {
     assert.deepEqual(await digestTree(live), before);
   });
 
-  it("refuses an output path whose parent symlink points at live data", async () => {
+  it("refuses an output path whose parent symlink points at a business directory", async () => {
     const root = await scratch();
-    const live = path.join(root, "live");
+    const business = path.join(root, "business");
     const { mkdir, symlink } = await import("node:fs/promises");
-    await mkdir(live);
-    await writeBusiness(live);
-    const before = await digestTree(live);
-    const alias = path.join(root, "alias");
-    await symlink(live, alias);
+    await mkdir(business);
+    await writeBusiness(business);
+    const before = await digestTree(business);
+    const alias = path.join(root, "business-alias");
+    await symlink(business, alias);
     const scripted = scriptedClient();
     await assert.rejects(
       () =>
         captureLocalV1Archive({
           outputDirectory: path.join(alias, "out"),
-          businessPaths: businessPaths(live),
+          businessPaths: businessPaths(business),
           client: scripted.client,
           serviceToken: SERVICE,
           approvalToken: APPROVAL,
@@ -587,7 +588,44 @@ describe("Local V1 partial capture", () => {
     );
     assert.equal(scripted.calls.length, 0);
     assert.equal(scripted.mutations.count, 0);
-    await assert.rejects(readdir(path.join(live, "out")), { code: "ENOENT" });
-    assert.deepEqual(await digestTree(live), before);
+    await assert.rejects(readdir(path.join(business, "out")), { code: "ENOENT" });
+    assert.deepEqual(await digestTree(business), before);
+  });
+
+  it("refuses an output path whose parent symlink points at the data directory", async () => {
+    const root = await scratch();
+    const business = path.join(root, "business");
+    const { mkdir, symlink } = await import("node:fs/promises");
+    await mkdir(business);
+    await writeBusiness(business);
+    const before = await digestTree(business);
+    await mkdir(JARVIS_DATA_DIR, { recursive: true });
+    const probe = `lv1-capture-probe-${randomBytes(8).toString("hex")}`;
+    const landed = path.join(JARVIS_DATA_DIR, probe);
+    await assert.rejects(readdir(landed), { code: "ENOENT" });
+    const alias = path.join(root, "data-alias");
+    await symlink(JARVIS_DATA_DIR, alias);
+    const scripted = scriptedClient();
+    try {
+      await assert.rejects(
+        () =>
+          captureLocalV1Archive({
+            outputDirectory: path.join(alias, probe),
+            businessPaths: businessPaths(business),
+            client: scripted.client,
+            serviceToken: SERVICE,
+            approvalToken: APPROVAL,
+            convexUrl: ENDPOINT,
+            capturedAt: AT,
+          }),
+        /overlaps a live data path/,
+      );
+      assert.equal(scripted.calls.length, 0);
+      assert.equal(scripted.mutations.count, 0);
+      await assert.rejects(readdir(landed), { code: "ENOENT" });
+    } finally {
+      await rm(landed, { recursive: true, force: true });
+    }
+    assert.deepEqual(await digestTree(business), before);
   });
 });
