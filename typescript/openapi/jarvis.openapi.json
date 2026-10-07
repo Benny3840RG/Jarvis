@@ -7818,7 +7818,7 @@
       },
       "VoiceDispatch": {
         "type": "object",
-        "description": "The authoritative decision for one submitted utterance. Query commands return query-unavailable until a read-only query provider is connected; recognizing a command is not a successful business or equipment answer.",
+        "description": "The authoritative decision for one submitted utterance. A connected read-only query provider returns answered only from existing Jarvis read models. Empty healthy data is stated as none or zero. A missing provider or a failed source returns query-unavailable and names what is unavailable. Recognizing a command is not itself a successful business or equipment answer.",
         "required": ["decision"],
         "additionalProperties": false,
         "properties": {
@@ -7830,6 +7830,7 @@
               "empty",
               "unrecognized",
               "ambiguous",
+              "answered",
               "query-unavailable",
               "awaiting-confirmation",
               "confirmation-not-pending",
@@ -7861,7 +7862,12 @@
           },
           "reason": {
             "type": "string",
-            "description": "Why a query or actuation was unavailable, or an actuation failed."
+            "description": "Why a query or actuation was unavailable, or an actuation failed. For a query this names the unavailable source and is never a guessed count."
+          },
+          "answer": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Spoken read-only answer derived from an existing Jarvis read model. Present only when decision is answered. Empty healthy data is stated as none or zero. This field is never a guess for a missing or failed source."
           },
           "expiresAt": {
             "type": "integer",

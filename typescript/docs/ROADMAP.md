@@ -11,6 +11,22 @@ existing stores. `completeness` stays `partial`. Neither function is wired to
 `export-v4`. The draft-only S6 helper is unchanged. The named proof gate is
 still open.
 
+## LV1-04 authoritative voice query bridge (2026-10-07)
+
+Deterministic voice query intents now answer from the same list/brief read models
+the HTTP API and daily brief already use. Empty healthy registers are reported as
+none or zero. A missing provider or a failed source stays `query-unavailable` and
+names that source. Live equipment status stays unavailable; crawler and trailer
+queries report recorded build status only.
+
+Next:
+
+- LV1-05 safe voice writes through existing API/MCP/ToolAction paths.
+- Owner-wide quote-delivery follow-up remains unsupported (same gap as the
+  operations inbox). Voice quote follow-up therefore fails closed as unavailable,
+  naming the missing owner-wide governed sent-quote read (lifecycle delivery ledger).
+- The daily-brief quote file is not treated as the governed sent-quote register.
+
 ## LV1-01 runtime data gitignore (2026-10-07)
 
 Business and memory JSON documents under `typescript/data/` were untracked but not ignored, so a local run could leave private customer records as `?? data/`. `.gitignore` now covers `jarvis-*.json*` and the dot-prefixed atomic temps. `check-repository-hygiene.mjs` asserts those paths are ignored and that tracked fixtures stay tracked. No `.bak` or `-wal` writer exists.

@@ -2677,6 +2677,12 @@
           return { transcript: transcript, alternatives: alternatives };
         }
         function describeVoiceDispatch(dispatch) {
+          if (dispatch && dispatch.decision === "answered") {
+            var answer = typeof dispatch.answer === "string" ? dispatch.answer.trim() : "";
+            return answer
+              ? { label: answer, tone: "ok" }
+              : { label: "Query unavailable — no authoritative answer was returned.", tone: "warn" };
+          }
           var map = {
             "ignored-interim": { label: "Listening…", tone: "muted" },
             empty: { label: "No command heard.", tone: "muted" },
@@ -2692,6 +2698,12 @@
             actuated: { label: "Actuated.", tone: "ok" },
             "actuation-failed": { label: "Actuation failed.", tone: "warn" },
           };
+          if (dispatch && dispatch.decision === "query-unavailable") {
+            var reason = typeof dispatch.reason === "string" ? dispatch.reason.trim() : "";
+            if (reason && !/no read-only query provider is connected/i.test(reason)) {
+              return { label: reason, tone: "warn" };
+            }
+          }
           return map[dispatch && dispatch.decision] || { label: "Unknown result.", tone: "muted" };
         }
         function voiceLatencyMs(startedAt, endedAt) {
