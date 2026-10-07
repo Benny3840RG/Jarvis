@@ -7845,6 +7845,10 @@
         "type": "object",
         "description": "Submit a recognised utterance to the session for a dispatch decision. A newly recognised command invalidates any older pending confirmation; a new critical command then arms its own single-use confirmation.",
         "required": ["transcript", "isFinal"],
+        "dependentRequired": {
+          "projectId": ["expectedRevision"],
+          "expectedRevision": ["projectId"]
+        },
         "additionalProperties": false,
         "properties": {
           "transcript": {
@@ -7871,7 +7875,7 @@
             "minLength": 1,
             "maxLength": 256,
             "pattern": "^[^\\s]+$",
-            "description": "Project a safe write would be staged against on the existing ToolAction path. Absent or unpaired with expectedRevision means the target is uncommissioned and nothing is staged."
+            "description": "Project a safe write would be staged against on the existing ToolAction path. Required together with expectedRevision. When both are absent the target is uncommissioned and nothing is staged."
           },
           "expectedRevision": {
             "type": "integer",

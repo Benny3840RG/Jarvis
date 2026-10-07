@@ -116,6 +116,9 @@ export function parseVoiceUtterance(body: unknown): {
     record.heardTranscript === undefined ? undefined : parseTranscript(record.heardTranscript);
   const projectId = parseProjectId(record.projectId);
   const expectedRevision = parseExpectedRevision(record.expectedRevision);
+  if ((projectId === undefined) !== (expectedRevision === undefined)) {
+    throw new Error("projectId and expectedRevision must be supplied together.");
+  }
   const capture = parseCapture(record.capture);
   return {
     transcript,

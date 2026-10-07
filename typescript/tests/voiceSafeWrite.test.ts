@@ -719,6 +719,44 @@ describe("voice safe writes", () => {
     assert.equal(actions.approveCalls, 0);
   });
 
+  it("rejects a project target that supplies only one of projectId and expectedRevision", async () => {
+    const actions = new MemoryActions();
+    const app = await makeApp(actions);
+    const sessionId = await openSession(app);
+    const capture = { title: "Buy timber", category: "workshop" };
+
+    const projectOnly = await utter(app, sessionId, {
+      transcript: "jarvis add a task",
+      isFinal: true,
+      projectId: "project-1",
+      capture,
+    });
+    assert.equal(projectOnly.statusCode, 422);
+    assert.match(String(projectOnly.headers["content-type"]), /application\/problem\+json/);
+    const projectProblem = projectOnly.json();
+    assert.equal(projectProblem.type, "urn:jarvis:problem:invalid-voice-request");
+    assert.equal(projectProblem.title, "Invalid Voice Request");
+    assert.equal(projectProblem.status, 422);
+    assert.match(projectProblem.detail, /together/i);
+    assert.equal(actions.rows.size, 0);
+
+    const revisionOnly = await utter(app, sessionId, {
+      transcript: "jarvis add a task",
+      isFinal: true,
+      expectedRevision: 1,
+      capture,
+    });
+    assert.equal(revisionOnly.statusCode, 422);
+    assert.match(String(revisionOnly.headers["content-type"]), /application\/problem\+json/);
+    const revisionProblem = revisionOnly.json();
+    assert.equal(revisionProblem.type, "urn:jarvis:problem:invalid-voice-request");
+    assert.equal(revisionProblem.title, "Invalid Voice Request");
+    assert.equal(revisionProblem.status, 422);
+    assert.match(revisionProblem.detail, /together/i);
+    assert.equal(actions.rows.size, 0);
+    assert.equal(actions.approveCalls, 0);
+  });
+
   it("stages a microphone write only when the original transcript carried the wake word", async () => {
     const actions = new MemoryActions();
     const app = await makeApp(actions);
