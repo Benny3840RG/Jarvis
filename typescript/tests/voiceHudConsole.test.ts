@@ -91,6 +91,7 @@ describe("voice HUD console logic (extracted from dashboard-v1.html)", () => {
           transcript: "confirm",
           isFinal: true,
           alternatives: ["confirm command", "cancel"],
+          heardTranscript: "jarvis confirm",
         },
       );
     });
@@ -152,6 +153,15 @@ describe("voice HUD console logic (extracted from dashboard-v1.html)", () => {
     it("describes a governed propose as proposed, not approved", () => {
       const info = logic.describeVoiceDispatch({ decision: "proposed" });
       assert.match(info.label, /propos/i);
+      assert.doesNotMatch(info.label, /approved|executed/i);
+    });
+
+    it("speaks a safe-write reason instead of claiming a proposal was staged", () => {
+      const info = logic.describeVoiceDispatch({
+        decision: "proposed",
+        reason: "Safe write was not staged: the wake word was not heard.",
+      });
+      assert.match(info.label, /wake word/i);
       assert.doesNotMatch(info.label, /approved|executed/i);
     });
 

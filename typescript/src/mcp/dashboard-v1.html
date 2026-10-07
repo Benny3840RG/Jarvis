@@ -2646,6 +2646,7 @@
             transcript: gate.transcript,
             isFinal: true,
             alternatives: preparedAlternatives,
+            heardTranscript: normalizeVoicePhrase(raw),
           };
         }
         function finalVoiceRecognition(event) {
@@ -2703,6 +2704,10 @@
             if (reason && !/no read-only query provider is connected/i.test(reason)) {
               return { label: reason, tone: "warn" };
             }
+          }
+          if (dispatch && dispatch.decision === "proposed") {
+            var proposedReason = typeof dispatch.reason === "string" ? dispatch.reason.trim() : "";
+            if (proposedReason) return { label: proposedReason, tone: "warn" };
           }
           return map[dispatch && dispatch.decision] || { label: "Unknown result.", tone: "muted" };
         }
@@ -2831,7 +2836,7 @@
             state.sessionPromise = creation;
             return creation;
           }
-          function dispatch(transcript, isFinal, alternatives) {
+          function dispatch(transcript, isFinal, alternatives, heardTranscript) {
             if (state.profilePending || state.profileFailed) {
               renderNotice(state.profilePending
                 ? "Changing voice profile. Commands are paused; submit a fresh command once ready."
@@ -2846,9 +2851,11 @@
               return ensureSession(generation)
                 .then(function (id) {
                   if (!id || generation !== state.generation) return null;
+                  var utterance = { transcript: transcript, isFinal: isFinal, alternatives: alternatives || [] };
+                  if (heardTranscript) utterance.heardTranscript = heardTranscript;
                   return api("/sessions/" + encodeURIComponent(id) + "/utterances", {
                     method: "POST",
-                    body: JSON.stringify({ transcript: transcript, isFinal: isFinal, alternatives: alternatives || [] }),
+                    body: JSON.stringify(utterance),
                   }).then(readResponse);
                 })
                 .then(function (payload) {
@@ -2984,7 +2991,7 @@
                 recognitionResult.alternatives,
                 WAKE_WORD,
               );
-              if (prepared) dispatch(prepared.transcript, prepared.isFinal, prepared.alternatives);
+              if (prepared) dispatch(prepared.transcript, prepared.isFinal, prepared.alternatives, prepared.heardTranscript);
             };
             recognition.onend = function () {
               if (state.recognition !== recognition || recognitionGeneration !== state.recognitionGeneration) return;

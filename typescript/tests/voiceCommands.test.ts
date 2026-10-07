@@ -103,6 +103,19 @@ describe("voice command catalog", () => {
     }
   });
 
+  it("describes quote follow-up as unavailable until the governed sent-quote read exists", () => {
+    const command = VOICE_COMMANDS.find((entry) => entry.id === "client.quote-follow-up");
+    assert.ok(command);
+    assert.match(command.summary, /lifecycle delivery ledger/i);
+    assert.doesNotMatch(command.summary, /daily brief marks/i);
+  });
+
+  it("describes reminders as including dates beyond the brief window", () => {
+    const command = VOICE_COMMANDS.find((entry) => entry.id === "client.reminders");
+    assert.ok(command);
+    assert.match(command.summary, /beyond the 24-hour/i);
+  });
+
   it("binds governed proposals to a tool/operation and never actuate", () => {
     for (const command of VOICE_COMMANDS) {
       if (command.kind === "propose") {

@@ -41,10 +41,63 @@ export function parseSwitchVoiceProfile(body: unknown): { profile: VoiceProfile 
   return { profile: parseProfile(record.profile) };
 }
 
+export type VoiceUtteranceCapture = Readonly<{
+  title?: string;
+  category?: string;
+}>;
+
+function parseProjectId(value: unknown): string | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "string" || value.length < 1 || value.length > 256 || /\s/.test(value)) {
+    throw new Error("projectId must be a non-empty identifier.");
+  }
+  return value;
+}
+
+function parseExpectedRevision(value: unknown): number | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 1) {
+    throw new Error("expectedRevision must be a positive integer.");
+  }
+  return value;
+}
+
+function parseCaptureField(value: unknown, name: string, max: number): string | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "string") throw new Error(`${name} must be a string.`);
+  const trimmed = value.trim();
+  if (trimmed.length < 1 || trimmed.length > max) {
+    throw new Error(`${name} must be within its length limit.`);
+  }
+  return trimmed;
+}
+
+function parseCapture(value: unknown): VoiceUtteranceCapture | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new Error("capture must be an object.");
+  }
+  const record = value as Record<string, unknown>;
+  for (const key of Object.keys(record)) {
+    if (key !== "title" && key !== "category")
+      throw new Error("capture contains an unknown field.");
+  }
+  const title = parseCaptureField(record.title, "capture.title", 200);
+  const category = parseCaptureField(record.category, "capture.category", 100);
+  return {
+    ...(title === undefined ? {} : { title }),
+    ...(category === undefined ? {} : { category }),
+  };
+}
+
 export function parseVoiceUtterance(body: unknown): {
   transcript: string;
   isFinal: boolean;
   alternatives?: string[];
+  heardTranscript?: string;
+  projectId?: string;
+  expectedRevision?: number;
+  capture?: VoiceUtteranceCapture;
 } {
   const record = asRecord(body);
   const transcript = parseTranscript(record.transcript);
@@ -58,5 +111,18 @@ export function parseVoiceUtterance(body: unknown): {
     }
     alternatives = record.alternatives.map((item) => parseTranscript(item));
   }
-  return { transcript, isFinal: record.isFinal, ...(alternatives ? { alternatives } : {}) };
+  const heardTranscript =
+    record.heardTranscript === undefined ? undefined : parseTranscript(record.heardTranscript);
+  const projectId = parseProjectId(record.projectId);
+  const expectedRevision = parseExpectedRevision(record.expectedRevision);
+  const capture = parseCapture(record.capture);
+  return {
+    transcript,
+    isFinal: record.isFinal,
+    ...(alternatives ? { alternatives } : {}),
+    ...(heardTranscript === undefined ? {} : { heardTranscript }),
+    ...(projectId === undefined ? {} : { projectId }),
+    ...(expectedRevision === undefined ? {} : { expectedRevision }),
+    ...(capture === undefined ? {} : { capture }),
+  };
 }

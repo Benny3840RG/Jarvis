@@ -1,5 +1,19 @@
 # Jarvis TypeScript Roadmap
 
+## LV1-05 safe voice writes (2026-10-07)
+
+Safe voice writes stage on the existing `ToolActionService` only. `tasks/create` and `reminders/create` are the executors voice may target (the same definitions the tool-execution allowlist already runs). Voice never calls `approve` or `execute`. A receipt is produced by the existing `ToolExecutionService` after the existing approval gate. Retry uses a stable action id and the existing execution idempotency key.
+
+Consequential proposals (`quotes:send`, `quotes:draft`) stay intent-only, including after spoken confirm. Errand phrases name MCP `create_errand` and write nothing: there is no ToolAction executor, and voice does not call the errand store. A missing wake word, unknown intent, incomplete capture, or uncommissioned tool-action target stages nothing.
+
+Catalog summaries for `client.quote-follow-up` and `client.reminders` now match LV1-04: quote follow-up names the missing lifecycle delivery ledger, and reminders include dates beyond the 24-hour brief window.
+
+Next:
+
+- Do not add an errand or note executor inside voice. A note still needs a complete `notes/create` payload before it can stage.
+- Owner-wide quote-delivery follow-up remains unsupported.
+- Host commissioning (#567) still needs J-arvis online.
+
 ## LV1-04 authoritative voice query bridge (2026-10-07)
 
 Deterministic voice query intents now answer from the same list/brief read models
@@ -10,7 +24,6 @@ queries report recorded build status only.
 
 Next:
 
-- LV1-05 safe voice writes through existing API/MCP/ToolAction paths.
 - Owner-wide quote-delivery follow-up remains unsupported (same gap as the
   operations inbox). Voice quote follow-up therefore fails closed as unavailable,
   naming the missing owner-wide governed sent-quote read (lifecycle delivery ledger).
