@@ -42,6 +42,7 @@ import {
   HTTP_PROJECT_STORE,
   HTTP_PROPERTY_STORE,
   HTTP_PROVIDER_NAME,
+  HTTP_QUOTE_PDF_ARTIFACT_REPOSITORY,
   HTTP_QUOTE_REPOSITORY,
   HTTP_QUOTE_STORE,
   HTTP_UPGRADE_STORE,
@@ -54,6 +55,7 @@ import { ConvexPreferenceStore } from "../src/preferences/convexPreferenceStore.
 import { JsonProjectStore } from "../src/projects/jsonProjectStore.js";
 import { JsonPropertyStore } from "../src/properties/jsonPropertyStore.js";
 import { ConvexQuoteRepository } from "../src/quotes/convexQuoteRepository.js";
+import { ConvexQuotePdfArtifactRepository } from "../src/quotes/quotePdfArtifactRepository.js";
 import { JsonQuoteStore } from "../src/quotes/jsonQuoteStore.js";
 import { ConvexBuildLogStore } from "../src/buildLog/convexBuildLogStore.js";
 import { ConvexAssetStore } from "../src/assets/convexAssetStore.js";
@@ -144,6 +146,9 @@ describe("LV1-09 live persistence split", () => {
         assert.ok(app.get(HTTP_BUSINESS_SETTINGS_STORE) instanceof JsonBusinessSettingsStore);
         assert.ok(app.get(HTTP_QUOTE_STORE) instanceof JsonQuoteStore);
         assert.ok(app.get(HTTP_QUOTE_REPOSITORY) instanceof ConvexQuoteRepository);
+        assert.ok(
+          app.get(HTTP_QUOTE_PDF_ARTIFACT_REPOSITORY) instanceof ConvexQuotePdfArtifactRepository,
+        );
         assert.ok(app.get(HTTP_BUILD_STORE) instanceof ConvexBuildStore);
         assert.ok(app.get(HTTP_BUILD_LOG_STORE) instanceof ConvexBuildLogStore);
         assert.ok(app.get(HTTP_UPGRADE_STORE) instanceof ConvexUpgradeStore);
