@@ -94,6 +94,9 @@ function assertDevelopmentConvexUrl(raw: string, url: URL, slug: string): void {
     throw refused("CONVEX_URL must be loopback or exactly the dev deployment host.");
   }
   if (isLoopbackHost(url.hostname)) return;
+  if (url.protocol !== "https:") {
+    throw refused("CONVEX_URL for a Convex cloud host must be https.");
+  }
   if (url.port !== "" || authorityHasExplicitPort(raw)) {
     throw refused("CONVEX_URL must be loopback or exactly the dev deployment host.");
   }

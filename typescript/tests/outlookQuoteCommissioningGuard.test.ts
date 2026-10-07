@@ -37,6 +37,27 @@ describe("outlook quote commissioning guard", () => {
     assert.equal(plan.convexUrl, "http://127.0.0.1:3210/");
   });
 
+  it("refuses a plaintext Convex cloud URL before any client read", async () => {
+    const convexUrl = "http://outgoing-ram-798.convex.cloud";
+    assert.throws(
+      () => assessOutlookQuoteCommissioningGuard({ ...READY, CONVEX_URL: convexUrl }),
+      /CONVEX_URL for a Convex cloud host must be https/,
+    );
+    let loaded = false;
+    await assert.rejects(
+      () =>
+        beginOutlookQuoteCommissioning({
+          environment: { ...READY, CONVEX_URL: convexUrl },
+          loadClientContactValues: () => {
+            loaded = true;
+            return Promise.resolve([]);
+          },
+        }),
+      /CONVEX_URL for a Convex cloud host must be https/,
+    );
+    assert.equal(loaded, false);
+  });
+
   it("binds CONVEX_URL to the dev deployment slug before any client read", async () => {
     const plan = assessOutlookQuoteCommissioningGuard(READY);
     assert.equal(plan.convexUrl, "https://outgoing-ram-798.convex.cloud/");

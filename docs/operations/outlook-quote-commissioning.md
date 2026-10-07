@@ -7,7 +7,8 @@ issues stay open until that host run is reviewed.
 Run it once, on the host, against the pinned development deployment and a
 mailbox that is not a customer. The kit refuses `JARVIS_ENVIRONMENT=production`,
 a `CONVEX_DEPLOYMENT` that is not `dev:` plus one deployment slug, a
-`CONVEX_URL` whose host is not loopback or exactly `<slug>.convex.cloud`, a
+`CONVEX_URL` whose host is not loopback or exactly `https://<slug>.convex.cloud`
+(plaintext cloud hosts are refused), a
 non-loopback Jarvis API, and a recipient that is missing the `non-customer`
 confirmation or that matches a client contact. Those checks happen before a
 quote is created.
