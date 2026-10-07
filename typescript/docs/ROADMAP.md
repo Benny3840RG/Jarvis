@@ -8,8 +8,12 @@ Convex snapshot, the existing S6 quote inventory, idempotency receipts, and
 PDF bytes. PR 3 adds `restoreLocalV1Archive`, which restores that capture into
 a new JSON directory and an injected empty database, then rereads through the
 existing stores. `completeness` stays `partial`. Neither function is wired to
-`export-v4`. The draft-only S6 helper is unchanged. The named proof gate is
-still open.
+`export-v4`. The draft-only S6 helper is unchanged. PR 4 adds
+`proveLocalV1Recovery`, which calls that restore and succeeds only when
+every V1 store was captured, blob digests match, the JSON completion
+marker stays partial, and a second isolated read matches. `clear-local`
+no longer treats a classic verify receipt as cover for business JSON.
+Full v4 recovery stays refused. Operator text is still open.
 
 ## LV1-04 authoritative voice query bridge (2026-10-07)
 

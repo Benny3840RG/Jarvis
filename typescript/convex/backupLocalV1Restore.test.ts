@@ -430,7 +430,7 @@ it("restores a partial capture into scratch JSON and an empty convex-test, then 
   const path = await import("node:path");
   const { tmpdir } = await import("node:os");
   const { captureLocalV1Archive } = await import("../src/backup/v4/localV1Capture.js");
-  const { restoreLocalV1Archive } = await import("../src/backup/v4/localV1Restore.js");
+  const { proveLocalV1Recovery } = await import("../src/backup/v4/localV1Proof.js");
   const { z } = await import("zod");
   const root = await mkdtemp(path.join(tmpdir(), "jarvis-lv1-restore-"));
   const live = path.join(root, "live");
@@ -473,15 +473,36 @@ it("restores a partial capture into scratch JSON and an empty convex-test, then 
     );
 
     const target = convexTest(schema, modules);
-    const restored = await restoreLocalV1Archive({
-      captureDirectory: capturedDir,
-      jsonDirectory: restoredDir,
-      client: { action: target.action.bind(target) } as never,
-      serviceToken,
-      approvalToken,
-      convexUrl: endpoint,
-      now,
-      liveDataDir: live,
+    const restored = await proveLocalV1Recovery({
+      restore: {
+        captureDirectory: capturedDir,
+        jsonDirectory: restoredDir,
+        client: { action: target.action.bind(target) } as never,
+        serviceToken,
+        approvalToken,
+        convexUrl: endpoint,
+        now,
+        liveDataDir: live,
+      },
+      liveDirectory: live,
+      readIsolated: async () => {
+        const convex = clientFor(target);
+        const listedClients = await new JsonClientStore(
+          path.join(restoredDir, "jarvis-clients.json"),
+          () => {},
+        ).list();
+        const tasks = await new ConvexPersistence(convex, serviceToken).listTasks();
+        const listedBuilds = await new ConvexBuildStore(convex, serviceToken).list();
+        const quote = await new ConvexQuoteRepository(convex, serviceToken).getQuote(
+          seeded.quote.aggregate.quoteId,
+        );
+        return {
+          clientId: listedClients[0]?.id ?? "",
+          taskId: tasks[0]?.id ?? "",
+          buildId: listedBuilds[0]?.id ?? "",
+          quoteId: quote?.aggregate.quoteId ?? "",
+        };
+      },
     });
     expect(restored.archive.manifest.completeness).toBe("partial");
     expect(restored.maps.tasks).toHaveLength(1);
