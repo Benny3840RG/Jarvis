@@ -5,8 +5,11 @@
 Tracker #697. PR 1 locks the live persistence split. PR 2 adds
 `captureLocalV1Archive`: one partial archive of business JSON, the classic
 Convex snapshot, the existing S6 quote inventory, idempotency receipts, and
-PDF bytes. `completeness` stays `partial`. The function is read-only against
-live stores and is not wired to `export-v4`. Isolated restore is still open.
+PDF bytes. PR 3 adds `restoreLocalV1Archive`, which restores that capture into
+a new JSON directory and an injected empty database, then rereads through the
+existing stores. `completeness` stays `partial`. Neither function is wired to
+`export-v4`. The draft-only S6 helper is unchanged. The named proof gate is
+still open.
 
 ## Guarded voice lifecycle review repairs (2026-10-05)
 

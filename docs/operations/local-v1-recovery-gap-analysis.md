@@ -5,7 +5,7 @@
 **Slice:** LV1-09 recovery closure  
 **Source read:** `adf82e37373105b2762033a22e8b1b9e8f7494c4` (`main`)  
 **Plan:** `docs/operations/local-v1-release-plan.md`, `JARVIS_ROADMAP.yaml` `release_tracks.local-v1.workstreams.lv1-recovery`  
-**Mode:** analysis, then PR 1 and PR 2. PR 1 locks the live split. PR 2 adds `captureLocalV1Archive`, a read-only partial capture. It is not a restore and it is not wired to `export-v4`.
+**Mode:** analysis, then PR 1, PR 2, and PR 3. PR 1 locks the live split. PR 2 adds `captureLocalV1Archive`, a read-only partial capture. PR 3 restores that capture into a scratch JSON directory and an injected empty database. It is not wired to `export-v4` and it does not write a live store.
 
 ## Decisions (integration lead, 2026-10-07)
 
@@ -290,34 +290,35 @@ Landed as `captureLocalV1Archive` in `typescript/src/backup/v4/localV1Capture.ts
 
 A successful run creates one new directory and writes only inside it:
 
-| Live store | Captured as |
-| --- | --- |
-| Business JSON: clients, properties, projects, flat quotes, invoices, enquiries, errands, settings | `readBusinessGroup` into archive group `businessRecords` |
-| Tasks, reminders, assistant state | `exportBackup` / `ConvexPersistence.snapshot` into group `core` |
-| Builds, build logs, upgrades, assets, preferences | `exportBackup` Convex list stores into group `memory` |
-| S6 tables: quotes, quote revisions, PDF artifact rows, deliveries, migration records, tool actions, tool execution receipts, external reconciliations | `backupS6:captureLocalV1` sidecar `convex-s6.json`. `S6_TABLES` is unchanged |
-| `directCreateReceipts`, `internalActionResults` | Same query, sibling payload `convex-receipts.json`, same 100-row and 512 KiB abort |
-| `_storage` PDF bytes | Read-only action `backupS6:readLocalV1Blobs`; raw bytes under `blobs/<sha256 hex>` plus the existing manifest blob entry |
-| Notes, project memory, orchestration, `quoteAggregate` | Absent. `completeness` stays `partial`. `consistentSnapshot` is false |
+| Live store                                                                                                                                            | Captured as                                                                                                              |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| Business JSON: clients, properties, projects, flat quotes, invoices, enquiries, errands, settings                                                     | `readBusinessGroup` into archive group `businessRecords`                                                                 |
+| Tasks, reminders, assistant state                                                                                                                     | `exportBackup` / `ConvexPersistence.snapshot` into group `core`                                                          |
+| Builds, build logs, upgrades, assets, preferences                                                                                                     | `exportBackup` Convex list stores into group `memory`                                                                    |
+| S6 tables: quotes, quote revisions, PDF artifact rows, deliveries, migration records, tool actions, tool execution receipts, external reconciliations | `backupS6:captureLocalV1` sidecar `convex-s6.json`. `S6_TABLES` is unchanged                                             |
+| `directCreateReceipts`, `internalActionResults`                                                                                                       | Same query, sibling payload `convex-receipts.json`, same 100-row and 512 KiB abort                                       |
+| `_storage` PDF bytes                                                                                                                                  | Read-only action `backupS6:readLocalV1Blobs`; raw bytes under `blobs/<sha256 hex>` plus the existing manifest blob entry |
+| Notes, project memory, orchestration, `quoteAggregate`                                                                                                | Absent. `completeness` stays `partial`. `consistentSnapshot` is false                                                    |
 
 Capture refuses a URL equal to `CONVEX_URL` (or another forbidden URL) and refuses an output path that already exists or overlaps a live data directory. Reads finish before the output directory is created. Convex `mutation` calls throw. A missing table, missing PDF bytes, corrupt business JSON, or a failed query/action throws and leaves no output directory. Overflow still aborts; it does not truncate. Tokens stay out of the files. This is not isolated restore. `assertRecoverable` still refuses the archive.
 
 ### PR 3 — EXTEND: isolated restore of that capture
 
-Reuse `restoreArchiveV4` for the JSON business documents into a scratch directory.
+Landed as `restoreLocalV1Archive` in `typescript/src/backup/v4/localV1Restore.ts`. JSON business, core, and memory documents go through `restoreArchiveV4` with `allowPartial: true` into a directory that must not already exist and must not overlap the live data directory or the capture directory. Convex rows go through action `backupLocalV1Restore:restoreLocalV1` and internal mutation `insertIsolated`. The caller supplies an empty `convex-test` client. The function never constructs a client and refuses a target identity equal to `CONVEX_URL`.
 
-Add a Convex apply step beside `restoreS6MutableQuotes`, still unregistered as a public mutation, still empty-database only:
+`restoreS6MutableQuotes` and `readS6MutableQuotes` are unchanged. A captured sidecar that contains a finalized revision or a nonempty delivery still throws from the draft-only helper.
 
-- preserve logical `quoteId` / `revisionId`;
-- admit finalised revisions and historical revisions that the capture actually contains, instead of only the first open draft;
-- import PDF bytes with `ctx.storage.store`, write the new `storageId`, and check the digest;
-- insert delivery, migration, action, receipt, and reconciliation rows that belong to those quotes, copying approval expiry and terminal states verbatim, with no execution and no lease;
-- insert tasks, reminders, assistant state, builds, logs, upgrades, assets, and preferences through the existing mutations, with a builds/tasks id map applied to `buildId`, receipt `entityId`, and nested assistant state;
-- reread through `JSONPersistence` or the JSON business stores, `ConvexPersistence`, `ConvexBuildStore`, `ConvexAssetStore`, and `ConvexQuoteRepository.getQuote` / list.
+The new apply path, and only that path:
 
-Keep S6's current draft-only helper as the closed subset it is. Do not loosen it so that a finalised quote sneaks through unverified. The new path is the one that admits finalised rows, and only when artifacts and receipts pass the checks above.
+- preserves logical `quoteId` / `revisionId`, including a finalized current revision and the historical draft that preceded it;
+- stores PDF bytes, checks the digest of the bytes just stored, and writes the new `storageId`;
+- copies delivery, migration, tool-action, receipt, and reconciliation rows verbatim, with no lease and no call to `approve` or send;
+- refuses an approved tool action whose expiry policy is not `ttl` or whose `approvalExpiresAt` is still in the future, so a restored approval is not executable and its expiry is not refreshed;
+- refuses a reconciliation that is not `resolved` with terminal status `succeeded` or `failed`, and refuses one whose receipt is missing or whose effect fingerprint differs, so a restored receipt is not a `no-effect` replay that sends mail;
+- inserts tasks, reminders, assistant state, builds, logs, upgrades, assets, and preferences directly, and returns id maps for tasks, reminders, and builds. Build logs and upgrades take the new build id. Direct-create receipts and internal action results, including `result.id`, take the new task or reminder id. Assistant-state strings that are exactly a mapped id are rewritten;
+- fails before any write when a sidecar checksum, table, quote link, invoice quote, or PDF digest does not match, and deletes the scratch directory plus any blobs it stored when the empty-database apply throws.
 
-The archive remains partial. `assertRecoverable` still refuses it.
+Reread is through `JsonClientStore`, `JsonQuoteStore`, `JsonInvoiceStore`, `ConvexPersistence`, `ConvexBuildStore`, `ConvexAssetStore`, and `ConvexQuoteRepository.getQuote` / `listQuotes`. The archive stays `partial`. `assertRecoverable` still refuses it.
 
 ### PR 4 — HARDEN: the Local V1 proof gate
 
@@ -379,4 +380,4 @@ Closed by the integration lead on 2026-10-07. See the decision list at the top o
 
 ## 8. What this file is not
 
-It is not a recovery drill and not a claim that any archive on disk is restorable. PR 1 locks the split. PR 2 writes a partial capture only. Isolated restore is PR 3. `assertRecoverable` still refuses the archive.
+It is not a recovery drill and not a claim that any archive on disk is restorable. PR 1 locks the split. PR 2 writes a partial capture only. PR 3 restores that capture into scratch JSON and an injected empty database. The named proof gate, including a restarted HTTP reread, is still PR 4. `assertRecoverable` still refuses the archive.
