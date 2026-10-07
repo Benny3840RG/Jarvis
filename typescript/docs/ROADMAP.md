@@ -8,6 +8,12 @@ Convex snapshot, the existing S6 quote inventory, idempotency receipts, and
 PDF bytes. `completeness` stays `partial`. The function is read-only against
 live stores and is not wired to `export-v4`. Isolated restore is still open.
 
+## LV1-01 runtime data gitignore (2026-10-07)
+
+Business and memory JSON documents under `typescript/data/` were untracked but not ignored, so a local run could leave private customer records as `?? data/`. `.gitignore` now covers `jarvis-*.json*` and the dot-prefixed atomic temps. `check-repository-hygiene.mjs` asserts those paths are ignored and that tracked fixtures stay tracked. No `.bak` or `-wal` writer exists.
+
+Next: finish the rest of the LV1-01 baseline (local preview, HUD/MCP, entity smoke) on the operator host; then voice commissioning (#567) and the shared Outlook send/reconcile (#294, #297).
+
 ## Guarded voice lifecycle review repairs (2026-10-05)
 
 Bounded repairs for #567 / PR #696 (successor to #687), prepared on an isolated
