@@ -57,6 +57,23 @@ const attemptArbitrary: fc.Arbitrary<Attempt> = fc.record({
   zone: zoneArbitrary,
 });
 
+const distinctZonePairArbitrary = fc
+  .tuple(zoneArbitrary, zoneArbitrary)
+  .filter(([first, second]) => first !== second);
+
+const attemptSequenceArbitrary: fc.Arbitrary<Attempt[]> = fc
+  .tuple(
+    actionIdArbitrary,
+    distinctZonePairArbitrary,
+    fc.array(attemptArbitrary, { minLength: 1, maxLength: 22 }),
+  )
+  .map(([reusedActionId, [zone, changedZone], tail]): Attempt[] => [
+    { kind: "live", actionId: reusedActionId, zone },
+    { kind: "live", actionId: reusedActionId, zone },
+    { kind: "live", actionId: reusedActionId, zone: changedZone },
+    ...tail,
+  ]);
+
 function actionForAttempt(attempt: Attempt): ToolAction {
   const candidate: ToolAction = {
     ...baseAction,
@@ -101,7 +118,7 @@ describe("ToolExecutionService properties", () => {
   it("preserves execution invariants across generated attempt sequences", async () => {
     await fc.assert(
       fc.asyncProperty(
-        fc.array(attemptArbitrary, { minLength: 1, maxLength: 25 }),
+        attemptSequenceArbitrary,
         async (attempts) => {
           const effects = { count: 0 };
           const executor = createExecutor(effects);
@@ -176,6 +193,48 @@ describe("ToolExecutionService properties", () => {
         },
       ),
       { numRuns: 60 },
+    );
+  });
+
+  it("keeps changed dry-run payloads outside the authoritative replay scope", async () => {
+    await fc.assert(
+      fc.asyncProperty(
+        actionIdArbitrary,
+        distinctZonePairArbitrary,
+        async (actionId, [firstZone, secondZone]) => {
+          const effects = { count: 0 };
+          const executor = createExecutor(effects);
+          const executionKey = deriveToolExecutionIdempotencyKey(actionId, "dry-run");
+
+          const first = await executor.execute({
+            action: {
+              ...baseAction,
+              actionId,
+              requestId: `request-${actionId}`,
+              arguments: { zone: firstZone },
+            },
+            authority: "T1",
+            idempotencyKey: executionKey,
+            dryRun: true,
+          });
+          const second = await executor.execute({
+            action: {
+              ...baseAction,
+              actionId,
+              requestId: `request-${actionId}`,
+              arguments: { zone: secondZone },
+            },
+            authority: "T1",
+            idempotencyKey: executionKey,
+            dryRun: true,
+          });
+
+          assert.equal(first.status, "dry-run");
+          assert.equal(second.status, "dry-run");
+          assert.equal(effects.count, 0);
+        },
+      ),
+      { numRuns: 30 },
     );
   });
 
@@ -271,13 +330,17 @@ describe("ToolExecutionService properties", () => {
             arguments: { zone },
             consumptionPolicy: "single-use",
           };
-          const executionKey = deriveToolExecutionIdempotencyKey(actionId, "live");
+          const invalidExecutionKey = deriveToolExecutionIdempotencyKey(actionId, "live");
+          // Deliberately use a different claim ID for the retry. If timeout
+          // validation ever moves below claim(), the first attempt will have
+          // consumed invalidExecutionKey and this retry must then be blocked.
+          const retryExecutionKey = `${invalidExecutionKey}:retry`;
 
           await assert.rejects(
             executor.execute({
               action: singleUse,
               authority: "T1",
-              idempotencyKey: executionKey,
+              idempotencyKey: invalidExecutionKey,
               timeoutMs,
             }),
             /timeoutMs must be an integer between 1 and 30000/,
@@ -287,7 +350,7 @@ describe("ToolExecutionService properties", () => {
           const retry = await executor.execute({
             action: singleUse,
             authority: "T1",
-            idempotencyKey: executionKey,
+            idempotencyKey: retryExecutionKey,
           });
           assert.equal(retry.status, "succeeded");
           assert.equal(effects.count, 1);
