@@ -328,12 +328,12 @@ Landed as `proveLocalV1Recovery` in `typescript/src/backup/v4/localV1Proof.ts`. 
 
 - The caller passed `readIsolated`.
 - `restoreLocalV1Archive` is the only apply. The live data directory digest is the same before and after, including when restore throws.
-- The archive has the business, core, and memory groups, `businessSettings` is present, and the V1 collections on those groups are arrays. Empty is valid. Omitted is not.
+- The archive has the business, core, and memory groups, `businessSettings` is present, and the V1 collections on those groups are arrays. An empty array is present. An omitted collection is not.
 - The isolated JSON restore left a regular completion-marker file whose `completeness` is `partial`, the archive manifest stays `partial`, and the in-progress marker is absent.
 - `assertRecoverable` still throws. A partial capture is not full recovery.
 - The S6 and receipt sidecars list their tables in order, with only `table` and `documents`, at most 100 rows, a matching payload checksum, and no `skipped` or `truncated` key. Payload size stays within the existing cap.
 - Each captured PDF artifact has a blob file that is not a symlink, and the file's sha256 and length match the manifest.
-- Two calls to the injected `readIsolated` callback return the same non-empty client, task, build, and quote ids.
+- Two calls to the injected `readIsolated` callback return the same client, task, build, and quote ids, and an empty id fails the gate. A capture with no client, no task, no build, or no quote therefore does not pass.
 
 Convex tests supply that callback and read the scratch stores. A node test calls `rereadIsolatedHttp`, which opens two `createJarvisHttpApp` instances on scratch stores and compares `GET` for a client, a task, a build, and a quote. Those apps are not a restarted operating-system process.
 
