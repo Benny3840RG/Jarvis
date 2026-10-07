@@ -229,9 +229,11 @@ V1 capture, stays `completeness: partial`. `--allow-partial` does not make it a
 recovery.
 
 The Local V1 gate is `proveLocalV1Recovery`. It calls `restoreLocalV1Archive`
-into a new JSON directory and an injected empty database, then requires a second
-isolated read to match. It does not write the live data directory and it does
-not construct a client from `CONVEX_URL`.
+into a new JSON directory and an injected empty database, then requires two
+calls to the injected reader to return the same non-empty ids. It does not
+restart an operating-system process, write the live data directory, or
+construct a client from `CONVEX_URL`. `completeness` stays `partial`. This is
+not a recovery.
 
 Classic `npm run backup -- restore` writes the live provider selected by
 `PERSISTENCE_PROVIDER`. That command is not the Local V1 gate.

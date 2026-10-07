@@ -324,17 +324,22 @@ Reread is through `JsonClientStore`, `JsonQuoteStore`, `JsonInvoiceStore`, `Conv
 
 Landed as `proveLocalV1Recovery` in `typescript/src/backup/v4/localV1Proof.ts`. It calls `restoreLocalV1Archive` and does not add a second apply path. `clear-local` refuses a classic verify receipt that omits business checksums. The explicit skip remains. `completeness` stays `partial`. Operator text names that gate in `archive-v4.md` and `persistence-settings.md`.
 
-The function returns success only when all of the following held on the isolated targets:
+`proveLocalV1Recovery` returns success only when these checks pass. It does not restart an operating-system process, and it does not serve HTTP itself.
 
-1. Every V1 store in section 1.1 and the Convex tables in section 1.3 was in the capture (empty is valid; omitted is not).
-2. Strict validate passed, including blob digests.
-3. Isolated restore finished (JSON completion marker, Convex empty-db apply, no live path).
-4. Store reread matched, including `ConvexQuoteRepository` and the business JSON stores.
-5. Reference and artifact checks in the design above passed.
-6. Two isolated reads through the injected reader matched. A node test opens two HTTP apps on scratch stores and checks GET for a client, a task, a build, and a quote.
-7. Checksums or row counts of the live data directory and a refused write against the live Convex URL were unchanged. A failed apply left no completion marker and no readable "live" scratch.
+- The caller passed `readIsolated`.
+- `restoreLocalV1Archive` is the only apply. The live data directory digest is the same before and after, including when restore throws.
+- The archive has the business, core, and memory groups, `businessSettings` is present, and the V1 collections on those groups are arrays. Empty is valid. Omitted is not.
+- The isolated JSON restore left a regular completion-marker file whose `completeness` is `partial`, the archive manifest stays `partial`, and the in-progress marker is absent.
+- `assertRecoverable` still throws. A partial capture is not full recovery.
+- The S6 and receipt sidecars list their tables in order, with only `table` and `documents`, at most 100 rows, a matching payload checksum, and no `skipped` or `truncated` key. Payload size stays within the existing cap.
+- Each captured PDF artifact has a blob file that is not a symlink, and the file's sha256 and length match the manifest.
+- Two calls to the injected `readIsolated` callback return the same non-empty client, task, build, and quote ids.
 
-This gate must fail closed if any row was skipped for size, if any PDF byte is missing, or if the Convex target URL equals the configured live URL. It must not flip `completeness` to `complete`.
+Convex tests supply that callback and read the scratch stores. A node test calls `rereadIsolatedHttp`, which opens two `createJarvisHttpApp` instances on scratch stores and compares `GET` for a client, a task, a build, and a quote. Those apps are not a restarted operating-system process.
+
+Not yet met, and not part of this gate: a restarted OS process that serves those four GETs again and matches the first read. That remains an open follow-up.
+
+The gate fails closed if any row was skipped for size, if any PDF byte is missing, or if the Convex target URL equals the configured live URL. It does not flip `completeness` to `complete`. Recovery is not complete.
 
 Point Danger zone `clear-local` at this gate, or stop accepting a classic verify receipt as sufficient when business files are in the quarantine set. A receipt that does not list the business checksums must not authorise quarantining them. The explicit skip checkbox can stay; it already requires accepting irreversible loss.
 
@@ -382,4 +387,4 @@ Closed by the integration lead on 2026-10-07. See the decision list at the top o
 
 ## 8. What this file is not
 
-It is not a recovery drill and not a claim that any archive on disk is restorable. PR 1 locks the split. PR 2 writes a partial capture only. PR 3 restores that capture into scratch JSON and an injected empty database. PR 4 names the proof gate `proveLocalV1Recovery`. The function checks two isolated reads through the injected reader, and a node test opens two HTTP apps on scratch stores. It does not flip `completeness` to `complete`. PR 5 records that gate in the operator docs. `assertRecoverable` still refuses the archive.
+It is not a recovery drill and not a claim that any archive on disk is restorable. PR 1 locks the split. PR 2 writes a partial capture only. PR 3 restores that capture into scratch JSON and an injected empty database. PR 4 names the proof gate `proveLocalV1Recovery`. The function checks two isolated reads through the injected reader. A node test opens two `createJarvisHttpApp` instances on scratch stores. A restarted OS process that serves the four GETs is not yet met. It does not flip `completeness` to `complete`. Recovery is not complete. PR 5 records that gate in the operator docs. `assertRecoverable` still refuses the archive.
