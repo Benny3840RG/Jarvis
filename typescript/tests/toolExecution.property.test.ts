@@ -118,77 +118,77 @@ describe("ToolExecutionService properties", () => {
   it("preserves execution invariants across generated attempt sequences", async () => {
     await fc.assert(
       fc.asyncProperty(attemptSequenceArbitrary, async (attempts) => {
-          const effects = { count: 0 };
-          const executor = createExecutor(effects);
-          const liveReceipts = new Map<string, { zone: string; receipt: ToolExecutionReceipt }>();
+        const effects = { count: 0 };
+        const executor = createExecutor(effects);
+        const liveReceipts = new Map<string, { zone: string; receipt: ToolExecutionReceipt }>();
 
-          for (const attempt of attempts) {
-            const action = actionForAttempt(attempt);
-            const dryRun = attempt.kind === "dry-run";
-            const executionKey = deriveToolExecutionIdempotencyKey(
-              action.actionId,
-              dryRun ? "dry-run" : "live",
-            );
-            const before = effects.count;
-            const result = await executor.execute({
-              action,
-              authority: attempt.kind === "unauthorized" ? "T0" : "T1",
-              idempotencyKey: executionKey,
-              ...(dryRun ? { dryRun: true } : {}),
-            });
+        for (const attempt of attempts) {
+          const action = actionForAttempt(attempt);
+          const dryRun = attempt.kind === "dry-run";
+          const executionKey = deriveToolExecutionIdempotencyKey(
+            action.actionId,
+            dryRun ? "dry-run" : "live",
+          );
+          const before = effects.count;
+          const result = await executor.execute({
+            action,
+            authority: attempt.kind === "unauthorized" ? "T0" : "T1",
+            idempotencyKey: executionKey,
+            ...(dryRun ? { dryRun: true } : {}),
+          });
 
-            if (dryRun) {
-              assert.equal(result.status, "dry-run");
-              assert.equal(effects.count, before, "dry-run must not invoke the tool definition");
-              continue;
-            }
-
-            const prior = liveReceipts.get(action.actionId);
-            if (prior !== undefined) {
-              if (prior.zone === attempt.zone) {
-                assert.deepEqual(
-                  result,
-                  prior.receipt,
-                  "a completed logical execution must remain replayable byte-for-byte",
-                );
-                assert.equal(effects.count, before, "replay must not create a second effect");
-              } else {
-                assert.equal(result.status, "blocked");
-                assert.equal(result.errorCode, "fingerprint-mismatch");
-                assert.equal(
-                  effects.count,
-                  before,
-                  "changed content must not inherit an earlier receipt",
-                );
-              }
-              continue;
-            }
-
-            if (attempt.kind === "unauthorized" || attempt.kind === "revoked") {
-              assert.equal(result.status, "blocked");
-              assert.equal(result.errorCode, "not-authorized");
-              assert.equal(effects.count, before, "unauthorized attempts must not create effects");
-              continue;
-            }
-
-            if (attempt.kind === "expired") {
-              assert.equal(result.status, "blocked");
-              assert.equal(result.errorCode, "approval-expired");
-              assert.equal(effects.count, before, "expired approval must not create effects");
-              continue;
-            }
-
-            assert.equal(result.status, "succeeded");
-            assert.equal(effects.count, before + 1);
-            liveReceipts.set(action.actionId, { zone: attempt.zone, receipt: result });
+          if (dryRun) {
+            assert.equal(result.status, "dry-run");
+            assert.equal(effects.count, before, "dry-run must not invoke the tool definition");
+            continue;
           }
 
-          assert.equal(
-            effects.count,
-            liveReceipts.size,
-            "each unique successful live action must create exactly one effect",
-          );
-        }),
+          const prior = liveReceipts.get(action.actionId);
+          if (prior !== undefined) {
+            if (prior.zone === attempt.zone) {
+              assert.deepEqual(
+                result,
+                prior.receipt,
+                "a completed logical execution must remain replayable byte-for-byte",
+              );
+              assert.equal(effects.count, before, "replay must not create a second effect");
+            } else {
+              assert.equal(result.status, "blocked");
+              assert.equal(result.errorCode, "fingerprint-mismatch");
+              assert.equal(
+                effects.count,
+                before,
+                "changed content must not inherit an earlier receipt",
+              );
+            }
+            continue;
+          }
+
+          if (attempt.kind === "unauthorized" || attempt.kind === "revoked") {
+            assert.equal(result.status, "blocked");
+            assert.equal(result.errorCode, "not-authorized");
+            assert.equal(effects.count, before, "unauthorized attempts must not create effects");
+            continue;
+          }
+
+          if (attempt.kind === "expired") {
+            assert.equal(result.status, "blocked");
+            assert.equal(result.errorCode, "approval-expired");
+            assert.equal(effects.count, before, "expired approval must not create effects");
+            continue;
+          }
+
+          assert.equal(result.status, "succeeded");
+          assert.equal(effects.count, before + 1);
+          liveReceipts.set(action.actionId, { zone: attempt.zone, receipt: result });
+        }
+
+        assert.equal(
+          effects.count,
+          liveReceipts.size,
+          "each unique successful live action must create exactly one effect",
+        );
+      }),
       { numRuns: 60 },
     );
   });
