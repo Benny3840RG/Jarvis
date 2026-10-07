@@ -15,6 +15,7 @@ import {
 } from "@nestjs/common";
 import type { FastifyRequest } from "fastify";
 
+import { withClientReferenceLock } from "../clients/clientReferenceLock.js";
 import type { Invoice, InvoiceStore } from "../invoices/invoice.js";
 import {
   parseCreateInvoice,
@@ -111,7 +112,9 @@ export class InvoiceController {
       }
     })();
     try {
-      return invoiceResponse(await this.invoices.add(input));
+      return await withClientReferenceLock(async () =>
+        invoiceResponse(await this.invoices.add(input)),
+      );
     } catch (error: unknown) {
       if (isInvalidInvoiceError(error)) throw invalid(error.message);
       throw operationFailed();

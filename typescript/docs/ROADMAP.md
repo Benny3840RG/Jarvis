@@ -26,10 +26,17 @@ a new JSON directory and an injected empty database, then rereads through the
 existing stores. `completeness` stays `partial`. Neither function is wired to
 `export-v4`. The draft-only S6 helper is unchanged. PR 4 adds
 `proveLocalV1Recovery`, which calls that restore and succeeds only when
-every V1 store was captured, blob digests match, the JSON completion
-marker stays partial, and a second isolated read matches. `clear-local`
-no longer treats a classic verify receipt as cover for business JSON.
-Full v4 recovery stays refused. Operator text is still open.
+the captured V1 collections are present, PDF blob digests match, the JSON
+completion marker and manifest stay `partial`, `assertRecoverable` still
+throws, and two injected reads return the same non-empty ids. The
+restarted-process criterion stays required and is NOT YET MET. What exists
+today is those two reads plus a node test that opens two HTTP apps on
+scratch stores. That proof is still owed under LV1-10 or LV1-11.
+`clear-local` no longer treats a classic verify receipt as cover for
+business JSON. Full v4 recovery stays refused. Operator docs name
+`proveLocalV1Recovery` as that gate and state that classic restore still
+writes the live provider. Checkout-local business files stay under
+`typescript/data/`. Recovery is not complete.
 
 ## LV1-04 authoritative voice query bridge (2026-10-07)
 

@@ -12,6 +12,7 @@ import {
   Query,
 } from "@nestjs/common";
 
+import { withClientReferenceLock } from "../clients/clientReferenceLock.js";
 import type { Property, PropertyStore } from "../properties/property.js";
 import { parseCreateProperty, parseUpdateProperty } from "./propertyRequest.js";
 import { JarvisProblem } from "./problemDetails.js";
@@ -75,7 +76,9 @@ export class PropertyController {
       }
     })();
     try {
-      return propertyResponse(await this.properties.add(input));
+      return await withClientReferenceLock(async () =>
+        propertyResponse(await this.properties.add(input)),
+      );
     } catch (error: unknown) {
       if (error instanceof Error && /empty|must be|must not|requires/.test(error.message))
         throw invalid(error.message);
@@ -106,7 +109,7 @@ export class PropertyController {
     })();
     let property: Property | null;
     try {
-      property = await this.properties.update(propertyId, input);
+      property = await withClientReferenceLock(() => this.properties.update(propertyId, input));
     } catch (error: unknown) {
       if (error instanceof Error && /empty|must be|must not|requires/.test(error.message))
         throw invalid(error.message);
