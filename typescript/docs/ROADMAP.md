@@ -12,8 +12,8 @@ Next:
 
 - LV1-05 safe voice writes through existing API/MCP/ToolAction paths.
 - Owner-wide quote-delivery follow-up remains unsupported (same gap as the
-  operations inbox). Voice quote follow-up is the daily brief's sent-quote slice.
-- Governed Convex quote-lifecycle register is not folded into that slice.
+  operations inbox). Voice quote follow-up therefore fails closed as unavailable.
+- The daily-brief quote file is not treated as the governed sent-quote register.
 
 ## Guarded voice lifecycle review repairs (2026-10-05)
 
