@@ -7,7 +7,7 @@ Off-host LV1-07/08 evidence for #697, base `e438f84ca2560a8585139ee09843a822a5f3
 - Home tasks, reminders, and errands, plus workshop builds, logs, upgrades, and assets, round-trip through the existing MCP tools and HTTP API. JSON files survive a new app instance (`tests/localV1HomeWorkshopFlow.test.ts`). Errands stay on `jarvis-errands.json` even when `PERSISTENCE_PROVIDER=convex`. The map is `docs/operations/local-v1-home-workshop.md`.
 - Open tasks, due reminders, open errands, and derived asset maintenance project into the daily brief and the loopback HUD snapshot. Active builds do not.
 - There is no crawler parts list. `upgrade.parts` records parts used in one change. Reminder completion is deletion, not a completed flag.
-- Google Home stays on pinned `home:announce`. `npm run home:kit` writes one evidence package with `commissioningClaimed: false`. It does not approve and does not add a Cast path.
+- Google Home stays on pinned `home:announce`. `npm run home:kit` writes one evidence package with `commissioningClaimed: false`. It does not approve, does not execute a ToolAction, and does not add a Cast path.
 
 Next: voice track calls the tools named in that map; Benny runs the kit on J-arvis after pinning speakers; Convex restart of tasks and workshop records still needs the host.
 

@@ -68,7 +68,7 @@ Routing and listener setup observe the execution cancellation signal and have in
 
 `npm run home:kit` writes one private evidence file (default: the system temp directory) and prints its path. The package always has `commissioningClaimed: false`. Running the kit is not commissioning. Commissioning still requires J-arvis, pinned devices, an owner-approved `home:announce` action, and a receipt Benny accepts.
 
-The kit does not approve anything and does not add a Cast send path. Audio leaves the machine only when the operator has already approved an action and then supplies that action to the existing execute endpoint.
+The kit does not approve anything, does not execute a ToolAction, and does not add a Cast send path. A configured API URL, service token, project id or action id does not send a request. After Benny approves with `npm run owner:approve`, a separate operator command uses the existing `POST /api/v1/projects/{projectId}/tool-actions/{actionId}/execute` route.
 
 ```bash
 npm run home:discover
@@ -83,6 +83,6 @@ The package records:
 2. Whether the pin map is absent, invalid, or pinned. Names only.
 3. One local TTS synthesis, refused unless the clip is audible.
 4. The existing fail-closed drills: no device (`tests/localCastCleanup.test.ts`), timeout and cancellation (`tests/localCastAcquisition.test.ts`, `tests/localCastAcceptedConnection.test.ts`, `tests/localCastLifecycle.test.ts`), and the pin/receipt contract (`tests/homeAnnouncementTool.test.ts`, `tests/googleHomeCommissioningKit.test.ts`).
-5. Governed announcement. With no action id, the step is `not-executed`. After Benny approves with `npm run owner:approve`, rerun on the loopback API with `JARVIS_API_BASE_URL`, `JARVIS_SERVICE_TOKEN`, `JARVIS_HOME_ANNOUNCE_PROJECT_ID` and `JARVIS_HOME_ANNOUNCE_ACTION_ID`. The kit POSTs the existing `/execute` route and copies `receiptId`, `tool`, `operation`, `status` and `errorCode` only.
+5. Governed announcement. The step is always `not-executed`. The kit does not read or execute the action.
 
 Stage with `POST /api/v1/projects/{projectId}/tool-actions` for tool `home`, operation `announce`, arguments `{ target, message }`. `target` must be a pinned name. An `address` field is rejected. Execution requires Convex-backed ToolAction storage, so a JSON-only process reports execution unavailable and must not be treated as a successful announcement.

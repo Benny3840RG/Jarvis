@@ -87,6 +87,39 @@ export function assembleGoogleHomeKitEvidence(input: {
   };
 }
 
+/**
+ * The kit never executes a ToolAction. API URL, service token, project id and
+ * action id are ignored, including an approved `home:announce` id. Playback
+ * uses the existing execute route from a separate operator command.
+ */
+function notExecutedReason(configured: boolean): string {
+  const ignored = configured
+    ? " A configured API URL, service token, project id or action id does not send a request."
+    : "";
+  return (
+    "The kit does not execute ToolActions." +
+    ignored +
+    " After owner approval, a separate operator command uses the existing" +
+    " POST /api/v1/projects/{projectId}/tool-actions/{actionId}/execute route."
+  );
+}
+
+export function kitGovernedAnnouncement(
+  env: NodeJS.ProcessEnv = {},
+): GoogleHomeKitEvidence["governedAnnouncement"] {
+  const configured = [
+    env.JARVIS_API_BASE_URL,
+    env.JARVIS_SERVICE_TOKEN,
+    env.JARVIS_HOME_ANNOUNCE_PROJECT_ID,
+    env.JARVIS_HOME_ANNOUNCE_ACTION_ID,
+  ].some((value) => typeof value === "string" && value.trim().length > 0);
+  return {
+    status: "not-executed",
+    reason: notExecutedReason(configured),
+    receipt: null,
+  };
+}
+
 /** Copy only the receipt fields an operator needs. Tokens and arguments stay out. */
 export function publicAnnouncementReceipt(
   value: unknown,

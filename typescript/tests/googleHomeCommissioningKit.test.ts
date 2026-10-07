@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
+import { fileURLToPath } from "node:url";
 
 import { homeAnnouncementArgumentsSchema } from "../src/actions/homeAnnouncementTool.js";
 import {
   GOOGLE_HOME_FAIL_CLOSED_TESTS,
   assembleGoogleHomeKitEvidence,
+  kitGovernedAnnouncement,
   publicAnnouncementReceipt,
   publicCastDiscovery,
 } from "../src/integrations/googleHome/commissioningKit.js";
@@ -112,5 +115,54 @@ describe("google home kit evidence", () => {
       "provider-failed",
     );
     assert.equal(publicAnnouncementReceipt({ tool: "quotes", operation: "send" }), null);
+  });
+
+  it("never posts tool-action execute, whatever environment is set", async () => {
+    const calls: string[] = [];
+    const original = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      calls.push(`${init?.method ?? "GET"} ${url}`);
+      return new Response("execute-forbidden", { status: 500 });
+    }) as typeof fetch;
+    const environments: NodeJS.ProcessEnv[] = [
+      {},
+      {
+        JARVIS_API_BASE_URL: "http://127.0.0.1:3210",
+        JARVIS_SERVICE_TOKEN: "service-token",
+        JARVIS_HOME_ANNOUNCE_PROJECT_ID: "project-1",
+        JARVIS_HOME_ANNOUNCE_ACTION_ID: "approved-home-announce",
+      },
+      {
+        JARVIS_API_BASE_URL: "http://127.0.0.1:3210",
+        JARVIS_SERVICE_TOKEN: "service-token",
+        JARVIS_HOME_ANNOUNCE_PROJECT_ID: "project-1",
+        JARVIS_HOME_ANNOUNCE_ACTION_ID: "quotes-send-action",
+      },
+      {
+        JARVIS_API_BASE_URL: "http://127.0.0.1:3210",
+        JARVIS_SERVICE_TOKEN: "service-token",
+        JARVIS_HOME_ANNOUNCE_PROJECT_ID: "project-1",
+        JARVIS_HOME_ANNOUNCE_ACTION_ID: "approved-home-announce",
+        JARVIS_GOOGLE_HOME_TARGETS_JSON: '{"Kitchen Display":"192.0.2.20"}',
+      },
+    ];
+    try {
+      for (const env of environments) {
+        const result = kitGovernedAnnouncement(env);
+        assert.equal(result.status, "not-executed");
+        assert.equal(result.receipt, null);
+      }
+    } finally {
+      globalThis.fetch = original;
+    }
+    assert.deepEqual(calls, []);
+
+    const runnerSource = readFileSync(
+      fileURLToPath(new URL("../src/tools/runGoogleHomeCommissioningKit.ts", import.meta.url)),
+      "utf8",
+    );
+    assert.equal(runnerSource.includes("fetch("), false);
+    assert.equal(runnerSource.includes("/execute"), false);
   });
 });
