@@ -63,3 +63,26 @@ Pin only intended speakers/displays. Avoid Cast groups or TVs unless deliberatel
 If LAUNCH or LOAD has taken effect but its acknowledgment is lost, playback or receiver changes are unconfirmed. Late LAUNCH callbacks cannot start LOAD after cancellation. A shared receiver application is not claimed as exclusively owned or stopped. The existing registered-attempt reconciliation boundary reports an indeterminate outcome; never resend automatically. Existing music or display content may be interrupted by an announcement and is not automatically resumed.
 
 Routing and listener setup observe the execution cancellation signal and have individual two-second timeouts. HTTP listeners are closed on acquisition failure, including cancellation while opening. A bound audio server is not a persistent network service.
+
+## Local V1 operator kit
+
+`npm run home:kit` writes one private evidence file (default: the system temp directory) and prints its path. The package always has `commissioningClaimed: false`. Running the kit is not commissioning. Commissioning still requires J-arvis, pinned devices, an owner-approved `home:announce` action, and a receipt Benny accepts.
+
+The kit does not approve anything and does not add a Cast send path. Audio leaves the machine only when the operator has already approved an action and then supplies that action to the existing execute endpoint.
+
+```bash
+npm run home:discover
+# Pin names to IPv4 addresses in the environment. Do not commit the map.
+# JARVIS_GOOGLE_HOME_TARGETS_JSON='{"Kitchen Display":"192.168.1.20"}'
+npm run home:kit -- --out /tmp/jarvis-google-home-evidence.json
+```
+
+The package records:
+
+1. Discovery names only. No addresses. An empty result is `unavailable`, which is the expected off-host result.
+2. Whether the pin map is absent, invalid, or pinned. Names only.
+3. One local TTS synthesis, refused unless the clip is audible.
+4. The existing fail-closed drills: no device (`tests/localCastCleanup.test.ts`), timeout and cancellation (`tests/localCastAcquisition.test.ts`, `tests/localCastAcceptedConnection.test.ts`, `tests/localCastLifecycle.test.ts`), and the pin/receipt contract (`tests/homeAnnouncementTool.test.ts`, `tests/googleHomeCommissioningKit.test.ts`).
+5. Governed announcement. With no action id, the step is `not-executed`. After Benny approves with `npm run owner:approve`, rerun on the loopback API with `JARVIS_API_BASE_URL`, `JARVIS_SERVICE_TOKEN`, `JARVIS_HOME_ANNOUNCE_PROJECT_ID` and `JARVIS_HOME_ANNOUNCE_ACTION_ID`. The kit POSTs the existing `/execute` route and copies `receiptId`, `tool`, `operation`, `status` and `errorCode` only.
+
+Stage with `POST /api/v1/projects/{projectId}/tool-actions` for tool `home`, operation `announce`, arguments `{ target, message }`. `target` must be a pinned name. An `address` field is rejected. Execution requires Convex-backed ToolAction storage, so a JSON-only process reports execution unavailable and must not be treated as a successful announcement.
