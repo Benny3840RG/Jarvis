@@ -126,3 +126,27 @@ export function createGoogleHomeAnnouncementProviderFromEnv(
   const voice = env.JARVIS_GOOGLE_HOME_TTS_VOICE?.trim() || "en-au";
   return new LocalGoogleHomeAnnouncementProvider(targets, 4_000, voice);
 }
+
+export type GoogleHomePinDescription =
+  | { readonly status: "absent" }
+  | { readonly status: "invalid"; readonly reason: string }
+  | { readonly status: "pinned"; readonly targetNames: readonly string[] };
+
+/**
+ * Names of pinned announcement targets only. Addresses stay in the operator
+ * environment and are not copied into evidence or logs.
+ */
+export function describeGoogleHomePins(
+  env: NodeJS.ProcessEnv = process.env,
+): GoogleHomePinDescription {
+  try {
+    const targets = parsePinnedTargets(env.JARVIS_GOOGLE_HOME_TARGETS_JSON);
+    if (targets.size === 0) return { status: "absent" };
+    return { status: "pinned", targetNames: [...targets.keys()] };
+  } catch (error: unknown) {
+    return {
+      status: "invalid",
+      reason: error instanceof Error ? error.message : "google-home-target-map-invalid",
+    };
+  }
+}
