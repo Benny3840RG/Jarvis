@@ -58,6 +58,8 @@ Physical machine actuation is not a Local V1 blocker. Uncommissioned hardware mu
 
 The first verification run for this plan exposed a newly published high-severity `source-map-js@1.2.1` advisory in the unchanged root dependency tree. Issue #699 and PR #700 repaired the root lockfile to patched `source-map-js@1.2.2` without weakening the audit gate. PR #700 merged before final verification of this roadmap candidate.
 
+A later baseline audit failed on critical `shell-quote` [GHSA-pqg4-j6r4-53mv](https://github.com/advisories/GHSA-pqg4-j6r4-53mv) (`>=1.8.4 <1.11.0`) via `concurrently@10.0.5`, which still pins `shell-quote@1.9.0`. No newer `concurrently` carries the fix. Issue #703 pins that dependency to patched `shell-quote@1.11.0` through a `concurrently` override. Audit thresholds are unchanged.
+
 ## Execution sequence
 
 ### LV1-01 — Baseline lock
