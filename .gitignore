@@ -7,8 +7,10 @@ __pycache__/
 .env
 .env.*
 *.sqlite3
-typescript/data/jarvis-state.json*
-typescript/data/.jarvis-state.json.tmp-*
+# Runtime JSON documents (assistant state, memory stores, business records) and
+# their lock, reclaim, quarantine, and audit sidecars. Atomic temps are dot-prefixed.
+typescript/data/jarvis-*.json*
+typescript/data/.jarvis-*.json.tmp-*
 
 # Temporal PASS prototype (src/preview/temporalPass) local idempotency/mock-repo state
 typescript/data/preview/temporal-pass-idempotency.json*
