@@ -3112,7 +3112,7 @@
       "delete": {
         "operationId": "deleteClient",
         "summary": "Delete a business client",
-        "description": "Permanently removes one client by its identifier.",
+        "description": "Permanently removes one client by its identifier when no enquiry, invoice, property, project, flat quote, or quote-lifecycle revision still references that client. A referencing record is a conflict; the client is left unchanged.",
         "tags": ["Clients"],
         "x-mcp-tool": {
           "exposed": true,
@@ -3144,6 +3144,9 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
