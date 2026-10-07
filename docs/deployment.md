@@ -94,13 +94,9 @@ outbox consumer or HTTP/MCP-wide runtime composition.
 
 ## JSON provider
 
-When `PERSISTENCE_PROVIDER` is unset or set to `json`, the maintained TypeScript runtime stores data at:
+When `PERSISTENCE_PROVIDER` is unset or set to `json`, the maintained TypeScript runtime stores assistant state, memory, and business records as `typescript/data/jarvis-*.json` (including `jarvis-state.json`).
 
-```text
-typescript/data/jarvis-state.json
-```
-
-The file, its lock file, temporary writes, backups, and corrupt-file quarantine copies must not be committed.
+Those documents must not be committed. The same rule covers adjacent lock files, dot-prefixed atomic temps (`.jarvis-*.json.tmp-*`), lock reclaim claims, `.corrupt-*` quarantine copies, and `jarvis-operator-audit.jsonl`. The JSON stores do not write `.bak` or `-wal` sidecars.
 
 ## Environment variables
 
@@ -111,7 +107,7 @@ All environment variables are loaded from `typescript/.env.local` at startup. Va
 | `JARVIS_SERVICE_TOKEN`                  | **Required**                                    | —                     | Current bearer token required by all authenticated HTTP and Convex operations. Must be a strong random secret; whitespace is rejected.                                                                            |
 | `JARVIS_SERVICE_TOKEN_PREVIOUS`         | Optional                                        | —                     | Previous token accepted during a controlled rotation window only. Remove after rotation is complete.                                                                                                              |
 | `JARVIS_TIMEZONE`                       | **Required** for Totality                       | —                     | IANA timezone string (e.g. `Australia/Melbourne`). Invalid values cause the status and Totality endpoints to return `503`.                                                                                        |
-| `PERSISTENCE_PROVIDER`                  | Optional                                        | `json`                | `json` or `convex`. With `json`, data is stored in `typescript/data/jarvis-state.json`. With `convex`, `CONVEX_URL` is required.                                                                                  |
+| `PERSISTENCE_PROVIDER`                  | Optional                                        | `json`                | `json` or `convex`. With `json`, data is stored in `typescript/data/jarvis-*.json`. With `convex`, `CONVEX_URL` is required.                                                                                       |
 | `CONVEX_URL`                            | **Required** when `PERSISTENCE_PROVIDER=convex` | —                     | Full URL of the authorised Convex deployment (e.g. `https://outgoing-ram-798.convex.cloud`).                                                                                                                      |
 | `OPENAI_API_KEY`                        | **Required** for Totality reasoning             | —                     | Server-side OpenAI API key. Never expose this in browser code, logs, issues, or chat.                                                                                                                             |
 | `JARVIS_HTTP_HOST`                      | Optional                                        | `127.0.0.1`           | Listener address for the HTTP service. Change only to expose the service on a non-loopback interface.                                                                                                             |

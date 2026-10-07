@@ -167,7 +167,7 @@ Invalid timezone configuration fails the reminder command rather than saving a g
 
 ### Local JSON persistence
 
-JSON is the default provider. Runtime data is stored in `typescript/data/jarvis-state.json`, which is ignored by Git. Writes use a temporary file plus atomic rename. Malformed or unsupported files are moved aside with a `.corrupt-*` suffix so the CLI can start with an empty document while preserving the bad file for recovery.
+JSON is the default provider. Assistant state, memory stores, and business records are stored as `typescript/data/jarvis-*.json`. Git ignores those documents and their lock, temporary, reclaim, and `.corrupt-*` sidecars, plus `jarvis-operator-audit.jsonl`. Writes use a temporary file plus atomic rename. Malformed or unsupported files are moved aside with a `.corrupt-*` suffix so the CLI can start with an empty document while preserving the bad file for recovery.
 
 Removing the tracked runtime file does not remove its older copies from Git history. Scrub repository history separately if an earlier state file contained sensitive personal data.
 
