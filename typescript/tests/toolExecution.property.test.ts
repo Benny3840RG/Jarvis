@@ -6,6 +6,7 @@ import { z } from "zod";
 
 import type { ToolAction } from "../src/actions/toolActions.js";
 import {
+  deriveToolExecutionIdempotencyKey,
   InMemoryToolExecutionReceiptStore,
   ToolExecutionService,
   type ToolExecutionReceipt,
@@ -32,7 +33,9 @@ const baseAction: ToolAction = {
   updatedAt: BASE_TIMESTAMP,
 };
 
-const keyArbitrary = fc.integer({ min: 0, max: 1_000_000 }).map((value) => `key-${value}`);
+const actionIdArbitrary = fc
+  .integer({ min: 0, max: 1_000_000 })
+  .map((value) => `property-action-${value}`);
 const zoneArbitrary = fc.constantFrom(
   "UTC",
   "Australia/Melbourne",
@@ -44,19 +47,22 @@ type AttemptKind = "live" | "dry-run" | "unauthorized" | "revoked" | "expired";
 
 type Attempt = Readonly<{
   kind: AttemptKind;
-  key: string;
+  actionId: string;
   zone: string;
 }>;
 
 const attemptArbitrary: fc.Arbitrary<Attempt> = fc.record({
   kind: fc.constantFrom<AttemptKind>("live", "dry-run", "unauthorized", "revoked", "expired"),
-  key: keyArbitrary,
+  actionId: actionIdArbitrary,
   zone: zoneArbitrary,
 });
 
 function actionForAttempt(attempt: Attempt): ToolAction {
   const candidate: ToolAction = {
     ...baseAction,
+    actionId: attempt.actionId,
+    requestId: `request-${attempt.actionId}`,
+    idempotencyKey: `proposal-${attempt.actionId}`,
     arguments: { zone: attempt.zone },
   };
 
@@ -102,17 +108,44 @@ describe("ToolExecutionService properties", () => {
           const liveReceipts = new Map<string, { zone: string; receipt: ToolExecutionReceipt }>();
 
           for (const attempt of attempts) {
+            const action = actionForAttempt(attempt);
+            const dryRun = attempt.kind === "dry-run";
+            const executionKey = deriveToolExecutionIdempotencyKey(
+              action.actionId,
+              dryRun ? "dry-run" : "live",
+            );
             const before = effects.count;
             const result = await executor.execute({
-              action: actionForAttempt(attempt),
+              action,
               authority: attempt.kind === "unauthorized" ? "T0" : "T1",
-              idempotencyKey: attempt.key,
-              ...(attempt.kind === "dry-run" ? { dryRun: true } : {}),
+              idempotencyKey: executionKey,
+              ...(dryRun ? { dryRun: true } : {}),
             });
 
-            if (attempt.kind === "dry-run") {
+            if (dryRun) {
               assert.equal(result.status, "dry-run");
               assert.equal(effects.count, before, "dry-run must not invoke the tool definition");
+              continue;
+            }
+
+            const prior = liveReceipts.get(action.actionId);
+            if (prior !== undefined) {
+              if (prior.zone === attempt.zone) {
+                assert.deepEqual(
+                  result,
+                  prior.receipt,
+                  "a completed logical execution must remain replayable byte-for-byte",
+                );
+                assert.equal(effects.count, before, "replay must not create a second effect");
+              } else {
+                assert.equal(result.status, "blocked");
+                assert.equal(result.errorCode, "fingerprint-mismatch");
+                assert.equal(
+                  effects.count,
+                  before,
+                  "changed content must not inherit an earlier receipt",
+                );
+              }
               continue;
             }
 
@@ -130,28 +163,15 @@ describe("ToolExecutionService properties", () => {
               continue;
             }
 
-            const prior = liveReceipts.get(attempt.key);
-            if (prior === undefined) {
-              assert.equal(result.status, "succeeded");
-              assert.equal(effects.count, before + 1);
-              liveReceipts.set(attempt.key, { zone: attempt.zone, receipt: result });
-              continue;
-            }
-
-            if (prior.zone === attempt.zone) {
-              assert.deepEqual(result, prior.receipt, "same logical retry must replay its receipt");
-              assert.equal(effects.count, before, "replay must not create a second effect");
-            } else {
-              assert.equal(result.status, "blocked");
-              assert.equal(result.errorCode, "fingerprint-mismatch");
-              assert.equal(effects.count, before, "changed content must not inherit an earlier receipt");
-            }
+            assert.equal(result.status, "succeeded");
+            assert.equal(effects.count, before + 1);
+            liveReceipts.set(action.actionId, { zone: attempt.zone, receipt: result });
           }
 
           assert.equal(
             effects.count,
             liveReceipts.size,
-            "each unique successful live execution key must create exactly one effect",
+            "each unique successful live action must create exactly one effect",
           );
         },
       ),
@@ -186,10 +206,7 @@ describe("ToolExecutionService properties", () => {
         ]);
 
         assert.equal(effects.count, 1, "single-use action must cross the effect boundary once");
-        assert.deepEqual(
-          [first.status, second.status].sort(),
-          ["blocked", "succeeded"],
-        );
+        assert.deepEqual([first.status, second.status].sort(), ["blocked", "succeeded"]);
         const loser = first.status === "blocked" ? first : second;
         assert.equal(loser.errorCode, "approval-consumed");
       }),
@@ -199,11 +216,13 @@ describe("ToolExecutionService properties", () => {
 
   it("never lets dry-run consume a single-use action's live execution", async () => {
     await fc.assert(
-      fc.asyncProperty(keyArbitrary, keyArbitrary, zoneArbitrary, async (dryKey, liveKey, zone) => {
+      fc.asyncProperty(actionIdArbitrary, zoneArbitrary, async (actionId, zone) => {
         const effects = { count: 0 };
         const executor = createExecutor(effects);
         const singleUse: ToolAction = {
           ...baseAction,
+          actionId,
+          requestId: `request-${actionId}`,
           arguments: { zone },
           consumptionPolicy: "single-use",
         };
@@ -211,13 +230,13 @@ describe("ToolExecutionService properties", () => {
         const dryRun = await executor.execute({
           action: singleUse,
           authority: "T1",
-          idempotencyKey: dryKey,
+          idempotencyKey: deriveToolExecutionIdempotencyKey(actionId, "dry-run"),
           dryRun: true,
         });
         const live = await executor.execute({
           action: singleUse,
           authority: "T1",
-          idempotencyKey: liveKey,
+          idempotencyKey: deriveToolExecutionIdempotencyKey(actionId, "live"),
         });
 
         assert.equal(dryRun.status, "dry-run");
@@ -238,34 +257,42 @@ describe("ToolExecutionService properties", () => {
     );
 
     await fc.assert(
-      fc.asyncProperty(invalidTimeoutArbitrary, keyArbitrary, zoneArbitrary, async (timeoutMs, key, zone) => {
-        const effects = { count: 0 };
-        const executor = createExecutor(effects);
-        const singleUse: ToolAction = {
-          ...baseAction,
-          arguments: { zone },
-          consumptionPolicy: "single-use",
-        };
+      fc.asyncProperty(
+        invalidTimeoutArbitrary,
+        actionIdArbitrary,
+        zoneArbitrary,
+        async (timeoutMs, actionId, zone) => {
+          const effects = { count: 0 };
+          const executor = createExecutor(effects);
+          const singleUse: ToolAction = {
+            ...baseAction,
+            actionId,
+            requestId: `request-${actionId}`,
+            arguments: { zone },
+            consumptionPolicy: "single-use",
+          };
+          const executionKey = deriveToolExecutionIdempotencyKey(actionId, "live");
 
-        await assert.rejects(
-          executor.execute({
+          await assert.rejects(
+            executor.execute({
+              action: singleUse,
+              authority: "T1",
+              idempotencyKey: executionKey,
+              timeoutMs,
+            }),
+            /timeoutMs must be an integer between 1 and 30000/,
+          );
+          assert.equal(effects.count, 0);
+
+          const retry = await executor.execute({
             action: singleUse,
             authority: "T1",
-            idempotencyKey: `${key}-invalid`,
-            timeoutMs,
-          }),
-          /timeoutMs must be an integer between 1 and 30000/,
-        );
-        assert.equal(effects.count, 0);
-
-        const retry = await executor.execute({
-          action: singleUse,
-          authority: "T1",
-          idempotencyKey: `${key}-valid`,
-        });
-        assert.equal(retry.status, "succeeded");
-        assert.equal(effects.count, 1);
-      }),
+            idempotencyKey: executionKey,
+          });
+          assert.equal(retry.status, "succeeded");
+          assert.equal(effects.count, 1);
+        },
+      ),
       { numRuns: 30 },
     );
   });
