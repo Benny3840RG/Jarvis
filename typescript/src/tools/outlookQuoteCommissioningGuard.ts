@@ -179,22 +179,83 @@ function unquoteDotAtomLocal(value: string): string | null {
   return `${inner}@${domain}`;
 }
 
+function decodeEncodedWords(value: string): string | null {
+  let invalid = false;
+  const decoded = value.replace(
+    /=\?([^?]*)\?([bBqQ])\?([^?]*)\?=/gu,
+    (_full, _charset: string, encoding: string, payload: string) => {
+      const encodingName = encoding.toLowerCase();
+      if (encodingName === "q") {
+        return payload
+          .replaceAll("_", " ")
+          .replace(/=([0-9a-fA-F]{2})/gu, (_hex, digits: string) => {
+            return String.fromCharCode(Number.parseInt(digits, 16));
+          });
+      }
+      if (encodingName === "b") return Buffer.from(payload, "base64").toString("utf8");
+      invalid = true;
+      return "";
+    },
+  );
+  return invalid ? null : decoded;
+}
+
+function unquoteQuotedAtoms(value: string): string {
+  return value.replace(/"([^"]*)"/gu, (full, inner: string) => {
+    return DOT_ATOM_ONLY.test(inner) ? inner : full;
+  });
+}
+
+/** Fold comments, encoded-words, and quoted locals. True when an address remains or the fold is invalid. */
+function residueContainsMailbox(value: string): boolean {
+  if (value.trim().length === 0) return false;
+  const decoded = decodeEncodedWords(value);
+  if (decoded === null) return true;
+  const uncommented = removeComments(decoded.toLowerCase());
+  if (uncommented === null) return true;
+  return unquoteQuotedAtoms(uncommented).includes("@");
+}
+
+/**
+ * One angle-addr, or the original text when it has no brackets.
+ * A second mailbox outside the brackets is refused.
+ */
+function singleAngleAddr(text: string): string | null {
+  if (!text.includes("<") && !text.includes(">")) return text;
+  const opens = [...text.matchAll(/</gu)];
+  const closes = [...text.matchAll(/>/gu)];
+  const open = opens[0];
+  const close = closes[0];
+  if (opens.length !== 1 || closes.length !== 1 || !open || !close) return null;
+  if (open.index === undefined || close.index === undefined || close.index < open.index)
+    return null;
+  const inside = text.slice(open.index + 1, close.index);
+  const before = text.slice(0, open.index);
+  const after = text.slice(close.index + 1);
+  if (before.includes("@") || after.includes("@")) return null;
+  if (residueContainsMailbox(before) || residueContainsMailbox(after)) return null;
+  return inside;
+}
+
 /**
  * Contact mailbox after one encoded-word, comment removal, a dot-atom unquote,
- * and every trailing dot. Plus-tags stay. A value that is not one mailbox is null.
+ * and every trailing dot. Plus-tags stay. More than one mailbox is null.
  */
 function exactMailbox(value: string): string | null {
-  let text = stripMailto(value.trim());
-  const wrapped = text.match(/<([^<>]+)>/u);
-  if (wrapped?.[1]) text = stripMailto(wrapped[1].trim());
+  const stripped = stripMailto(value.trim());
+  const angled = singleAngleAddr(stripped);
+  if (angled === null) return null;
+  let text = stripMailto(angled.trim());
   const decoded = applyOneEncodedWord(text.trim());
   if (decoded === null) return null;
   text = decoded.toLowerCase();
   const uncommented = removeComments(text);
   if (uncommented === null) return null;
+  if ((uncommented.match(/@/gu) ?? []).length !== 1) return null;
   const unquoted = unquoteDotAtomLocal(stripTrailingDots(uncommented.trim()));
   if (unquoted === null) return null;
   text = unquoted.trim();
+  if ((text.match(/@/gu) ?? []).length !== 1) return null;
   if (text.length === 0 || text.length > 320 || !PLAIN_MAILBOX.test(text)) return null;
   return text;
 }

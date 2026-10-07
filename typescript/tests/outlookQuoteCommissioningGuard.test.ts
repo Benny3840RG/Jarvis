@@ -390,6 +390,35 @@ describe("outlook quote commissioning guard", () => {
     assert.equal(contained, true);
   });
 
+  it("refuses a second mailbox hidden beside an angle address before anything is staged", async () => {
+    const contacts = [
+      "Name <other@evil.com> customer(note)@example.com",
+      'Name <other@evil.com> "customer"@example.com',
+      "Name <other@evil.com> =?utf-8?q?customer=40example.com?=",
+      "customer(note)@example.com <other@evil.com>",
+      "=?utf-8?q?customer=40example.com?= <other@evil.com>",
+    ];
+    for (const contact of contacts) {
+      let staged = 0;
+      let sent = 0;
+      await assert.rejects(async () => {
+        const plan = await beginOutlookQuoteCommissioning({
+          environment: {
+            ...READY,
+            JARVIS_OUTLOOK_COMMISSIONING_RECIPIENT: "customer@example.com",
+            JARVIS_OUTLOOK_COMMISSIONING_RECIPIENT_ALLOWLIST: "customer@example.com",
+          },
+          loadClientContactValues: () => Promise.resolve([contact]),
+        });
+        staged += 1;
+        sent += 1;
+        void plan;
+      }, /could not be parsed into one mailbox/);
+      assert.equal(staged, 0, contact);
+      assert.equal(sent, 0, contact);
+    }
+  });
+
   it("records one terminal reconciliation and leaves #294 and #297 open", () => {
     const evidence = assertOutlookCommissioningProof({
       providerRequestId: "graph-message-1",
