@@ -4,6 +4,8 @@ import { afterEach, describe, it } from "node:test";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 
 import { createJarvisHttpApp } from "../src/http/app.js";
+import { InMemoryInvoiceStore } from "../src/invoices/inMemoryInvoiceStore.js";
+import type { InvoiceStore } from "../src/invoices/invoice.js";
 import type { HttpAppConfig } from "../src/http/config.js";
 import type { PersistenceProvider } from "../src/persistence/persistence.js";
 import { captureCredentials, type CredentialsRuntime } from "../src/settings/credentialsStatus.js";
@@ -119,7 +121,7 @@ describe("voice HTTP boundary", () => {
     assert.ok(body.commands.some((c: { id: string }) => c.id === "trailer.winch-up"));
   });
 
-  it("returns an explicit unavailable query result without inventing business data", async () => {
+  it("answers an empty invoice register as none, not a guessed count", async () => {
     const app = await makeApp();
     const sessionId = await openSession(app, "client");
     const response = await utter(app, sessionId, {
@@ -127,9 +129,69 @@ describe("voice HTTP boundary", () => {
       isFinal: true,
     });
     assert.equal(response.statusCode, 200);
-    assert.equal(response.json().dispatch.decision, "query-unavailable");
-    assert.match(response.json().dispatch.reason, /No read-only query provider/);
+    assert.equal(response.json().dispatch.decision, "answered");
+    assert.equal(response.json().dispatch.answer, "No unpaid invoices.");
     assert.equal(response.json().pending, null);
+  });
+
+  it("answers unpaid invoices from the invoice store and ignores an unissued draft", async () => {
+    const invoices = new InMemoryInvoiceStore();
+    await invoices.add({
+      clientId: "client-1",
+      number: "INV-DRAFT",
+      lineItems: [{ description: "Draft", quantity: 1, unitPrice: 80 }],
+    });
+    const issued = await invoices.add({
+      clientId: "client-1",
+      number: "INV-9",
+      lineItems: [{ description: "Work", quantity: 1, unitPrice: 40 }],
+    });
+    await invoices.issue(issued.id);
+    const app = await createJarvisHttpApp({
+      persistence: persistence(),
+      providerName: "json",
+      config: CONFIG,
+      credentialsRuntime: credentials("10.0.0.5"),
+      invoiceStore: invoices,
+      logger: false,
+    });
+    openApps.push(app);
+    const sessionId = await openSession(app, "client");
+    const response = await utter(app, sessionId, {
+      transcript: "any unpaid invoices",
+      isFinal: true,
+    });
+    assert.equal(response.json().dispatch.decision, "answered");
+    assert.equal(response.json().dispatch.answer, "1 unpaid invoice, balance due 40.00. INV-9.");
+  });
+
+  it("names invoice records when the store fails instead of inventing a count", async () => {
+    const failing: InvoiceStore = {
+      list: () => Promise.reject(new Error("invoice store down")),
+      get: () => Promise.reject(new Error("invoice store down")),
+      add: () => Promise.reject(new Error("invoice store down")),
+      update: () => Promise.reject(new Error("invoice store down")),
+      issue: () => Promise.reject(new Error("invoice store down")),
+      void: () => Promise.reject(new Error("invoice store down")),
+      recordPayment: () => Promise.reject(new Error("invoice store down")),
+    };
+    const app = await createJarvisHttpApp({
+      persistence: persistence(),
+      providerName: "json",
+      config: CONFIG,
+      credentialsRuntime: credentials("10.0.0.5"),
+      invoiceStore: failing,
+      logger: false,
+    });
+    openApps.push(app);
+    const sessionId = await openSession(app, "client");
+    const response = await utter(app, sessionId, {
+      transcript: "any unpaid invoices",
+      isFinal: true,
+    });
+    assert.equal(response.json().dispatch.decision, "query-unavailable");
+    assert.equal(response.json().dispatch.reason, "Invoice records are unavailable.");
+    assert.equal(response.json().dispatch.answer, undefined);
   });
 
   it("only proposes a governed send — a spoken confirm never approves it", async () => {
