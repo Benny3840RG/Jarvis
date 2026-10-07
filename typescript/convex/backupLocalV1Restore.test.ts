@@ -629,10 +629,37 @@ it("restores a partial capture into scratch JSON and an empty convex-test, then 
     const afterApprove = await target.run(async (ctx) => ctx.db.query("toolActions").first());
     expect(afterApprove?.approvalExpiresAt).toBe(1);
     expect(afterApprove?.state).toBe("approved");
+
+    const stateDoc = JSON.parse(
+      await readFile(path.join(restoredDir, "jarvis-state.json"), "utf8"),
+    ) as {
+      tasks: Array<{ id: string }>;
+    };
+    const buildDoc = JSON.parse(
+      await readFile(path.join(restoredDir, "jarvis-builds.json"), "utf8"),
+    ) as {
+      builds: Array<{ id: string }>;
+    };
+    const { readRestartedProcess } = await import("../src/backup/v4/localV1ProcessRestart.js");
+    const restarted = await readRestartedProcess({
+      jsonDirectory: restoredDir,
+      liveDirectory: live,
+      clientId: "client-1",
+      taskId: stateDoc.tasks[0]?.id ?? "",
+      buildId: buildDoc.builds[0]?.id ?? "",
+      quoteId: seeded.quote.aggregate.quoteId,
+      configuredConvexUrl: process.env.CONVEX_URL,
+    });
+    expect(restarted.quoteRecovered).toBe(false);
+    expect(restarted.first.quoteStatus).toBe(503);
+    expect(restarted.second.quoteStatus).toBe(503);
+    expect(restarted.first.clientBody).toContain("Ada");
+    expect(restarted.first.taskBody).toContain("live-task");
+    expect(restarted.first.buildBody).toContain("live-build");
   } finally {
     await rm(root, { recursive: true, force: true });
   }
-});
+}, 120_000);
 
 it("fails closed on a missing PDF, a live target, an executable approval, and a nonempty database", async () => {
   const seeded = await seed();

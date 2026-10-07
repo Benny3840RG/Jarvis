@@ -7,11 +7,17 @@ import { fileURLToPath } from "node:url";
  * `path.resolve(dirname, "../../data/jarvis-<domain>.json")` independently; the
  * backup layer (archive v4) needs to open exactly those same files without going
  * through the stores, so the canonical location lives here.
+ *
+ * `JARVIS_DATA_DIR` overrides that checkout directory for one process. Unset, the
+ * directory stays `typescript/data`. This is the same JSON files, not a second store.
  */
-export const JARVIS_DATA_DIR = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
-  "../../data",
-);
+function resolveJarvisDataDir(): string {
+  const override = process.env.JARVIS_DATA_DIR?.trim();
+  if (override !== undefined && override.length > 0) return path.resolve(override);
+  return path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../data");
+}
+
+export const JARVIS_DATA_DIR = resolveJarvisDataDir();
 
 /** Absolute path of a `data/jarvis-*.json` document by its file basename. */
 export function jarvisDataFile(basename: string): string {

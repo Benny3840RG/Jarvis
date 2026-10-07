@@ -7438,7 +7438,7 @@
       "post": {
         "operationId": "executeDangerZoneAction",
         "summary": "Run one confirmed Danger zone action",
-        "description": "Runs one Phase A action after a case-sensitive confirmation string. End overlap removes only the matching PREVIOUS Convex env variable and any local previous assignment. Reset JSON quarantines jarvis-state.json. Clear local quarantines the local core, memory, and business JSON files and requires either an explicit skip or a verified backup from the last 24 hours whose receipt lists a checksum for every business JSON file. A classic verify receipt without those checksums does not authorise the quarantine. Neither reset nor clear calls Convex delete APIs. Failures leave overlap in place when removal did not succeed, and responses never echo token values.",
+        "description": "Runs one Phase A action after a case-sensitive confirmation string. End overlap removes only the matching PREVIOUS Convex env variable and any local previous assignment. Reset JSON quarantines jarvis-state.json. Clear local quarantines the local core, memory, and business JSON files and requires either an explicit skip or a verified backup from the last 24 hours whose receipt lists a checksum for every core, memory, and business JSON file. A classic verify receipt without those checksums does not authorise the quarantine. Neither reset nor clear calls Convex delete APIs. Failures leave overlap in place when removal did not succeed, and responses never echo token values.",
         "tags": ["Settings"],
         "parameters": [
           {

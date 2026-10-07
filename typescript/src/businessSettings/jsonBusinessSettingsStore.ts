@@ -1,9 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-
 import { writePrivateJsonFile } from "../persistence/atomicJsonFile.js";
+import { jarvisDataFile } from "../persistence/jarvisDataPaths.js";
 import { JsonFileLock } from "../persistence/jsonFileLock.js";
 import type { PersistenceWarning } from "../persistence/types.js";
 import type {
@@ -19,8 +17,7 @@ const DOCUMENT_VERSION = 1 as const;
 type BusinessSettingsDocument = { version: number; settings: BusinessSettings };
 
 function defaultSettingsPath(): string {
-  const filename = fileURLToPath(import.meta.url);
-  return path.resolve(path.dirname(filename), "../../data/jarvis-business-settings.json");
+  return jarvisDataFile("jarvis-business-settings.json");
 }
 
 function isNodeError(error: unknown): error is NodeJS.ErrnoException {
