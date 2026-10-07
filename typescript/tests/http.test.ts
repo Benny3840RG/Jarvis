@@ -526,6 +526,93 @@ describe("Jarvis HTTP system boundary", () => {
     assert.match(create.headers.location ?? "", /\/api\/v1\/tasks\/task-1$/);
   });
 
+  it("refuses an in-process replay of a deleted task idempotency key", async () => {
+    const tasks = new Map<string, Task>();
+    let creates = 0;
+    const persistence = makePersistence({
+      async listTasks() {
+        return [...tasks.values()];
+      },
+      async addTask(title, category) {
+        creates += 1;
+        const task: Task = {
+          id: "task-live",
+          title,
+          completed: false,
+          category,
+          createdAt: 1,
+        };
+        tasks.set(task.id, task);
+        return task;
+      },
+      async removeTask(id) {
+        const task = tasks.get(id) ?? null;
+        if (task) tasks.delete(id);
+        return task;
+      },
+    });
+    const app = await makeApp({ persistence });
+    const headers = {
+      authorization: ["Bearer", "current" + "-secret"].join(" "),
+      "idempotency-key": "task-create-deleted",
+    };
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/v1/tasks",
+      headers,
+      payload: { title: "Inspect bracket" },
+    });
+    const replayed = await app.inject({
+      method: "POST",
+      url: "/api/v1/tasks",
+      headers,
+      payload: { title: "Inspect bracket" },
+    });
+    const removed = await app.inject({
+      method: "DELETE",
+      url: "/api/v1/tasks/task-live",
+      headers,
+    });
+    const afterDelete = await app.inject({
+      method: "POST",
+      url: "/api/v1/tasks",
+      headers,
+      payload: { title: "Inspect bracket" },
+    });
+
+    assert.equal(created.statusCode, 201);
+    assert.equal(replayed.statusCode, 201);
+    assert.equal(replayed.json().data.id, "task-live");
+    assert.equal(removed.statusCode, 200);
+    assert.equal(creates, 1);
+    assert.equal(afterDelete.statusCode, 409);
+    assert.equal(afterDelete.headers["retry-after"], undefined);
+    assert.equal(afterDelete.json().type, "urn:jarvis:problem:task-no-longer-available");
+    assert.equal(creates, 1);
+  });
+
+  it("maps a deleted-task idempotency refusal to a non-retryable 409", async () => {
+    const app = await makeApp({
+      persistence: makePersistence({
+        async addTask() {
+          throw new Error("Task from this create request is no longer available.");
+        },
+      }),
+    });
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/v1/tasks",
+      headers: {
+        authorization: ["Bearer", "current" + "-secret"].join(" "),
+        "idempotency-key": "task-create-gone",
+      },
+      payload: { title: "Inspect bracket" },
+    });
+    assert.equal(response.statusCode, 409);
+    assert.equal(response.headers["retry-after"], undefined);
+    assert.equal(response.json().type, "urn:jarvis:problem:task-no-longer-available");
+  });
+
   it("exposes durable reminder operations through the authenticated boundary", async () => {
     const reminder: Reminder = {
       id: "reminder-1",
@@ -613,6 +700,91 @@ describe("Jarvis HTTP system boundary", () => {
     assert.equal(update.json().data.dueRaw, undefined);
     assert.equal(remove.statusCode, 200);
     assert.equal(remove.json().data.id, "reminder-1");
+  });
+
+  it("refuses an in-process replay of a deleted reminder idempotency key", async () => {
+    const reminders = new Map<string, Reminder>();
+    let creates = 0;
+    const persistence = makePersistence({
+      async listReminders() {
+        return [...reminders.values()];
+      },
+      async addReminder(title) {
+        creates += 1;
+        const reminder: Reminder = {
+          id: "reminder-live",
+          title,
+          createdAt: 1,
+        };
+        reminders.set(reminder.id, reminder);
+        return reminder;
+      },
+      async removeReminder(id) {
+        const reminder = reminders.get(id) ?? null;
+        if (reminder) reminders.delete(id);
+        return reminder;
+      },
+    });
+    const app = await makeApp({ persistence });
+    const headers = {
+      authorization: ["Bearer", "current" + "-secret"].join(" "),
+      "idempotency-key": "reminder-create-deleted",
+    };
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/v1/reminders",
+      headers,
+      payload: { title: "Inspect bracket" },
+    });
+    const replayed = await app.inject({
+      method: "POST",
+      url: "/api/v1/reminders",
+      headers,
+      payload: { title: "Inspect bracket" },
+    });
+    const removed = await app.inject({
+      method: "DELETE",
+      url: "/api/v1/reminders/reminder-live",
+      headers,
+    });
+    const afterDelete = await app.inject({
+      method: "POST",
+      url: "/api/v1/reminders",
+      headers,
+      payload: { title: "Inspect bracket" },
+    });
+
+    assert.equal(created.statusCode, 201);
+    assert.equal(replayed.statusCode, 201);
+    assert.equal(replayed.json().data.id, "reminder-live");
+    assert.equal(removed.statusCode, 200);
+    assert.equal(creates, 1);
+    assert.equal(afterDelete.statusCode, 409);
+    assert.equal(afterDelete.headers["retry-after"], undefined);
+    assert.equal(afterDelete.json().type, "urn:jarvis:problem:reminder-no-longer-available");
+    assert.equal(creates, 1);
+  });
+
+  it("maps a deleted-reminder idempotency refusal to a non-retryable 409", async () => {
+    const app = await makeApp({
+      persistence: makePersistence({
+        async addReminder() {
+          throw new Error("Reminder from this create request is no longer available.");
+        },
+      }),
+    });
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/v1/reminders",
+      headers: {
+        authorization: ["Bearer", "current" + "-secret"].join(" "),
+        "idempotency-key": "reminder-create-gone",
+      },
+      payload: { title: "Inspect bracket" },
+    });
+    assert.equal(response.statusCode, 409);
+    assert.equal(response.headers["retry-after"], undefined);
+    assert.equal(response.json().type, "urn:jarvis:problem:reminder-no-longer-available");
   });
 
   it("accepts current and overlap tokens", async () => {

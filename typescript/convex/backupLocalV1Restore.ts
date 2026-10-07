@@ -464,6 +464,9 @@ async function insert(ctx: MutationCtx, table: TableNames, fields: Row): Promise
 /**
  * Empty-database apply for one Local V1 capture. Not the draft-only S6 helper.
  * Copies approval expiry verbatim and refuses an approval that is still executable.
+ * Returned id maps are tasks, reminders, and builds. Build logs and upgrades
+ * are inserted against the remapped build id. Assets and preferences are
+ * inserted with their fields and are not included in those maps.
  */
 export const insertIsolated = internalMutation({
   args: {

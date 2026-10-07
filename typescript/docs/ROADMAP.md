@@ -59,8 +59,14 @@ matches client, task, and build GETs from scratch JSON. Quote GET across a
 real restarted process is PROVEN on host at main `2d34a741` with an isolated
 self-hosted convex-local-backend on `127.0.0.1` (evidence: host
 `~/lv1-01/restart-proof.md`, quote body sha256 `c7fd9977…dbb8`). That run
-needed workarounds. Full end-to-end recovery on realistic data stays NOT YET
-MET until this change merges and the host proof is repeated. `completeness`
+needed workarounds. A host re-proof of `990bd8c2` passed capture, restore,
+field fidelity, and tombstoned replay refusal; the restart step failed because
+the isolated child was not given `JARVIS_DELIVERY_RUNTIME_TOKEN`. The follow-up
+passes that token, refuses `*.convex.site` and loopback aliases of the
+configured URL, tombstones a deleted task or reminder idempotency key in the
+same process, and maps a persistence "no longer available" refusal to a
+non-retryable 409. Full end-to-end recovery on realistic data stays NOT YET MET
+until the host repeats that restart step. `completeness`
 stays `partial`. `clear-local` checksums cover the core, memory, and
 business files that action quarantines. Full v4 recovery stays refused.
 Operator docs name `proveLocalV1Recovery` as that gate and state that classic

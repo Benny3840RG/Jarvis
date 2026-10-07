@@ -49,11 +49,18 @@ export type RestartedProcessRequest = {
   configuredConvexUrl: string | undefined;
   /**
    * Isolated Convex backend. Absent keeps the JSON-only harness. Refused when
-   * it is the configured CONVEX_URL or any `*.convex.cloud` host.
+   * it is the configured CONVEX_URL (including localhost / 127.0.0.1 / ::1
+   * aliases on the same port), any `*.convex.cloud` host, or any `*.convex.site`
+   * host.
    */
   isolatedConvexUrl?: string;
   /** Defaults to the harness token. A host backend can supply its own. */
   serviceToken?: string;
+  /**
+   * Required when `isolatedConvexUrl` is set. Passed to the child as
+   * `JARVIS_DELIVERY_RUNTIME_TOKEN` and never written into an error message.
+   */
+  deliveryRuntimeToken?: string;
 };
 
 function delay(ms: number): Promise<void> {
@@ -83,6 +90,7 @@ function childEnvironment(
   serviceToken: string,
 ): NodeJS.ProcessEnv {
   const isolated = request.isolatedConvexUrl;
+  const deliveryToken = request.deliveryRuntimeToken?.trim();
   return {
     PATH: process.env.PATH ?? "",
     HOME: process.env.HOME ?? "",
@@ -98,7 +106,33 @@ function childEnvironment(
     JARVIS_RECONCILIATION_ENABLED: "false",
     JARVIS_POSTHOG_ENABLED: "false",
     CONVEX_URL: isolated ?? LOCAL_V1_RESTART_CONVEX_SENTINEL,
+    ...(isolated === undefined || deliveryToken === undefined || deliveryToken.length === 0
+      ? {}
+      : { JARVIS_DELIVERY_RUNTIME_TOKEN: deliveryToken }),
   };
+}
+
+function canonicalHostname(hostname: string): string {
+  let host = hostname.toLowerCase();
+  if (host.startsWith("[") && host.endsWith("]")) host = host.slice(1, -1);
+  while (host.endsWith(".")) host = host.slice(0, -1);
+  if (host === "localhost" || host === "::1" || host === "0:0:0:0:0:0:0:1") return "127.0.0.1";
+  return host;
+}
+
+function canonicalOrigin(url: URL): string {
+  const port = url.port !== "" ? url.port : url.protocol === "https:" ? "443" : "80";
+  return `${url.protocol}//${canonicalHostname(url.hostname)}:${port}`;
+}
+
+function isConvexHosted(hostname: string): boolean {
+  const host = canonicalHostname(hostname);
+  return (
+    host === "convex.cloud" ||
+    host.endsWith(".convex.cloud") ||
+    host === "convex.site" ||
+    host.endsWith(".convex.site")
+  );
 }
 
 function assertIsolatedConvexUrl(url: string, configured: string | undefined): void {
@@ -115,8 +149,7 @@ function assertIsolatedConvexUrl(url: string, configured: string | undefined): v
   ) {
     throw new Error("Local V1 process restart isolated Convex URL is not an isolated http(s) URL.");
   }
-  const host = parsed.hostname.toLowerCase();
-  if (host === "convex.cloud" || host.endsWith(".convex.cloud")) {
+  if (isConvexHosted(parsed.hostname)) {
     throw new Error("Local V1 process restart refuses a Convex cloud URL.");
   }
   const configuredTrimmed = configured?.trim();
@@ -124,15 +157,20 @@ function assertIsolatedConvexUrl(url: string, configured: string | undefined): v
   if (url.trim() === configuredTrimmed) {
     throw new Error("Local V1 process restart refuses the configured CONVEX_URL.");
   }
+  let configuredUrl: URL;
   try {
-    if (parsed.href === new URL(configuredTrimmed).href) {
-      throw new Error("Local V1 process restart refuses the configured CONVEX_URL.");
-    }
-  } catch (error: unknown) {
-    if (error instanceof Error && error.message.includes("refuses the configured CONVEX_URL")) {
-      throw error;
-    }
+    configuredUrl = new URL(configuredTrimmed);
+  } catch {
+    return;
   }
+  if (canonicalOrigin(parsed) === canonicalOrigin(configuredUrl)) {
+    throw new Error("Local V1 process restart refuses the configured CONVEX_URL.");
+  }
+}
+
+function withoutSecret(text: string, secret: string | undefined): string {
+  if (secret === undefined || secret.length === 0) return text;
+  return text.split(secret).join("[redacted]");
 }
 
 async function stopChild(child: ChildProcess): Promise<void> {
@@ -148,16 +186,24 @@ async function stopChild(child: ChildProcess): Promise<void> {
   }
 }
 
-async function waitForListen(child: ChildProcess, output: { text: string }): Promise<void> {
+async function waitForListen(
+  child: ChildProcess,
+  output: { text: string },
+  secret: string | undefined,
+): Promise<void> {
   const deadline = Date.now() + LISTEN_TIMEOUT_MS;
   while (Date.now() < deadline) {
     if (output.text.includes("Jarvis HTTP is listening")) return;
     if (child.exitCode !== null || child.signalCode !== null) {
-      throw new Error(`Jarvis HTTP exited before listening.\n${output.text.slice(-2_000)}`);
+      throw new Error(
+        withoutSecret(`Jarvis HTTP exited before listening.\n${output.text.slice(-2_000)}`, secret),
+      );
     }
     await delay(50);
   }
-  throw new Error(`Jarvis HTTP did not listen.\n${output.text.slice(-2_000)}`);
+  throw new Error(
+    withoutSecret(`Jarvis HTTP did not listen.\n${output.text.slice(-2_000)}`, secret),
+  );
 }
 
 async function getBody(
@@ -178,6 +224,7 @@ async function serveOnce(
 ): Promise<RestartedProcessBody> {
   const output = { text: "" };
   const token = request.serviceToken ?? SERVICE_TOKEN;
+  const deliveryToken = request.deliveryRuntimeToken?.trim();
   const child = spawn(process.execPath, ["--import", "tsx", "src/http/main.ts"], {
     cwd: typescriptRoot,
     env: childEnvironment(request, port, token),
@@ -192,7 +239,7 @@ async function serveOnce(
     output.text += chunk;
   });
   try {
-    await waitForListen(child, output);
+    await waitForListen(child, output, deliveryToken);
     const client = await getBody(
       port,
       `/api/v1/clients/${encodeURIComponent(request.clientId)}`,
@@ -211,7 +258,10 @@ async function serveOnce(
     );
     if (client.status !== 200 || task.status !== 200 || build.status !== 200) {
       throw new Error(
-        `Local V1 process restart HTTP read failed (${client.status}, ${task.status}, ${build.status}).`,
+        withoutSecret(
+          `Local V1 process restart HTTP read failed (${client.status}, ${task.status}, ${build.status}).\n${output.text.slice(-2_000)}`,
+          deliveryToken,
+        ),
       );
     }
     if (request.isolatedConvexUrl === undefined && quote.status === 200) {
@@ -220,7 +270,12 @@ async function serveOnce(
       );
     }
     if (request.isolatedConvexUrl !== undefined && quote.status !== 200) {
-      throw new Error("Local V1 process restart quote GET failed.");
+      throw new Error(
+        withoutSecret(
+          `Local V1 process restart quote GET failed.\n${output.text.slice(-2_000)}`,
+          deliveryToken,
+        ),
+      );
     }
     return {
       clientBody: client.body,
@@ -238,6 +293,7 @@ async function serveOnce(
  * Spawns the existing HTTP entrypoint twice against one scratch JSON directory.
  * Client, task, and build GETs must match. Quote GETs are compared only when
  * `isolatedConvexUrl` names a backend that is not the configured deployment.
+ * Isolated mode also requires `deliveryRuntimeToken`.
  */
 export async function readRestartedProcess(
   request: RestartedProcessRequest,
@@ -247,7 +303,15 @@ export async function readRestartedProcess(
     throw new Error("Local V1 process restart sentinel collides with the configured CONVEX_URL.");
   }
   const isolated = request.isolatedConvexUrl;
-  if (isolated !== undefined) assertIsolatedConvexUrl(isolated, request.configuredConvexUrl);
+  if (isolated !== undefined) {
+    assertIsolatedConvexUrl(isolated, request.configuredConvexUrl);
+    const deliveryToken = request.deliveryRuntimeToken?.trim();
+    if (deliveryToken === undefined || deliveryToken.length === 0) {
+      throw new Error(
+        "Local V1 process restart isolated Convex backend requires JARVIS_DELIVERY_RUNTIME_TOKEN.",
+      );
+    }
+  }
   const token = request.serviceToken ?? SERVICE_TOKEN;
   if (token.length < 32) {
     throw new Error("Local V1 process restart service token is too short.");

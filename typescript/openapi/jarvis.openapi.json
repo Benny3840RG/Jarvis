@@ -1118,7 +1118,7 @@
       "post": {
         "operationId": "createTask",
         "summary": "Create a durable task",
-        "description": "Creates one task after explicit user intent. Reusing an Idempotency-Key must replay the original result rather than create a duplicate.",
+        "description": "Creates one task after explicit user intent. Reusing an Idempotency-Key replays the original result while that task still exists. Replaying the key after the task was deleted is a 409 conflict, not a new task and not a retryable failure.",
         "tags": ["Tasks"],
         "parameters": [
           {
@@ -1454,7 +1454,7 @@
       "post": {
         "operationId": "createReminder",
         "summary": "Create a durable reminder",
-        "description": "Creates one reminder and preserves its exact due text. Jarvis only adds a timestamp when the due value is unambiguous in the supplied timezone.",
+        "description": "Creates one reminder and preserves its exact due text. Jarvis only adds a timestamp when the due value is unambiguous in the supplied timezone. Reusing an Idempotency-Key replays the original result while that reminder still exists. Replaying the key after the reminder was deleted is a 409 conflict, not a new reminder and not a retryable failure.",
         "tags": ["Reminders"],
         "parameters": [
           {

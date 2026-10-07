@@ -230,22 +230,31 @@ recovery.
 
 The Local V1 gate is `proveLocalV1Recovery`. It calls `restoreLocalV1Archive`
 into a new JSON directory and an injected empty database, then requires two
-calls to the injected reader to return the same non-empty ids. `liveDirectory`
-must be the restore live data directory. A node test opens two HTTP apps on
-scratch stores. A separate harness, `readRestartedProcess`, spawns
-`src/http/main.ts`, GETs a client, a task, and a build, kills that process,
-spawns it again, and requires those three bodies to match. That default stays
-JSON-only and leaves the quote unrecovered. The same harness can be pointed at
-an isolated Convex URL; it refuses the configured `CONVEX_URL` and any
-`*.convex.cloud` host, then GETs and compares the quote. Quote GET across a
-real restarted process is **PROVEN** on host at main `2d34a741` with an
-isolated self-hosted convex-local-backend on `127.0.0.1` (never the shared dev
-deployment). Evidence: host `~/lv1-01/restart-proof.md`, quote body sha256
-`c7fd9977…dbb8`. That run needed workarounds. Full end-to-end recovery on
-realistic data stays **NOT YET MET** until this change merges and the host
-proof is repeated. This gate does not write the live data directory and it
-does not construct a client from the configured `CONVEX_URL`. `completeness`
-stays `partial`. `assertRecoverable` still throws. This is not a recovery.
+calls to the injected reader to return the same non-empty ids. The restore
+result maps tasks, reminders, and builds. Build logs and upgrades are stored
+against the new build id. Assets and preferences are restored with their
+fields and are not included in those maps. `liveDirectory` must be the restore
+live data directory. A node test opens two HTTP apps on scratch stores. A
+separate harness, `readRestartedProcess`, spawns `src/http/main.ts`, GETs a
+client, a task, and a build, kills that process, spawns it again, and requires
+those three bodies to match. That default stays JSON-only and leaves the quote
+unrecovered. The same harness can be pointed at an isolated Convex URL. That
+mode passes the caller-supplied `JARVIS_DELIVERY_RUNTIME_TOKEN` to the child.
+It refuses the configured `CONVEX_URL`, including a localhost / `127.0.0.1` /
+`::1` alias on the same port, and any `*.convex.cloud` or `*.convex.site`
+host, then GETs and compares the quote. Quote GET across a real restarted
+process is **PROVEN** on host at main `2d34a741` with an isolated self-hosted
+convex-local-backend on `127.0.0.1` (never the shared dev deployment).
+Evidence: host `~/lv1-01/restart-proof.md`, quote body sha256 `c7fd9977…dbb8`.
+That run needed workarounds. A host re-proof of `990bd8c2` passed capture,
+restore, field fidelity, quote sha256 equality, and tombstoned replay refusal,
+and the restart step failed because the child was not given the delivery
+token. The harness now passes that token. Full end-to-end recovery on
+realistic data stays **NOT YET MET** until the host repeats that restart
+step. This gate does not write the live data
+directory and it does not construct a client from the configured `CONVEX_URL`.
+`completeness` stays `partial`. `assertRecoverable` still throws. This is not
+a recovery.
 
 Classic `npm run backup -- restore` writes the live provider selected by
 `PERSISTENCE_PROVIDER`. That command is not the Local V1 gate.
