@@ -37,7 +37,7 @@ Business jobs still cannot stage `quotes:finalize` or `quotes:send`. See `docs/o
 
 Next:
 
-- Leave #294 and #297 open until the host commissioning kit runs against a non-customer dev mailbox.
+- Leave #294 and #297 open until the host commissioning kit runs against a mailbox on `JARVIS_OUTLOOK_COMMISSIONING_RECIPIENT_ALLOWLIST`.
 - Do not auto-create totality projects from business jobs.
 - Voice brief quotes remain on the flat store until a later slice reuses this register without a new authority.
 
