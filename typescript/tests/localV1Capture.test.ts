@@ -561,4 +561,33 @@ describe("Local V1 partial capture", () => {
     }
     assert.deepEqual(await digestTree(live), before);
   });
+
+  it("refuses an output path whose parent symlink points at live data", async () => {
+    const root = await scratch();
+    const live = path.join(root, "live");
+    const { mkdir, symlink } = await import("node:fs/promises");
+    await mkdir(live);
+    await writeBusiness(live);
+    const before = await digestTree(live);
+    const alias = path.join(root, "alias");
+    await symlink(live, alias);
+    const scripted = scriptedClient();
+    await assert.rejects(
+      () =>
+        captureLocalV1Archive({
+          outputDirectory: path.join(alias, "out"),
+          businessPaths: businessPaths(live),
+          client: scripted.client,
+          serviceToken: SERVICE,
+          approvalToken: APPROVAL,
+          convexUrl: ENDPOINT,
+          capturedAt: AT,
+        }),
+      /overlaps a live data path/,
+    );
+    assert.equal(scripted.calls.length, 0);
+    assert.equal(scripted.mutations.count, 0);
+    await assert.rejects(readdir(path.join(live, "out")), { code: "ENOENT" });
+    assert.deepEqual(await digestTree(live), before);
+  });
 });

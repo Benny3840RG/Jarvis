@@ -38,8 +38,8 @@ export const LOCAL_V1_BLOB_DIR = "blobs";
 const DIGEST = /^sha256:[a-f0-9]{64}$/;
 
 export class LocalV1CaptureError extends Error {
-  constructor(message: string) {
-    super(message);
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
     this.name = "LocalV1CaptureError";
   }
 }
@@ -126,6 +126,59 @@ function isInside(parent: string, child: string): boolean {
   return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
 }
 
+function isNodeError(error: unknown): error is NodeJS.ErrnoException {
+  return error instanceof Error && "code" in error;
+}
+
+/** Resolve existing ancestors even when the final output directory is absent. */
+async function physicalPath(target: string): Promise<string> {
+  const absolute = path.resolve(target);
+  try {
+    return await fs.realpath(absolute);
+  } catch (error: unknown) {
+    if (!isNodeError(error) || error.code !== "ENOENT") throw error;
+    const entry = await fs.lstat(absolute).catch((statError: unknown) => {
+      if (isNodeError(statError) && statError.code === "ENOENT") return null;
+      throw statError;
+    });
+    if (entry?.isSymbolicLink()) {
+      throw new LocalV1CaptureError(
+        `Cannot establish capture isolation through dangling symbolic link ${absolute}.`,
+      );
+    }
+    const parent = path.dirname(absolute);
+    if (parent === absolute) throw error;
+    return path.join(await physicalPath(parent), path.basename(absolute));
+  }
+}
+
+type OwnedDirectory = {
+  lexical: string;
+  physical: string;
+  dev: number;
+  ino: number;
+};
+
+async function removeOwnedDirectory(owned: OwnedDirectory): Promise<void> {
+  const current = await fs.lstat(owned.lexical).catch((error: unknown) => {
+    if (isNodeError(error) && error.code === "ENOENT") return null;
+    throw error;
+  });
+  const landed =
+    current === null || current.isSymbolicLink() ? null : await fs.realpath(owned.lexical);
+  if (
+    current === null ||
+    current.isSymbolicLink() ||
+    !current.isDirectory() ||
+    current.dev !== owned.dev ||
+    current.ino !== owned.ino ||
+    landed !== owned.physical
+  ) {
+    throw new LocalV1CaptureError("Local V1 capture refuses to remove a path it did not create.");
+  }
+  await fs.rm(owned.lexical, { recursive: true, force: true });
+}
+
 function assertContained(root: string, target: string): void {
   if (!isInside(root, target)) {
     throw new LocalV1CaptureError(
@@ -145,26 +198,38 @@ function liveRoots(request: LocalV1CaptureRequest): string[] {
   return [...roots];
 }
 
+function overlaps(parent: string, child: string): boolean {
+  return isInside(parent, child) || isInside(child, parent);
+}
+
 async function assertOutputIsNew(
   outputDirectory: string,
   roots: readonly string[],
-): Promise<string> {
-  const output = path.resolve(outputDirectory);
-  for (const root of roots) {
-    if (isInside(root, output) || isInside(output, root)) {
-      throw new LocalV1CaptureError(
-        "Local V1 capture refuses an output directory that overlaps a live data path.",
-      );
+): Promise<{ lexical: string; physical: string }> {
+  const lexical = path.resolve(outputDirectory);
+  const physical = await physicalPath(lexical);
+  const physicalRoots = await Promise.all(roots.map((root) => physicalPath(root)));
+  const candidates = [
+    [lexical, roots],
+    [physical, physicalRoots],
+  ] as const;
+  for (const [child, parents] of candidates) {
+    for (const root of parents) {
+      if (overlaps(root, child)) {
+        throw new LocalV1CaptureError(
+          "Local V1 capture refuses an output directory that overlaps a live data path.",
+        );
+      }
     }
   }
-  const stat = await fs.lstat(output).catch((error: unknown) => {
-    if (error instanceof Error && "code" in error && error.code === "ENOENT") return null;
+  const stat = await fs.lstat(lexical).catch((error: unknown) => {
+    if (isNodeError(error) && error.code === "ENOENT") return null;
     throw error;
   });
   if (stat !== null) {
-    throw new LocalV1CaptureError(`Local V1 capture output already exists: ${output}`);
+    throw new LocalV1CaptureError(`Local V1 capture output already exists: ${lexical}`);
   }
-  return output;
+  return { lexical, physical };
 }
 
 function assertNotLiveUrl(request: LocalV1CaptureRequest): void {
@@ -319,7 +384,8 @@ export async function captureLocalV1Archive(
 ): Promise<LocalV1CaptureResult> {
   assertNotLiveUrl(request);
   const roots = liveRoots(request);
-  const output = await assertOutputIsNew(request.outputDirectory, roots);
+  const isolated = await assertOutputIsNew(request.outputDirectory, roots);
+  const output = isolated.lexical;
   const capturedAt = request.capturedAt ?? new Date();
   const client = readOnlyClient(request.client);
   const before = await Promise.all(
@@ -413,10 +479,23 @@ export async function captureLocalV1Archive(
     }
   }
 
-  let created = false;
+  let owned: OwnedDirectory | null = null;
   try {
     await fs.mkdir(output);
-    created = true;
+    const createdStat = await fs.lstat(output);
+    const landed = createdStat.isSymbolicLink() ? null : await fs.realpath(output);
+    const physicalRoots = await Promise.all(roots.map((root) => physicalPath(root)));
+    if (
+      createdStat.isSymbolicLink() ||
+      !createdStat.isDirectory() ||
+      landed !== isolated.physical ||
+      physicalRoots.some((root) => overlaps(root, landed ?? ""))
+    ) {
+      throw new LocalV1CaptureError(
+        "Local V1 capture refuses an output directory that overlaps a live data path.",
+      );
+    }
+    owned = { lexical: output, physical: landed, dev: createdStat.dev, ino: createdStat.ino };
     const blobDir = path.join(output, LOCAL_V1_BLOB_DIR);
     assertContained(output, blobDir);
     await fs.mkdir(blobDir);
@@ -442,10 +521,21 @@ export async function captureLocalV1Archive(
     if (reread.manifest.completeness !== "partial") {
       throw new LocalV1CaptureError("Local V1 capture must stay partial.");
     }
-    created = false;
+    owned = null;
     return { outputDirectory: output, archivePath, archive: reread };
   } catch (error: unknown) {
-    if (created) await fs.rm(output, { recursive: true, force: true });
+    if (owned !== null) {
+      try {
+        await removeOwnedDirectory(owned);
+      } catch (cleanup: unknown) {
+        throw new LocalV1CaptureError(
+          cleanup instanceof Error
+            ? cleanup.message
+            : "Local V1 capture refuses to remove a path it did not create.",
+          { cause: error },
+        );
+      }
+    }
     throw error;
   }
 }
