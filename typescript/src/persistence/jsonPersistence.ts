@@ -1,7 +1,5 @@
 import fs from "node:fs/promises";
-import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { fileURLToPath } from "node:url";
 
 import { UuidRemapper } from "../backup/uuidRemapper.js";
 import { validateReminderDue, type ReminderDue } from "../reminders/due.js";
@@ -17,6 +15,7 @@ import {
 } from "./document.js";
 import { assertAssistantState } from "./assistantState.js";
 import { writePrivateJsonFile } from "./atomicJsonFile.js";
+import { jarvisDataFile } from "./jarvisDataPaths.js";
 import { JsonFileLock } from "./jsonFileLock.js";
 import type {
   AssistantState,
@@ -37,8 +36,7 @@ import {
 const DEFAULT_LOCK_TIMEOUT_MS = 2_000;
 
 function defaultDataPath(): string {
-  const filename = fileURLToPath(import.meta.url);
-  return path.resolve(path.dirname(filename), "../../data/jarvis-state.json");
+  return jarvisDataFile("jarvis-state.json");
 }
 
 function isNodeError(error: unknown): error is NodeJS.ErrnoException {

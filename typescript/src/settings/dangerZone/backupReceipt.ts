@@ -3,18 +3,15 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 import { writePrivateJsonFile } from "../../persistence/atomicJsonFile.js";
-import { businessDataFiles } from "../../persistence/jarvisDataPaths.js";
-import { VERIFY_MAX_AGE_MS, type VerifiedBackup } from "./catalog.js";
+import { CLEAR_LOCAL_BASENAMES, VERIFY_MAX_AGE_MS, type VerifiedBackup } from "./catalog.js";
 import { DangerZoneRefusal, nodeErrorCode } from "./errors.js";
 
 const RECEIPT_KIND = "jarvis-backup-verify-receipt";
 const MAX_RECEIPT_BYTES = 4096;
 const CHECKSUM_VALUE = /^(?:absent|[0-9a-f]{64})$/;
 
-/** Business JSON basenames `clear-local` quarantines. A classic receipt must name each one. */
-export const BUSINESS_CLEAR_BASENAMES = Object.values(businessDataFiles).map((filePath) =>
-  path.basename(filePath),
-);
+/** Core, memory, and business basenames `clear-local` quarantines. A clear-local receipt must name each one. */
+export const BUSINESS_CLEAR_BASENAMES = [...CLEAR_LOCAL_BASENAMES];
 
 export type BackupVerifyReceipt = {
   kind: typeof RECEIPT_KIND;
@@ -52,7 +49,7 @@ export async function businessFileChecksums(dataDir: string): Promise<Record<str
     if (entry.isSymbolicLink() || !entry.isFile()) {
       throw new DangerZoneRefusal(
         "backup",
-        `Refusing to checksum ${filePath}: business files must be regular files.`,
+        `Refusing to checksum ${filePath}: clear-local files must be regular files.`,
       );
     }
     checksums[basename] = createHash("sha256")
@@ -91,7 +88,7 @@ export async function writeBackupVerifyReceipt(
   if (businessChecksums !== undefined && checksums === undefined) {
     throw new DangerZoneRefusal(
       "backup",
-      "A clear-local receipt must list sha256 or absent for every business JSON file.",
+      "A clear-local receipt must list sha256 or absent for every core, memory, and business JSON file.",
     );
   }
   const receipt: BackupVerifyReceipt = {
@@ -216,8 +213,8 @@ export async function assertVerifiedBackup(options: {
 }
 
 /**
- * `clear-local` quarantines business JSON. A classic verify receipt does not
- * list those files, so it cannot authorise that rename.
+ * `clear-local` quarantines core, memory, and business JSON. A classic verify
+ * receipt does not list those files, so it cannot authorise that rename.
  */
 export async function assertBusinessChecksumsForClear(options: {
   archivePath: string;
@@ -227,7 +224,7 @@ export async function assertBusinessChecksumsForClear(options: {
   if (receipt?.businessChecksums === undefined) {
     throw new DangerZoneRefusal(
       "backup",
-      "A classic verify receipt does not list business file checksums, so it cannot authorise quarantining them.",
+      "A classic verify receipt does not list core, memory, and business file checksums, so it cannot authorise quarantining them.",
     );
   }
   const current = await businessFileChecksums(options.dataDir);
@@ -235,7 +232,7 @@ export async function assertBusinessChecksumsForClear(options: {
     if (receipt.businessChecksums[basename] !== current[basename]) {
       throw new DangerZoneRefusal(
         "backup",
-        `Verified backup checksum for ${basename} does not match the live business file. Nothing was quarantined.`,
+        `Verified backup checksum for ${basename} does not match the live file. Nothing was quarantined.`,
       );
     }
   }

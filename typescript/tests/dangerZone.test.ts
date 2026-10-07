@@ -405,7 +405,7 @@ describe("clear local", () => {
       (error: unknown) =>
         error instanceof DangerZoneRefusal &&
         error.code === "backup" &&
-        /business file checksums/.test(error.message),
+        /core, memory, and business file checksums/.test(error.message),
     );
     assert.equal(await fs.readFile(path.join(dataDir, "jarvis-clients.json"), "utf8"), "[]");
     await writeBackupVerifyReceipt(
@@ -454,6 +454,79 @@ describe("clear local", () => {
     assert.equal(await fs.readFile(clients, "utf8"), '{"id":"changed"}\n');
     const names = await fs.readdir(dataDir);
     assert.equal(names.includes("jarvis-clients.json"), true);
+    assert.equal(
+      names.some((name) => name.includes(".corrupt-")),
+      false,
+    );
+  });
+
+  it("refuses clear-local when a core or memory checksum does not match", async () => {
+    const dataDir = await tempDir();
+    const backups = await tempDir();
+    const state = path.join(dataDir, "jarvis-state.json");
+    const preferences = path.join(dataDir, "jarvis-preferences.json");
+    await fs.writeFile(state, '{"note":1}\n', "utf8");
+    await fs.writeFile(preferences, "prefs\n", "utf8");
+    const archive = path.join(backups, "jarvis-backup.json");
+    await fs.writeFile(archive, "{}\n", "utf8");
+    await writeBackupVerifyReceipt(archive, new Date(), await businessFileChecksums(dataDir));
+    await fs.writeFile(preferences, "changed\n", "utf8");
+    const zone = service({ dataDir, backups });
+    await assert.rejects(
+      () =>
+        zone.execute("clear-local", {
+          confirmation: "CLEAR LOCAL",
+          backup: { mode: "verified", path: archive },
+        }),
+      (error: unknown) =>
+        error instanceof DangerZoneRefusal &&
+        error.code === "backup" &&
+        /jarvis-preferences.json does not match/.test(error.message),
+    );
+    assert.equal(await fs.readFile(state, "utf8"), '{"note":1}\n');
+    assert.equal(await fs.readFile(preferences, "utf8"), "changed\n");
+    const names = await fs.readdir(dataDir);
+    assert.equal(
+      names.some((name) => name.includes(".corrupt-")),
+      false,
+    );
+  });
+
+  it("does not treat a business-only checksum map as cover for core and memory files", async () => {
+    const dataDir = await tempDir();
+    const backups = await tempDir();
+    const state = path.join(dataDir, "jarvis-state.json");
+    await fs.writeFile(state, "core\n", "utf8");
+    const archive = path.join(backups, "jarvis-backup.json");
+    await fs.writeFile(archive, "{}\n", "utf8");
+    const businessOnly = [
+      "jarvis-clients.json",
+      "jarvis-properties.json",
+      "jarvis-projects.json",
+      "jarvis-quotes.json",
+      "jarvis-invoices.json",
+      "jarvis-enquiries.json",
+      "jarvis-errands.json",
+      "jarvis-business-settings.json",
+    ];
+    const receipt = {
+      kind: "jarvis-backup-verify-receipt",
+      archivePath: archive,
+      verifiedAt: new Date().toISOString(),
+      businessChecksums: Object.fromEntries(businessOnly.map((name) => [name, "absent"])),
+    };
+    await fs.writeFile(`${archive}.jarvis-verify.json`, `${JSON.stringify(receipt)}\n`, "utf8");
+    const zone = service({ dataDir, backups });
+    await assert.rejects(
+      () =>
+        zone.execute("clear-local", {
+          confirmation: "CLEAR LOCAL",
+          backup: { mode: "verified", path: archive },
+        }),
+      (error: unknown) => error instanceof DangerZoneRefusal && error.code === "backup",
+    );
+    assert.equal(await fs.readFile(state, "utf8"), "core\n");
+    const names = await fs.readdir(dataDir);
     assert.equal(
       names.some((name) => name.includes(".corrupt-")),
       false,

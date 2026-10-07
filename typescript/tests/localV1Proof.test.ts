@@ -86,6 +86,51 @@ describe("Local V1 proof gate", () => {
     assert.equal(await fs.readFile(liveFile, "utf8"), before);
   });
 
+  it("refuses a liveDirectory that is not the restore live data directory", async () => {
+    const root = await tempDir();
+    const live = path.join(root, "live");
+    const other = path.join(root, "other");
+    const restored = path.join(root, "restored");
+    await fs.mkdir(live);
+    await fs.mkdir(other);
+    const liveFile = path.join(live, "jarvis-clients.json");
+    await fs.writeFile(liveFile, '{"keep":true}\n', "utf8");
+    const before = await fs.readFile(liveFile, "utf8");
+    const calls: string[] = [];
+    await assert.rejects(
+      () =>
+        proveLocalV1Recovery({
+          restore: {
+            captureDirectory: path.join(root, "capture"),
+            jsonDirectory: restored,
+            client: {
+              action: async () => {
+                calls.push("action");
+                throw new Error("restore action");
+              },
+            },
+            serviceToken: "lv1-proof-service-token-000000000000",
+            approvalToken: "lv1-proof-approval-token-00000000000",
+            convexUrl: "https://isolated.example",
+            now: 1,
+            liveDataDir: other,
+          },
+          liveDirectory: live,
+          readIsolated: async () => {
+            calls.push("read");
+            return readIds;
+          },
+        }),
+      /liveDirectory to be the restore live data directory/,
+    );
+    assert.deepEqual(calls, []);
+    await assert.rejects(
+      () => fs.lstat(restored),
+      (error: unknown) => error instanceof Error && "code" in error && error.code === "ENOENT",
+    );
+    assert.equal(await fs.readFile(liveFile, "utf8"), before);
+  });
+
   it("rejects an empty isolated read and a restart that does not match", () => {
     assert.throws(
       () => assertIsolatedReadsMatch({ ...readIds, clientId: "" }, readIds),

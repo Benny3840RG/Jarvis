@@ -230,12 +230,15 @@ recovery.
 
 The Local V1 gate is `proveLocalV1Recovery`. It calls `restoreLocalV1Archive`
 into a new JSON directory and an injected empty database, then requires two
-calls to the injected reader to return the same non-empty ids. A node test
-opens two HTTP apps on scratch stores. The required restarted-process proof
-is **NOT YET MET**. It is still owed as a host or dogfood step under LV1-10
-or LV1-11. This gate does not write the live data directory and it does not
-construct a client from `CONVEX_URL`. `completeness` stays `partial`. This is
-not a recovery.
+calls to the injected reader to return the same non-empty ids. `liveDirectory`
+must be the restore live data directory. A node test opens two HTTP apps on
+scratch stores. A separate harness spawns `src/http/main.ts`, GETs a client, a
+task, and a build, kills that process, spawns it again, and requires those
+three bodies to match. The quote GET on that restarted process is **NOT YET
+MET**. LV1-10 or LV1-11 still has to run the same entrypoint against an isolated
+local Convex backend that is not the configured `CONVEX_URL`. This gate does
+not write the live data directory and it does not construct a client from the
+configured `CONVEX_URL`. `completeness` stays `partial`. This is not a recovery.
 
 Classic `npm run backup -- restore` writes the live provider selected by
 `PERSISTENCE_PROVIDER`. That command is not the Local V1 gate.
