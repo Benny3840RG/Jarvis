@@ -12,10 +12,12 @@ import {
   Query,
 } from "@nestjs/common";
 
+import type { ClientStore } from "../clients/client.js";
+import { withClientReferenceLock } from "../clients/clientReferenceLock.js";
 import type { Property, PropertyStore } from "../properties/property.js";
 import { parseCreateProperty, parseUpdateProperty } from "./propertyRequest.js";
 import { JarvisProblem } from "./problemDetails.js";
-import { HTTP_PROPERTY_STORE } from "./tokens.js";
+import { HTTP_CLIENT_STORE, HTTP_PROPERTY_STORE } from "./tokens.js";
 
 function invalid(detail: string): JarvisProblem {
   return new JarvisProblem(
@@ -50,7 +52,10 @@ function propertyResponse(property: Property): { data: Property } {
 
 @Controller("api/v1/properties")
 export class PropertyController {
-  constructor(@Inject(HTTP_PROPERTY_STORE) private readonly properties: PropertyStore) {}
+  constructor(
+    @Inject(HTTP_PROPERTY_STORE) private readonly properties: PropertyStore,
+    @Inject(HTTP_CLIENT_STORE) private readonly clients: ClientStore,
+  ) {}
 
   @Get()
   async list(@Query("clientId") clientId?: string) {
@@ -75,8 +80,12 @@ export class PropertyController {
       }
     })();
     try {
-      return propertyResponse(await this.properties.add(input));
+      return await withClientReferenceLock(
+        async () => propertyResponse(await this.properties.add(input)),
+        { clients: this.clients, clientId: input.clientId },
+      );
     } catch (error: unknown) {
+      if (error instanceof JarvisProblem) throw error;
       if (error instanceof Error && /empty|must be|must not|requires/.test(error.message))
         throw invalid(error.message);
       throw operationFailed();
@@ -106,8 +115,14 @@ export class PropertyController {
     })();
     let property: Property | null;
     try {
-      property = await this.properties.update(propertyId, input);
+      property = await withClientReferenceLock(
+        () => this.properties.update(propertyId, input),
+        input.clientId === undefined
+          ? undefined
+          : { clients: this.clients, clientId: input.clientId },
+      );
     } catch (error: unknown) {
+      if (error instanceof JarvisProblem) throw error;
       if (error instanceof Error && /empty|must be|must not|requires/.test(error.message))
         throw invalid(error.message);
       throw operationFailed();

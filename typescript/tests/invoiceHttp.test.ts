@@ -71,6 +71,15 @@ afterEach(async () => {
   await Promise.all(openApps.splice(0).map((app) => app.close()));
 });
 
+async function createClient(app: NestFastifyApplication): Promise<string> {
+  const created = await inject(app, "POST", "/api/v1/clients", {
+    headers: AUTH,
+    payload: { name: "Referenced client" },
+  });
+  assert.equal(created.statusCode, 201);
+  return created.json<{ data: { id: string } }>().data.id;
+}
+
 describe("invoice HTTP boundary", () => {
   it("requires authentication", async () => {
     const app = await makeApp();
@@ -79,10 +88,11 @@ describe("invoice HTTP boundary", () => {
 
   it("creates, replays, issues, filters and records invoice payments", async () => {
     const app = await makeApp();
+    const clientId = await createClient(app);
     const created = await inject(app, "POST", "/api/v1/invoices", {
       headers: AUTH,
       payload: {
-        clientId: "c1",
+        clientId,
         projectId: "p1",
         quoteId: "q1",
         number: "BTI-0001",
@@ -98,12 +108,14 @@ describe("invoice HTTP boundary", () => {
     assert.equal(invoice.total, 220);
     const replay = await inject(app, "POST", "/api/v1/invoices", {
       headers: AUTH,
-      payload: { clientId: "c1", number: "BTI-9999", duplicateKey: "p1-final" },
+      payload: { clientId, number: "BTI-9999", duplicateKey: "p1-final" },
     });
     assert.equal(replay.json<{ data: Invoice }>().data.id, invoice.id);
     assert.equal(
       (
-        await inject(app, "GET", "/api/v1/invoices?clientId=c1&status=draft", { headers: AUTH })
+        await inject(app, "GET", `/api/v1/invoices?clientId=${clientId}&status=draft`, {
+          headers: AUTH,
+        })
       ).json<{ count: number }>().count,
       1,
     );
@@ -126,10 +138,11 @@ describe("invoice HTTP boundary", () => {
 
   it("does not double-record a payment retried with the same idempotency key", async () => {
     const app = await makeApp();
+    const clientId = await createClient(app);
     const created = await inject(app, "POST", "/api/v1/invoices", {
       headers: AUTH,
       payload: {
-        clientId: "c1",
+        clientId,
         number: "BTI-0010",
         lineItems: [{ description: "Labour", quantity: 1, unitPrice: 500 }],
       },
@@ -164,10 +177,11 @@ describe("invoice HTTP boundary", () => {
 
   it("rejects a payment idempotency key reused for a different payment", async () => {
     const app = await makeApp();
+    const clientId = await createClient(app);
     const created = await inject(app, "POST", "/api/v1/invoices", {
       headers: AUTH,
       payload: {
-        clientId: "c1",
+        clientId,
         number: "BTI-0011",
         lineItems: [{ description: "Labour", quantity: 1, unitPrice: 500 }],
       },
@@ -199,10 +213,11 @@ describe("invoice HTTP boundary", () => {
 
   it("requires an Idempotency-Key on payment requests", async () => {
     const app = await makeApp();
+    const clientId = await createClient(app);
     const created = await inject(app, "POST", "/api/v1/invoices", {
       headers: AUTH,
       payload: {
-        clientId: "c1",
+        clientId,
         number: "BTI-0012",
         lineItems: [{ description: "Labour", quantity: 1, unitPrice: 50 }],
       },
@@ -218,11 +233,12 @@ describe("invoice HTTP boundary", () => {
 
   it("rejects malformed bodies, stale state changes, pre-issue payment and invalid filters", async () => {
     const app = await makeApp();
+    const clientId = await createClient(app);
     assert.equal(
       (
         await inject(app, "POST", "/api/v1/invoices", {
           headers: AUTH,
-          payload: { clientId: "c1", number: "BTI-1", total: 1 },
+          payload: { clientId, number: "BTI-1", total: 1 },
         })
       ).statusCode,
       422,
@@ -234,7 +250,7 @@ describe("invoice HTTP boundary", () => {
     const created = await inject(app, "POST", "/api/v1/invoices", {
       headers: AUTH,
       payload: {
-        clientId: "c1",
+        clientId,
         number: "BTI-0002",
         lineItems: [{ description: "Waste", quantity: 1, unitPrice: 30 }],
       },

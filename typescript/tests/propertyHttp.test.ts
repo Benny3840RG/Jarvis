@@ -71,6 +71,15 @@ afterEach(async () => {
   await Promise.all(openApps.splice(0).map((app) => app.close()));
 });
 
+async function createClient(app: NestFastifyApplication, name: string): Promise<string> {
+  const created = await inject(app, "POST", "/api/v1/clients", {
+    headers: AUTH,
+    payload: { name },
+  });
+  assert.equal(created.statusCode, 201);
+  return created.json<{ data: { id: string } }>().data.id;
+}
+
 describe("property HTTP boundary", () => {
   it("requires authentication", async () => {
     const app = await makeApp();
@@ -79,30 +88,32 @@ describe("property HTTP boundary", () => {
 
   it("creates, lists, filters, gets, updates, and deletes a property", async () => {
     const app = await makeApp();
+    const firstClient = await createClient(app, "First client");
+    const secondClient = await createClient(app, "Second client");
 
     const created = await inject(app, "POST", "/api/v1/properties", {
       headers: AUTH,
       payload: {
-        clientId: "client-1",
+        clientId: firstClient,
         address: "12 Gum Street, Preston VIC 3072",
         hazards: ["dog on site", "narrow driveway"],
       },
     });
     assert.equal(created.statusCode, 201);
     const property = created.json<{ data: Property }>().data;
-    assert.equal(property.clientId, "client-1");
+    assert.equal(property.clientId, firstClient);
     assert.deepEqual(property.hazards, ["dog on site", "narrow driveway"]);
 
     await inject(app, "POST", "/api/v1/properties", {
       headers: AUTH,
-      payload: { clientId: "client-2", address: "99 Other Road" },
+      payload: { clientId: secondClient, address: "99 Other Road" },
     });
 
     const list = await inject(app, "GET", "/api/v1/properties", { headers: AUTH });
     assert.equal(list.statusCode, 200);
     assert.equal(list.json<{ count: number }>().count, 2);
 
-    const filtered = await inject(app, "GET", "/api/v1/properties?clientId=client-1", {
+    const filtered = await inject(app, "GET", `/api/v1/properties?clientId=${firstClient}`, {
       headers: AUTH,
     });
     assert.equal(filtered.statusCode, 200);

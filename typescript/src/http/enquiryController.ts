@@ -11,6 +11,11 @@ import {
   Query,
 } from "@nestjs/common";
 
+import type { ClientStore } from "../clients/client.js";
+import {
+  confirmReferencedClient,
+  withClientReferenceLock,
+} from "../clients/clientReferenceLock.js";
 import type { Enquiry, EnquiryConversionResult, EnquiryStore } from "../enquiries/enquiry.js";
 import type { ProjectStore } from "../projects/project.js";
 import {
@@ -21,7 +26,7 @@ import {
   parseUpdateEnquiry,
 } from "./enquiryRequest.js";
 import { JarvisProblem } from "./problemDetails.js";
-import { HTTP_ENQUIRY_STORE, HTTP_PROJECT_STORE } from "./tokens.js";
+import { HTTP_CLIENT_STORE, HTTP_ENQUIRY_STORE, HTTP_PROJECT_STORE } from "./tokens.js";
 
 function invalid(detail: string): JarvisProblem {
   return new JarvisProblem(
@@ -59,6 +64,7 @@ export class EnquiryController {
   constructor(
     @Inject(HTTP_ENQUIRY_STORE) private readonly enquiries: EnquiryStore,
     @Inject(HTTP_PROJECT_STORE) private readonly projects: ProjectStore,
+    @Inject(HTTP_CLIENT_STORE) private readonly clients: ClientStore,
   ) {}
 
   @Get()
@@ -92,8 +98,12 @@ export class EnquiryController {
       }
     })();
     try {
-      return enquiryResponse(await this.enquiries.add(input));
+      return await withClientReferenceLock(
+        async () => enquiryResponse(await this.enquiries.add(input)),
+        { clients: this.clients, clientId: input.clientId },
+      );
     } catch (error: unknown) {
+      if (error instanceof JarvisProblem) throw error;
       if (error instanceof Error && /empty|must be|must not|requires/.test(error.message))
         throw invalid(error.message);
       throw operationFailed();
@@ -166,8 +176,13 @@ export class EnquiryController {
     })();
     let result: EnquiryConversionResult | null;
     try {
-      result = await this.enquiries.convertToProject(enquiryId, this.projects, input);
+      result = await withClientReferenceLock(async () => {
+        const enquiry = await this.enquiries.get(enquiryId);
+        if (enquiry) await confirmReferencedClient(this.clients, enquiry.clientId);
+        return this.enquiries.convertToProject(enquiryId, this.projects, input);
+      });
     } catch (error: unknown) {
+      if (error instanceof JarvisProblem) throw error;
       if (error instanceof Error && /open|unavailable|empty/.test(error.message))
         throw invalid(error.message);
       throw operationFailed();

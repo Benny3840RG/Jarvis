@@ -322,25 +322,43 @@ Reread is through `JsonClientStore`, `JsonQuoteStore`, `JsonInvoiceStore`, `Conv
 
 ### PR 4 — HARDEN: the Local V1 proof gate
 
-Landed as `proveLocalV1Recovery` in `typescript/src/backup/v4/localV1Proof.ts`. It calls `restoreLocalV1Archive` and does not add a second apply path. `clear-local` refuses a classic verify receipt that omits business checksums. The explicit skip remains. `completeness` stays `partial`. Operator text is PR 5.
+Landed as `proveLocalV1Recovery` in `typescript/src/backup/v4/localV1Proof.ts`. It calls `restoreLocalV1Archive` and does not add a second apply path. `clear-local` refuses a classic verify receipt that omits core, memory, or business checksums. The explicit skip remains. `completeness` stays `partial`. Operator text names that gate in `archive-v4.md` and `persistence-settings.md`.
 
-The function returns success only when all of the following held on the isolated targets:
+The proof criteria are unchanged. They still require a restarted process before the GET results are matched:
 
-1. Every V1 store in section 1.1 and the Convex tables in section 1.3 was in the capture (empty is valid; omitted is not).
-2. Strict validate passed, including blob digests.
-3. Isolated restore finished (JSON completion marker, Convex empty-db apply, no live path).
-4. Store reread matched, including `ConvexQuoteRepository` and the business JSON stores.
-5. Reference and artifact checks in the design above passed.
-6. A second process, or a second `createJarvisHttpApp` bound to the scratch JSON paths and the `convex-test` client, served `GET` for a client, a task, a build, and a quote, then the process was restarted and those `GET`s matched.
-7. Checksums or row counts of the live data directory and a refused write against the live Convex URL were unchanged. A failed apply left no completion marker and no readable "live" scratch.
+`capture/export → validate → isolated restore → normal store/API reread → reference/artifact checks → runtime restart → rollback proof`
 
-This gate must fail closed if any row was skipped for size, if any PDF byte is missing, or if the Convex target URL equals the configured live URL. It must not flip `completeness` to `complete`.
+Runtime restart means a restarted process serves `GET` for a client, a task, a build, and a quote, and those results match the read taken before the restart. The full criterion, including the quote, is **NOT YET MET**. Recovery is not complete.
 
-Point Danger zone `clear-local` at this gate, or stop accepting a classic verify receipt as sufficient when business files are in the quarantine set. A receipt that does not list the business checksums must not authorise quarantining them. The explicit skip checkbox can stay; it already requires accepting irreversible loss.
+Off-host, these parts are met:
+
+- `proveLocalV1Recovery` requires `liveDirectory` to be the same resolved path as `restore.liveDataDir`. When `liveDataDir` is omitted, that path is the checkout data directory. A mismatch throws before restore and writes nothing.
+- `readRestartedProcess` spawns the existing `src/http/main.ts` entrypoint as a child Node process with `JARVIS_DATA_DIR` set to a scratch JSON directory. It GETs a client, a task, and a build, kills the process, spawns `src/http/main.ts` again, and requires those three bodies to match. The live data directory digest is unchanged. The child `CONVEX_URL` is `http://127.0.0.1:9`, which is not the configured deployment URL. The existing entrypoint still constructs a notes client from that process variable; the proof does not call notes and does not pass the configured URL. A node test does this on JSON written by the existing stores. The convex-test restore test does it again on the JSON directory `proveLocalV1Recovery` just wrote.
+- `clear-local` checksums cover every core, memory, and business file that action quarantines. A receipt that lists only the business files does not authorise the quarantine.
+
+The quote half is **NOT YET MET**. The quote lifecycle has no JSON store, `convex-test` is not a backend a child process can dial, and this repository has no local Convex backend harness. The host step for LV1-10 or LV1-11 is: start an isolated local Convex backend whose URL is not the configured `CONVEX_URL`, restore with `restoreLocalV1Archive`, spawn the existing entrypoint against that backend and the scratch JSON directory, GET the client, the task, the build, and the quote, kill the process, spawn it again, and require the four bodies to match.
+
+`proveLocalV1Recovery` itself still does not spawn that process. Recovery is not complete. The function returns success only when these partial checks pass:
+
+- `liveDirectory` equals the restore live data directory, before any restore write.
+- The caller passed `readIsolated`.
+- `restoreLocalV1Archive` is the only apply. The live data directory digest is the same before and after, including when restore throws.
+- The archive has the business, core, and memory groups, `businessSettings` is present, and the V1 collections on those groups are arrays. An empty array is present. An omitted collection is not.
+- The isolated JSON restore left a regular completion-marker file whose `completeness` is `partial`, the archive manifest stays `partial`, and the in-progress marker is absent.
+- `assertRecoverable` still throws. A partial capture is not full recovery.
+- The S6 and receipt sidecars list their tables in order, with only `table` and `documents`, at most 100 rows, a matching payload checksum, and no `skipped` or `truncated` key. Payload size stays within the existing cap.
+- Each captured PDF artifact has a blob file that is not a symlink, and the file's sha256 and length match the manifest.
+- Two calls to the injected `readIsolated` callback return the same client, task, build, and quote ids, and an empty id fails the gate. A capture with no client, no task, no build, or no quote therefore does not pass.
+
+Convex tests supply that callback. The node test calls `rereadIsolatedHttp`, which opens two `createJarvisHttpApp` instances on scratch stores and compares those four GETs. That stand-in is still not the restarted-process criterion. The OS-process harness above is `readRestartedProcess`. It matches client, task, and build only. It does not recover the quote.
+
+The gate fails closed if any row was skipped for size, if any PDF byte is missing, or if the Convex target URL equals the configured live URL. It does not flip `completeness` to `complete`. Recovery is not complete.
+
+Point Danger zone `clear-local` at this gate, or stop accepting a classic verify receipt as sufficient when core, memory, or business files are in the quarantine set. A receipt that does not list those checksums must not authorise quarantining them. The explicit skip checkbox can stay; it already requires accepting irreversible loss.
 
 ### PR 5 — HARDEN: operator text
 
-Update `typescript/docs/operators/archive-v4.md`, `persistence-settings.md`, and `typescript/docs/ROADMAP.md` so they say:
+Recorded in `typescript/docs/operators/archive-v4.md`, `persistence-settings.md`, and `typescript/docs/ROADMAP.md`. Those pages say:
 
 - which files are checkout-local;
 - that v4 full recovery is still refused;
@@ -382,4 +400,4 @@ Closed by the integration lead on 2026-10-07. See the decision list at the top o
 
 ## 8. What this file is not
 
-It is not a recovery drill and not a claim that any archive on disk is restorable. PR 1 locks the split. PR 2 writes a partial capture only. PR 3 restores that capture into scratch JSON and an injected empty database. PR 4 names the proof gate `proveLocalV1Recovery`, including a restarted isolated read. It does not flip `completeness` to `complete`. Operator text is still PR 5. `assertRecoverable` still refuses the archive.
+It is not a recovery drill and not a claim that any archive on disk is restorable. PR 1 locks the split. PR 2 writes a partial capture only. PR 3 restores that capture into scratch JSON and an injected empty database. PR 4 names the proof gate `proveLocalV1Recovery`. The restarted-process criterion stays required. Client, task, and build GETs across a killed and respawned `src/http/main.ts` are met off-host. The quote GET is **NOT YET MET** until LV1-10 or LV1-11 runs that same entrypoint against an isolated local Convex backend that is not the configured `CONVEX_URL`. It does not flip `completeness` to `complete`. Recovery is not complete. PR 5 records that gate in the operator docs. `assertRecoverable` still refuses the archive.

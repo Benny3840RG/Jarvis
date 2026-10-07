@@ -1,9 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-
 import { writePrivateJsonFile } from "../persistence/atomicJsonFile.js";
+import { jarvisDataFile } from "../persistence/jarvisDataPaths.js";
 import { JsonFileLock } from "../persistence/jsonFileLock.js";
 import type { PersistenceWarning } from "../persistence/types.js";
 import { applyBuildLogUpdate, cloneBuildLogEntry, createBuildLogEntry } from "./buildLogData.js";
@@ -21,8 +19,7 @@ const DOCUMENT_VERSION = 1 as const;
 type BuildLogDocument = { version: number; entries: BuildLogEntry[] };
 
 function defaultBuildLogsPath(): string {
-  const filename = fileURLToPath(import.meta.url);
-  return path.resolve(path.dirname(filename), "../../data/jarvis-build-logs.json");
+  return jarvisDataFile("jarvis-build-logs.json");
 }
 
 function isNodeError(error: unknown): error is NodeJS.ErrnoException {
