@@ -3112,7 +3112,7 @@
       "delete": {
         "operationId": "deleteClient",
         "summary": "Delete a business client",
-        "description": "Permanently removes one client by its identifier when no enquiry, invoice, property, project, flat quote, or quote-lifecycle revision still references that client. A referencing record is a conflict; the client is left unchanged.",
+        "description": "Permanently removes one client by its identifier when no enquiry, invoice, property, project, flat quote, or quote-lifecycle revision still references that client. A referencing record is a conflict; the client is left unchanged. The 409 guarantee covers writers in the same Jarvis HTTP process; the quote:create CLI is a separate process and stores the typed client name, not the id.",
         "tags": ["Clients"],
         "x-mcp-tool": {
           "exposed": true,
@@ -3252,6 +3252,9 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
           },
           "422": {
             "$ref": "#/components/responses/UnprocessableEntity"
@@ -3501,6 +3504,9 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
           },
           "422": {
             "$ref": "#/components/responses/UnprocessableEntity"
@@ -3789,6 +3795,9 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
           },
           "422": {
             "$ref": "#/components/responses/UnprocessableEntity"
@@ -6643,6 +6652,9 @@
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
           "422": {
             "$ref": "#/components/responses/UnprocessableEntity"
           },
@@ -7021,6 +7033,9 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
           },
           "422": {
             "$ref": "#/components/responses/UnprocessableEntity"
