@@ -1,4 +1,18 @@
-import { Body, Controller, Get, HttpCode, Inject, Param, Patch, Post, Query } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  Inject,
+  Param,
+  Patch,
+  Post,
+  Query,
+  Req,
+  Res,
+  StreamableFile,
+} from "@nestjs/common";
+import type { FastifyReply, FastifyRequest } from "fastify";
 
 import {
   QuoteFingerprintMismatchError,
@@ -11,6 +25,10 @@ import type {
   QuoteDeliveryAttempt,
   QuoteDeliveryRepository,
 } from "../quotes/quoteDeliveryRepository.js";
+import {
+  QuotePdfArtifactReadError,
+  type QuotePdfArtifactRepository,
+} from "../quotes/quotePdfArtifactRepository.js";
 import type { QuoteRepository } from "../quotes/quoteRepository.js";
 import { JarvisProblem } from "./problemDetails.js";
 import {
@@ -19,10 +37,15 @@ import {
   parseListQuoteRevisions,
   parseQuoteFinalization,
   parseQuoteRevisionCommand,
+  parseQuoteRevisionParam,
   parseRecordCommercialOutcome,
   parseUpdateQuoteDraft,
 } from "./quoteRequest.js";
-import { HTTP_QUOTE_DELIVERY_REPOSITORY, HTTP_QUOTE_REPOSITORY } from "./tokens.js";
+import {
+  HTTP_QUOTE_DELIVERY_REPOSITORY,
+  HTTP_QUOTE_PDF_ARTIFACT_REPOSITORY,
+  HTTP_QUOTE_REPOSITORY,
+} from "./tokens.js";
 
 function unavailable(): JarvisProblem {
   return new JarvisProblem(
@@ -40,6 +63,48 @@ function deliveriesUnavailable(): JarvisProblem {
     "Quote Delivery Lifecycle Unavailable",
     "The quote delivery ledger is not yet commissioned.",
   );
+}
+
+function pdfUnavailable(): JarvisProblem {
+  return new JarvisProblem(
+    503,
+    "quote-pdf-unavailable",
+    "Quote PDF Unavailable",
+    "The stored quote PDF reader is not configured.",
+  );
+}
+
+function pdfReadProblem(error: QuotePdfArtifactReadError): JarvisProblem {
+  if (
+    error.code === "quote-pdf-artifact-digest-mismatch" ||
+    error.code === "quote-pdf-artifact-fingerprint-mismatch"
+  ) {
+    return new JarvisProblem(
+      409,
+      error.code,
+      "Quote PDF Verification Failed",
+      "The stored quote PDF did not match its recorded digest or revision fingerprint.",
+    );
+  }
+  return new JarvisProblem(
+    503,
+    error.code,
+    "Quote PDF Unavailable",
+    "The stored quote PDF could not be read.",
+  );
+}
+
+function contentDisposition(filename: string): string {
+  const ascii = filename.replace(/["\\]/g, "_").replace(/[^\x20-\x7E]/g, "_");
+  return `attachment; filename="${ascii}"`;
+}
+
+function clientAbortSignal(request: FastifyRequest): AbortSignal {
+  const controller = new AbortController();
+  const abort = (): void => controller.abort();
+  request.raw.once("aborted", abort);
+  request.raw.socket.once("close", abort);
+  return controller.signal;
 }
 
 function invalid(detail: string): JarvisProblem {
@@ -149,11 +214,18 @@ export class QuoteController {
     @Inject(HTTP_QUOTE_REPOSITORY) private readonly quotes: QuoteRepository | null,
     @Inject(HTTP_QUOTE_DELIVERY_REPOSITORY)
     private readonly deliveries: QuoteDeliveryRepository | null,
+    @Inject(HTTP_QUOTE_PDF_ARTIFACT_REPOSITORY)
+    private readonly pdfArtifacts: QuotePdfArtifactRepository | null,
   ) {}
 
   private requireRepository(): QuoteRepository {
     if (!this.quotes) throw unavailable();
     return this.quotes;
+  }
+
+  private requirePdfArtifacts(): QuotePdfArtifactRepository {
+    if (!this.pdfArtifacts) throw pdfUnavailable();
+    return this.pdfArtifacts;
   }
 
   @Post()
@@ -330,6 +402,74 @@ export class QuoteController {
       if (error instanceof JarvisProblem) throw error;
       throw operationProblem(error);
     }
+  }
+
+  @Get(":quoteId/revisions/:revision/pdf")
+  async readPdf(
+    @Param("quoteId") quoteId: string,
+    @Param("revision") revisionParam: string,
+    @Req() request: FastifyRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ): Promise<StreamableFile> {
+    const repository = this.requireRepository();
+    const artifacts = this.requirePdfArtifacts();
+    let revision: number;
+    try {
+      revision = parseQuoteRevisionParam(revisionParam);
+    } catch (error: unknown) {
+      throw invalid(
+        error instanceof Error ? error.message : "Revision must be a positive integer.",
+      );
+    }
+    let snapshot: QuoteSnapshot | null;
+    try {
+      snapshot = await repository.getQuote(quoteId);
+    } catch (error: unknown) {
+      if (error instanceof JarvisProblem) throw error;
+      throw operationProblem(error);
+    }
+    const fingerprint = snapshot?.revision.fingerprint;
+    if (
+      !snapshot ||
+      snapshot.aggregate.currentRevision !== revision ||
+      snapshot.revision.revision !== revision ||
+      snapshot.revision.status !== "finalized" ||
+      fingerprint === undefined
+    ) {
+      throw notFound();
+    }
+    let stored;
+    try {
+      stored = await artifacts.getForRevision(
+        {
+          quoteId,
+          revision,
+          expectedRevisionFingerprint: fingerprint,
+        },
+        clientAbortSignal(request),
+      );
+    } catch (error: unknown) {
+      if (error instanceof JarvisProblem) throw error;
+      if (error instanceof QuotePdfArtifactReadError) throw pdfReadProblem(error);
+      throw pdfUnavailable();
+    }
+    if (
+      !stored ||
+      stored.quoteId !== quoteId ||
+      stored.revision !== revision ||
+      stored.revisionId !== snapshot.revision.revisionId ||
+      stored.revisionFingerprint !== fingerprint ||
+      stored.mediaType !== "application/pdf" ||
+      stored.bytes.byteLength !== stored.byteLength
+    ) {
+      throw notFound();
+    }
+    reply.header("X-Quote-Pdf-Digest", stored.digest);
+    return new StreamableFile(Buffer.from(stored.bytes), {
+      type: stored.mediaType,
+      disposition: contentDisposition(stored.filename),
+      length: stored.byteLength,
+    });
   }
 
   @Get(":quoteId/deliveries")
