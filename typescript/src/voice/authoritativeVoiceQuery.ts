@@ -49,7 +49,7 @@ const EQUIPMENT_STATUS_UNAVAILABLE =
 const TIMEZONE_UNAVAILABLE = "Jarvis timezone configuration is unavailable.";
 
 const QUOTE_FOLLOW_UP_UNAVAILABLE =
-  "Quote follow-up is unavailable: no owner-wide read of governed sent quotes is connected. The daily-brief quote file is not that register.";
+  "Quote follow-up is unavailable: no owner-wide governed sent-quote read (lifecycle delivery ledger) is connected. The daily-brief quote file is not that register.";
 
 function unavailable(reason: string): VoiceQueryAnswer {
   return { status: "unavailable", reason };

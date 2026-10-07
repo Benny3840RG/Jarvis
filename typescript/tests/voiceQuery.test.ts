@@ -388,8 +388,31 @@ describe("authoritative voice queries", () => {
     assert.deepEqual(result, {
       status: "unavailable",
       reason:
-        "Quote follow-up is unavailable: no owner-wide read of governed sent quotes is connected. The daily-brief quote file is not that register.",
+        "Quote follow-up is unavailable: no owner-wide governed sent-quote read (lifecycle delivery ledger) is connected. The daily-brief quote file is not that register.",
     });
+  });
+
+  it("does not treat an empty or draft-only flat quote file as no follow-up", async () => {
+    let reads = 0;
+    const flat = (rows: Quote[]) => ({
+      list: async () => {
+        reads += 1;
+        return rows;
+      },
+    });
+    const files = [flat([]), flat([quote("Q-1", "draft", 1)])];
+    for (const quotes of files) {
+      const result = await ask(sources({ quotes }), "client.quote-follow-up");
+      assert.deepEqual(result, {
+        status: "unavailable",
+        reason:
+          "Quote follow-up is unavailable: no owner-wide governed sent-quote read (lifecycle delivery ledger) is connected. The daily-brief quote file is not that register.",
+      });
+      if (result.status === "unavailable") {
+        assert.doesNotMatch(result.reason, /no quotes awaiting a response/i);
+      }
+    }
+    assert.equal(reads, 0);
   });
 
   it("reads open tasks and ignores completed ones", async () => {
