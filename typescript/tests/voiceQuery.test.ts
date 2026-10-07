@@ -371,32 +371,25 @@ describe("authoritative voice queries", () => {
     assert.deepEqual(result, { status: "unavailable", reason: "Enquiry records are unavailable." });
   });
 
-  it("reads sent quotes awaiting a response and ignores drafts", async () => {
+  it("keeps quote follow-up unavailable until the governed owner-wide read exists", async () => {
+    let reads = 0;
     const result = await ask(
       sources({
         quotes: {
-          list: async () => [quote("Q-1", "draft", 1), quote("Q-2", "sent", 5)],
+          list: async () => {
+            reads += 1;
+            return [quote("Q-1", "sent", 1)];
+          },
         },
       }),
       "client.quote-follow-up",
     );
+    assert.equal(reads, 0);
     assert.deepEqual(result, {
-      status: "answered",
-      answer: "1 quote awaiting a response. Q-2.",
+      status: "unavailable",
+      reason:
+        "Quote follow-up is unavailable: no owner-wide read of governed sent quotes is connected. The daily-brief quote file is not that register.",
     });
-  });
-
-  it("reports no quote follow-up when none are awaiting a response", async () => {
-    const result = await ask(
-      sources({ quotes: { list: async () => [quote("Q-1", "draft", 1)] } }),
-      "client.quote-follow-up",
-    );
-    assert.deepEqual(result, { status: "answered", answer: "No quotes awaiting a response." });
-  });
-
-  it("names quote records when follow-up cannot be read", async () => {
-    const result = await ask(sources(), "client.quote-follow-up");
-    assert.deepEqual(result, { status: "unavailable", reason: "Quote records are unavailable." });
   });
 
   it("reads open tasks and ignores completed ones", async () => {
@@ -440,6 +433,21 @@ describe("authoritative voice queries", () => {
     assert.deepEqual(result, {
       status: "answered",
       answer: "1 reminder due, 1 upcoming, 1 undated. Due: Due one. Upcoming: Soon.",
+    });
+  });
+
+  it("reports reminders scheduled beyond the brief upcoming window", async () => {
+    const result = await ask(
+      sources({
+        reminders: {
+          listReminders: async () => [reminder("Later", NOW + 2 * DAY)],
+        },
+      }),
+      "client.reminders",
+    );
+    assert.deepEqual(result, {
+      status: "answered",
+      answer: "0 reminders due, 0 upcoming, 0 undated. 1 reminder scheduled later.",
     });
   });
 
