@@ -117,9 +117,7 @@ function createExecutor(counter: { count: number }): ToolExecutionService {
 describe("ToolExecutionService properties", () => {
   it("preserves execution invariants across generated attempt sequences", async () => {
     await fc.assert(
-      fc.asyncProperty(
-        attemptSequenceArbitrary,
-        async (attempts) => {
+      fc.asyncProperty(attemptSequenceArbitrary, async (attempts) => {
           const effects = { count: 0 };
           const executor = createExecutor(effects);
           const liveReceipts = new Map<string, { zone: string; receipt: ToolExecutionReceipt }>();
@@ -190,8 +188,7 @@ describe("ToolExecutionService properties", () => {
             liveReceipts.size,
             "each unique successful live action must create exactly one effect",
           );
-        },
-      ),
+        }),
       { numRuns: 60 },
     );
   });
