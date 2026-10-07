@@ -19,7 +19,28 @@ const READY = {
   JARVIS_OUTLOOK_COMMISSIONING_PROJECT_KEY: "totality-dev",
   JARVIS_OUTLOOK_COMMISSIONING_CONFIRM: "non-customer",
   JARVIS_OUTLOOK_COMMISSIONING_RECIPIENT: "commissioning@example.invalid",
+  JARVIS_OUTLOOK_COMMISSIONING_RECIPIENT_ALLOWLIST: "commissioning@example.invalid",
 };
+
+async function rejectsBeforeClientRead(
+  environment: Record<string, string | undefined>,
+  pattern: RegExp,
+): Promise<void> {
+  assert.throws(() => assessOutlookQuoteCommissioningGuard(environment), pattern);
+  let loaded = false;
+  await assert.rejects(
+    () =>
+      beginOutlookQuoteCommissioning({
+        environment,
+        loadClientContactValues: () => {
+          loaded = true;
+          return Promise.resolve(["customer@example.com"]);
+        },
+      }),
+    pattern,
+  );
+  assert.equal(loaded, false);
+}
 
 describe("outlook quote commissioning guard", () => {
   it("accepts a development deployment, loopback API, and confirmed non-customer mailbox", () => {
@@ -191,17 +212,73 @@ describe("outlook quote commissioning guard", () => {
     );
   });
 
-  it("keeps the confirmed mailbox exact after normalisation", () => {
+  it("keeps a plain plus-tag exact and does not repair a display name", () => {
+    assert.throws(
+      () =>
+        assessOutlookQuoteCommissioningGuard({
+          ...READY,
+          JARVIS_OUTLOOK_COMMISSIONING_RECIPIENT: "Mailto:Ops <Commissioning@Example.invalid.>",
+        }),
+      /must be an email address/,
+    );
+    const tagged = "commissioning+tag@example.invalid";
     const plan = assessOutlookQuoteCommissioningGuard({
       ...READY,
-      JARVIS_OUTLOOK_COMMISSIONING_RECIPIENT: "Mailto:Ops <Commissioning@Example.invalid.>",
+      JARVIS_OUTLOOK_COMMISSIONING_RECIPIENT: "Commissioning+Tag@Example.invalid",
+      JARVIS_OUTLOOK_COMMISSIONING_RECIPIENT_ALLOWLIST: tagged,
+    });
+    assert.equal(plan.recipient, tagged);
+  });
+
+  it("sends only to an allowlisted plain mailbox and refuses the rest before any client read", async () => {
+    const plan = await beginOutlookQuoteCommissioning({
+      environment: READY,
+      loadClientContactValues: () => Promise.resolve(["other@example.invalid"]),
     });
     assert.equal(plan.recipient, "commissioning@example.invalid");
-    const tagged = assessOutlookQuoteCommissioningGuard({
-      ...READY,
-      JARVIS_OUTLOOK_COMMISSIONING_RECIPIENT: "commissioning+tag@example.invalid",
-    });
-    assert.equal(tagged.recipient, "commissioning+tag@example.invalid");
+
+    await rejectsBeforeClientRead(
+      { ...READY, JARVIS_OUTLOOK_COMMISSIONING_RECIPIENT_ALLOWLIST: undefined },
+      /RECIPIENT_ALLOWLIST is required/,
+    );
+    await rejectsBeforeClientRead(
+      { ...READY, JARVIS_OUTLOOK_COMMISSIONING_RECIPIENT_ALLOWLIST: " , " },
+      /at least one plain email address/,
+    );
+    await rejectsBeforeClientRead(
+      {
+        ...READY,
+        JARVIS_OUTLOOK_COMMISSIONING_RECIPIENT_ALLOWLIST: "other@example.invalid",
+      },
+      /not on the commissioning allowlist/,
+    );
+    await rejectsBeforeClientRead(
+      {
+        ...READY,
+        JARVIS_OUTLOOK_COMMISSIONING_RECIPIENT_ALLOWLIST: "commissioning@example.invalid.",
+      },
+      /must list plain email addresses/,
+    );
+
+    const recipientBypasses = [
+      "customer@example.com.",
+      "customer@example.com..",
+      "customer@example.com...",
+      '"customer"@example.com',
+      "customer(comment)@example.com",
+      "=?utf-8?q?customer?=@example.com",
+      "Name <customer@example.com..>",
+    ];
+    for (const recipient of recipientBypasses) {
+      await rejectsBeforeClientRead(
+        {
+          ...READY,
+          JARVIS_OUTLOOK_COMMISSIONING_RECIPIENT: recipient,
+          JARVIS_OUTLOOK_COMMISSIONING_RECIPIENT_ALLOWLIST: "customer@example.com",
+        },
+        /must be an email address/,
+      );
+    }
   });
 
   it("refuses a normalised client contact before a quote is created", async () => {
@@ -219,12 +296,48 @@ describe("outlook quote commissioning guard", () => {
         contacts: ["customer@example.com"],
       },
       {
-        recipient: "customer@example.com.",
-        contacts: ["customer@example.com"],
+        recipient: "customer@example.com",
+        contacts: ["customer@example.com."],
+      },
+      {
+        recipient: "customer@example.com",
+        contacts: ["customer@example.com.."],
+      },
+      {
+        recipient: "customer@example.com",
+        contacts: ["customer@example.com..."],
+      },
+      {
+        recipient: "customer@example.com",
+        contacts: ["Name <customer@example.com..>"],
+      },
+      {
+        recipient: "customer@example.com",
+        contacts: ['"customer"@example.com'],
+      },
+      {
+        recipient: "customer@example.com",
+        contacts: ["customer(comment)@example.com"],
+      },
+      {
+        recipient: "customer@example.com",
+        contacts: ["(comment)customer@example.com"],
+      },
+      {
+        recipient: "customer@example.com",
+        contacts: ["customer@(comment)example.com"],
+      },
+      {
+        recipient: "customer@example.com",
+        contacts: ["=?utf-8?q?customer?=@example.com"],
       },
     ];
     for (const entry of cases) {
-      assert.equal(recipientCollidesWithContacts(entry.recipient, entry.contacts), true);
+      assert.equal(
+        recipientCollidesWithContacts(entry.recipient, entry.contacts),
+        true,
+        entry.contacts[0],
+      );
       let loaded = false;
       await assert.rejects(
         () =>
@@ -232,6 +345,7 @@ describe("outlook quote commissioning guard", () => {
             environment: {
               ...READY,
               JARVIS_OUTLOOK_COMMISSIONING_RECIPIENT: entry.recipient,
+              JARVIS_OUTLOOK_COMMISSIONING_RECIPIENT_ALLOWLIST: entry.recipient,
             },
             loadClientContactValues: () => {
               loaded = true;
@@ -240,8 +354,40 @@ describe("outlook quote commissioning guard", () => {
           }),
         /matches a client contact/,
       );
-      assert.equal(loaded, true);
+      assert.equal(loaded, true, entry.contacts[0]);
     }
+
+    let unparsed = false;
+    await assert.rejects(
+      () =>
+        beginOutlookQuoteCommissioning({
+          environment: READY,
+          loadClientContactValues: () => {
+            unparsed = true;
+            return Promise.resolve(["not-a-mailbox"]);
+          },
+        }),
+      /could not be parsed into one mailbox/,
+    );
+    assert.equal(unparsed, true);
+
+    let contained = false;
+    await assert.rejects(
+      () =>
+        beginOutlookQuoteCommissioning({
+          environment: {
+            ...READY,
+            JARVIS_OUTLOOK_COMMISSIONING_RECIPIENT: "customer@example.com",
+            JARVIS_OUTLOOK_COMMISSIONING_RECIPIENT_ALLOWLIST: "customer@example.com",
+          },
+          loadClientContactValues: () => {
+            contained = true;
+            return Promise.resolve(["customer@example.com.extra"]);
+          },
+        }),
+      /matches a client contact/,
+    );
+    assert.equal(contained, true);
   });
 
   it("records one terminal reconciliation and leaves #294 and #297 open", () => {

@@ -105,19 +105,122 @@ function assertDevelopmentConvexUrl(raw: string, url: URL, slug: string): void {
   }
 }
 
+const ATEXT = "[a-z0-9!#$%&'*+/=?^_`{|}~-]";
+const DOT_ATOM = `${ATEXT}+(?:\\.${ATEXT}+)*`;
+const DOMAIN = "[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+";
+const PLAIN_MAILBOX = new RegExp(`^${DOT_ATOM}@${DOMAIN}$`, "u");
+const DOT_ATOM_ONLY = new RegExp(`^${DOT_ATOM}$`, "u");
+
 function stripMailto(value: string): string {
   return value.toLowerCase().startsWith("mailto:") ? value.slice("mailto:".length).trim() : value;
 }
 
-/** Addr-spec after display-name, mailto, case, and one trailing-dot fold. Plus-tags stay. */
+/** Lowercase and trim only. Quotes, comments, encoded words, display names, and trailing dots are rejected. */
+function plainMailbox(value: string): string | null {
+  const text = value.trim().toLowerCase();
+  if (text.includes("=?") || text.includes("?=")) return null;
+  if (text.length === 0 || text.length > 320 || !PLAIN_MAILBOX.test(text)) return null;
+  return text;
+}
+
+function applyOneEncodedWord(value: string): string | null {
+  const matches = [...value.matchAll(/=\?([^?]*)\?([bBqQ])\?([^?]*)\?=/gu)];
+  if (matches.length > 1) return null;
+  const match = matches[0];
+  if (!match) return value;
+  const encoding = match[2]?.toLowerCase();
+  const payload = match[3] ?? "";
+  let decoded: string;
+  if (encoding === "q") {
+    decoded = payload.replaceAll("_", " ").replace(/=([0-9a-fA-F]{2})/gu, (_full, hex: string) => {
+      return String.fromCharCode(Number.parseInt(hex, 16));
+    });
+  } else if (encoding === "b") {
+    decoded = Buffer.from(payload, "base64").toString("utf8");
+  } else {
+    return null;
+  }
+  return value.replace(match[0], decoded);
+}
+
+function removeComments(value: string): string | null {
+  let depth = 0;
+  let out = "";
+  for (const char of value) {
+    if (char === "(") {
+      depth += 1;
+      continue;
+    }
+    if (char === ")") {
+      if (depth === 0) return null;
+      depth -= 1;
+      continue;
+    }
+    if (depth === 0) out += char;
+  }
+  return depth === 0 ? out : null;
+}
+
+function stripTrailingDots(value: string): string {
+  let end = value.length;
+  while (end > 0 && value[end - 1] === ".") end -= 1;
+  return value.slice(0, end);
+}
+
+function unquoteDotAtomLocal(value: string): string | null {
+  const at = value.lastIndexOf("@");
+  if (at <= 0) return null;
+  const local = value.slice(0, at);
+  const domain = value.slice(at + 1);
+  if (!local.startsWith('"')) return `${local}@${domain}`;
+  if (!local.endsWith('"') || local.length < 2) return null;
+  const inner = local.slice(1, -1);
+  if (!DOT_ATOM_ONLY.test(inner)) return null;
+  return `${inner}@${domain}`;
+}
+
+/**
+ * Contact mailbox after one encoded-word, comment removal, a dot-atom unquote,
+ * and every trailing dot. Plus-tags stay. A value that is not one mailbox is null.
+ */
 function exactMailbox(value: string): string | null {
   let text = stripMailto(value.trim());
   const wrapped = text.match(/<([^<>]+)>/u);
   if (wrapped?.[1]) text = stripMailto(wrapped[1].trim());
-  text = text.trim().toLowerCase();
-  if (text.endsWith(".")) text = text.slice(0, -1);
-  if (text.length > 320 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(text)) return null;
+  const decoded = applyOneEncodedWord(text.trim());
+  if (decoded === null) return null;
+  text = decoded.toLowerCase();
+  const uncommented = removeComments(text);
+  if (uncommented === null) return null;
+  const unquoted = unquoteDotAtomLocal(stripTrailingDots(uncommented.trim()));
+  if (unquoted === null) return null;
+  text = unquoted.trim();
+  if (text.length === 0 || text.length > 320 || !PLAIN_MAILBOX.test(text)) return null;
   return text;
+}
+
+function recipientAllowlist(environment: CommissioningEnvironment): ReadonlySet<string> {
+  const raw = required(environment, "JARVIS_OUTLOOK_COMMISSIONING_RECIPIENT_ALLOWLIST");
+  const entries = raw
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0);
+  if (entries.length === 0) {
+    throw refused(
+      "JARVIS_OUTLOOK_COMMISSIONING_RECIPIENT_ALLOWLIST must list at least one plain email address.",
+    );
+  }
+  const mailboxes = new Set<string>();
+  for (const entry of entries) {
+    const mailbox = plainMailbox(entry);
+    if (!mailbox) {
+      throw refused(
+        "JARVIS_OUTLOOK_COMMISSIONING_RECIPIENT_ALLOWLIST must list plain email addresses.",
+      );
+    }
+    mailboxes.add(mailbox);
+  }
+  return mailboxes;
 }
 
 /** Customer-contact key: exact mailbox with one `+tag` removed from the local part. */
@@ -135,7 +238,8 @@ function contactKey(value: string): string | null {
 
 /**
  * Refuses production, a Convex URL that is not loopback or this dev deployment,
- * a non-loopback API, and a recipient that is not an email address.
+ * a non-loopback API, a recipient that is not a plain email address, and a
+ * recipient that is not on the operator allowlist.
  * Returns before any quote, send, or reconciliation call.
  */
 export function assessOutlookQuoteCommissioningGuard(
@@ -181,9 +285,13 @@ export function assessOutlookQuoteCommissioningGuard(
     );
   }
 
-  const recipient = exactMailbox(required(environment, "JARVIS_OUTLOOK_COMMISSIONING_RECIPIENT"));
+  const recipient = plainMailbox(required(environment, "JARVIS_OUTLOOK_COMMISSIONING_RECIPIENT"));
   if (!recipient) {
     throw refused("JARVIS_OUTLOOK_COMMISSIONING_RECIPIENT must be an email address.");
+  }
+  const allowlist = recipientAllowlist(environment);
+  if (!allowlist.has(recipient)) {
+    throw refused("JARVIS_OUTLOOK_COMMISSIONING_RECIPIENT is not on the commissioning allowlist.");
   }
 
   return {
@@ -214,7 +322,13 @@ export async function beginOutlookQuoteCommissioning(input: {
 }): Promise<CommissioningPlan> {
   const plan = assessOutlookQuoteCommissioningGuard(input.environment);
   const contacts = await input.loadClientContactValues();
-  if (recipientCollidesWithContacts(plan.recipient, contacts)) {
+  for (const value of contacts) {
+    if (!exactMailbox(value)) {
+      throw refused("a client contact could not be parsed into one mailbox.");
+    }
+  }
+  const contained = contacts.some((value) => value.toLowerCase().includes(plan.recipient));
+  if (recipientCollidesWithContacts(plan.recipient, contacts) || contained) {
     throw refused(
       "the commissioning recipient matches a client contact and is not a non-customer mailbox.",
     );

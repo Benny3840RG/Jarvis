@@ -9,14 +9,22 @@ mailbox that is not a customer. The kit refuses `JARVIS_ENVIRONMENT=production`,
 a `CONVEX_DEPLOYMENT` that is not `dev:` plus one deployment slug, a
 `CONVEX_URL` whose host is not loopback or exactly `https://<slug>.convex.cloud`
 (plaintext cloud hosts are refused), a
-non-loopback Jarvis API, and a recipient that is missing the `non-customer`
-confirmation or that matches a client contact. Those checks happen before a
-quote is created.
+non-loopback Jarvis API, a recipient that is missing the `non-customer`
+confirmation, a recipient that is not on the allowlist, or a recipient that
+matches a client contact. Those checks happen before a quote is created.
 
-The recipient is `JARVIS_OUTLOOK_COMMISSIONING_RECIPIENT`. It must be an email
-address. Display names, `mailto:`, case, and one trailing dot are folded away,
-and that exact mailbox is what the quote uses. A `+tag` is ignored only when
-comparing the mailbox with client contacts. `JARVIS_OUTLOOK_COMMISSIONING_CONFIRM`
+The recipient is `JARVIS_OUTLOOK_COMMISSIONING_RECIPIENT`. It must already be a
+plain `local@domain` mailbox. Comparison lowercases and trims, and then rejects
+quotes, comments, encoded words, display names, and trailing dots instead of
+repairing them. The allowlist is
+`JARVIS_OUTLOOK_COMMISSIONING_RECIPIENT_ALLOWLIST`, a comma-separated list of
+those same plain mailboxes in the shell or ignored `.env.local`. A missing or
+empty allowlist refuses the run, and the recipient must exactly match one
+entry. The client-contact check still runs after that. It strips every trailing
+dot, removes comments, decodes one encoded-word, and unquotes a dot-atom local
+part. A contact that is not one mailbox, or whose text contains the recipient,
+also refuses the run. A `+tag` is ignored only when comparing the mailbox with
+client contacts. `JARVIS_OUTLOOK_COMMISSIONING_CONFIRM`
 must be exactly `non-customer`. `JARVIS_OUTLOOK_COMMISSIONING_PROJECT_KEY` must
 already be a Convex totality project. This kit does not create that project.
 
@@ -39,6 +47,7 @@ Required environment (shell or ignored `.env.local`, never a command argument):
 - `JARVIS_OUTLOOK_COMMISSIONING_PROJECT_KEY`
 - `JARVIS_OUTLOOK_COMMISSIONING_CONFIRM=non-customer`
 - `JARVIS_OUTLOOK_COMMISSIONING_RECIPIENT`
+- `JARVIS_OUTLOOK_COMMISSIONING_RECIPIENT_ALLOWLIST` (comma-separated plain mailboxes; required)
 - the existing Outlook runtime variables that register `quotes:send`
 
 The command uses the existing HTTP routes and the existing Outlook
