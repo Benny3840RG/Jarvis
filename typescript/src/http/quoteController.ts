@@ -14,6 +14,7 @@ import {
 } from "@nestjs/common";
 import type { FastifyReply, FastifyRequest } from "fastify";
 
+import { withClientReferenceLock } from "../clients/clientReferenceLock.js";
 import {
   QuoteFingerprintMismatchError,
   QuoteFinalizedImmutableError,
@@ -238,7 +239,9 @@ export class QuoteController {
       throw invalid(error instanceof Error ? error.message : "The quote request is invalid.");
     }
     try {
-      return snapshotResponse(await this.requireRepository().createQuote(input));
+      return await withClientReferenceLock(async () =>
+        snapshotResponse(await this.requireRepository().createQuote(input)),
+      );
     } catch (error: unknown) {
       if (error instanceof JarvisProblem) throw error;
       throw operationProblem(error);

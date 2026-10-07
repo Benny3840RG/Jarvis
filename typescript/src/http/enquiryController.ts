@@ -11,6 +11,7 @@ import {
   Query,
 } from "@nestjs/common";
 
+import { withClientReferenceLock } from "../clients/clientReferenceLock.js";
 import type { Enquiry, EnquiryConversionResult, EnquiryStore } from "../enquiries/enquiry.js";
 import type { ProjectStore } from "../projects/project.js";
 import {
@@ -92,7 +93,9 @@ export class EnquiryController {
       }
     })();
     try {
-      return enquiryResponse(await this.enquiries.add(input));
+      return await withClientReferenceLock(async () =>
+        enquiryResponse(await this.enquiries.add(input)),
+      );
     } catch (error: unknown) {
       if (error instanceof Error && /empty|must be|must not|requires/.test(error.message))
         throw invalid(error.message);
@@ -166,7 +169,9 @@ export class EnquiryController {
     })();
     let result: EnquiryConversionResult | null;
     try {
-      result = await this.enquiries.convertToProject(enquiryId, this.projects, input);
+      result = await withClientReferenceLock(() =>
+        this.enquiries.convertToProject(enquiryId, this.projects, input),
+      );
     } catch (error: unknown) {
       if (error instanceof Error && /open|unavailable|empty/.test(error.message))
         throw invalid(error.message);
