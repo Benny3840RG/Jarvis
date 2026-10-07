@@ -412,19 +412,20 @@ describe("voice safe writes", () => {
     );
     assert.equal(actions.rows.size, 0);
 
-    const blank = await utter(app, sessionId, {
-      transcript: "jarvis remind me to follow up",
-      isFinal: true,
-      ...TARGET,
-      capture: { title: "   " },
-    });
-    assert.equal(blank.statusCode, 200);
-    assert.equal(blank.json().dispatch.decision, "proposed");
-    assert.equal(blank.json().dispatch.toolActionId, undefined);
-    assert.equal(
-      blank.json().dispatch.reason,
-      "Safe write was not staged: the capture is missing a required field.",
-    );
+    for (const capture of [{ title: "   " }, { title: "Buy timber", category: "   " }]) {
+      const blank = await utter(app, sessionId, {
+        transcript: "jarvis add a task",
+        isFinal: true,
+        ...TARGET,
+        capture,
+      });
+      assert.equal(blank.statusCode, 422);
+      assert.match(String(blank.headers["content-type"]), /application\/problem\+json/);
+      const problem = blank.json();
+      assert.equal(problem.type, "urn:jarvis:problem:invalid-voice-request");
+      assert.equal(problem.status, 422);
+      assert.match(problem.detail, /capture\.(title|category)/);
+    }
     assert.equal(actions.rows.size, 0);
     assert.equal(actions.approveCalls, 0);
   });
@@ -707,6 +708,15 @@ describe("voice safe writes", () => {
     assert.equal(retry.json().dispatch.toolActionId, firstId);
     assert.equal(actions.rows.size, 1);
     assert.equal(actions.approveCalls, 0);
+
+    const secondSessionId = await openSession(app);
+    const crossSessionRetry = await utter(app, secondSessionId, {
+      ...payload,
+      expectedRevision: 4,
+    });
+    assert.equal(crossSessionRetry.statusCode, 200);
+    assert.equal(crossSessionRetry.json().dispatch.toolActionId, firstId);
+    assert.equal(actions.rows.size, 1);
 
     const next = await utter(app, sessionId, { ...payload, expectedRevision: 5 });
     assert.equal(next.statusCode, 200);
