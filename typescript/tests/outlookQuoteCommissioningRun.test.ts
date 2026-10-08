@@ -310,6 +310,48 @@ describe("outlook quote commissioning run", () => {
         pattern: /could not be parsed into one mailbox/u,
       },
       { contact: "=?utf-8?q?=ZZ?=", pattern: /could not be parsed into one mailbox/u },
+      {
+        contact: "=?utf-8?q?=3D=3Futf=2D8=3Fq=3F3840zip=3D40gmail=3D2Ecom=3F=3D?=",
+        pattern: /could not be parsed into one mailbox/u,
+      },
+      {
+        contact:
+          "=?utf-8?q?=3D=3Futf=2D8=3Fq=3F=3D3D=3D3Futf=3D2D8=3D3Fq=3D3F3840zip=3D3D40gmail=3D3D2Ecom=3D3F=3D3D=3F=3D?=",
+        pattern: /could not be parsed into one mailbox/u,
+      },
+      {
+        contact: "=?utf-8?q?=3D=3Futf=2D8=3Fq=3F=3D283840zip=3D40gmail=3D2Ecom=3D29=3F=3D?=",
+        pattern: /could not be parsed into one mailbox/u,
+      },
+      {
+        contact: "=?utf-8?b?PT91dGYtOD9iP016ZzBNSHBwY0VCbmJXRnBiQzVqYjIwPT89?=",
+        pattern: /could not be parsed into one mailbox/u,
+      },
+      {
+        contact:
+          "=?utf-8?b?PT91dGYtOD9iP1BUOTFkR1l0T0Q5aVAwMTZaekJOU0hCd1kwVkNibUpYUm5CaVF6VnFZakl3UFQ4OT89?=",
+        pattern: /could not be parsed into one mailbox/u,
+      },
+      {
+        contact: "=?utf-16?b?/v8AMwA4ADQAMAB6AGkAcABAAGcAbQBhAGkAbAAuAGMAbwBt?=",
+        pattern: /could not be parsed into one mailbox/u,
+      },
+      {
+        contact: "=?utf-16?b?//4zADgANAAwAHoAaQBwAEAAZwBtAGEAaQBsAC4AYwBvAG0A?=",
+        pattern: /could not be parsed into one mailbox/u,
+      },
+      {
+        contact: "=?utf-16be?b?ADMAOAA0ADAAegBpAHAAQABnAG0AYQBpAGwALgBjAG8AbQ==?=",
+        pattern: /could not be parsed into one mailbox/u,
+      },
+      {
+        contact: "=?utf-16le?b?MwA4ADQAMAB6AGkAcABAAGcAbQBhAGkAbAAuAGMAbwBtAA==?=",
+        pattern: /could not be parsed into one mailbox/u,
+      },
+      {
+        contact: "=?utf-7?q?3840zip=40gmail.com?=",
+        pattern: /could not be parsed into one mailbox/u,
+      },
     ];
     for (const { contact, pattern } of cases) {
       const calls: string[] = [];

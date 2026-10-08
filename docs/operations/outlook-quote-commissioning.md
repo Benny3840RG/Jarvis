@@ -20,10 +20,11 @@ repairing them. The allowlist is
 `JARVIS_OUTLOOK_COMMISSIONING_RECIPIENT_ALLOWLIST`, a comma-separated list of
 those same plain mailboxes in the shell or ignored `.env.local`. A missing or
 empty allowlist refuses the run, and the recipient must exactly match one
-entry. The client-contact check still runs after that. It decodes every encoded word
-with that word's charset. An unknown charset, a decode error, or a malformed
-word refuses the run. NFKC and format-character removal, including zero-width
-characters, then apply to the whole decoded contact. Every email-like token in
+entry. The client-contact check still runs after that. It decodes each encoded word
+once, and only for `us-ascii`, `utf-8` (`utf8`), or `iso-8859-1` (`latin1`). Any other
+charset, a decode error, or a malformed word refuses the run. NFKC and format-character
+removal, including zero-width characters, then apply to that one decoded string. A
+remaining `=?` refuses the contact. There is no second decode. Every email-like token in
 that one string is extracted the same way, including an address in parentheses,
 angle brackets, or the display-name residue. A phone number or a name with no
 mailbox does not abort the run. A value that looks like an address but is not

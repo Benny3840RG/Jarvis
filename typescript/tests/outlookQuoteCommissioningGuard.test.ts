@@ -578,6 +578,54 @@ describe("outlook quote commissioning guard", () => {
     assert.equal(latin1NotUtf8.recipient, recipient);
   });
 
+  it("refuses nested encoded words and charsets outside the allowlist", async () => {
+    const recipient = "3840zip@gmail.com";
+    const environment = {
+      ...READY,
+      JARVIS_OUTLOOK_COMMISSIONING_RECIPIENT: recipient,
+      JARVIS_OUTLOOK_COMMISSIONING_RECIPIENT_ALLOWLIST: recipient,
+    };
+    const refusedContacts = [
+      "=?utf-8?q?=3D=3Futf=2D8=3Fq=3F3840zip=3D40gmail=3D2Ecom=3F=3D?=",
+      "=?utf-8?q?=3D=3Futf=2D8=3Fq=3F=3D3D=3D3Futf=3D2D8=3D3Fq=3D3F3840zip=3D3D40gmail=3D3D2Ecom=3D3F=3D3D=3F=3D?=",
+      "=?utf-8?q?=3D=3Futf=2D8=3Fq=3F=3D283840zip=3D40gmail=3D2Ecom=3D29=3F=3D?=",
+      "=?utf-8?b?PT91dGYtOD9iP016ZzBNSHBwY0VCbmJXRnBiQzVqYjIwPT89?=",
+      "=?utf-8?b?PT91dGYtOD9iP1BUOTFkR1l0T0Q5aVAwMTZaekJOU0hCd1kwVkNibUpYUm5CaVF6VnFZakl3UFQ4OT89?=",
+      "=?utf-16?b?/v8AMwA4ADQAMAB6AGkAcABAAGcAbQBhAGkAbAAuAGMAbwBt?=",
+      "=?utf-16?b?//4zADgANAAwAHoAaQBwAEAAZwBtAGEAaQBsAC4AYwBvAG0A?=",
+      "=?utf-16be?b?ADMAOAA0ADAAegBpAHAAQABnAG0AYQBpAGwALgBjAG8AbQ==?=",
+      "=?utf-16le?b?MwA4ADQAMAB6AGkAcABAAGcAbQBhAGkAbAAuAGMAbwBtAA==?=",
+      "=?utf-7?q?3840zip=40gmail.com?=",
+    ];
+    for (const contact of refusedContacts) {
+      let staged = 0;
+      await assert.rejects(async () => {
+        const plan = await beginOutlookQuoteCommissioning({
+          environment,
+          loadClientContactValues: () => Promise.resolve([contact]),
+        });
+        staged += 1;
+        void plan;
+      }, /could not be parsed into one mailbox/);
+      assert.equal(staged, 0, contact);
+    }
+
+    for (const contact of [
+      "=?utf8?q?3840zip=40gmail.com?=",
+      "=?us-ascii?q?3840zip=40gmail.com?=",
+      "=?latin1?q?3840zip=40gmail.com?=",
+    ]) {
+      await assert.rejects(
+        () =>
+          beginOutlookQuoteCommissioning({
+            environment,
+            loadClientContactValues: () => Promise.resolve([contact]),
+          }),
+        /matches a client contact/,
+      );
+    }
+  });
+
   it("strips one unquoted CONVEX_DEPLOYMENT comment and still refuses production", () => {
     assert.equal(
       stripUnquotedTrailingComment("dev:outgoing-ram-798 # systemd kept this comment"),

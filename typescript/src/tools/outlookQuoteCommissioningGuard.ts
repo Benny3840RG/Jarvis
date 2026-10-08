@@ -180,6 +180,9 @@ function bEncodedBytes(payload: string): Uint8Array | null {
   return decoded;
 }
 
+/** Charsets the contact check will decode. Everything else, including UTF-16 and UTF-7, refuses. */
+const CONTACT_CHARSETS = new Set(["us-ascii", "utf-8", "utf8", "iso-8859-1", "latin1"]);
+
 function decodeEncodedWord(charset: string, encoding: string, payload: string): string | null {
   const encodingName = encoding.toLowerCase();
   const bytes =
@@ -189,8 +192,8 @@ function decodeEncodedWord(charset: string, encoding: string, payload: string): 
         ? bEncodedBytes(payload)
         : null;
   if (bytes === null) return null;
-  const name = charset.trim();
-  if (name.length === 0) return null;
+  const name = charset.trim().toLowerCase();
+  if (!CONTACT_CHARSETS.has(name)) return null;
   try {
     return new TextDecoder(name, { fatal: true }).decode(bytes);
   } catch {
@@ -235,8 +238,8 @@ function unquoteDotAtomLocal(value: string): string | null {
 }
 
 /**
- * Decodes every encoded word with its declared charset. An unknown charset,
- * a decode error, or a malformed word refuses the whole contact.
+ * Decodes every encoded word once, and only for an allowlisted charset.
+ * A charset outside that list, a decode error, or a malformed word refuses the contact.
  */
 function decodeEncodedWords(value: string): string | null {
   let out = "";
@@ -255,11 +258,16 @@ function decodeEncodedWords(value: string): string | null {
   return out;
 }
 
-/** NFKC, then drop format characters such as zero-width spaces, after decoding. */
+/**
+ * One decode, then NFKC and format-character removal.
+ * A remaining encoded-word opener is refused. There is no second decode.
+ */
 function normaliseContact(value: string): string | null {
   const decoded = decodeEncodedWords(value);
   if (decoded === null) return null;
-  return decoded.normalize("NFKC").replace(/\p{Cf}/gu, "");
+  const folded = decoded.normalize("NFKC").replace(/\p{Cf}/gu, "");
+  if (folded.includes("=?")) return null;
+  return folded;
 }
 
 function unquoteQuotedAtoms(value: string): string {
@@ -268,12 +276,11 @@ function unquoteQuotedAtoms(value: string): string {
   });
 }
 
-/** True when normalised residue still holds an address, or the fold is invalid. */
+/** True when already-normalised residue still holds an address, or the fold is invalid. */
 function residueContainsMailbox(value: string): boolean {
   if (value.trim().length === 0) return false;
-  const normalised = normaliseContact(value);
-  if (normalised === null) return true;
-  const uncommented = removeComments(normalised.toLowerCase());
+  if (value.includes("=?")) return true;
+  const uncommented = removeComments(value.toLowerCase());
   if (uncommented === null) return true;
   return unquoteQuotedAtoms(uncommented).includes("@");
 }
@@ -300,13 +307,12 @@ function singleAngleAddr(text: string): string | null {
 }
 
 /**
- * One mailbox after charset decoding, NFKC, and format-character removal.
- * Plus-tags stay. More than one mailbox is null.
+ * One mailbox in an already-normalised contact.
+ * Plus-tags stay. More than one mailbox is null. This does not decode again.
  */
 function exactMailbox(value: string): string | null {
-  const normalised = normaliseContact(value);
-  if (normalised === null) return null;
-  const stripped = stripMailto(normalised.trim());
+  if (value.includes("=?")) return null;
+  const stripped = stripMailto(value.trim());
   const angled = singleAngleAddr(stripped);
   if (angled === null) return null;
   let text = stripMailto(angled.trim()).toLowerCase();
@@ -347,7 +353,9 @@ function recipientAllowlist(environment: CommissioningEnvironment): ReadonlySet<
 
 /** Customer-contact key: exact mailbox with one `+tag` removed from the local part. */
 function contactKey(value: string): string | null {
-  const mailbox = exactMailbox(value);
+  const normalised = normaliseContact(value);
+  if (normalised === null) return null;
+  const mailbox = exactMailbox(normalised);
   if (!mailbox) return null;
   const at = mailbox.lastIndexOf("@");
   const local = mailbox.slice(0, at);
