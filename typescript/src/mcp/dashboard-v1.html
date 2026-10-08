@@ -1111,6 +1111,457 @@
       }
 
     </style>
+
+    <style id="console-02-fidelity">
+      /* Presentation pass toward the Console 02 reference. Readings stay bound. */
+      .crt-glass {
+        position: fixed;
+        inset: 78px 70px 78px;
+        z-index: 1;
+        pointer-events: none;
+        border-radius: 16px;
+        background:
+          linear-gradient(180deg, rgba(255, 236, 206, 0.1), transparent 16%, transparent 72%, rgba(0, 0, 0, 0.22)),
+          radial-gradient(ellipse 90% 28% at 50% 0%, rgba(255, 214, 160, 0.14), transparent 70%);
+        box-shadow: inset 0 0 80px rgba(0, 0, 0, 0.28), inset 0 0 0 1px rgba(255, 220, 170, 0.16);
+      }
+      .rivet { width: 13px; height: 13px; }
+      .title-plate {
+        width: min(760px, 48vw);
+        padding: 9px 34px 8px;
+        border-radius: 6px 6px 16px 16px;
+        background:
+          linear-gradient(180deg, #f0d7a2 0%, #b8894a 7%, #5a3e22 16%, #1c140e 48%, #6a4c28 78%, #24180f 100%);
+        border: 1px solid #f6e7c8;
+        box-shadow:
+          inset 0 2px 0 #fff1d4,
+          inset 0 -10px 14px rgba(0, 0, 0, 0.4),
+          0 6px 0 #0c0a08,
+          0 14px 22px rgba(0, 0, 0, 0.55);
+      }
+      .wordmark {
+        font-size: clamp(26px, 2.15vw, 40px);
+        letter-spacing: 0.16em;
+        font-weight: 700;
+        color: #fff8ec;
+        text-shadow: 0 1px 0 #6a5030, 0 0 14px rgba(255, 214, 150, 0.85), 0 2px 2px rgba(0, 0, 0, 0.65);
+      }
+      .console-no { font-size: clamp(13px, 1.05vw, 18px); letter-spacing: 0.14em; }
+      .title-plate .sub-plate { font-size: 11px; letter-spacing: 0.28em; color: #f6e7c4; }
+      .ornament-note {
+        margin: 0;
+        font-size: 10px;
+        letter-spacing: 0.08em;
+        color: #e7c98a;
+        text-shadow: none;
+      }
+      .ornament { pointer-events: none; }
+      @media (min-width: 1400px) {
+        body[data-console-view="focus"][data-backdrop-severity="UNKNOWN"] .hud-photo {
+          filter: saturate(1.48) brightness(1.24) contrast(1.08);
+        }
+        body[data-console-view="focus"][data-backdrop-severity="OK"] .hud-photo {
+          filter: saturate(1.52) brightness(1.26) contrast(1.06);
+        }
+        body[data-console-view="focus"][data-backdrop-severity="WARN"] .hud-photo {
+          filter: sepia(0.12) saturate(1.22) brightness(1.08) contrast(1.05);
+        }
+        body[data-console-view="focus"][data-backdrop-severity="STOPPED"] .hud-photo {
+          filter: saturate(0.72) brightness(0.82) hue-rotate(-12deg);
+        }
+        body[data-console-view="focus"] .hud-vignette {
+          background: radial-gradient(ellipse 84% 76% at 50% 48%, rgba(8, 10, 14, 0.02), rgba(6, 8, 12, 0.28) 86%);
+        }
+        body[data-console-view="focus"] .shell { padding: 168px 78px 46px; }
+        body[data-console-view="focus"] .brand {
+          top: 96px;
+          left: 102px;
+          width: auto;
+          max-width: 280px;
+          padding: 4px 10px 4px 4px;
+          border-radius: 8px;
+          background: linear-gradient(180deg, rgba(92, 64, 32, 0.72), rgba(16, 12, 8, 0.62));
+          border: 1px solid rgba(240, 214, 160, 0.62);
+          box-shadow: inset 0 1px 0 rgba(255, 236, 200, 0.45), 0 6px 14px rgba(0, 0, 0, 0.35);
+        }
+        body[data-console-view="focus"] .brand-kicker {
+          display: block;
+          color: #f0d7a4;
+          font-size: 10px;
+          letter-spacing: 0.16em;
+        }
+        body[data-console-view="focus"] .brand .plaque p { font-size: 12px; color: #fff1dc; }
+        body[data-console-view="focus"] .mark { width: 42px; height: 42px; flex: 0 0 42px; }
+        body[data-console-view="focus"] .top-actions {
+          top: 96px;
+          right: 100px;
+          width: 430px;
+          max-width: 430px;
+        }
+        body[data-console-view="focus"] .team-nav {
+          top: 136px;
+          left: 50%;
+          width: 860px;
+          transform: translateX(-50%);
+        }
+        body[data-console-view="focus"] .team-nav .rail-button {
+          min-height: 26px;
+          border-radius: 4px;
+          background: linear-gradient(180deg, rgba(74, 52, 28, 0.62), rgba(14, 10, 8, 0.5));
+          border: 1px solid rgba(232, 196, 130, 0.5);
+          color: #f6e2c4;
+          letter-spacing: 0.06em;
+          box-shadow: inset 0 1px 0 rgba(255, 230, 190, 0.28);
+        }
+        body[data-console-view="focus"] .team-nav .rail-button.active {
+          color: #fff6e8;
+          border-color: #ffb15a;
+          box-shadow: inset 0 0 10px rgba(255, 140, 40, 0.35), 0 0 8px rgba(255, 122, 24, 0.35);
+        }
+        body[data-console-view="focus"] .top-actions .pill,
+        body[data-console-view="focus"] .top-actions .team-chip,
+        body[data-console-view="focus"] .top-actions a.limits-now {
+          border-radius: 3px;
+          background: rgba(10, 8, 6, 0.58);
+          border: 1px solid rgba(255, 176, 90, 0.42);
+          color: #ffe0b0;
+          letter-spacing: 0.05em;
+          font-family: "Rajdhani", Inter, sans-serif;
+        }
+        body[data-console-view="focus"] .console-deck {
+          grid-template-columns: minmax(300px, 0.96fr) minmax(0, 1.5fr) minmax(280px, 0.9fr);
+          gap: 8px;
+        }
+        body[data-console-view="focus"] .console-col { gap: 7px; }
+        body[data-console-view="focus"] .console-deck .plate {
+          background-color: rgba(8, 14, 22, 0.34);
+          border: 1px solid rgba(255, 168, 72, 0.78);
+          border-radius: 10px;
+          box-shadow:
+            inset 0 0 28px rgba(255, 140, 40, 0.1),
+            inset 0 0 0 1px rgba(255, 214, 160, 0.12),
+            0 0 16px rgba(0, 0, 0, 0.18);
+        }
+        body[data-console-view="focus"] .plate h2,
+        body[data-console-view="focus"] .plate h3,
+        body[data-console-view="focus"] .analyzer-plate h3 {
+          font-family: "Rajdhani", Inter, sans-serif;
+          font-size: 13px;
+          letter-spacing: 0.18em;
+          color: #ffb15a;
+        }
+        body[data-console-view="focus"] .overview-plate {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr);
+          grid-template-rows: auto auto auto minmax(180px, 1fr) minmax(128px, 0.38fr);
+          align-items: stretch;
+          justify-items: stretch;
+          height: 100%;
+          overflow: hidden;
+        }
+        body[data-console-view="focus"] .overview-plate > h2 { grid-row: 1; justify-self: center; }
+        body[data-console-view="focus"] .overview-row {
+          grid-row: 2;
+          width: 100%;
+          margin: 0;
+          align-items: center;
+        }
+        body[data-console-view="focus"] .core-row,
+        body[data-console-view="focus"] .core-side { display: contents; }
+        body[data-console-view="focus"] .core-readout {
+          grid-row: 3;
+          display: flex;
+          flex-wrap: wrap;
+          justify-content: center;
+          align-items: baseline;
+          gap: 4px 10px;
+          min-width: 0;
+        }
+        body[data-console-view="focus"] .core-readout p { margin: 0; font-size: 11px; line-height: 1.15; }
+        body[data-console-view="focus"] .core-readout b {
+          font-size: 14px;
+          letter-spacing: 0.14em;
+          padding: 1px 12px 2px;
+          border-radius: 999px;
+          border: 1px solid rgba(255, 177, 90, 0.9);
+          background: rgba(16, 10, 6, 0.55);
+          box-shadow: 0 0 12px rgba(255, 122, 24, 0.4);
+        }
+        body[data-console-view="focus"] .core-stage {
+          grid-row: 4;
+          width: min(430px, 100%);
+          height: auto;
+          max-height: 100%;
+          aspect-ratio: 1;
+          justify-self: center;
+          align-self: center;
+          position: relative;
+        }
+        body[data-console-view="focus"] .core-stage::before {
+          content: "";
+          position: absolute;
+          inset: -6%;
+          border-radius: 50%;
+          background: radial-gradient(circle, rgba(255, 140, 40, 0.42), rgba(255, 90, 16, 0.08) 48%, transparent 70%);
+          pointer-events: none;
+        }
+        body[data-console-view="focus"] .core-rings {
+          filter: drop-shadow(0 0 10px rgba(255, 150, 50, 0.95)) drop-shadow(0 0 28px rgba(255, 100, 20, 0.55));
+        }
+        body[data-console-view="focus"] .ring-gauge svg { width: 96px; height: 96px; }
+        body[data-console-view="focus"] .ring-gauge b { font-size: 11px; }
+        body[data-console-view="focus"] .core-side .tac-plate {
+          grid-row: 5;
+          position: relative;
+          display: flex;
+          flex-direction: column;
+          min-height: 0;
+          overflow: hidden;
+          background-color: rgba(6, 12, 20, 0.16);
+          border-color: rgba(255, 160, 60, 0.4);
+        }
+        body[data-console-view="focus"] .core-side .tac-chart {
+          position: relative;
+          inset: auto;
+          width: 100%;
+          flex: 1 1 auto;
+          height: auto;
+          min-height: 108px;
+          filter: drop-shadow(0 0 8px rgba(255, 150, 50, 0.95));
+        }
+        body[data-console-view="focus"] .tac-chart path {
+          stroke-width: 2.6px;
+          stroke-linecap: round;
+          stroke-linejoin: round;
+        }
+        body[data-console-view="focus"] .tac-chart circle {
+          stroke: #fff6e4;
+          stroke-width: 1.2px;
+        }
+        body[data-console-view="focus"] .chart-grid {
+          stroke: rgba(255, 196, 120, 0.9);
+          stroke-width: 1.35px;
+        }
+        body[data-console-view="focus"] .chart .ornament {
+          opacity: 0.95;
+        }
+        body[data-console-view="focus"] .col-left .chart { min-height: 0; height: auto; flex: 1 1 auto; }
+        body[data-console-view="focus"] .dial svg,
+        body[data-console-view="focus"] .mini-dial { width: min(78px, 100%); height: auto; }
+        body[data-console-view="focus"] .tick-row .track {
+          height: 8px;
+          border-radius: 2px;
+          background:
+            linear-gradient(90deg, #ffd7a0 0 10px, rgba(255, 150, 50, 0.15) 10px),
+            repeating-linear-gradient(90deg, rgba(255, 170, 70, 0.7) 0 2px, transparent 2px 6px);
+          box-shadow: inset 0 0 0 1px rgba(255, 186, 110, 0.28), 0 0 6px rgba(255, 122, 24, 0.25);
+        }
+        body[data-console-view="focus"] .col-right > .plate:nth-child(2) {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background:
+            radial-gradient(circle at 50% 42%, rgba(255, 150, 40, 0.16), transparent 62%),
+            rgba(8, 12, 18, 0.38);
+        }
+        body[data-console-view="focus"] .col-right > .plate:nth-child(2) .tile-row {
+          width: 100%;
+          justify-items: center;
+        }
+        body[data-console-view="focus"] .col-right > .plate:nth-child(2) .tile:first-child {
+          display: grid;
+          justify-items: center;
+          grid-template-columns: 1fr;
+          gap: 0;
+          background: transparent;
+          border: 0;
+          padding: 0;
+          text-align: center;
+        }
+        body[data-console-view="focus"] .col-right > .plate:nth-child(2) .tile:first-child span {
+          letter-spacing: 0.2em;
+          font-size: 11px;
+        }
+        body[data-console-view="focus"] #tile-tasks {
+          font-family: "Rajdhani", Inter, sans-serif;
+          font-size: 58px;
+          line-height: 0.86;
+          letter-spacing: 0.02em;
+          color: #fff6e8;
+          text-shadow: 0 0 18px rgba(255, 150, 50, 0.9);
+        }
+        body[data-console-view="focus"] .network-plate { grid-template-columns: 86px minmax(0, 1fr); }
+        body[data-console-view="focus"] .mascot-frame { width: 78px; height: 78px; }
+        body[data-console-view="focus"] .network-plate .mission-mascot,
+        body[data-console-view="focus"] .mascot-frame .mission-mascot svg { width: 58px; height: 58px; }
+        body[data-console-view="focus"] .now-strip,
+        body[data-console-view="focus"] .now-strip .mission-panel,
+        body[data-console-view="focus"] .now-strip .queue-panel { max-height: 52px; }
+        body[data-console-view="focus"] .now-strip .mission-core,
+        body[data-console-view="focus"] .now-strip .queue-panel {
+          background: linear-gradient(180deg, rgba(48, 34, 18, 0.72), rgba(10, 8, 6, 0.62));
+          border: 1px solid rgba(232, 196, 130, 0.55);
+          border-radius: 8px;
+          box-shadow: inset 0 1px 0 rgba(255, 230, 190, 0.25);
+        }
+        body[data-console-view="focus"] .focus-layout .mission-copy h2 {
+          font-family: "Rajdhani", Inter, sans-serif;
+          font-size: 16px;
+          letter-spacing: 0.03em;
+          color: #fff4e4;
+        }
+        body[data-console-view="focus"] .focus-layout .eyebrow { color: #ffb15a; letter-spacing: 0.18em; }
+        body[data-console-view="focus"] .console-lower {
+          height: 208px;
+          margin-bottom: 28px;
+          grid-template-columns: 214px minmax(0, 1fr) 214px;
+          align-items: end;
+          gap: 10px;
+        }
+        body[data-console-view="focus"] .gauge-face {
+          position: relative;
+          width: 208px;
+          height: 208px;
+          margin: 0;
+          align-self: end;
+          justify-self: center;
+          overflow: hidden;
+          border-radius: 50%;
+          background:
+            radial-gradient(circle at 50% 38%, #6e5434 0%, #24180f 58%, #0c0a08 76%);
+          box-shadow:
+            inset 0 0 0 3px #f0ddb4,
+            inset 0 0 0 8px #3a2a18,
+            inset 0 0 0 12px #120e0a,
+            inset 0 12px 18px rgba(255, 230, 190, 0.16),
+            0 12px 18px rgba(0, 0, 0, 0.5);
+          padding: 0;
+        }
+        body[data-console-view="focus"] .gauge-face svg {
+          width: 188px;
+          height: 188px;
+          display: block;
+          margin: 10px auto 0;
+        }
+        body[data-console-view="focus"] .gauge-face > span {
+          position: absolute;
+          left: 18px;
+          right: 18px;
+          top: 62px;
+          z-index: 3;
+          margin: 0;
+          font-family: "Rajdhani", Inter, sans-serif;
+          font-size: 13px;
+          font-weight: 700;
+          letter-spacing: 0.1em;
+          color: #2a1c10;
+          text-shadow: none;
+        }
+        body[data-console-view="focus"] .gauge-face > b {
+          position: absolute;
+          left: 16px;
+          right: 16px;
+          bottom: 50px;
+          z-index: 3;
+          margin: 0;
+          font-size: 13px;
+          font-weight: 700;
+          letter-spacing: 0.12em;
+          color: #2a1c10;
+          text-shadow: none;
+        }
+        body[data-console-view="focus"] .analyzer-plate {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) 22px;
+          grid-template-rows: auto minmax(0, 1fr) auto;
+          height: 196px;
+          align-self: end;
+          padding: 4px 12px 8px;
+          border-radius: 12px;
+          border: 2px solid #f6e7c4;
+          background:
+            linear-gradient(180deg, #f8e6c0 0%, #e7c78a 46%, #d7b06a 100%);
+          box-shadow:
+            inset 0 1px 0 #fff6e0,
+            inset 0 -10px 14px rgba(90, 52, 18, 0.28),
+            0 10px 16px rgba(0, 0, 0, 0.35);
+        }
+        body[data-console-view="focus"] .analyzer-plate h3 {
+          grid-column: 1 / -1;
+          color: #2a1c10;
+          text-shadow: none;
+          font-size: 14px;
+        }
+        body[data-console-view="focus"] .analyzer {
+          grid-column: 1;
+          grid-row: 2;
+          height: 100%;
+          min-height: 0;
+          align-items: stretch;
+        }
+        body[data-console-view="focus"] .analyzer-row { height: 100%; }
+        body[data-console-view="focus"] .analyzer-row .slider { min-height: 0; height: auto; flex: 1 1 auto; }
+        body[data-console-view="focus"] .analyzer-row span,
+        body[data-console-view="focus"] .analyzer-row b {
+          color: #2a1c10;
+          text-shadow: none;
+          font-weight: 700;
+        }
+        body[data-console-view="focus"] .analyzer-row span { font-size: 11px; letter-spacing: 0.06em; }
+        body[data-console-view="focus"] .analyzer-row b { font-size: 10px; letter-spacing: 0.08em; }
+        body[data-console-view="focus"] .analyzer-row .slider {
+          width: 18px;
+          flex: 0 0 70px;
+          height: 70px;
+          max-height: 70px;
+          border-radius: 8px;
+          background: repeating-linear-gradient(#3a2814, #3a2814 2px, #140e0a 2px, #140e0a 5px);
+          box-shadow: inset 0 0 0 1px #5c4018, inset 0 2px 4px rgba(0, 0, 0, 0.65);
+        }
+        body[data-console-view="focus"] .analyzer-row .knob {
+          width: 26px;
+          height: 26px;
+          box-shadow: inset 0 1px 0 #fff6e0, 0 2px 3px rgba(0, 0, 0, 0.45);
+        }
+        body[data-console-view="focus"] .level {
+          display: block;
+          grid-column: 2;
+          grid-row: 2;
+          position: relative;
+          width: 14px;
+          height: auto;
+          align-self: stretch;
+          border-radius: 3px;
+          background: repeating-linear-gradient(#1a120c, #1a120c 3px, #0c0a08 3px, #0c0a08 6px);
+          box-shadow: inset 0 0 0 1px #c4a36a;
+        }
+        body[data-console-view="focus"] .level i {
+          position: absolute;
+          left: 1px;
+          right: 1px;
+          bottom: 1px;
+          width: auto;
+          height: 0;
+          border-radius: 2px;
+          background: linear-gradient(#ffe6b8, #ff7a18 42%, #c45a12);
+          box-shadow: 0 0 8px rgba(255, 122, 24, 0.75);
+        }
+        body[data-console-view="focus"] #totality-bar-label {
+          grid-column: 1 / -1;
+          grid-row: 3;
+          margin: 2px 0 0;
+          text-align: center;
+          color: #2a1c10;
+          text-shadow: none;
+          font-size: 11px;
+          font-weight: 700;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .core-rings, .core-rings .spin-slow { animation: none !important; }
+      }
+    </style>
+
   </head>
   <body data-backdrop-severity="UNKNOWN" data-console-view="focus"><!-- JARVIS // OPERATOR CONSOLE · LANDSCAPE COMMAND CENTRE -->
     <canvas id="hud-backdrop" class="hud-backdrop" aria-hidden="true"></canvas>
@@ -1118,19 +1569,42 @@
     <div class="bezel" aria-hidden="true"></div>
     <svg class="bezel-art" viewBox="0 0 1920 1080" preserveAspectRatio="none" aria-hidden="true">
       <defs>
-        <linearGradient id="frame-brass" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stop-color="#3a2c1c"/>
-          <stop offset="0.18" stop-color="#1c140e"/>
-          <stop offset="0.55" stop-color="#2e2116"/>
-          <stop offset="0.82" stop-color="#120e0a"/>
-          <stop offset="1" stop-color="#241a12"/>
+        <linearGradient id="frame-steel" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#6a5840"/>
+          <stop offset="0.08" stop-color="#2a2118"/>
+          <stop offset="0.2" stop-color="#14100c"/>
+          <stop offset="0.5" stop-color="#3a2e22"/>
+          <stop offset="0.78" stop-color="#100e0c"/>
+          <stop offset="1" stop-color="#4a3c2c"/>
         </linearGradient>
+        <linearGradient id="frame-brass" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#f0d7a4"/>
+          <stop offset="0.35" stop-color="#8a6840"/>
+          <stop offset="0.7" stop-color="#e7c98a"/>
+          <stop offset="1" stop-color="#5a4024"/>
+        </linearGradient>
+        <radialGradient id="rivet-face" cx="35%" cy="30%" r="65%">
+          <stop offset="0" stop-color="#f6e6c4"/>
+          <stop offset="0.35" stop-color="#a88448"/>
+          <stop offset="0.72" stop-color="#3a2a18"/>
+          <stop offset="1" stop-color="#120e0a"/>
+        </radialGradient>
       </defs>
-      <path fill="url(#frame-brass)" fill-rule="evenodd" d="M46 0 H1874 A46 46 0 0 1 1920 46 V1034 A46 46 0 0 1 1874 1080 H46 A46 46 0 0 1 0 1034 V46 A46 46 0 0 1 46 0 Z M96 78 H1824 A22 22 0 0 1 1846 100 V980 A22 22 0 0 1 1824 1002 H96 A22 22 0 0 1 74 980 V100 A22 22 0 0 1 96 78 Z"/>
-      <path fill="none" stroke="#9a7848" stroke-width="2" d="M70 4 H1850"/>
-      <path fill="none" stroke="#0c0a08" stroke-width="14" d="M96 78 H1824 A22 22 0 0 1 1846 100 V980 A22 22 0 0 1 1824 1002 H96 A22 22 0 0 1 74 980 V100 A22 22 0 0 1 96 78 Z"/>
+      <path fill="url(#frame-steel)" fill-rule="evenodd" d="M36 6 H1884 A30 30 0 0 1 1914 36 V1044 A30 30 0 0 1 1884 1074 H36 A30 30 0 0 1 6 1044 V36 A30 30 0 0 1 36 6 Z M92 84 H1828 A18 18 0 0 1 1846 102 V978 A18 18 0 0 1 1828 996 H92 A18 18 0 0 1 74 978 V102 A18 18 0 0 1 92 84 Z"/>
+      <path fill="none" stroke="url(#frame-brass)" stroke-width="7" d="M48 18 H1872 A18 18 0 0 1 1890 36 V1044 A18 18 0 0 1 1872 1062 H48 A18 18 0 0 1 30 1044 V36 A18 18 0 0 1 48 18 Z"/>
+      <path fill="none" stroke="#1a140e" stroke-width="16" d="M92 84 H1828 A18 18 0 0 1 1846 102 V978 A18 18 0 0 1 1828 996 H92 A18 18 0 0 1 74 978 V102 A18 18 0 0 1 92 84 Z"/>
+      <path fill="none" stroke="#e7d3a4" stroke-width="2" opacity="0.85" d="M100 92 H1820 A10 10 0 0 1 1830 102 V970"/>
+      <path fill="none" stroke="#f6ead0" stroke-width="1.2" opacity="0.55" d="M70 14 H1850"/>
+      <g fill="url(#rivet-face)" stroke="#1a120c" stroke-width="1">
+        <circle cx="150" cy="44" r="7"/><circle cx="280" cy="44" r="7"/><circle cx="410" cy="44" r="7"/><circle cx="540" cy="44" r="7"/>
+        <circle cx="1380" cy="44" r="7"/><circle cx="1510" cy="44" r="7"/><circle cx="1640" cy="44" r="7"/><circle cx="1770" cy="44" r="7"/>
+        <circle cx="150" cy="1036" r="7"/><circle cx="360" cy="1036" r="7"/><circle cx="1560" cy="1036" r="7"/><circle cx="1770" cy="1036" r="7"/>
+        <circle cx="40" cy="180" r="7"/><circle cx="40" cy="340" r="7"/><circle cx="40" cy="520" r="7"/><circle cx="40" cy="700" r="7"/><circle cx="40" cy="880" r="7"/>
+        <circle cx="1880" cy="180" r="7"/><circle cx="1880" cy="340" r="7"/><circle cx="1880" cy="520" r="7"/><circle cx="1880" cy="700" r="7"/><circle cx="1880" cy="880" r="7"/>
+      </g>
     </svg>
     <div class="bezel-lip" aria-hidden="true"></div>
+    <div class="crt-glass" aria-hidden="true"></div>
     <div class="hud-photo" aria-hidden="true"></div>
     <div class="rivets" aria-hidden="true"><i class="rivet"></i><i class="rivet"></i><i class="rivet"></i><i class="rivet"></i><i class="rivet"></i><i class="rivet"></i><i class="rivet"></i><i class="rivet"></i><i class="rivet"></i><i class="rivet"></i><i class="rivet"></i><i class="rivet"></i><i class="rivet"></i><i class="rivet"></i><i class="rivet"></i><i class="rivet"></i><i class="rivet"></i><i class="rivet"></i><i class="rivet"></i><i class="rivet"></i></div><!-- JARVIS // OPERATOR CONSOLE · LANDSCAPE COMMAND CENTRE --><!-- JARVIS // OPERATOR CONSOLE · LANDSCAPE COMMAND CENTRE -->
     <div class="totality-title title-plate">
@@ -1225,21 +1699,21 @@
                   <div class="console-col col-left">
                     <section class="plate">
                       <h2>PREDICTOR CORE</h2>
-                      <svg class="chart" viewBox="0 0 300 120" role="img" aria-label="Predictor Core"><g class="chart-grid" stroke="rgba(255,154,60,0.62)" stroke-width="1.15" fill="none"><path d="M16 24 H284 M16 52 H284 M16 80 H284 M16 104 H284"/><path d="M16 16 V108 M86 16 V108 M156 16 V108 M226 16 V108 M284 16 V108"/></g><g fill="#ffb15a" font-size="8" font-family="Rajdhani, sans-serif"><text x="2" y="20">100</text><text x="6" y="56">50</text><text x="10" y="108">0</text></g><path d="M16 104 H284" stroke="#d98938" stroke-width="1.6" fill="none"/><polyline id="predictor-line" points="" fill="none" stroke="#ff7a18" stroke-width="2.4"/></svg>
-                      <p id="predictor-state">UNKNOWN</p>
+                      <svg class="chart" viewBox="0 0 300 120" role="img" aria-label="Predictor Core"><g class="chart-grid" stroke="rgba(255,154,60,0.62)" stroke-width="1.15" fill="none"><path d="M16 24 H284 M16 52 H284 M16 80 H284 M16 104 H284"/><path d="M16 16 V108 M86 16 V108 M156 16 V108 M226 16 V108 M284 16 V108"/></g><g fill="#ffb15a" font-size="8" font-family="Rajdhani, sans-serif"><text x="2" y="20">100</text><text x="6" y="56">50</text><text x="10" y="108">0</text></g><path d="M16 104 H284" stroke="#d98938" stroke-width="1.6" fill="none"/><g class="ornament" aria-hidden="true"><polyline points="8.0,65.0 18.5,69.4 29.0,72.9 39.6,73.8 50.1,71.0 60.6,64.8 71.1,56.5 81.6,48.5 92.1,43.3 102.7,42.8 113.2,47.6 123.7,56.7 134.2,67.6 144.7,77.3 155.3,83.1 165.8,83.2 176.3,77.8 186.8,68.6 197.3,58.2 207.9,49.6 218.4,45.0 228.9,45.3 239.4,49.8 249.9,56.6 260.4,63.5 271.0,68.5 281.5,70.5 292.0,69.7" fill="none" stroke="rgba(255,241,220,0.55)" stroke-width="1.3"/><polyline points="8.0,83.0 18.5,84.6 29.0,82.5 39.6,76.9 50.1,70.3 60.6,66.7 71.1,68.7 81.6,76.2 92.1,85.7 102.7,92.1 113.2,91.6 123.7,83.9 134.2,72.8 144.7,64.1 155.3,62.3 165.8,68.5 176.3,79.2 186.8,88.8 197.3,92.6 207.9,88.9 218.4,80.4 228.9,71.7 239.4,67.2 249.9,68.6 260.4,74.1 271.0,80.3 281.5,83.8 292.0,83.5" fill="none" stroke="#ffb15a" stroke-width="1.35" opacity="0.8"/><polyline points="8.0,93.4 18.5,92.8 29.0,91.2 39.6,88.8 50.1,86.0 60.6,83.2 71.1,81.1 81.6,80.2 92.1,80.7 102.7,82.7 113.2,86.0 123.7,90.1 134.2,94.5 144.7,98.2 155.3,100.8 165.8,101.9 176.3,101.1 186.8,98.9 197.3,95.5 207.9,91.6 218.4,87.8 228.9,84.8 239.4,83.0 249.9,82.5 260.4,83.2 271.0,84.8 281.5,86.8 292.0,88.7" fill="none" stroke="#ff7a18" stroke-width="1.2" opacity="0.55"/><text x="214" y="18" fill="#ffb15a" font-size="8" font-family="Rajdhani, sans-serif">ORNAMENT</text></g><polyline id="predictor-line" points="" fill="none" stroke="#ff7a18" stroke-width="2.4"/></svg>
+                      <p id="predictor-state">UNKNOWN</p><p class="ornament-note">Ornament traces are not a reading.</p>
                     </section>
                     <section class="plate">
                       <h2>WAVEFORM ANALYSIS</h2>
-                      <svg class="chart" viewBox="0 0 300 72" aria-hidden="true"><g class="chart-grid" stroke="rgba(255,154,60,0.62)" stroke-width="1.15" fill="none"><path d="M8 14 H292 M8 36 H292 M8 58 H292"/><path d="M8 8 V64 M80 8 V64 M150 8 V64 M220 8 V64 M292 8 V64"/></g><g fill="#ffb15a" font-size="8" font-family="Rajdhani, sans-serif"><text x="2" y="12">100</text><text x="6" y="40">50</text><text x="10" y="62">0</text></g><path d="M8 36 H292" stroke="#ff7a18" fill="none" stroke-width="2"/></svg>
-                      <p id="waveform-state">No waveform signal.</p>
+                      <svg class="chart" viewBox="0 0 300 72" aria-hidden="true"><g class="chart-grid" stroke="rgba(255,154,60,0.62)" stroke-width="1.15" fill="none"><path d="M8 14 H292 M8 36 H292 M8 58 H292"/><path d="M8 8 V64 M80 8 V64 M150 8 V64 M220 8 V64 M292 8 V64"/></g><g fill="#ffb15a" font-size="8" font-family="Rajdhani, sans-serif"><text x="2" y="12">100</text><text x="6" y="40">50</text><text x="10" y="62">0</text></g><g class="ornament" aria-hidden="true"><polyline points="8.0,35.0 12.5,38.3 17.0,39.8 21.5,38.0 26.0,33.7 30.5,28.9 35.0,26.4 39.6,28.0 44.1,33.2 48.6,39.3 53.1,43.1 57.6,42.1 62.1,36.5 66.6,29.0 71.1,23.8 75.6,23.9 80.1,29.6 84.6,38.0 89.1,44.7 93.7,45.8 98.2,40.5 102.7,31.5 107.2,23.4 111.7,20.9 116.2,25.4 120.7,34.7 125.2,43.8 129.7,47.8 134.2,44.4 138.7,35.4 143.2,25.6 147.7,20.2 152.3,22.2 156.8,30.6 161.3,40.7 165.8,47.1 170.3,46.6 174.8,39.3 179.3,29.4 183.8,22.1 188.3,21.3 192.8,27.2 197.3,36.5 201.8,44.2 206.3,46.2 210.9,41.7 215.4,33.4 219.9,25.8 224.4,22.9 228.9,25.9 233.4,33.0 237.9,40.1 242.4,43.5 246.9,41.8 251.4,36.2 255.9,30.0 260.4,26.4 265.0,27.1 269.5,31.2 274.0,36.3 278.5,39.6 283.0,39.6 287.5,36.8 292.0,33.0" fill="none" stroke="rgba(255,244,230,0.7)" stroke-width="1.15"/><polyline points="8.0,43.4 12.5,43.6 17.0,42.7 21.5,40.8 26.0,38.4 30.5,36.2 35.0,34.7 39.6,34.6 44.1,36.0 48.6,38.6 53.1,42.0 57.6,45.0 62.1,47.0 66.6,47.1 71.1,45.3 75.6,41.9 80.1,37.8 84.6,34.0 89.1,31.7 93.7,31.5 98.2,33.6 102.7,37.5 107.2,42.2 111.7,46.5 116.2,49.2 120.7,49.4 125.2,47.2 129.7,43.0 134.2,37.9 138.7,33.4 143.2,30.5 147.7,30.2 152.3,32.5 156.8,36.7 161.3,41.8 165.8,46.4 170.3,49.2 174.8,49.6 179.3,47.5 183.8,43.4 188.3,38.6 192.8,34.2 197.3,31.5 201.8,31.1 206.3,33.0 210.9,36.7 215.4,41.0 219.9,44.9 224.4,47.3 228.9,47.6 233.4,46.0 237.9,43.0 242.4,39.4 246.9,36.2 251.4,34.3 255.9,34.0 260.4,35.3 265.0,37.6 269.5,40.3 274.0,42.6 278.5,44.0 283.0,44.1 287.5,43.2 292.0,41.6" fill="none" stroke="#ff7a18" stroke-width="1.35" opacity="0.75"/><text x="214" y="12" fill="#ffb15a" font-size="8" font-family="Rajdhani, sans-serif">ORNAMENT</text></g><path d="M8 36 H292" stroke="#ff7a18" fill="none" stroke-width="2"/></svg>
+                      <p id="waveform-state">No waveform signal.</p><p class="ornament-note">The wave is ornament, not a signal.</p>
                     </section>
                     <section class="plate">
                       <h2>STABILITY MONITOR</h2>
                       <div class="dial-row">
-                        <div class="dial"><svg viewBox="0 0 72 72" aria-hidden="true"><circle cx="36" cy="36" r="33" fill="#5c4324"/><circle cx="36" cy="36" r="28" fill="#efe6d2"/><circle cx="36" cy="36" r="24" fill="none" stroke="#ff7a18" stroke-width="2" stroke-dasharray="2 3"/><line x1="36" y1="36" x2="20" y2="48" stroke="#1a140e" stroke-width="2" stroke-linecap="round"/><circle cx="36" cy="36" r="3.5" fill="#d98938"/></svg><span>HOST</span><b id="dial-host">UNKNOWN</b></div>
-                        <div class="dial"><svg viewBox="0 0 72 72" aria-hidden="true"><circle cx="36" cy="36" r="33" fill="#5c4324"/><circle cx="36" cy="36" r="28" fill="#efe6d2"/><circle cx="36" cy="36" r="24" fill="none" stroke="#ff7a18" stroke-width="2" stroke-dasharray="2 3"/><line x1="36" y1="36" x2="20" y2="48" stroke="#1a140e" stroke-width="2" stroke-linecap="round"/><circle cx="36" cy="36" r="3.5" fill="#d98938"/></svg><span>MEM</span><b id="dial-mem">UNKNOWN</b></div>
-                        <div class="dial"><svg viewBox="0 0 72 72" aria-hidden="true"><circle cx="36" cy="36" r="33" fill="#5c4324"/><circle cx="36" cy="36" r="28" fill="#efe6d2"/><circle cx="36" cy="36" r="24" fill="none" stroke="#ff7a18" stroke-width="2" stroke-dasharray="2 3"/><line x1="36" y1="36" x2="20" y2="48" stroke="#1a140e" stroke-width="2" stroke-linecap="round"/><circle cx="36" cy="36" r="3.5" fill="#d98938"/></svg><span>STORE</span><b id="dial-store">UNKNOWN</b></div>
-                        <div class="dial"><svg viewBox="0 0 72 72" aria-hidden="true"><circle cx="36" cy="36" r="33" fill="#5c4324"/><circle cx="36" cy="36" r="28" fill="#efe6d2"/><circle cx="36" cy="36" r="24" fill="none" stroke="#ff7a18" stroke-width="2" stroke-dasharray="2 3"/><line x1="36" y1="36" x2="20" y2="48" stroke="#1a140e" stroke-width="2" stroke-linecap="round"/><circle cx="36" cy="36" r="3.5" fill="#d98938"/></svg><span>LINK</span><b id="dial-link">UNKNOWN</b></div>
+                        <div class="dial"><svg class="mini-dial" viewBox="0 0 80 80" aria-hidden="true"><circle cx="40" cy="40" r="39" fill="#120e0a"/><circle cx="40" cy="40" r="36" fill="#8d6a3a"/><circle cx="40" cy="40" r="33" fill="#f4ead4"/><circle cx="40" cy="40" r="31" fill="#fff8ee"/><g stroke="#3a2e1c" stroke-linecap="round"><line x1="40" y1="12" x2="40" y2="17" stroke-width="1.4"/><line x1="54" y1="15.5" x2="52.2" y2="20" stroke-width="1"/><line x1="66" y1="26" x2="62.2" y2="29" stroke-width="1.4"/><line x1="73" y1="40" x2="68" y2="40" stroke-width="1"/><line x1="66" y1="54" x2="62.2" y2="51" stroke-width="1.4"/><line x1="54" y1="64.5" x2="52.2" y2="60" stroke-width="1"/><line x1="40" y1="68" x2="40" y2="63" stroke-width="1.4"/><line x1="26" y1="64.5" x2="27.8" y2="60" stroke-width="1"/><line x1="14" y1="54" x2="17.8" y2="51" stroke-width="1.4"/><line x1="7" y1="40" x2="12" y2="40" stroke-width="1"/><line x1="14" y1="26" x2="17.8" y2="29" stroke-width="1.4"/><line x1="26" y1="15.5" x2="27.8" y2="20" stroke-width="1"/></g><circle cx="40" cy="40" r="24" fill="none" stroke="#c47b4a" stroke-width="1" opacity="0.45"/><line x1="40" y1="40" x2="22" y2="54" stroke="#1a140e" stroke-width="2.3" stroke-linecap="round"/><circle cx="40" cy="40" r="4.2" fill="#d98938" stroke="#3a2c18" stroke-width="0.6"/><ellipse cx="28" cy="24" rx="14" ry="6" fill="rgba(255,255,255,0.42)" transform="rotate(-32 28 24)"/></svg><span>HOST</span><b id="dial-host">UNKNOWN</b></div>
+                        <div class="dial"><svg class="mini-dial" viewBox="0 0 80 80" aria-hidden="true"><circle cx="40" cy="40" r="39" fill="#120e0a"/><circle cx="40" cy="40" r="36" fill="#8d6a3a"/><circle cx="40" cy="40" r="33" fill="#f4ead4"/><circle cx="40" cy="40" r="31" fill="#fff8ee"/><g stroke="#3a2e1c" stroke-linecap="round"><line x1="40" y1="12" x2="40" y2="17" stroke-width="1.4"/><line x1="54" y1="15.5" x2="52.2" y2="20" stroke-width="1"/><line x1="66" y1="26" x2="62.2" y2="29" stroke-width="1.4"/><line x1="73" y1="40" x2="68" y2="40" stroke-width="1"/><line x1="66" y1="54" x2="62.2" y2="51" stroke-width="1.4"/><line x1="54" y1="64.5" x2="52.2" y2="60" stroke-width="1"/><line x1="40" y1="68" x2="40" y2="63" stroke-width="1.4"/><line x1="26" y1="64.5" x2="27.8" y2="60" stroke-width="1"/><line x1="14" y1="54" x2="17.8" y2="51" stroke-width="1.4"/><line x1="7" y1="40" x2="12" y2="40" stroke-width="1"/><line x1="14" y1="26" x2="17.8" y2="29" stroke-width="1.4"/><line x1="26" y1="15.5" x2="27.8" y2="20" stroke-width="1"/></g><circle cx="40" cy="40" r="24" fill="none" stroke="#c47b4a" stroke-width="1" opacity="0.45"/><line x1="40" y1="40" x2="22" y2="54" stroke="#1a140e" stroke-width="2.3" stroke-linecap="round"/><circle cx="40" cy="40" r="4.2" fill="#d98938" stroke="#3a2c18" stroke-width="0.6"/><ellipse cx="28" cy="24" rx="14" ry="6" fill="rgba(255,255,255,0.42)" transform="rotate(-32 28 24)"/></svg><span>MEM</span><b id="dial-mem">UNKNOWN</b></div>
+                        <div class="dial"><svg class="mini-dial" viewBox="0 0 80 80" aria-hidden="true"><circle cx="40" cy="40" r="39" fill="#120e0a"/><circle cx="40" cy="40" r="36" fill="#8d6a3a"/><circle cx="40" cy="40" r="33" fill="#f4ead4"/><circle cx="40" cy="40" r="31" fill="#fff8ee"/><g stroke="#3a2e1c" stroke-linecap="round"><line x1="40" y1="12" x2="40" y2="17" stroke-width="1.4"/><line x1="54" y1="15.5" x2="52.2" y2="20" stroke-width="1"/><line x1="66" y1="26" x2="62.2" y2="29" stroke-width="1.4"/><line x1="73" y1="40" x2="68" y2="40" stroke-width="1"/><line x1="66" y1="54" x2="62.2" y2="51" stroke-width="1.4"/><line x1="54" y1="64.5" x2="52.2" y2="60" stroke-width="1"/><line x1="40" y1="68" x2="40" y2="63" stroke-width="1.4"/><line x1="26" y1="64.5" x2="27.8" y2="60" stroke-width="1"/><line x1="14" y1="54" x2="17.8" y2="51" stroke-width="1.4"/><line x1="7" y1="40" x2="12" y2="40" stroke-width="1"/><line x1="14" y1="26" x2="17.8" y2="29" stroke-width="1.4"/><line x1="26" y1="15.5" x2="27.8" y2="20" stroke-width="1"/></g><circle cx="40" cy="40" r="24" fill="none" stroke="#c47b4a" stroke-width="1" opacity="0.45"/><line x1="40" y1="40" x2="22" y2="54" stroke="#1a140e" stroke-width="2.3" stroke-linecap="round"/><circle cx="40" cy="40" r="4.2" fill="#d98938" stroke="#3a2c18" stroke-width="0.6"/><ellipse cx="28" cy="24" rx="14" ry="6" fill="rgba(255,255,255,0.42)" transform="rotate(-32 28 24)"/></svg><span>STORE</span><b id="dial-store">UNKNOWN</b></div>
+                        <div class="dial"><svg class="mini-dial" viewBox="0 0 80 80" aria-hidden="true"><circle cx="40" cy="40" r="39" fill="#120e0a"/><circle cx="40" cy="40" r="36" fill="#8d6a3a"/><circle cx="40" cy="40" r="33" fill="#f4ead4"/><circle cx="40" cy="40" r="31" fill="#fff8ee"/><g stroke="#3a2e1c" stroke-linecap="round"><line x1="40" y1="12" x2="40" y2="17" stroke-width="1.4"/><line x1="54" y1="15.5" x2="52.2" y2="20" stroke-width="1"/><line x1="66" y1="26" x2="62.2" y2="29" stroke-width="1.4"/><line x1="73" y1="40" x2="68" y2="40" stroke-width="1"/><line x1="66" y1="54" x2="62.2" y2="51" stroke-width="1.4"/><line x1="54" y1="64.5" x2="52.2" y2="60" stroke-width="1"/><line x1="40" y1="68" x2="40" y2="63" stroke-width="1.4"/><line x1="26" y1="64.5" x2="27.8" y2="60" stroke-width="1"/><line x1="14" y1="54" x2="17.8" y2="51" stroke-width="1.4"/><line x1="7" y1="40" x2="12" y2="40" stroke-width="1"/><line x1="14" y1="26" x2="17.8" y2="29" stroke-width="1.4"/><line x1="26" y1="15.5" x2="27.8" y2="20" stroke-width="1"/></g><circle cx="40" cy="40" r="24" fill="none" stroke="#c47b4a" stroke-width="1" opacity="0.45"/><line x1="40" y1="40" x2="22" y2="54" stroke="#1a140e" stroke-width="2.3" stroke-linecap="round"/><circle cx="40" cy="40" r="4.2" fill="#d98938" stroke="#3a2c18" stroke-width="0.6"/><ellipse cx="28" cy="24" rx="14" ry="6" fill="rgba(255,255,255,0.42)" transform="rotate(-32 28 24)"/></svg><span>LINK</span><b id="dial-link">UNKNOWN</b></div>
                       </div>
                       <p>Host meters are not exposed. Needles stay parked.</p>
                     </section>
@@ -2595,11 +3069,13 @@
           const bar = byId("totality-bar");
           if (bar) {
             if (!status || !layers.length) {
-              bar.style.width = "0%";
+              bar.style.width = "100%";
+              bar.style.height = "0%";
               text(byId("totality-bar-label"), "UNKNOWN");
             } else {
               const pct = Math.round((ready / layers.length) * 100);
-              bar.style.width = pct + "%";
+              bar.style.width = "100%";
+              bar.style.height = pct + "%";
               text(byId("totality-bar-label"), ready + "/" + layers.length + " layers ready");
             }
           }

@@ -28,10 +28,13 @@ and an unlabelled tactical node sketch. The reading stays `UNKNOWN`.
 Headers use an inlined Rajdhani subset (SIL OFL 1.1, see
 `src/mcp/assets/Rajdhani-OFL.txt`). The loopback page allows that face with
 `font-src data:` and does not load a font CDN.
-On a 1920×1080 desktop the brand sits inside the left of the frame, the chips
-sit inside the right, and the nav is one row under the title so it does not
-cover either. Desktop, tablet, and phone collapse the same regions; they do
-not get a second data model.
+On a 1920×1080 desktop the brand plaque sits on the upper-left glass, the chips
+sit on the upper-right, and the nav is one row under the title so it does not
+cover either. The focus frame uses a heavier brass bezel, a brighter dusk
+coast, a brass Core Analyzer face with engraved channel names, and gauge
+captions painted above the dial art. Decorative chart traces are labelled
+ornament and are not readings. Desktop, tablet, and phone collapse the same
+regions; they do not get a second data model.
 
 | Zone      | What it shows                                                              | Mount                               |
 | --------- | -------------------------------------------------------------------------- | ----------------------------------- |

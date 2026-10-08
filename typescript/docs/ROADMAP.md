@@ -284,6 +284,23 @@ Decisions:
 Next: the nav-badge fold-in (active∩scheduled dedup) shipped — see the booked-jobs nav badge
 entry above.
 
+## Console 02 fidelity (2026-10-08)
+
+Presentation-only pass on `src/mcp/dashboard-v1.html` toward the Console 02
+reference picture. The focus frame has a heavier brass bezel, a brighter dusk
+coast, denser instrument chrome, a larger glowing core, thicker tactical
+strokes, brass analyzer faders with engraved labels, and gauge captions above
+the dial faces. The nav sits on its own row under the title. Every number is
+still a real HUD field or `UNKNOWN` / no-signal copy. Ornament waveforms are
+labelled as ornament. Screenshots: `docs/screenshots/console-02-1920x1080.png`
+and `docs/screenshots/console-02-vs-reference.png`.
+
+Still unlike the reference, on purpose: no copied percents, device totals,
+version strings, facility names, or fictional fader names. NOW, Next 3, the
+section nav, and the status chips stay because they are operator controls.
+The bee-and-tree mark is the existing SVG. Capture, reminders, and the voice
+safe-write reason stay on their existing views.
+
 ## Console 02 HUD (2026-10-02)
 
 The same operator widget is now the JARVIS TOTALITY Console 02 frame: a
