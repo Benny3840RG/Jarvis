@@ -97,7 +97,7 @@ describe("MicrosoftGraphMessageStatusClient", () => {
         if (url.includes("/v1.0/me?")) {
           return new Response(
             JSON.stringify({
-              mail: "alias@outlook.com",
+              mail: ` ${INPUT.mailbox.toUpperCase()} `,
               userPrincipalName: INPUT.mailbox,
             }),
             { status: 200 },
@@ -143,6 +143,39 @@ describe("MicrosoftGraphMessageStatusClient", () => {
         error.code === "outlook-signed-in-mailbox-mismatch",
     );
     assert.equal(calls.length, 1);
+  });
+
+  it("does not read the message when only one signed-in mailbox matches", async () => {
+    const profiles = [
+      { mail: INPUT.mailbox, userPrincipalName: "other@outlook.com" },
+      { mail: "other@outlook.com", userPrincipalName: INPUT.mailbox },
+      { mail: INPUT.mailbox, userPrincipalName: "thebeeztreez+other@outlook.com" },
+      { mail: "", userPrincipalName: "" },
+    ];
+    for (const profile of profiles) {
+      const calls: string[] = [];
+      const client = new MicrosoftGraphMessageStatusClient({
+        addressing: "signed-in",
+        async getAccessToken() {
+          return "access-token";
+        },
+        async fetch(input) {
+          calls.push(String(input));
+          return new Response(JSON.stringify(profile), { status: 200 });
+        },
+      });
+      await assert.rejects(
+        client.getMessageStatus({ ...INPUT, signal: new AbortController().signal }),
+        (error: unknown) =>
+          error instanceof OutlookReconciliationError &&
+          error.code === "outlook-signed-in-mailbox-mismatch",
+      );
+      assert.equal(calls.length, 1, JSON.stringify(profile));
+      assert.equal(
+        calls.some((url) => url.includes("/messages/")),
+        false,
+      );
+    }
   });
 
   it("classifies non-terminal Graph responses without reading provider messages", async () => {

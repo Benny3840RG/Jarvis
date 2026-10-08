@@ -212,8 +212,8 @@ describe("MicrosoftGraphQuoteEmailProvider", () => {
       [
         new Response(
           JSON.stringify({
-            mail: "personal@outlook.com",
-            userPrincipalName: "live#personal@outlook.com",
+            mail: " Personal@Outlook.com ",
+            userPrincipalName: "personal@outlook.com",
           }),
           { status: 200 },
         ),
@@ -237,6 +237,11 @@ describe("MicrosoftGraphQuoteEmailProvider", () => {
     for (const profile of [
       { mail: "other@outlook.com", userPrincipalName: "other@outlook.com" },
       { mail: "personal+tag@outlook.com", userPrincipalName: "personal+tag@outlook.com" },
+      { mail: "personal@outlook.com", userPrincipalName: "other@outlook.com" },
+      { mail: "other@outlook.com", userPrincipalName: "personal@outlook.com" },
+      { mail: "personal@outlook.com", userPrincipalName: "personal+tag@outlook.com" },
+      { mail: "", userPrincipalName: "" },
+      { mail: "   ", userPrincipalName: "   " },
     ]) {
       const requests: RecordedRequest[] = [];
       const provider = providerWith(

@@ -6,8 +6,8 @@ Host preflight of the commissioning kit on a personal Outlook mailbox. The kit s
 
 - Named mode stages `senderConnection` for `JARVIS_OUTLOOK_COMMISSIONING_CONNECTION`. Legacy mode still omits it.
 - The totality project is required before a client or quote is created.
-- Phone numbers and names are not compared. An address that is not one mailbox still refuses the run.
-- A consumers-authority mailbox uses Graph `/me` after the signed-in mailbox matches. Tenant mailboxes stay on `/users/{mailbox}`.
+- Phone numbers and names are not compared. A mailbox inside a comment, or written with a lookalike at-sign, is compared. An address that is not one mailbox still refuses the run.
+- A consumers-authority mailbox uses Graph `/me` only when every non-empty signed-in `mail` and `userPrincipalName` matches. Tenant mailboxes stay on `/users/{mailbox}`.
 - An unquoted trailing comment on `CONVEX_DEPLOYMENT` is stripped for both `.env.local` and a systemd environment file.
 
 Next:

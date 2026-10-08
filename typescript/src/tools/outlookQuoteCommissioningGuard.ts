@@ -397,19 +397,75 @@ export function recipientCollidesWithContacts(
   return contactValues.some((value) => contactKey(value) === recipientKey);
 }
 
+/** Top-level comment bodies. Unbalanced parentheses are not a contact we can compare. */
+function commentBodies(value: string): string[] | null {
+  const bodies: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value[index];
+    if (char === "(") {
+      if (depth === 0) start = index + 1;
+      depth += 1;
+    } else if (char === ")") {
+      if (depth === 0) return null;
+      depth -= 1;
+      if (depth === 0) bodies.push(value.slice(start, index));
+    }
+  }
+  return depth === 0 ? bodies : null;
+}
+
 /**
- * Phone numbers and other values that do not fold into an address are ignored.
- * A value that still contains an address, or whose fold is invalid, must be
- * exactly one mailbox. Anything else could hide the recipient and is refused.
+ * Mailboxes that exist only inside comments. A comment with no address is
+ * ignored. An address-like comment that is not one mailbox is refused.
  */
-function contactForComparison(value: string): "skip" | "compare" | "refuse" {
-  const decoded = decodeEncodedWords(value);
+function mailboxesHiddenInComments(value: string): string[] | "refuse" | "none" {
+  const bodies = commentBodies(value);
+  if (bodies === null) return "refuse";
+  if (bodies.length === 0) return "none";
+  const found: string[] = [];
+  for (const body of bodies) {
+    const nested = mailboxesHiddenInComments(body);
+    if (nested === "refuse") return "refuse";
+    if (nested !== "none") found.push(...nested);
+    const uncommented = removeComments(body);
+    if (uncommented === null) return "refuse";
+    if (uncommented.includes("@") || uncommented.includes("<") || uncommented.includes(">")) {
+      const mailbox = exactMailbox(uncommented);
+      if (!mailbox) return "refuse";
+      found.push(mailbox);
+    }
+  }
+  return found.length === 0 ? "none" : found;
+}
+
+/**
+ * Phone numbers and names that contain no address are ignored.
+ * NFKC folds lookalike at-signs. Every email-like token, including one
+ * inside comments or brackets, must be exactly one mailbox.
+ */
+function contactForComparison(value: string): "skip" | "refuse" | { mailbox: string } {
+  const normalised = value.normalize("NFKC");
+  const decoded = decodeEncodedWords(normalised);
   if (decoded === null) return "refuse";
-  const uncommented = removeComments(decoded.toLowerCase());
+  const folded = decoded.normalize("NFKC");
+  const visible = exactMailbox(normalised);
+  const hidden = mailboxesHiddenInComments(folded);
+  if (hidden === "refuse") return "refuse";
+  if (visible) {
+    if (hidden !== "none") return "refuse";
+    return { mailbox: visible };
+  }
+  const uncommented = removeComments(folded);
   if (uncommented === null) return "refuse";
-  const folded = unquoteQuotedAtoms(uncommented);
-  if (!folded.includes("@") && !folded.includes("<") && !folded.includes(">")) return "skip";
-  return exactMailbox(value) ? "compare" : "refuse";
+  const residue = unquoteQuotedAtoms(uncommented);
+  if (residue.includes("@") || residue.includes("<") || residue.includes(">")) return "refuse";
+  if (hidden === "none") return "skip";
+  if (hidden.length !== 1) return "refuse";
+  const mailbox = hidden[0];
+  if (mailbox === undefined) return "refuse";
+  return { mailbox };
 }
 
 /**
@@ -429,7 +485,7 @@ export async function beginOutlookQuoteCommissioning(input: {
     if (disposition === "refuse") {
       throw refused("a client contact could not be parsed into one mailbox.");
     }
-    emailContacts.push(value);
+    emailContacts.push(disposition.mailbox);
   }
   const contained = emailContacts.some((value) => value.toLowerCase().includes(plan.recipient));
   if (recipientCollidesWithContacts(plan.recipient, emailContacts) || contained) {

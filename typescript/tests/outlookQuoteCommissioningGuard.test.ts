@@ -423,6 +423,7 @@ describe("outlook quote commissioning guard", () => {
           "Ada Lovelace",
           "=?utf-8?q?workshop_phone?=",
           "other@example.com",
+          "(other@example.com)",
         ]),
     });
     assert.equal(accepted.recipient, "commissioning@example.invalid");
@@ -458,6 +459,60 @@ describe("outlook quote commissioning guard", () => {
         }),
       /matches a client contact/,
     );
+  });
+
+  it("refuses a comment-wrapped or lookalike mailbox before anything is staged", async () => {
+    const recipient = "3840zip@gmail.com";
+    const hidden = [
+      "(3840zip@gmail.com)",
+      "Ada Lovelace (3840zip@gmail.com)",
+      "+1 (555) 010-0000 (3840zip@gmail.com)",
+      "+61 400 000 000 (3840zip@gmail.com)",
+      "=?utf-8?q?=283840zip=40gmail=2Ecom=29?=",
+      "3840zip\u{FF20}gmail.com",
+      "3840zip\u{FE6B}gmail.com",
+      "3840zip\u{FF20}gmail\u{FF0E}com",
+    ];
+    for (const contact of hidden) {
+      let staged = 0;
+      let sent = 0;
+      await assert.rejects(async () => {
+        const plan = await beginOutlookQuoteCommissioning({
+          environment: {
+            ...READY,
+            JARVIS_OUTLOOK_COMMISSIONING_RECIPIENT: recipient,
+            JARVIS_OUTLOOK_COMMISSIONING_RECIPIENT_ALLOWLIST: recipient,
+          },
+          loadClientContactValues: () => Promise.resolve([contact]),
+        });
+        staged += 1;
+        sent += 1;
+        void plan;
+      }, /matches a client contact/);
+      assert.equal(staged, 0, contact);
+      assert.equal(sent, 0, contact);
+    }
+
+    const unparseable = ["(not-quite@)", "not-quite\u{FF20}", "(3840zip@gmail.com extra)"];
+    for (const contact of unparseable) {
+      let staged = 0;
+      let sent = 0;
+      await assert.rejects(async () => {
+        const plan = await beginOutlookQuoteCommissioning({
+          environment: {
+            ...READY,
+            JARVIS_OUTLOOK_COMMISSIONING_RECIPIENT: recipient,
+            JARVIS_OUTLOOK_COMMISSIONING_RECIPIENT_ALLOWLIST: recipient,
+          },
+          loadClientContactValues: () => Promise.resolve([contact]),
+        });
+        staged += 1;
+        sent += 1;
+        void plan;
+      }, /could not be parsed into one mailbox/);
+      assert.equal(staged, 0, contact);
+      assert.equal(sent, 0, contact);
+    }
   });
 
   it("strips one unquoted CONVEX_DEPLOYMENT comment and still refuses production", () => {

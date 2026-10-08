@@ -241,6 +241,46 @@ describe("outlook quote commissioning run", () => {
     assert.deepEqual(calls, ["GET"]);
   });
 
+  it("creates nothing when a comment or lookalike hides the recipient", async () => {
+    const recipient = "3840zip@gmail.com";
+    const contacts = [
+      "(3840zip@gmail.com)",
+      "+1 (555) 010-0000 (3840zip@gmail.com)",
+      "3840zip\u{FF20}gmail.com",
+    ];
+    for (const contact of contacts) {
+      const calls: string[] = [];
+      await assert.rejects(
+        () =>
+          executeOutlookQuoteCommissioning(
+            {
+              ...READY,
+              JARVIS_OUTLOOK_COMMISSIONING_RECIPIENT: recipient,
+              JARVIS_OUTLOOK_COMMISSIONING_RECIPIENT_ALLOWLIST: recipient,
+            },
+            {
+              request: (input) => {
+                calls.push(input.method);
+                if (input.method === "GET" && input.path === "/api/v1/clients") {
+                  return Promise.resolve({
+                    status: 200,
+                    body: { data: [{ contacts: [{ value: contact }] }] },
+                  });
+                }
+                return Promise.reject(new Error(`unexpected write ${input.method}`));
+              },
+              loadProjectRevision: () => Promise.reject(new Error("project must not be read")),
+              createOutlookRuntime: () => {
+                throw new Error("runtime must not be created");
+              },
+            },
+          ),
+        /matches a client contact/u,
+      );
+      assert.deepEqual(calls, ["GET"], contact);
+    }
+  });
+
   it("refuses a named connection id before any write when named mode is off", async () => {
     const calls: string[] = [];
     await assert.rejects(

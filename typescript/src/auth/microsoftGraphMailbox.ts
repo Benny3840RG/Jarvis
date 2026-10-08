@@ -24,15 +24,20 @@ export function graphMailboxPrefix(addressing: GraphMailboxAddressing, mailbox: 
   return addressing === "signed-in" ? "me" : `users/${encodeURIComponent(mailbox)}`;
 }
 
-/** True when mail or userPrincipalName is exactly the configured mailbox. */
+/**
+ * True when every non-empty mail and userPrincipalName equals the configured
+ * mailbox. A blank profile matches nothing.
+ */
 export function signedInMailboxMatches(body: unknown, configuredMailbox: string): boolean {
   if (typeof body !== "object" || body === null) return false;
   const record = body as Record<string, unknown>;
   const expected = configuredMailbox.trim().toLowerCase();
   if (expected.length === 0) return false;
-  return [record.mail, record.userPrincipalName].some(
-    (value) => typeof value === "string" && value.trim().toLowerCase() === expected,
+  const present = [record.mail, record.userPrincipalName].filter(
+    (value): value is string => typeof value === "string" && value.trim().length > 0,
   );
+  if (present.length === 0) return false;
+  return present.every((value) => value.trim().toLowerCase() === expected);
 }
 
 export type SignedInProfileRead = { ok: true; body: unknown } | { ok: false };

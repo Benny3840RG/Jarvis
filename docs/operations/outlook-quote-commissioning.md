@@ -20,13 +20,12 @@ repairing them. The allowlist is
 `JARVIS_OUTLOOK_COMMISSIONING_RECIPIENT_ALLOWLIST`, a comma-separated list of
 those same plain mailboxes in the shell or ignored `.env.local`. A missing or
 empty allowlist refuses the run, and the recipient must exactly match one
-entry. The client-contact check still runs after that. It strips every trailing
-dot, removes comments, decodes one encoded-word, and unquotes a dot-atom local
-part. Only a contact that folds into an address is compared. A phone number or
-a name with no mailbox does not abort the run. A value that still contains an
-address, or whose fold is invalid, must be exactly one mailbox; anything else
-refuses the run. A contact that is that mailbox, or whose text contains the
-recipient, also refuses the run. A `+tag` is ignored only when comparing the
+entry. The client-contact check still runs after that. It normalises the contact
+with NFKC, then extracts every email-like token, including an address in
+parentheses or angle brackets. A phone number or a name with no mailbox does
+not abort the run. A value that looks like an address but is not exactly one
+mailbox refuses the run. A contact that is that mailbox, or whose text contains
+the recipient, also refuses the run. A `+tag` is ignored only when comparing the
 mailbox with client contacts. `JARVIS_OUTLOOK_COMMISSIONING_CONFIRM`
 must be exactly `non-customer`. `JARVIS_OUTLOOK_COMMISSIONING_PROJECT_KEY` must
 already be a Convex totality project. This kit does not create that project.
@@ -70,16 +69,18 @@ connection. The approval step is unchanged: it still posts the existing
 approval token and does not add another approver.
 
 A personal Microsoft account (the consumers authority, no tenant id) is
-addressed as Graph `/me`. Before any mailbox call, `mail` or
-`userPrincipalName` on the signed-in profile must equal the configured
-mailbox. A mismatch or an unreadable profile fails closed. Work or school
+addressed as Graph `/me`. Before any mailbox call, every non-empty `mail`
+and `userPrincipalName` on the signed-in profile must equal the configured
+mailbox after trim, compared case-insensitively. Both empty, or one of them
+different, fails closed. An unreadable profile fails closed. Work or school
 mailboxes stay on `/users/{mailbox}`.
 
 The command uses the existing HTTP routes and the existing Outlook
 reconciliation worker:
 
-1. Read clients. Skip contacts that are not an email. Refuse when an email
-   contact is the recipient or cannot be parsed as one mailbox.
+1. Read clients. Skip a phone or name that contains no mailbox. Refuse when a
+   contact looks like an address but is not exactly one mailbox, or when that
+   mailbox is the recipient.
 2. Resolve the named sender, require the Outlook runtime and reconciliation,
    and require the totality project. A missing project creates no client and
    no quote.
