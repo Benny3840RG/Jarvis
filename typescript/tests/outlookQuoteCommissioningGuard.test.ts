@@ -525,6 +525,7 @@ describe("outlook quote commissioning guard", () => {
     const collisions = [
       "=?utf-8?q?3840zip=EF=BC=A0gmail.com?=",
       "=?utf-8?q?3840zip=EF=B9=ABgmail.com?=",
+      "=?iso-8859-1?q?3840zip=40gmail.com?=",
       "3840zip@gmai\u200Bl.com",
       "3840\u200Czip@gmail.com",
       "3840zip@gmail\u2060.com",
@@ -568,6 +569,13 @@ describe("outlook quote commissioning guard", () => {
       assert.equal(staged, 0, contact);
       assert.equal(sent, 0, contact);
     }
+
+    const latin1NotUtf8 = await beginOutlookQuoteCommissioning({
+      environment,
+      loadClientContactValues: () =>
+        Promise.resolve(["=?iso-8859-1?q?3840zip=EF=BC=A0gmail.com?="]),
+    });
+    assert.equal(latin1NotUtf8.recipient, recipient);
   });
 
   it("strips one unquoted CONVEX_DEPLOYMENT comment and still refuses production", () => {

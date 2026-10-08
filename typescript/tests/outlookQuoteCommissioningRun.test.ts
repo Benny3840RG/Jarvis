@@ -289,6 +289,10 @@ describe("outlook quote commissioning run", () => {
         pattern: /matches a client contact/u,
       },
       {
+        contact: "=?iso-8859-1?q?3840zip=40gmail.com?=",
+        pattern: /matches a client contact/u,
+      },
+      {
         contact: "=?utf-8?q?3840zip=EF=B9=ABgmail.com?=",
         pattern: /matches a client contact/u,
       },
