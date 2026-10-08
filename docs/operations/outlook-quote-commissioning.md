@@ -25,7 +25,9 @@ once, and only for `us-ascii`, `utf-8` (any case, or `utf8`), or `iso-8859-1`. A
 charset, including UTF-16, UTF-7, `latin1`, and an RFC 2231 language suffix, refuses the
 run, as does a decode error or a malformed word. NFKC and format-character removal,
 including zero-width characters, then apply to that one decoded string. A remaining `=?`
-refuses the contact. There is no second decode. A contact that is not zero mailboxes or
+refuses the contact. There is no second decode. An `=` and `?` split by a comment, space,
+or nested parenthesis refuses too, and so does a second pass that still changes the contact.
+A contact that is not zero mailboxes or
 exactly one comparable mailbox refuses before any write. Every email-like token in
 that one string is extracted the same way, including an address in parentheses,
 angle brackets, or the display-name residue. A phone number or a name with no

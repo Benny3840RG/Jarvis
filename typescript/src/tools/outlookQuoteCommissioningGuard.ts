@@ -489,6 +489,115 @@ function mailboxesHiddenInComments(value: string): string[] | "refuse" | "none" 
   return found.length === 0 ? "none" : found;
 }
 
+/** Letters and numbers only, lowercased. Used to spot a recipient hidden in punctuation. */
+function contactSkeleton(value: string): string {
+  return value.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
+}
+
+/** Depth above 1 is nested. A close with nothing open, or a leftover open, is unbalanced. */
+function parenthesisFault(value: string): boolean {
+  let depth = 0;
+  for (const char of value) {
+    if (char === "(") {
+      depth += 1;
+      if (depth > 1) return true;
+    } else if (char === ")") {
+      if (depth === 0) return true;
+      depth -= 1;
+    }
+  }
+  return depth !== 0;
+}
+
+function encodedOpenerCount(value: string): number {
+  let count = 0;
+  let index = 0;
+  while (index < value.length) {
+    const found = value.indexOf("=?", index);
+    if (found === -1) return count;
+    count += 1;
+    index = found + 2;
+  }
+  return count;
+}
+
+/**
+ * `=` and `?` that are not already the contiguous opener `=?`.
+ * Comment removal or whitespace removal that creates that opener is the same refusal.
+ */
+function hiddenEncodedOpener(value: string): boolean {
+  if (!value.includes("=") || !value.includes("?")) return false;
+  const uncommented = removeComments(value);
+  if (uncommented === null) return true;
+  const tightened = value.replace(/\s+/gu, "");
+  const present = encodedOpenerCount(value);
+  if (present === 0) return true;
+  return encodedOpenerCount(uncommented) > present || encodedOpenerCount(tightened) > present;
+}
+
+/**
+ * NFKC, format-character removal, comment removal, then one decode, then NFKC again.
+ * A second run must not change the result.
+ */
+function normaliseOnce(value: string): string | null {
+  const folded = value.normalize("NFKC").replace(/\p{Cf}/gu, "");
+  const uncommented = removeComments(folded);
+  if (uncommented === null) return null;
+  const decoded = decodeEncodedWords(uncommented);
+  if (decoded === null) return null;
+  const result = decoded.normalize("NFKC").replace(/\p{Cf}/gu, "");
+  if (result.includes("=?") || /=\?[^?]*\?[bBqQ]\?[^?]*\?=/u.test(result)) return null;
+  return result;
+}
+
+function pipelineStable(value: string): boolean {
+  const once = normaliseOnce(value);
+  if (once === null) return false;
+  return normaliseOnce(once) === once;
+}
+
+function skeletonThreat(value: string, nfkc: string, recipient: string): boolean {
+  const at = recipient.lastIndexOf("@");
+  if (at <= 0) return true;
+  const local = contactSkeleton(recipient.slice(0, at));
+  const full = contactSkeleton(recipient);
+  const decoded = normaliseOnce(value) ?? "";
+  const views = [contactSkeleton(value), contactSkeleton(nfkc), contactSkeleton(decoded)];
+  if (full.length > 0 && views.some((view) => view.includes(full))) return true;
+  if (nfkc.includes("=?")) return false;
+  return local.length > 0 && views.some((view) => view.includes(local));
+}
+
+/**
+ * Order-independent refusal for a dev commissioning contact.
+ * A contiguous encoded word that the single decoder consumes is left to the
+ * existing comparison. Every other `=`/`?` arrangement, nested or unbalanced
+ * parentheses, an unstable second pass, or a hidden recipient skeleton refuses.
+ */
+function contactFailsClosed(value: string, recipient: string): boolean {
+  const nfkc = value.normalize("NFKC");
+  const stripped = nfkc.replace(/\p{Cf}/gu, "");
+  if (
+    parenthesisFault(nfkc) ||
+    parenthesisFault(stripped) ||
+    hiddenEncodedOpener(nfkc) ||
+    hiddenEncodedOpener(stripped)
+  ) {
+    return true;
+  }
+  const disposition = contactForComparison(value);
+  if (
+    disposition !== "skip" &&
+    disposition !== "refuse" &&
+    disposition.mailbox.includes(recipient)
+  ) {
+    return false;
+  }
+  if (!pipelineStable(value)) return true;
+  if (disposition === "refuse") return false;
+  return skeletonThreat(value, stripped, recipient);
+}
+
 /**
  * Phone numbers and names that contain no address are ignored.
  * Decode, NFKC, and format-character stripping run on the whole contact.
@@ -527,6 +636,9 @@ export async function beginOutlookQuoteCommissioning(input: {
   const contacts = await input.loadClientContactValues();
   const emailContacts: string[] = [];
   for (const value of contacts) {
+    if (contactFailsClosed(value, plan.recipient)) {
+      throw refused("a client contact could not be parsed into one mailbox.");
+    }
     const disposition = contactForComparison(value);
     if (disposition === "skip") continue;
     if (disposition === "refuse") {

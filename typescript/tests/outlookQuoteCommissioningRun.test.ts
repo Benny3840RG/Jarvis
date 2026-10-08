@@ -337,6 +337,30 @@ describe("outlook quote commissioning run", () => {
         pattern: /could not be parsed into one mailbox/u,
       },
       {
+        contact: "=()?utf-8?q?3840zip=40gmail.com?=",
+        pattern: /could not be parsed into one mailbox/u,
+      },
+      {
+        contact: "=(note)?utf-8?q?3840zip=40gmail.com?=",
+        pattern: /could not be parsed into one mailbox/u,
+      },
+      {
+        contact: "=\uFF08\uFF09?utf-8?q?3840zip=40gmail.com?=",
+        pattern: /could not be parsed into one mailbox/u,
+      },
+      {
+        contact: "=()?utf-8?b?Mzg0MHppcEBnbWFpbC5jb20?=",
+        pattern: /could not be parsed into one mailbox/u,
+      },
+      {
+        contact: "= ?utf-8?q?3840zip=40gmail.com?=",
+        pattern: /could not be parsed into one mailbox/u,
+      },
+      {
+        contact: "=((x))?utf-8?q?3840zip=40gmail.com?=",
+        pattern: /could not be parsed into one mailbox/u,
+      },
+      {
         contact: "=?utf-8?b?PT91dGYtOD9iP016ZzBNSHBwY0VCbmJXRnBiQzVqYjIwPT89?=",
         pattern: /could not be parsed into one mailbox/u,
       },

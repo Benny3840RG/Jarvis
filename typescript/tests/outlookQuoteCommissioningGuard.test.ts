@@ -632,6 +632,37 @@ describe("outlook quote commissioning guard", () => {
     }
   });
 
+  it("refuses an encoded word whose opener is split before anything is staged", async () => {
+    const recipient = "3840zip@gmail.com";
+    const environment = {
+      ...READY,
+      JARVIS_OUTLOOK_COMMISSIONING_RECIPIENT: recipient,
+      JARVIS_OUTLOOK_COMMISSIONING_RECIPIENT_ALLOWLIST: recipient,
+    };
+    const split = [
+      "=()?utf-8?q?3840zip=40gmail.com?=",
+      "=(note)?utf-8?q?3840zip=40gmail.com?=",
+      "=\uFF08\uFF09?utf-8?q?3840zip=40gmail.com?=",
+      "=()?utf-8?b?Mzg0MHppcEBnbWFpbC5jb20?=",
+      "= ?utf-8?q?3840zip=40gmail.com?=",
+      "=\t?utf-8?q?3840zip=40gmail.com?=",
+      "=\n?utf-8?q?3840zip=40gmail.com?=",
+      "=((x))?utf-8?q?3840zip=40gmail.com?=",
+    ];
+    for (const contact of split) {
+      let staged = 0;
+      await assert.rejects(async () => {
+        const plan = await beginOutlookQuoteCommissioning({
+          environment,
+          loadClientContactValues: () => Promise.resolve([contact]),
+        });
+        staged += 1;
+        void plan;
+      }, /could not be parsed into one mailbox/);
+      assert.equal(staged, 0, contact);
+    }
+  });
+
   it("strips one unquoted CONVEX_DEPLOYMENT comment and still refuses production", () => {
     assert.equal(
       stripUnquotedTrailingComment("dev:outgoing-ram-798 # systemd kept this comment"),
