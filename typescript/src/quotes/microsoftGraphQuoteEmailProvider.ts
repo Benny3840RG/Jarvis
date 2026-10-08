@@ -1,5 +1,11 @@
 import { createHash } from "node:crypto";
 
+import {
+  graphMailboxPrefix,
+  readSignedInProfile,
+  signedInMailboxMatches,
+  type GraphMailboxAddressing,
+} from "../auth/microsoftGraphMailbox.js";
 import type {
   QuoteEmailPrepareInput,
   QuoteEmailPreparedReference,
@@ -17,6 +23,8 @@ export type MicrosoftGraphQuoteEmailProviderOptions = {
   getAccessToken: MicrosoftGraphAccessTokenSupplier;
   fetch?: typeof globalThis.fetch;
   graphOrigin?: typeof GRAPH_ORIGIN;
+  /** Personal Microsoft accounts use `/me`. Work or school mailboxes stay on `/users`. */
+  addressing?: GraphMailboxAddressing;
 };
 
 export class MicrosoftGraphQuoteEmailProviderError extends Error {
@@ -91,12 +99,32 @@ export class MicrosoftGraphQuoteEmailProvider {
   private readonly getAccessToken: MicrosoftGraphAccessTokenSupplier;
   private readonly fetch: typeof globalThis.fetch;
   private readonly graphOrigin: typeof GRAPH_ORIGIN;
+  private readonly addressing: GraphMailboxAddressing;
 
   constructor(options: MicrosoftGraphQuoteEmailProviderOptions) {
     this.mailbox = requiredText(options.mailbox, 320, "outlook-mailbox-invalid");
     this.getAccessToken = options.getAccessToken;
     this.fetch = options.fetch ?? globalThis.fetch;
     this.graphOrigin = options.graphOrigin ?? GRAPH_ORIGIN;
+    this.addressing = options.addressing ?? "users";
+  }
+
+  private mailboxPrefix(): string {
+    return graphMailboxPrefix(this.addressing, this.mailbox);
+  }
+
+  private async ensureSignedInMailbox(token: string, signal: AbortSignal): Promise<void> {
+    if (this.addressing !== "signed-in") return;
+    const profile = await readSignedInProfile({
+      origin: this.graphOrigin,
+      token,
+      fetch: this.fetch,
+      signal,
+    });
+    if (!profile.ok) fail("outlook-signed-in-mailbox-unreadable");
+    if (!signedInMailboxMatches(profile.body, this.mailbox)) {
+      fail("outlook-signed-in-mailbox-mismatch");
+    }
   }
 
   validateSender(senderConnection: string | undefined): void {
@@ -123,7 +151,8 @@ export class MicrosoftGraphQuoteEmailProvider {
   ): Promise<QuoteEmailPreparedReference> {
     const validated = validatePrepareInput(input);
     const token = await this.token(signal);
-    const url = `${this.graphOrigin}/users/${encodeURIComponent(this.mailbox)}/messages`;
+    await this.ensureSignedInMailbox(token, signal);
+    const url = `${this.graphOrigin}/${this.mailboxPrefix()}/messages`;
     let response: Response;
     try {
       response = await this.fetch(url, {
@@ -183,8 +212,9 @@ export class MicrosoftGraphQuoteEmailProvider {
   ): Promise<QuoteEmailSendAcceptance> {
     const immutableMessageId = validateReference(reference);
     const token = await this.token(signal);
+    await this.ensureSignedInMailbox(token, signal);
     const url =
-      `${this.graphOrigin}/users/${encodeURIComponent(this.mailbox)}/messages/` +
+      `${this.graphOrigin}/${this.mailboxPrefix()}/messages/` +
       `${encodeURIComponent(immutableMessageId)}/send`;
     let response: Response;
     try {

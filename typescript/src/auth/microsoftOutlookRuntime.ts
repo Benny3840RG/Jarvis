@@ -1,3 +1,4 @@
+import { graphMailboxAddressing } from "./microsoftGraphMailbox.js";
 import { createNamedOutlookRuntime } from "./microsoftOutlookConnections.js";
 import {
   FileRefreshTokenStore,
@@ -55,15 +56,18 @@ export function createMicrosoftOutlookRuntimeFromEnv(
     ...(dependencies.fetch === undefined ? {} : { fetch: dependencies.fetch }),
   });
   const getAccessToken = (signal: AbortSignal) => accessTokenSupplier.getAccessToken(signal);
+  const addressing = graphMailboxAddressing(config.tokenEndpoint);
   const quoteEmailProvider = new MicrosoftGraphQuoteEmailProvider({
     mailbox: config.mailbox,
     getAccessToken,
+    addressing,
     ...(dependencies.fetch === undefined ? {} : { fetch: dependencies.fetch }),
   });
   const messageStatusClient =
     dependencies.messageStatusClient ??
     new MicrosoftGraphMessageStatusClient({
       getAccessToken,
+      addressing,
       ...(dependencies.fetch === undefined ? {} : { fetch: dependencies.fetch }),
     });
 

@@ -205,4 +205,73 @@ describe("MicrosoftGraphQuoteEmailProvider", () => {
     const { createQuoteEmailProviderFromEnv } = await import("../src/quotes/quoteEmailProvider.js");
     assert.equal(createQuoteEmailProviderFromEnv(), null);
   });
+
+  it("drafts a personal mailbox through /me only after the signed-in mailbox matches", async () => {
+    const requests: RecordedRequest[] = [];
+    const provider = providerWith(
+      [
+        new Response(
+          JSON.stringify({
+            mail: " Personal@Outlook.com ",
+            userPrincipalName: "personal@outlook.com",
+          }),
+          { status: 200 },
+        ),
+        new Response(JSON.stringify({ id: "immutable-message-id", isDraft: true }), {
+          status: 201,
+        }),
+      ],
+      requests,
+      { mailbox: "personal@outlook.com", addressing: "signed-in" },
+    );
+
+    const prepared = await provider.prepare(input(), new AbortController().signal);
+    assert.equal(prepared.providerRequestId, "immutable-message-id");
+    assert.match(requests[0]?.url ?? "", /\/v1\.0\/me\?\$select=mail,userPrincipalName$/u);
+    assert.equal(requests[0]?.init.method, "GET");
+    assert.equal(requests[1]?.url, "https://graph.microsoft.com/v1.0/me/messages");
+    assert.equal(requests[1]?.init.method, "POST");
+  });
+
+  it("does not create a draft when the signed-in mailbox differs, including a plus-tag", async () => {
+    for (const profile of [
+      { mail: "other@outlook.com", userPrincipalName: "other@outlook.com" },
+      { mail: "personal+tag@outlook.com", userPrincipalName: "personal+tag@outlook.com" },
+      { mail: "personal@outlook.com", userPrincipalName: "other@outlook.com" },
+      { mail: "other@outlook.com", userPrincipalName: "personal@outlook.com" },
+      { mail: "personal@outlook.com", userPrincipalName: "personal+tag@outlook.com" },
+      { mail: "", userPrincipalName: "" },
+      { mail: "   ", userPrincipalName: "   " },
+    ]) {
+      const requests: RecordedRequest[] = [];
+      const provider = providerWith(
+        [new Response(JSON.stringify(profile), { status: 200 })],
+        requests,
+        { mailbox: "personal@outlook.com", addressing: "signed-in" },
+      );
+      await assert.rejects(
+        provider.prepare(input(), new AbortController().signal),
+        /outlook-signed-in-mailbox-mismatch/u,
+      );
+      assert.equal(requests.length, 1);
+      assert.equal(requests[0]?.init.method, "GET");
+    }
+  });
+
+  it("does not send when the signed-in profile cannot be read", async () => {
+    const requests: RecordedRequest[] = [];
+    const provider = providerWith([new Response(null, { status: 403 })], requests, {
+      mailbox: "personal@outlook.com",
+      addressing: "signed-in",
+    });
+    await assert.rejects(
+      provider.sendPrepared(
+        { providerRequestId: "message-1", providerCorrelationId: "message-1" },
+        new AbortController().signal,
+      ),
+      /outlook-signed-in-mailbox-unreadable/u,
+    );
+    assert.equal(requests.length, 1);
+    assert.match(requests[0]?.url ?? "", /\/v1\.0\/me\?/u);
+  });
 });
