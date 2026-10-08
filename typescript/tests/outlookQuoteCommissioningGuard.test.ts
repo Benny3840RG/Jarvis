@@ -589,6 +589,7 @@ describe("outlook quote commissioning guard", () => {
       "=?utf-8?q?=3D=3Futf=2D8=3Fq=3F3840zip=3D40gmail=3D2Ecom=3F=3D?=",
       "=?utf-8?q?=3D=3Futf=2D8=3Fq=3F=3D3D=3D3Futf=3D2D8=3D3Fq=3D3F3840zip=3D3D40gmail=3D3D2Ecom=3D3F=3D3D=3F=3D?=",
       "=?utf-8?q?=3D=3Futf=2D8=3Fq=3F=3D283840zip=3D40gmail=3D2Ecom=3D29=3F=3D?=",
+      "=?utf-8?q?=3D=3Futf=2D8=3Fq=3F=3D3D=3D3Futf=3D2D8=3D3Fq=3D3F=3D3D283840zip=3D3D40gmail=3D3D2Ecom=3D3D29=3D3F=3D3D=3F=3D?=",
       "=?utf-8?b?PT91dGYtOD9iP016ZzBNSHBwY0VCbmJXRnBiQzVqYjIwPT89?=",
       "=?utf-8?b?PT91dGYtOD9iP1BUOTFkR1l0T0Q5aVAwMTZaekJOU0hCd1kwVkNibUpYUm5CaVF6VnFZakl3UFQ4OT89?=",
       "=?utf-16?b?/v8AMwA4ADQAMAB6AGkAcABAAGcAbQBhAGkAbAAuAGMAbwBt?=",
@@ -596,6 +597,9 @@ describe("outlook quote commissioning guard", () => {
       "=?utf-16be?b?ADMAOAA0ADAAegBpAHAAQABnAG0AYQBpAGwALgBjAG8AbQ==?=",
       "=?utf-16le?b?MwA4ADQAMAB6AGkAcABAAGcAbQBhAGkAbAAuAGMAbwBtAA==?=",
       "=?utf-7?q?3840zip=40gmail.com?=",
+      "=?latin1?q?3840zip=40gmail.com?=",
+      "=?utf-8*en?q?3840zip=40gmail.com?=",
+      "=?utf-8*en-us?q?3840zip=40gmail.com?=",
     ];
     for (const contact of refusedContacts) {
       let staged = 0;
@@ -612,8 +616,10 @@ describe("outlook quote commissioning guard", () => {
 
     for (const contact of [
       "=?utf8?q?3840zip=40gmail.com?=",
+      "=?UTF-8?q?3840zip=40gmail.com?=",
+      "=?UTF8?q?3840zip=40gmail.com?=",
       "=?us-ascii?q?3840zip=40gmail.com?=",
-      "=?latin1?q?3840zip=40gmail.com?=",
+      "=?ISO-8859-1?q?3840zip=40gmail.com?=",
     ]) {
       await assert.rejects(
         () =>

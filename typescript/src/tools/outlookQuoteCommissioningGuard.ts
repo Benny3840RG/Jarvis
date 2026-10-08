@@ -180,8 +180,12 @@ function bEncodedBytes(payload: string): Uint8Array | null {
   return decoded;
 }
 
-/** Charsets the contact check will decode. Everything else, including UTF-16 and UTF-7, refuses. */
-const CONTACT_CHARSETS = new Set(["us-ascii", "utf-8", "utf8", "iso-8859-1", "latin1"]);
+/**
+ * Charsets the contact check will decode. Case is folded by the caller.
+ * `utf8` is the no-hyphen alias of `utf-8`. Anything else refuses, including
+ * UTF-16, UTF-7, `latin1`, and an RFC 2231 language suffix.
+ */
+const CONTACT_CHARSETS = new Set(["us-ascii", "utf-8", "utf8", "iso-8859-1"]);
 
 function decodeEncodedWord(charset: string, encoding: string, payload: string): string | null {
   const encodingName = encoding.toLowerCase();
@@ -193,7 +197,7 @@ function decodeEncodedWord(charset: string, encoding: string, payload: string): 
         : null;
   if (bytes === null) return null;
   const name = charset.trim().toLowerCase();
-  if (!CONTACT_CHARSETS.has(name)) return null;
+  if (name.includes("*") || name.includes("'") || !CONTACT_CHARSETS.has(name)) return null;
   try {
     return new TextDecoder(name, { fatal: true }).decode(bytes);
   } catch {
@@ -266,7 +270,7 @@ function normaliseContact(value: string): string | null {
   const decoded = decodeEncodedWords(value);
   if (decoded === null) return null;
   const folded = decoded.normalize("NFKC").replace(/\p{Cf}/gu, "");
-  if (folded.includes("=?")) return null;
+  if (folded.includes("=?") || /=\?[^?]*\?[bBqQ]\?[^?]*\?=/u.test(folded)) return null;
   return folded;
 }
 
