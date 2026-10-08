@@ -28,10 +28,17 @@ and an unlabelled tactical node sketch. The reading stays `UNKNOWN`.
 Headers use an inlined Rajdhani subset (SIL OFL 1.1, see
 `src/mcp/assets/Rajdhani-OFL.txt`). The loopback page allows that face with
 `font-src data:` and does not load a font CDN.
-On a 1920×1080 desktop the brand sits inside the left of the frame, the chips
-sit inside the right, and the nav is one row under the title so it does not
-cover either. Desktop, tablet, and phone collapse the same regions; they do
-not get a second data model.
+On a 1920×1080 desktop one bezel fills the viewport. The brand plaque sits on
+the upper-left glass and reads THE BEEZ TREEZ once, with Property Solutions
+under it. The chips sit on the upper-right, and the nav is one row under the
+title. The focus frame is a thick weathered steel-and-brass bezel with rivets
+and a curved glass vignette. The coast is a muted dusk. Plates are smoked
+teal glass with thin outlines and small-caps titles. Empty meters keep dim
+grids, ghost traces, tick rails, and dial faces. The core is the large centre
+instrument. The tactical node sketch is drawn on the coast, not in a second
+box. The two cream gauges overlap the bottom bezel. Decorative chart traces
+are labelled ornament and are not readings. Desktop, tablet, and phone
+collapse the same regions; they do not get a second data model.
 
 | Zone      | What it shows                                                              | Mount                               |
 | --------- | -------------------------------------------------------------------------- | ----------------------------------- |
@@ -61,7 +68,8 @@ Console 02 plates that have no Jarvis meter stay parked. Predictor Core draws
 task counts by category only after `tasks` arrives. Waveform Analysis has no
 signal, so the line stays flat. Host, memory, store, and link dials, System
 Load, and System Efficiency have no host meter, so the needles stay parked and
-the caption stays `UNKNOWN`. System Overview uses layer readiness, persistence
+the face stays `UNKNOWN`. Longer honesty notes sit on the control title, not
+on the plate. System Overview uses layer readiness, persistence
 reachability, and `zState` as words, not invented percents. Data List is
 `status.integrations` stages. The numeric tiles are active tasks, reminders,
 and inbox item count. Network Integrity shows `status.version`. Tactical
