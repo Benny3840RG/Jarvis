@@ -329,10 +329,6 @@ describe("outlook quote commissioning guard", () => {
         recipient: "customer@example.com",
         contacts: ["customer@(comment)example.com"],
       },
-      {
-        recipient: "customer@example.com",
-        contacts: ["=?utf-8?q?customer?=@example.com"],
-      },
     ];
     for (const entry of cases) {
       assert.equal(
@@ -359,6 +355,28 @@ describe("outlook quote commissioning guard", () => {
       assert.equal(loaded, true, entry.contacts[0]);
     }
 
+    assert.equal(
+      recipientCollidesWithContacts("customer@example.com", ["=?utf-8?q?customer?=@example.com"]),
+      false,
+    );
+    let encoded = false;
+    await assert.rejects(
+      () =>
+        beginOutlookQuoteCommissioning({
+          environment: {
+            ...READY,
+            JARVIS_OUTLOOK_COMMISSIONING_RECIPIENT: "customer@example.com",
+            JARVIS_OUTLOOK_COMMISSIONING_RECIPIENT_ALLOWLIST: "customer@example.com",
+          },
+          loadClientContactValues: () => {
+            encoded = true;
+            return Promise.resolve(["=?utf-8?q?customer?=@example.com"]);
+          },
+        }),
+      /could not be parsed into one mailbox/,
+    );
+    assert.equal(encoded, true);
+
     const skipped = await beginOutlookQuoteCommissioning({
       environment: READY,
       loadClientContactValues: () => Promise.resolve(["not-a-mailbox"]),
@@ -379,7 +397,7 @@ describe("outlook quote commissioning guard", () => {
             return Promise.resolve(["customer@example.com.extra"]);
           },
         }),
-      /matches a client contact/,
+      /could not be parsed into one mailbox/,
     );
     assert.equal(contained, true);
   });
@@ -421,7 +439,6 @@ describe("outlook quote commissioning guard", () => {
           "+1 (555) 010-0000",
           "07123 456789",
           "Ada Lovelace",
-          "=?utf-8?q?workshop_phone?=",
           "other@example.com",
           "(other@example.com)",
         ]),
@@ -433,6 +450,7 @@ describe("outlook quote commissioning guard", () => {
       "Name <not-an-email>",
       "customer@example.com extra",
       "+1 555 =?utf-8?q?customer=40example.com?=",
+      "=?utf-8?q?workshop_phone?=",
     ];
     for (const contact of ambiguous) {
       let staged = 0;
@@ -468,7 +486,6 @@ describe("outlook quote commissioning guard", () => {
       "Ada Lovelace (3840zip@gmail.com)",
       "+1 (555) 010-0000 (3840zip@gmail.com)",
       "+61 400 000 000 (3840zip@gmail.com)",
-      "=?utf-8?q?=283840zip=40gmail=2Ecom=29?=",
       "3840zip\u{FF20}gmail.com",
       "3840zip\u{FE6B}gmail.com",
       "3840zip\u{FF20}gmail\u{FF0E}com",
@@ -493,7 +510,12 @@ describe("outlook quote commissioning guard", () => {
       assert.equal(sent, 0, contact);
     }
 
-    const unparseable = ["(not-quite@)", "not-quite\u{FF20}", "(3840zip@gmail.com extra)"];
+    const unparseable = [
+      "(not-quite@)",
+      "not-quite\u{FF20}",
+      "(3840zip@gmail.com extra)",
+      "=?utf-8?q?=283840zip=40gmail=2Ecom=29?=",
+    ];
     for (const contact of unparseable) {
       let staged = 0;
       let sent = 0;
@@ -523,9 +545,6 @@ describe("outlook quote commissioning guard", () => {
       JARVIS_OUTLOOK_COMMISSIONING_RECIPIENT_ALLOWLIST: recipient,
     };
     const collisions = [
-      "=?utf-8?q?3840zip=EF=BC=A0gmail.com?=",
-      "=?utf-8?q?3840zip=EF=B9=ABgmail.com?=",
-      "=?iso-8859-1?q?3840zip=40gmail.com?=",
       "3840zip@gmai\u200Bl.com",
       "3840\u200Czip@gmail.com",
       "3840zip@gmail\u2060.com",
@@ -548,6 +567,9 @@ describe("outlook quote commissioning guard", () => {
     }
 
     const unreadable = [
+      "=?utf-8?q?3840zip=EF=BC=A0gmail.com?=",
+      "=?utf-8?q?3840zip=EF=B9=ABgmail.com?=",
+      "=?iso-8859-1?q?3840zip=40gmail.com?=",
       "=?not-a-charset?q?3840zip=40gmail.com?=",
       "=?utf-8?q?=ZZ?=",
       "=?utf-8?q?3840zip=40gmail.com",
@@ -570,12 +592,15 @@ describe("outlook quote commissioning guard", () => {
       assert.equal(sent, 0, contact);
     }
 
-    const latin1NotUtf8 = await beginOutlookQuoteCommissioning({
-      environment,
-      loadClientContactValues: () =>
-        Promise.resolve(["=?iso-8859-1?q?3840zip=EF=BC=A0gmail.com?="]),
-    });
-    assert.equal(latin1NotUtf8.recipient, recipient);
+    await assert.rejects(
+      () =>
+        beginOutlookQuoteCommissioning({
+          environment,
+          loadClientContactValues: () =>
+            Promise.resolve(["=?iso-8859-1?q?3840zip=EF=BC=A0gmail.com?="]),
+        }),
+      /could not be parsed into one mailbox/,
+    );
   });
 
   it("refuses nested encoded words and charsets outside the allowlist", async () => {
@@ -627,7 +652,7 @@ describe("outlook quote commissioning guard", () => {
             environment,
             loadClientContactValues: () => Promise.resolve([contact]),
           }),
-        /matches a client contact/,
+        /could not be parsed into one mailbox/,
       );
     }
   });

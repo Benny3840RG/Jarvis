@@ -147,64 +147,6 @@ function plainMailbox(value: string): string | null {
   return text;
 }
 
-/** Q-encoded payload as bytes. A bad hex escape or a non-ASCII source character is malformed. */
-function qEncodedBytes(payload: string): Uint8Array | null {
-  const bytes: number[] = [];
-  for (let index = 0; index < payload.length; index += 1) {
-    const char = payload[index] ?? "";
-    if (char === "_") {
-      bytes.push(0x20);
-      continue;
-    }
-    if (char === "=") {
-      const hex = payload.slice(index + 1, index + 3);
-      if (!/^[0-9A-Fa-f]{2}$/u.test(hex)) return null;
-      bytes.push(Number.parseInt(hex, 16));
-      index += 2;
-      continue;
-    }
-    const code = char.codePointAt(0);
-    if (code === undefined || code > 0x7f) return null;
-    bytes.push(code);
-  }
-  return Uint8Array.from(bytes);
-}
-
-/** Padded base64 only. Node's decoder accepts bytes this rejects. */
-function bEncodedBytes(payload: string): Uint8Array | null {
-  if (payload.length === 0) return new Uint8Array();
-  if (payload.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/u.test(payload)) return null;
-  const padding = payload.endsWith("==") ? 2 : payload.endsWith("=") ? 1 : 0;
-  const decoded = Buffer.from(payload, "base64");
-  if (decoded.length !== (payload.length / 4) * 3 - padding) return null;
-  return decoded;
-}
-
-/**
- * Charsets the contact check will decode. Case is folded by the caller.
- * `utf8` is the no-hyphen alias of `utf-8`. Anything else refuses, including
- * UTF-16, UTF-7, `latin1`, and an RFC 2231 language suffix.
- */
-const CONTACT_CHARSETS = new Set(["us-ascii", "utf-8", "utf8", "iso-8859-1"]);
-
-function decodeEncodedWord(charset: string, encoding: string, payload: string): string | null {
-  const encodingName = encoding.toLowerCase();
-  const bytes =
-    encodingName === "q"
-      ? qEncodedBytes(payload)
-      : encodingName === "b"
-        ? bEncodedBytes(payload)
-        : null;
-  if (bytes === null) return null;
-  const name = charset.trim().toLowerCase();
-  if (name.includes("*") || name.includes("'") || !CONTACT_CHARSETS.has(name)) return null;
-  try {
-    return new TextDecoder(name, { fatal: true }).decode(bytes);
-  } catch {
-    return null;
-  }
-}
-
 function removeComments(value: string): string | null {
   let depth = 0;
   let out = "";
@@ -241,37 +183,37 @@ function unquoteDotAtomLocal(value: string): string | null {
   return `${inner}@${domain}`;
 }
 
-/**
- * Decodes every encoded word once, and only for an allowlisted charset.
- * A charset outside that list, a decode error, or a malformed word refuses the contact.
- */
-function decodeEncodedWords(value: string): string | null {
-  let out = "";
-  let index = 0;
-  while (index < value.length) {
-    const start = value.indexOf("=?", index);
-    if (start === -1) return out + value.slice(index);
-    out += value.slice(index, start);
-    const match = /^=\?([^?]*)\?([bBqQ])\?([^?]*)\?=/u.exec(value.slice(start));
-    if (!match?.[0]) return null;
-    const decoded = decodeEncodedWord(match[1] ?? "", match[2] ?? "", match[3] ?? "");
-    if (decoded === null) return null;
-    out += decoded;
-    index = start + match[0].length;
-  }
-  return out;
-}
+/** Format, bidi, and zero-width marks. Stripped before a contact is compared. */
+const CONTACT_MARKS = /[\p{Cf}\p{Bidi_Control}]/gu;
 
 /**
- * One decode, then NFKC and format-character removal.
- * A remaining encoded-word opener is refused. There is no second decode.
+ * Letters, digits, space, and the punctuation a stored Jarvis contact may use.
+ * `=` and `?` are excluded: client contacts are plain values, not MIME headers.
  */
-function normaliseContact(value: string): string | null {
-  const decoded = decodeEncodedWords(value);
-  if (decoded === null) return null;
-  const folded = decoded.normalize("NFKC").replace(/\p{Cf}/gu, "");
-  if (folded.includes("=?") || /=\?[^?]*\?[bBqQ]\?[^?]*\?=/u.test(folded)) return null;
-  return folded;
+const CONTACT_ALLOWED = new RegExp(String.raw`^[\p{L}\p{N} ._+\-@()<> ,;:'"/]*$`, "u");
+
+/**
+ * NFKC, then format/bidi/zero-width stripping, repeated until the string is unchanged.
+ * A value that does not reach a fixed point is unparseable.
+ */
+function foldContact(value: string): string | null {
+  let current = value;
+  for (let pass = 0; pass < 8; pass += 1) {
+    const next = current.normalize("NFKC").replace(CONTACT_MARKS, "");
+    if (next === current) return current;
+    current = next;
+  }
+  return null;
+}
+
+/** True when the folded contact is plain text. Checked before comments are removed. */
+function contactIsPlain(value: string): boolean {
+  return !value.includes("=") && !value.includes("?") && CONTACT_ALLOWED.test(value);
+}
+
+/** Letters and numbers only, lowercased. Used to spot a recipient local part. */
+function contactSkeleton(value: string): string {
+  return value.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
 }
 
 function unquoteQuotedAtoms(value: string): string {
@@ -280,10 +222,9 @@ function unquoteQuotedAtoms(value: string): string {
   });
 }
 
-/** True when already-normalised residue still holds an address, or the fold is invalid. */
+/** True when already-folded residue still holds an address, or the fold is invalid. */
 function residueContainsMailbox(value: string): boolean {
   if (value.trim().length === 0) return false;
-  if (value.includes("=?")) return true;
   const uncommented = removeComments(value.toLowerCase());
   if (uncommented === null) return true;
   return unquoteQuotedAtoms(uncommented).includes("@");
@@ -311,11 +252,10 @@ function singleAngleAddr(text: string): string | null {
 }
 
 /**
- * One mailbox in an already-normalised contact.
- * Plus-tags stay. More than one mailbox is null. This does not decode again.
+ * One mailbox in an already-folded plain contact.
+ * Plus-tags stay. More than one mailbox is null.
  */
 function exactMailbox(value: string): string | null {
-  if (value.includes("=?")) return null;
   const stripped = stripMailto(value.trim());
   const angled = singleAngleAddr(stripped);
   if (angled === null) return null;
@@ -357,9 +297,9 @@ function recipientAllowlist(environment: CommissioningEnvironment): ReadonlySet<
 
 /** Customer-contact key: exact mailbox with one `+tag` removed from the local part. */
 function contactKey(value: string): string | null {
-  const normalised = normaliseContact(value);
-  if (normalised === null) return null;
-  const mailbox = exactMailbox(normalised);
+  const folded = foldContact(value);
+  if (folded === null || !contactIsPlain(folded)) return null;
+  const mailbox = exactMailbox(folded);
   if (!mailbox) return null;
   const at = mailbox.lastIndexOf("@");
   const local = mailbox.slice(0, at);
@@ -489,139 +429,54 @@ function mailboxesHiddenInComments(value: string): string[] | "refuse" | "none" 
   return found.length === 0 ? "none" : found;
 }
 
-/** Letters and numbers only, lowercased. Used to spot a recipient hidden in punctuation. */
-function contactSkeleton(value: string): string {
-  return value.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
-}
-
-/** Depth above 1 is nested. A close with nothing open, or a leftover open, is unbalanced. */
-function parenthesisFault(value: string): boolean {
-  let depth = 0;
-  for (const char of value) {
-    if (char === "(") {
-      depth += 1;
-      if (depth > 1) return true;
-    } else if (char === ")") {
-      if (depth === 0) return true;
-      depth -= 1;
-    }
-  }
-  return depth !== 0;
-}
-
-function encodedOpenerCount(value: string): number {
-  let count = 0;
-  let index = 0;
-  while (index < value.length) {
-    const found = value.indexOf("=?", index);
-    if (found === -1) return count;
-    count += 1;
-    index = found + 2;
-  }
-  return count;
-}
-
-/**
- * `=` and `?` that are not already the contiguous opener `=?`.
- * Comment removal or whitespace removal that creates that opener is the same refusal.
- */
-function hiddenEncodedOpener(value: string): boolean {
-  if (!value.includes("=") || !value.includes("?")) return false;
-  const uncommented = removeComments(value);
-  if (uncommented === null) return true;
-  const tightened = value.replace(/\s+/gu, "");
-  const present = encodedOpenerCount(value);
-  if (present === 0) return true;
-  return encodedOpenerCount(uncommented) > present || encodedOpenerCount(tightened) > present;
-}
-
-/**
- * NFKC, format-character removal, comment removal, then one decode, then NFKC again.
- * A second run must not change the result.
- */
-function normaliseOnce(value: string): string | null {
-  const folded = value.normalize("NFKC").replace(/\p{Cf}/gu, "");
-  const uncommented = removeComments(folded);
-  if (uncommented === null) return null;
-  const decoded = decodeEncodedWords(uncommented);
-  if (decoded === null) return null;
-  const result = decoded.normalize("NFKC").replace(/\p{Cf}/gu, "");
-  if (result.includes("=?") || /=\?[^?]*\?[bBqQ]\?[^?]*\?=/u.test(result)) return null;
-  return result;
-}
-
-function pipelineStable(value: string): boolean {
-  const once = normaliseOnce(value);
-  if (once === null) return false;
-  return normaliseOnce(once) === once;
-}
-
-function skeletonThreat(value: string, nfkc: string, recipient: string): boolean {
+/** Local part of the recipient, folded the same way, then reduced to letters and numbers. */
+function recipientLocalSkeleton(recipient: string): string {
   const at = recipient.lastIndexOf("@");
-  if (at <= 0) return true;
-  const local = contactSkeleton(recipient.slice(0, at));
-  const full = contactSkeleton(recipient);
-  const decoded = normaliseOnce(value) ?? "";
-  const views = [contactSkeleton(value), contactSkeleton(nfkc), contactSkeleton(decoded)];
-  if (full.length > 0 && views.some((view) => view.includes(full))) return true;
-  if (nfkc.includes("=?")) return false;
-  return local.length > 0 && views.some((view) => view.includes(local));
+  if (at <= 0) return "";
+  const folded = foldContact(recipient.slice(0, at));
+  return contactSkeleton(folded ?? "");
 }
 
 /**
- * Order-independent refusal for a dev commissioning contact.
- * A contiguous encoded word that the single decoder consumes is left to the
- * existing comparison. Every other `=`/`?` arrangement, nested or unbalanced
- * parentheses, an unstable second pass, or a hidden recipient skeleton refuses.
+ * The recipient local part inside a contact that is not exactly that mailbox.
+ * An extracted mailbox equal to the recipient is a customer collision, not this refusal.
  */
-function contactFailsClosed(value: string, recipient: string): boolean {
-  const nfkc = value.normalize("NFKC");
-  const stripped = nfkc.replace(/\p{Cf}/gu, "");
-  if (
-    parenthesisFault(nfkc) ||
-    parenthesisFault(stripped) ||
-    hiddenEncodedOpener(nfkc) ||
-    hiddenEncodedOpener(stripped)
-  ) {
-    return true;
-  }
-  const disposition = contactForComparison(value);
-  if (
-    disposition !== "skip" &&
-    disposition !== "refuse" &&
-    disposition.mailbox.includes(recipient)
-  ) {
-    return false;
-  }
-  if (!pipelineStable(value)) return true;
-  if (disposition === "refuse") return false;
-  return skeletonThreat(value, stripped, recipient);
+function localPartThreat(folded: string, mailbox: string | null, recipient: string): boolean {
+  if (mailbox === recipient) return false;
+  const local = recipientLocalSkeleton(recipient);
+  return local.length > 0 && contactSkeleton(folded).includes(local);
 }
 
 /**
  * Phone numbers and names that contain no address are ignored.
- * Decode, NFKC, and format-character stripping run on the whole contact.
- * Every email-like token in that one string must be exactly one mailbox.
+ * The folded contact is checked before comments are removed. That same string
+ * is the only input to mailbox extraction and the skip decision.
+ * Zero mailboxes skip. Exactly one mailbox is compared. Anything else refuses.
  */
-function contactForComparison(value: string): "skip" | "refuse" | { mailbox: string } {
-  const folded = normaliseContact(value);
-  if (folded === null) return "refuse";
+function contactForComparison(
+  value: string,
+  recipient: string,
+): "skip" | "refuse" | { mailbox: string } {
+  const folded = foldContact(value);
+  if (folded === null || !contactIsPlain(folded)) return "refuse";
   const hidden = mailboxesHiddenInComments(folded);
   if (hidden === "refuse") return "refuse";
   const visible = exactMailbox(folded);
   if (visible) {
     if (hidden !== "none") return "refuse";
+    if (localPartThreat(folded, visible, recipient)) return "refuse";
     return { mailbox: visible };
   }
   const uncommented = removeComments(folded);
   if (uncommented === null) return "refuse";
   const residue = unquoteQuotedAtoms(uncommented);
   if (residue.includes("@") || residue.includes("<") || residue.includes(">")) return "refuse";
-  if (hidden === "none") return "skip";
+  if (hidden === "none") return localPartThreat(folded, null, recipient) ? "refuse" : "skip";
   if (hidden.length !== 1) return "refuse";
-  const mailbox = hidden[0];
-  if (mailbox === undefined) return "refuse";
-  return { mailbox };
+  const only = hidden[0];
+  if (only === undefined) return "refuse";
+  if (localPartThreat(folded, only, recipient)) return "refuse";
+  return { mailbox: only };
 }
 
 /**
@@ -636,10 +491,7 @@ export async function beginOutlookQuoteCommissioning(input: {
   const contacts = await input.loadClientContactValues();
   const emailContacts: string[] = [];
   for (const value of contacts) {
-    if (contactFailsClosed(value, plan.recipient)) {
-      throw refused("a client contact could not be parsed into one mailbox.");
-    }
-    const disposition = contactForComparison(value);
+    const disposition = contactForComparison(value, plan.recipient);
     if (disposition === "skip") continue;
     if (disposition === "refuse") {
       throw refused("a client contact could not be parsed into one mailbox.");

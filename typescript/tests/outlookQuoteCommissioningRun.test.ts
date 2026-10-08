@@ -286,15 +286,15 @@ describe("outlook quote commissioning run", () => {
     const cases = [
       {
         contact: "=?utf-8?q?3840zip=EF=BC=A0gmail.com?=",
-        pattern: /matches a client contact/u,
+        pattern: /could not be parsed into one mailbox/u,
       },
       {
         contact: "=?iso-8859-1?q?3840zip=40gmail.com?=",
-        pattern: /matches a client contact/u,
+        pattern: /could not be parsed into one mailbox/u,
       },
       {
         contact: "=?utf-8?q?3840zip=EF=B9=ABgmail.com?=",
-        pattern: /matches a client contact/u,
+        pattern: /could not be parsed into one mailbox/u,
       },
       {
         contact: "=?utf-8?b?Mzg0MHppcO+8oGdtYWlsLmNvbQ==?= <other@outlook.com>",
