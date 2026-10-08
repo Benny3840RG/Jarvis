@@ -297,6 +297,11 @@ faint leaders toward the side columns. The tactical node sketch is drawn over
 the lower-right coast. Dev Status and Hextrick Nams keep dim icon-and-rail
 rows until a real reading arrives.
 
+A later layout pass moved the tactical title to the lower-right of the stage,
+beside a scattered node network. The core is 420px so NOW and Next 3 sit clear
+of the ring. Status chips wrap inside the top bezel. The Core Analyzer shows
+the LIMITS reading once.
+
 ## Console 02 fidelity, second pass (2026-10-08)
 
 The focus frame is one viewport-filling bezel: thick weathered steel and brass,
