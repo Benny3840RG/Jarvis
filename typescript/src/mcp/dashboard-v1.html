@@ -1992,23 +1992,31 @@
           align-self: start;
         }
         body[data-console-view="focus"] .core-side .tac-plate {
-          right: 200px;
-          bottom: 258px;
-          width: 420px;
-          height: 176px;
+          position: absolute;
+          left: auto;
+          right: 28px;
+          bottom: 78px;
+          width: 228px;
+          height: 148px;
+          margin: 0;
+          overflow: hidden;
+          z-index: 4;
         }
         body[data-console-view="focus"] .core-side .tac-plate h2 {
           position: absolute;
-          right: 0;
-          bottom: 6px;
-          width: 118px;
+          right: 2px;
+          bottom: 0;
+          left: auto;
+          width: auto;
+          max-width: calc(100% - 4px);
           margin: 0;
           text-align: right;
           z-index: 3;
-          line-height: 1.15;
+          line-height: 1.1;
+          font-size: 12px;
         }
         body[data-console-view="focus"] .tac-chart {
-          inset: 4px 124px 4px 0;
+          inset: 0 0 30px 0;
           width: auto;
           height: auto;
           min-height: 0;
@@ -2016,9 +2024,10 @@
         body[data-console-view="focus"] .tac-chart path { stroke-width: 0.85px; }
         body[data-console-view="focus"] #tactical-caption {
           position: absolute;
-          right: 0;
-          bottom: 26px;
-          width: 118px;
+          right: 2px;
+          bottom: 15px;
+          left: auto;
+          width: auto;
           margin: 0;
           text-align: right;
         }
