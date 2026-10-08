@@ -20,12 +20,15 @@ repairing them. The allowlist is
 `JARVIS_OUTLOOK_COMMISSIONING_RECIPIENT_ALLOWLIST`, a comma-separated list of
 those same plain mailboxes in the shell or ignored `.env.local`. A missing or
 empty allowlist refuses the run, and the recipient must exactly match one
-entry. The client-contact check still runs after that. It normalises the contact
-with NFKC, then extracts every email-like token, including an address in
-parentheses or angle brackets. A phone number or a name with no mailbox does
-not abort the run. A value that looks like an address but is not exactly one
-mailbox refuses the run. A contact that is that mailbox, or whose text contains
-the recipient, also refuses the run. A `+tag` is ignored only when comparing the
+entry. The client-contact check still runs after that. It decodes every encoded word
+with that word's charset. An unknown charset, a decode error, or a malformed
+word refuses the run. NFKC and format-character removal, including zero-width
+characters, then apply to the whole decoded contact. Every email-like token in
+that one string is extracted the same way, including an address in parentheses,
+angle brackets, or the display-name residue. A phone number or a name with no
+mailbox does not abort the run. A value that looks like an address but is not
+exactly one mailbox refuses the run. A contact that is that mailbox, or whose
+text contains the recipient, also refuses the run. A `+tag` is ignored only when comparing the
 mailbox with client contacts. `JARVIS_OUTLOOK_COMMISSIONING_CONFIRM`
 must be exactly `non-customer`. `JARVIS_OUTLOOK_COMMISSIONING_PROJECT_KEY` must
 already be a Convex totality project. This kit does not create that project.

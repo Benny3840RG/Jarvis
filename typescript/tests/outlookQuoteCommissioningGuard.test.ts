@@ -515,6 +515,61 @@ describe("outlook quote commissioning guard", () => {
     }
   });
 
+  it("refuses a charset-decoded lookalike before anything is staged", async () => {
+    const recipient = "3840zip@gmail.com";
+    const environment = {
+      ...READY,
+      JARVIS_OUTLOOK_COMMISSIONING_RECIPIENT: recipient,
+      JARVIS_OUTLOOK_COMMISSIONING_RECIPIENT_ALLOWLIST: recipient,
+    };
+    const collisions = [
+      "=?utf-8?q?3840zip=EF=BC=A0gmail.com?=",
+      "=?utf-8?q?3840zip=EF=B9=ABgmail.com?=",
+      "3840zip@gmai\u200Bl.com",
+      "3840\u200Czip@gmail.com",
+      "3840zip@gmail\u2060.com",
+      "3840zip@gm\u00ADail.com",
+    ];
+    for (const contact of collisions) {
+      let staged = 0;
+      let sent = 0;
+      await assert.rejects(async () => {
+        const plan = await beginOutlookQuoteCommissioning({
+          environment,
+          loadClientContactValues: () => Promise.resolve([contact]),
+        });
+        staged += 1;
+        sent += 1;
+        void plan;
+      }, /matches a client contact/);
+      assert.equal(staged, 0, contact);
+      assert.equal(sent, 0, contact);
+    }
+
+    const unreadable = [
+      "=?not-a-charset?q?3840zip=40gmail.com?=",
+      "=?utf-8?q?=ZZ?=",
+      "=?utf-8?q?3840zip=40gmail.com",
+      "=?utf-8?b?Mzg0MHppcO+8oGdtYWlsLmNvbQ==?= <other@outlook.com>",
+      "<other@outlook.com> =?utf-8?b?Mzg0MHppcO+5q2dtYWlsLmNvbQ==?=",
+    ];
+    for (const contact of unreadable) {
+      let staged = 0;
+      let sent = 0;
+      await assert.rejects(async () => {
+        const plan = await beginOutlookQuoteCommissioning({
+          environment,
+          loadClientContactValues: () => Promise.resolve([contact]),
+        });
+        staged += 1;
+        sent += 1;
+        void plan;
+      }, /could not be parsed into one mailbox/);
+      assert.equal(staged, 0, contact);
+      assert.equal(sent, 0, contact);
+    }
+  });
+
   it("strips one unquoted CONVEX_DEPLOYMENT comment and still refuses production", () => {
     assert.equal(
       stripUnquotedTrailingComment("dev:outgoing-ram-798 # systemd kept this comment"),

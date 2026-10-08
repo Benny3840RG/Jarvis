@@ -281,6 +281,65 @@ describe("outlook quote commissioning run", () => {
     }
   });
 
+  it("creates nothing when an encoded lookalike hides the recipient", async () => {
+    const recipient = "3840zip@gmail.com";
+    const cases = [
+      {
+        contact: "=?utf-8?q?3840zip=EF=BC=A0gmail.com?=",
+        pattern: /matches a client contact/u,
+      },
+      {
+        contact: "=?utf-8?q?3840zip=EF=B9=ABgmail.com?=",
+        pattern: /matches a client contact/u,
+      },
+      {
+        contact: "=?utf-8?b?Mzg0MHppcO+8oGdtYWlsLmNvbQ==?= <other@outlook.com>",
+        pattern: /could not be parsed into one mailbox/u,
+      },
+      {
+        contact: "<other@outlook.com> =?utf-8?b?Mzg0MHppcO+5q2dtYWlsLmNvbQ==?=",
+        pattern: /could not be parsed into one mailbox/u,
+      },
+      { contact: "3840zip@gmai\u200Bl.com", pattern: /matches a client contact/u },
+      {
+        contact: "=?not-a-charset?q?3840zip=40gmail.com?=",
+        pattern: /could not be parsed into one mailbox/u,
+      },
+      { contact: "=?utf-8?q?=ZZ?=", pattern: /could not be parsed into one mailbox/u },
+    ];
+    for (const { contact, pattern } of cases) {
+      const calls: string[] = [];
+      await assert.rejects(
+        () =>
+          executeOutlookQuoteCommissioning(
+            {
+              ...READY,
+              JARVIS_OUTLOOK_COMMISSIONING_RECIPIENT: recipient,
+              JARVIS_OUTLOOK_COMMISSIONING_RECIPIENT_ALLOWLIST: recipient,
+            },
+            {
+              request: (input) => {
+                calls.push(input.method);
+                if (input.method === "GET" && input.path === "/api/v1/clients") {
+                  return Promise.resolve({
+                    status: 200,
+                    body: { data: [{ contacts: [{ value: contact }] }] },
+                  });
+                }
+                return Promise.reject(new Error(`unexpected write ${input.method} ${input.path}`));
+              },
+              loadProjectRevision: () => Promise.reject(new Error("project must not be read")),
+              createOutlookRuntime: () => {
+                throw new Error("runtime must not be created");
+              },
+            },
+          ),
+        pattern,
+      );
+      assert.deepEqual(calls, ["GET"], contact);
+    }
+  });
+
   it("refuses a named connection id before any write when named mode is off", async () => {
     const calls: string[] = [];
     await assert.rejects(

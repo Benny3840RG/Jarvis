@@ -147,24 +147,55 @@ function plainMailbox(value: string): string | null {
   return text;
 }
 
-function applyOneEncodedWord(value: string): string | null {
-  const matches = [...value.matchAll(/=\?([^?]*)\?([bBqQ])\?([^?]*)\?=/gu)];
-  if (matches.length > 1) return null;
-  const match = matches[0];
-  if (!match) return value;
-  const encoding = match[2]?.toLowerCase();
-  const payload = match[3] ?? "";
-  let decoded: string;
-  if (encoding === "q") {
-    decoded = payload.replaceAll("_", " ").replace(/=([0-9a-fA-F]{2})/gu, (_full, hex: string) => {
-      return String.fromCharCode(Number.parseInt(hex, 16));
-    });
-  } else if (encoding === "b") {
-    decoded = Buffer.from(payload, "base64").toString("utf8");
-  } else {
+/** Q-encoded payload as bytes. A bad hex escape or a non-ASCII source character is malformed. */
+function qEncodedBytes(payload: string): Uint8Array | null {
+  const bytes: number[] = [];
+  for (let index = 0; index < payload.length; index += 1) {
+    const char = payload[index] ?? "";
+    if (char === "_") {
+      bytes.push(0x20);
+      continue;
+    }
+    if (char === "=") {
+      const hex = payload.slice(index + 1, index + 3);
+      if (!/^[0-9A-Fa-f]{2}$/u.test(hex)) return null;
+      bytes.push(Number.parseInt(hex, 16));
+      index += 2;
+      continue;
+    }
+    const code = char.codePointAt(0);
+    if (code === undefined || code > 0x7f) return null;
+    bytes.push(code);
+  }
+  return Uint8Array.from(bytes);
+}
+
+/** Padded base64 only. Node's decoder accepts bytes this rejects. */
+function bEncodedBytes(payload: string): Uint8Array | null {
+  if (payload.length === 0) return new Uint8Array();
+  if (payload.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/u.test(payload)) return null;
+  const padding = payload.endsWith("==") ? 2 : payload.endsWith("=") ? 1 : 0;
+  const decoded = Buffer.from(payload, "base64");
+  if (decoded.length !== (payload.length / 4) * 3 - padding) return null;
+  return decoded;
+}
+
+function decodeEncodedWord(charset: string, encoding: string, payload: string): string | null {
+  const encodingName = encoding.toLowerCase();
+  const bytes =
+    encodingName === "q"
+      ? qEncodedBytes(payload)
+      : encodingName === "b"
+        ? bEncodedBytes(payload)
+        : null;
+  if (bytes === null) return null;
+  const name = charset.trim();
+  if (name.length === 0) return null;
+  try {
+    return new TextDecoder(name, { fatal: true }).decode(bytes);
+  } catch {
     return null;
   }
-  return value.replace(match[0], decoded);
 }
 
 function removeComments(value: string): string | null {
@@ -203,25 +234,32 @@ function unquoteDotAtomLocal(value: string): string | null {
   return `${inner}@${domain}`;
 }
 
+/**
+ * Decodes every encoded word with its declared charset. An unknown charset,
+ * a decode error, or a malformed word refuses the whole contact.
+ */
 function decodeEncodedWords(value: string): string | null {
-  let invalid = false;
-  const decoded = value.replace(
-    /=\?([^?]*)\?([bBqQ])\?([^?]*)\?=/gu,
-    (_full, _charset: string, encoding: string, payload: string) => {
-      const encodingName = encoding.toLowerCase();
-      if (encodingName === "q") {
-        return payload
-          .replaceAll("_", " ")
-          .replace(/=([0-9a-fA-F]{2})/gu, (_hex, digits: string) => {
-            return String.fromCharCode(Number.parseInt(digits, 16));
-          });
-      }
-      if (encodingName === "b") return Buffer.from(payload, "base64").toString("utf8");
-      invalid = true;
-      return "";
-    },
-  );
-  return invalid ? null : decoded;
+  let out = "";
+  let index = 0;
+  while (index < value.length) {
+    const start = value.indexOf("=?", index);
+    if (start === -1) return out + value.slice(index);
+    out += value.slice(index, start);
+    const match = /^=\?([^?]*)\?([bBqQ])\?([^?]*)\?=/u.exec(value.slice(start));
+    if (!match?.[0]) return null;
+    const decoded = decodeEncodedWord(match[1] ?? "", match[2] ?? "", match[3] ?? "");
+    if (decoded === null) return null;
+    out += decoded;
+    index = start + match[0].length;
+  }
+  return out;
+}
+
+/** NFKC, then drop format characters such as zero-width spaces, after decoding. */
+function normaliseContact(value: string): string | null {
+  const decoded = decodeEncodedWords(value);
+  if (decoded === null) return null;
+  return decoded.normalize("NFKC").replace(/\p{Cf}/gu, "");
 }
 
 function unquoteQuotedAtoms(value: string): string {
@@ -230,12 +268,12 @@ function unquoteQuotedAtoms(value: string): string {
   });
 }
 
-/** Fold comments, encoded-words, and quoted locals. True when an address remains or the fold is invalid. */
+/** True when normalised residue still holds an address, or the fold is invalid. */
 function residueContainsMailbox(value: string): boolean {
   if (value.trim().length === 0) return false;
-  const decoded = decodeEncodedWords(value);
-  if (decoded === null) return true;
-  const uncommented = removeComments(decoded.toLowerCase());
+  const normalised = normaliseContact(value);
+  if (normalised === null) return true;
+  const uncommented = removeComments(normalised.toLowerCase());
   if (uncommented === null) return true;
   return unquoteQuotedAtoms(uncommented).includes("@");
 }
@@ -262,17 +300,16 @@ function singleAngleAddr(text: string): string | null {
 }
 
 /**
- * Contact mailbox after one encoded-word, comment removal, a dot-atom unquote,
- * and every trailing dot. Plus-tags stay. More than one mailbox is null.
+ * One mailbox after charset decoding, NFKC, and format-character removal.
+ * Plus-tags stay. More than one mailbox is null.
  */
 function exactMailbox(value: string): string | null {
-  const stripped = stripMailto(value.trim());
+  const normalised = normaliseContact(value);
+  if (normalised === null) return null;
+  const stripped = stripMailto(normalised.trim());
   const angled = singleAngleAddr(stripped);
   if (angled === null) return null;
-  let text = stripMailto(angled.trim());
-  const decoded = applyOneEncodedWord(text.trim());
-  if (decoded === null) return null;
-  text = decoded.toLowerCase();
+  let text = stripMailto(angled.trim()).toLowerCase();
   const uncommented = removeComments(text);
   if (uncommented === null) return null;
   if ((uncommented.match(/@/gu) ?? []).length !== 1) return null;
@@ -442,17 +479,15 @@ function mailboxesHiddenInComments(value: string): string[] | "refuse" | "none" 
 
 /**
  * Phone numbers and names that contain no address are ignored.
- * NFKC folds lookalike at-signs. Every email-like token, including one
- * inside comments or brackets, must be exactly one mailbox.
+ * Decode, NFKC, and format-character stripping run on the whole contact.
+ * Every email-like token in that one string must be exactly one mailbox.
  */
 function contactForComparison(value: string): "skip" | "refuse" | { mailbox: string } {
-  const normalised = value.normalize("NFKC");
-  const decoded = decodeEncodedWords(normalised);
-  if (decoded === null) return "refuse";
-  const folded = decoded.normalize("NFKC");
-  const visible = exactMailbox(normalised);
+  const folded = normaliseContact(value);
+  if (folded === null) return "refuse";
   const hidden = mailboxesHiddenInComments(folded);
   if (hidden === "refuse") return "refuse";
+  const visible = exactMailbox(folded);
   if (visible) {
     if (hidden !== "none") return "refuse";
     return { mailbox: visible };
