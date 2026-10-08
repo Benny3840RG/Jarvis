@@ -284,6 +284,19 @@ Decisions:
 Next: the nav-badge fold-in (active∩scheduled dedup) shipped — see the booked-jobs nav badge
 entry above.
 
+## Console 02 polish (2026-10-08)
+
+The focus header sits on the top bezel: brand at the left, title in the
+centre, section nav under the title, status chips at the right. NOW and Next 3
+are a short pair above the analyzer, clear of the left column and the tactical
+sketch. Instrument plates show one `UNKNOWN` or `NO SIGNAL` tag. The longer
+notes (ornament traces, parked needles, uninvented names) stay on the element
+title and in this file's operator HUD contract. The bezel is darker gunmetal
+with a brass lip and a heavier glass vignette. Core bloom is tighter, with
+faint leaders toward the side columns. The tactical node sketch is drawn over
+the lower-right coast. Dev Status and Hextrick Nams keep dim icon-and-rail
+rows until a real reading arrives.
+
 ## Console 02 fidelity, second pass (2026-10-08)
 
 The focus frame is one viewport-filling bezel: thick weathered steel and brass,

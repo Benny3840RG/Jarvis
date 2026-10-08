@@ -68,7 +68,8 @@ Console 02 plates that have no Jarvis meter stay parked. Predictor Core draws
 task counts by category only after `tasks` arrives. Waveform Analysis has no
 signal, so the line stays flat. Host, memory, store, and link dials, System
 Load, and System Efficiency have no host meter, so the needles stay parked and
-the caption stays `UNKNOWN`. System Overview uses layer readiness, persistence
+the face stays `UNKNOWN`. Longer honesty notes sit on the control title, not
+on the plate. System Overview uses layer readiness, persistence
 reachability, and `zState` as words, not invented percents. Data List is
 `status.integrations` stages. The numeric tiles are active tasks, reminders,
 and inbox item count. Network Integrity shows `status.version`. Tactical

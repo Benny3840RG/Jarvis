@@ -2,22 +2,14 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 
-const widget = readFileSync(
-  new URL("../src/mcp/dashboard-v1.html", import.meta.url),
-  "utf8",
-);
-const fidelityStyle = widget.match(
-  /<style id="console-02-fidelity">([\s\S]*?)<\/style>/,
-)?.[1];
+const widget = readFileSync(new URL("../src/mcp/dashboard-v1.html", import.meta.url), "utf8");
+const fidelityStyle = widget.match(/<style id="console-02-fidelity">([\s\S]*?)<\/style>/)?.[1];
 
 describe("Console 02 presentation regressions", () => {
   it("keeps the added glass and ornament layers non-interactive", () => {
     assert.ok(fidelityStyle, "Console 02 fidelity stylesheet is missing");
     assert.match(widget, /<div class="crt-glass" aria-hidden="true"><\/div>/);
-    assert.match(
-      fidelityStyle,
-      /\.crt-glass\s*\{[^}]*pointer-events:\s*none\s*;/,
-    );
+    assert.match(fidelityStyle, /\.crt-glass\s*\{[^}]*pointer-events:\s*none\s*;/);
     assert.match(fidelityStyle, /\.ornament\s*\{[^}]*pointer-events:\s*none\s*;/);
   });
 
