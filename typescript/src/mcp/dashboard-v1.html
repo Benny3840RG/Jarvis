@@ -1562,7 +1562,234 @@
       }
     </style>
 
-  </head>
+  
+    <style id="console-02-pass2">
+      /* Second presentation pass. Still no invented readings. */
+      html, body { background: #12100e; }
+      .rivets { display: none; }
+      .brand-legal {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip: rect(0 0 0 0);
+      }
+      .crt-glass {
+        inset: 70px 52px 68px;
+        border-radius: 28px;
+        background:
+          radial-gradient(ellipse 80% 22% at 50% 0%, rgba(255, 236, 210, 0.16), transparent 70%),
+          radial-gradient(ellipse 78% 70% at 50% 48%, transparent 42%, rgba(0, 0, 0, 0.42) 100%);
+        box-shadow: inset 0 0 90px rgba(0, 0, 0, 0.42), inset 0 0 0 1px rgba(255, 220, 180, 0.14);
+      }
+      @media (min-width: 1400px) {
+        body[data-console-view="focus"] .hud-frame,
+        body[data-console-view="focus"] .hud-frame::before,
+        body[data-console-view="focus"] .hud-frame::after {
+          border: 0;
+          box-shadow: none;
+          background: transparent;
+          outline: 0;
+        }
+        body[data-console-view="focus"][data-backdrop-severity="UNKNOWN"] .hud-photo {
+          filter: saturate(0.8) brightness(1.14) contrast(1.06) hue-rotate(20deg);
+        }
+        body[data-console-view="focus"][data-backdrop-severity="OK"] .hud-photo {
+          filter: saturate(0.78) brightness(1.08) contrast(1.02) hue-rotate(10deg);
+        }
+        body[data-console-view="focus"][data-backdrop-severity="WARN"] .hud-photo {
+          filter: sepia(0.18) saturate(0.62) brightness(0.68) contrast(1.04);
+        }
+        body[data-console-view="focus"][data-backdrop-severity="STOPPED"] .hud-photo {
+          filter: saturate(0.4) brightness(0.52) hue-rotate(8deg);
+        }
+        body[data-console-view="focus"] .hud-vignette {
+          background:
+            linear-gradient(180deg, rgba(10, 18, 28, 0.12), rgba(8, 36, 42, 0.1) 55%, rgba(4, 16, 22, 0.2)),
+            radial-gradient(ellipse 86% 76% at 50% 48%, rgba(4, 12, 18, 0.0), rgba(2, 8, 12, 0.22) 100%);
+        }
+        body[data-console-view="focus"] .shell { z-index: 10; padding: 118px 96px 210px; }
+        body[data-console-view="focus"] .console-deck {
+          grid-template-columns: minmax(250px, 0.78fr) minmax(0, 1.72fr) minmax(230px, 0.74fr);
+        }
+        body[data-console-view="focus"] .console-deck .plate {
+          background-color: rgba(7, 24, 32, 0.3);
+          border: 1px solid rgba(232, 190, 130, 0.55);
+          border-radius: 16px;
+          box-shadow:
+            inset 0 0 0 1px rgba(120, 170, 170, 0.08),
+            0 0 14px rgba(255, 150, 60, 0.08);
+        }
+        body[data-console-view="focus"] .plate h2,
+        body[data-console-view="focus"] .plate h3,
+        body[data-console-view="focus"] .analyzer-plate h3 {
+          border-bottom: 0;
+          padding-bottom: 0;
+          font-variant: small-caps;
+          font-stretch: condensed;
+          letter-spacing: 0.2em;
+          font-size: 13px;
+          color: #f3e2c0;
+          text-shadow: 0 0 8px rgba(255, 176, 90, 0.35);
+        }
+        body[data-console-view="focus"] .plate h2::before,
+        body[data-console-view="focus"] .analyzer-plate h3::before { display: none; }
+        body[data-console-view="focus"] .chart-grid {
+          stroke: rgba(186, 206, 198, 0.38);
+          stroke-width: 1px;
+        }
+        body[data-console-view="focus"] .chart .ornament { opacity: 0.42; }
+        body[data-console-view="focus"] .tick-row .track {
+          height: 6px;
+          background: repeating-linear-gradient(90deg, rgba(196, 176, 140, 0.28) 0 1px, transparent 1px 7px);
+          box-shadow: inset 0 0 0 1px rgba(232, 200, 150, 0.16);
+        }
+        body[data-console-view="focus"] .tick-row .slot,
+        body[data-console-view="focus"] .tick-row .check { opacity: 0.4; }
+        body[data-console-view="focus"] .overview-plate {
+          background: transparent;
+          border: 0;
+          box-shadow: none;
+          overflow: visible;
+          grid-template-rows: auto auto auto minmax(0, 1fr) 0px;
+        }
+        body[data-console-view="focus"] .overview-row { gap: 8px; }
+        body[data-console-view="focus"] .ring-gauge svg { width: 118px; height: 118px; }
+        body[data-console-view="focus"] .ring-gauge b {
+          font-size: 13px;
+          letter-spacing: 0.08em;
+          color: #f6ead4;
+          text-shadow: none;
+        }
+        body[data-console-view="focus"] .core-stage {
+          width: 600px;
+          height: 600px;
+          max-width: none;
+          max-height: none;
+          aspect-ratio: auto;
+          z-index: 1;
+        }
+        body[data-console-view="focus"] .core-stage::before {
+          inset: -10%;
+          background: radial-gradient(circle, rgba(255, 150, 48, 0.34), rgba(255, 90, 16, 0.05) 46%, transparent 68%);
+        }
+        body[data-console-view="focus"] .core-cross {
+          position: absolute;
+          left: 50%;
+          top: 50%;
+          width: 920px;
+          height: 1px;
+          transform: translate(-50%, -50%);
+          background: linear-gradient(90deg, transparent, rgba(255, 186, 110, 0.45), transparent);
+          pointer-events: none;
+          z-index: 0;
+        }
+        body[data-console-view="focus"] .core-cross::before {
+          content: "";
+          position: absolute;
+          left: 50%;
+          top: 50%;
+          width: 1px;
+          height: 640px;
+          transform: translate(-50%, -50%);
+          background: linear-gradient(transparent, rgba(255, 186, 110, 0.4), transparent);
+        }
+        body[data-console-view="focus"] .core-side .tac-plate {
+          position: absolute;
+          left: 4%;
+          right: 4%;
+          bottom: 0;
+          height: 132px;
+          background: transparent;
+          border: 0;
+          box-shadow: none;
+          z-index: 2;
+          pointer-events: none;
+        }
+        body[data-console-view="focus"] .core-side .tac-plate h2,
+        body[data-console-view="focus"] .core-side .tac-plate p {
+          text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
+        }
+        body[data-console-view="focus"] .tac-chart path { stroke-width: 2.2px; }
+        body[data-console-view="focus"] .now-strip {
+          position: fixed;
+          left: 300px;
+          right: 300px;
+          bottom: 236px;
+          z-index: 13;
+          max-height: 46px;
+        }
+        body[data-console-view="focus"] .console-lower {
+          position: fixed;
+          z-index: 14;
+          left: 70px;
+          right: 70px;
+          bottom: 18px;
+          height: 228px;
+          margin: 0;
+          grid-template-columns: 250px minmax(0, 1fr) 250px;
+          pointer-events: none;
+        }
+        body[data-console-view="focus"] .gauge-face {
+          width: 252px;
+          height: 252px;
+          z-index: 12;
+          pointer-events: auto;
+          background:
+            radial-gradient(circle at 50% 36%, #6a5436 0%, #1c140e 62%, #0c0a08 78%);
+        }
+        body[data-console-view="focus"] .gauge-face svg {
+          width: 228px;
+          height: 228px;
+          margin: 12px auto 0;
+        }
+        body[data-console-view="focus"] .analyzer-plate {
+          height: 210px;
+          pointer-events: auto;
+          background:
+            linear-gradient(180deg, #4a4034 0%, #241e18 18%, #14110e 100%);
+          border-color: #c4a36a;
+        }
+        body[data-console-view="focus"] .analyzer-plate h3,
+        body[data-console-view="focus"] .analyzer-row span,
+        body[data-console-view="focus"] .analyzer-row b,
+        body[data-console-view="focus"] #totality-bar-label {
+          color: #f0e2c4;
+        }
+        body[data-console-view="focus"] .analyzer-row { position: relative; }
+        body[data-console-view="focus"] .analyzer-row .slider {
+          width: 16px;
+          flex: 0 0 92px;
+          height: 92px;
+          max-height: 92px;
+          border-radius: 6px;
+          background: repeating-linear-gradient(#070605 0 3px, #1c1814 3px 6px);
+          box-shadow: inset 0 0 0 1px #8a7a5c, inset 0 3px 5px rgba(0, 0, 0, 0.8);
+        }
+        body[data-console-view="focus"] .analyzer-row .slider::after {
+          width: 22px;
+          height: 8px;
+          border-radius: 2px;
+          background: linear-gradient(180deg, #f7f4ee, #b7b2a8 45%, #5c5954);
+          box-shadow: inset 0 1px 0 #fff, 0 1px 2px rgba(0, 0, 0, 0.6);
+        }
+        body[data-console-view="focus"] .fader-scale {
+          position: absolute;
+          left: calc(50% - 34px);
+          top: 30px;
+          height: 92px;
+          display: flex;
+          flex-direction: column;
+          justify-content: space-between;
+          font-family: "Rajdhani", Inter, sans-serif;
+          font-size: 9px;
+          letter-spacing: 0.04em;
+          color: #d9c7a4;
+          pointer-events: none;
+        }
+      }
+    </style>
+</head>
   <body data-backdrop-severity="UNKNOWN" data-console-view="focus"><!-- JARVIS // OPERATOR CONSOLE · LANDSCAPE COMMAND CENTRE -->
     <canvas id="hud-backdrop" class="hud-backdrop" aria-hidden="true"></canvas>
     <div class="hud-vignette" aria-hidden="true"></div>
@@ -1570,37 +1797,37 @@
     <svg class="bezel-art" viewBox="0 0 1920 1080" preserveAspectRatio="none" aria-hidden="true">
       <defs>
         <linearGradient id="frame-steel" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stop-color="#6a5840"/>
-          <stop offset="0.08" stop-color="#2a2118"/>
-          <stop offset="0.2" stop-color="#14100c"/>
-          <stop offset="0.5" stop-color="#3a2e22"/>
-          <stop offset="0.78" stop-color="#100e0c"/>
-          <stop offset="1" stop-color="#4a3c2c"/>
+          <stop offset="0" stop-color="#d5c4aa"/>
+          <stop offset="0.05" stop-color="#7a6c5c"/>
+          <stop offset="0.14" stop-color="#3e362e"/>
+          <stop offset="0.46" stop-color="#5a5046"/>
+          <stop offset="0.78" stop-color="#2c261f"/>
+          <stop offset="1" stop-color="#a89880"/>
         </linearGradient>
-        <linearGradient id="frame-brass" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stop-color="#f0d7a4"/>
-          <stop offset="0.35" stop-color="#8a6840"/>
-          <stop offset="0.7" stop-color="#e7c98a"/>
-          <stop offset="1" stop-color="#5a4024"/>
+        <linearGradient id="frame-brass" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stop-color="#6a5434"/>
+          <stop offset="0.4" stop-color="#e7d3a4"/>
+          <stop offset="0.7" stop-color="#8a6840"/>
+          <stop offset="1" stop-color="#f0e2c4"/>
         </linearGradient>
         <radialGradient id="rivet-face" cx="35%" cy="30%" r="65%">
-          <stop offset="0" stop-color="#f6e6c4"/>
-          <stop offset="0.35" stop-color="#a88448"/>
-          <stop offset="0.72" stop-color="#3a2a18"/>
-          <stop offset="1" stop-color="#120e0a"/>
+          <stop offset="0" stop-color="#f6ead4"/>
+          <stop offset="0.4" stop-color="#8d7348"/>
+          <stop offset="0.78" stop-color="#2a2118"/>
+          <stop offset="1" stop-color="#0c0a08"/>
         </radialGradient>
       </defs>
-      <path fill="url(#frame-steel)" fill-rule="evenodd" d="M36 6 H1884 A30 30 0 0 1 1914 36 V1044 A30 30 0 0 1 1884 1074 H36 A30 30 0 0 1 6 1044 V36 A30 30 0 0 1 36 6 Z M92 84 H1828 A18 18 0 0 1 1846 102 V978 A18 18 0 0 1 1828 996 H92 A18 18 0 0 1 74 978 V102 A18 18 0 0 1 92 84 Z"/>
-      <path fill="none" stroke="url(#frame-brass)" stroke-width="7" d="M48 18 H1872 A18 18 0 0 1 1890 36 V1044 A18 18 0 0 1 1872 1062 H48 A18 18 0 0 1 30 1044 V36 A18 18 0 0 1 48 18 Z"/>
-      <path fill="none" stroke="#1a140e" stroke-width="16" d="M92 84 H1828 A18 18 0 0 1 1846 102 V978 A18 18 0 0 1 1828 996 H92 A18 18 0 0 1 74 978 V102 A18 18 0 0 1 92 84 Z"/>
-      <path fill="none" stroke="#e7d3a4" stroke-width="2" opacity="0.85" d="M100 92 H1820 A10 10 0 0 1 1830 102 V970"/>
-      <path fill="none" stroke="#f6ead0" stroke-width="1.2" opacity="0.55" d="M70 14 H1850"/>
-      <g fill="url(#rivet-face)" stroke="#1a120c" stroke-width="1">
-        <circle cx="150" cy="44" r="7"/><circle cx="280" cy="44" r="7"/><circle cx="410" cy="44" r="7"/><circle cx="540" cy="44" r="7"/>
-        <circle cx="1380" cy="44" r="7"/><circle cx="1510" cy="44" r="7"/><circle cx="1640" cy="44" r="7"/><circle cx="1770" cy="44" r="7"/>
-        <circle cx="150" cy="1036" r="7"/><circle cx="360" cy="1036" r="7"/><circle cx="1560" cy="1036" r="7"/><circle cx="1770" cy="1036" r="7"/>
-        <circle cx="40" cy="180" r="7"/><circle cx="40" cy="340" r="7"/><circle cx="40" cy="520" r="7"/><circle cx="40" cy="700" r="7"/><circle cx="40" cy="880" r="7"/>
-        <circle cx="1880" cy="180" r="7"/><circle cx="1880" cy="340" r="7"/><circle cx="1880" cy="520" r="7"/><circle cx="1880" cy="700" r="7"/><circle cx="1880" cy="880" r="7"/>
+      <path fill="url(#frame-steel)" fill-rule="evenodd" d="M0 0 H1920 V1080 H0 Z M118 102 H1802 A40 40 0 0 1 1842 142 V930 A40 40 0 0 1 1802 970 H118 A40 40 0 0 1 78 930 V142 A40 40 0 0 1 118 102 Z"/>
+      <path fill="none" stroke="#1a140e" stroke-width="3" d="M118 102 H1802 A40 40 0 0 1 1842 142 V930 A40 40 0 0 1 1802 970 H118 A40 40 0 0 1 78 930 V142 A40 40 0 0 1 118 102 Z"/>
+      <path fill="none" stroke="url(#frame-brass)" stroke-width="3" d="M104 88 H1816 A48 48 0 0 1 1864 136 V936 A48 48 0 0 1 1816 984 H104 A48 48 0 0 1 56 936 V136 A48 48 0 0 1 104 88 Z"/>
+      <path fill="none" stroke="#f6ead0" stroke-width="1.2" opacity="0.55" d="M18 10 H1902"/>
+      <path fill="none" stroke="#1a140e" stroke-width="2" opacity="0.8" d="M0 0 H1920"/>
+      <g fill="url(#rivet-face)" stroke="#120e0a" stroke-width="1">
+        <circle cx="120" cy="38" r="6.5"/><circle cx="250" cy="38" r="6.5"/><circle cx="380" cy="38" r="6.5"/><circle cx="510" cy="38" r="6.5"/>
+        <circle cx="1410" cy="38" r="6.5"/><circle cx="1540" cy="38" r="6.5"/><circle cx="1670" cy="38" r="6.5"/><circle cx="1800" cy="38" r="6.5"/>
+        <circle cx="140" cy="1042" r="6.5"/><circle cx="340" cy="1042" r="6.5"/><circle cx="1580" cy="1042" r="6.5"/><circle cx="1780" cy="1042" r="6.5"/>
+        <circle cx="30" cy="160" r="6.5"/><circle cx="30" cy="320" r="6.5"/><circle cx="30" cy="500" r="6.5"/><circle cx="30" cy="680" r="6.5"/><circle cx="30" cy="860" r="6.5"/>
+        <circle cx="1890" cy="160" r="6.5"/><circle cx="1890" cy="320" r="6.5"/><circle cx="1890" cy="500" r="6.5"/><circle cx="1890" cy="680" r="6.5"/><circle cx="1890" cy="860" r="6.5"/>
       </g>
     </svg>
     <div class="bezel-lip" aria-hidden="true"></div>
@@ -1620,7 +1847,7 @@
             <svg class="mark tree-mark" viewBox="0 0 64 64" aria-hidden="true"><path d="M30 54 C30 42 29 36 32 28 C35 36 34 42 34 54 Z" fill="#6b4424"/><path d="M32 30 C22 26 12 20 12 10 C22 12 28 20 32 28 Z" fill="#c4a574"/><path d="M32 30 C42 24 54 16 52 8 C42 12 36 20 32 28 Z" fill="#e7d3a4"/><ellipse cx="46" cy="18" rx="6" ry="3.2" fill="#1a140e" transform="rotate(-16 46 18)"/><path d="M42 17 h4 M45 19 h4" stroke="#ff7a18" stroke-width="1.4" stroke-linecap="round"/></svg>
             <div class="plaque">
               <p class="brand-kicker">THE BEEZ TREEZ</p>
-              <p><b>Beez Treez</b> Property Solutions</p>
+              <p><b class="brand-legal">Beez Treez</b> Property Solutions</p>
             </div>
           </div>
             <nav class="panel green team-nav" aria-label="Command centre sections">
@@ -1728,6 +1955,7 @@
                       </div>
                       <div class="core-row">
                         <div class="core-stage">
+                        <div class="core-cross" aria-hidden="true"></div>
                         <svg class="core-rings" viewBox="0 0 400 400" aria-hidden="true">
   <defs>
     <filter id="core-glow" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="3.2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
@@ -1758,13 +1986,13 @@
   <circle cx="200" cy="200" r="102" fill="none" stroke="#000" stroke-width="3" opacity="0.7"/>
   <circle cx="200" cy="200" r="98" fill="none" stroke="rgba(255,186,110,0.22)" stroke-width="1"/>
   <svg class="core-emblem" x="118" y="112" width="164" height="176" viewBox="0 0 164 176">
-    <path d="M78 168 C74 132 70 108 80 86 C90 108 88 132 86 168 Z" fill="#5c3a1e"/>
-    <path d="M80 96 C70 78 48 70 36 78" fill="none" stroke="#6b4424" stroke-width="3"/>
-    <path d="M80 90 C92 72 118 64 132 74" fill="none" stroke="#6b4424" stroke-width="3"/>
-    <path d="M80 108 C64 100 46 108 34 124" fill="none" stroke="#6b4424" stroke-width="2.5"/>
-    <path d="M82 104 C98 96 122 104 136 118" fill="none" stroke="#6b4424" stroke-width="2.5"/>
-    <path d="M78 78 C74 58 60 46 48 40" fill="none" stroke="#8a5a30" stroke-width="2.4"/>
-    <path d="M84 76 C96 56 118 46 132 42" fill="none" stroke="#8a5a30" stroke-width="2.4"/>
+    <path d="M78 168 C74 132 70 108 80 86 C90 108 88 132 86 168 Z" fill="#f0e2c8"/>
+    <path d="M80 96 C70 78 48 70 36 78" fill="none" stroke="#f6ead4" stroke-width="3"/>
+    <path d="M80 90 C92 72 118 64 132 74" fill="none" stroke="#f6ead4" stroke-width="3"/>
+    <path d="M80 108 C64 100 46 108 34 124" fill="none" stroke="#f6ead4" stroke-width="2.5"/>
+    <path d="M82 104 C98 96 122 104 136 118" fill="none" stroke="#f6ead4" stroke-width="2.5"/>
+    <path d="M78 78 C74 58 60 46 48 40" fill="none" stroke="#fff6e8" stroke-width="2.4"/>
+    <path d="M84 76 C96 56 118 46 132 42" fill="none" stroke="#fff6e8" stroke-width="2.4"/>
     <ellipse cx="36" cy="74" rx="14" ry="8" fill="#c4a574" transform="rotate(-24 36 74)"/>
     <ellipse cx="48" cy="36" rx="12" ry="7" fill="#e7d3a4" transform="rotate(-18 48 36)"/>
     <ellipse cx="132" cy="70" rx="15" ry="8" fill="#e7d3a4" transform="rotate(20 132 70)"/>
@@ -1898,24 +2126,24 @@
                 <div class="console-lower">
                   <section class="plate gauge-face">
                     <span>SYSTEM LOAD</span>
-                    <svg class="analogue" viewBox="0 0 160 160" aria-hidden="true"><circle cx="80" cy="80" r="78" fill="#120e0a"/><circle cx="80" cy="80" r="76" fill="#f3e6c4"/><circle cx="80" cy="80" r="71" fill="#8d6a3a"/><circle cx="80" cy="80" r="64" fill="#1a120c"/><circle cx="80" cy="80" r="60" fill="#efe6d2"/><ellipse cx="54" cy="38" rx="30" ry="13" fill="rgba(255,255,255,0.46)" transform="rotate(-28 54 38)"/><ellipse cx="102" cy="112" rx="16" ry="6" fill="rgba(255,255,255,0.14)" transform="rotate(18 102 112)"/><circle cx="80" cy="80" r="58" fill="none" stroke="#c4a36a" stroke-width="2"/><line x1="37.1" y1="116.0" x2="44.8" y2="110.0" stroke="#3a2e1c" stroke-width="1.6"/><line x1="25.7" y1="93.5" x2="31.5" y2="92.1" stroke="#3a2e1c" stroke-width="0.8"/><line x1="25.2" y1="68.4" x2="35.0" y2="70.4" stroke="#3a2e1c" stroke-width="1.6"/><line x1="35.9" y1="45.5" x2="40.6" y2="49.2" stroke="#3a2e1c" stroke-width="0.8"/><line x1="55.5" y1="29.7" x2="59.8" y2="38.7" stroke="#3a2e1c" stroke-width="1.6"/><line x1="80.0" y1="24.0" x2="80.0" y2="30.0" stroke="#3a2e1c" stroke-width="0.8"/><line x1="104.5" y1="29.7" x2="100.2" y2="38.7" stroke="#3a2e1c" stroke-width="1.6"/><line x1="124.1" y1="45.5" x2="119.4" y2="49.2" stroke="#3a2e1c" stroke-width="0.8"/><line x1="134.8" y1="68.4" x2="125.0" y2="70.4" stroke="#3a2e1c" stroke-width="1.6"/><line x1="134.3" y1="93.5" x2="128.5" y2="92.1" stroke="#3a2e1c" stroke-width="0.8"/><line x1="122.9" y1="116.0" x2="115.2" y2="110.0" stroke="#3a2e1c" stroke-width="1.6"/><text x="50.9" y="104.4" text-anchor="middle" dominant-baseline="central" font-size="8" fill="#2c2416" font-family="sans-serif">0</text><text x="42.8" y="72.1" text-anchor="middle" dominant-baseline="central" font-size="8" fill="#2c2416" font-family="sans-serif">20</text><text x="63.3" y="45.8" text-anchor="middle" dominant-baseline="central" font-size="8" fill="#2c2416" font-family="sans-serif">40</text><text x="96.7" y="45.8" text-anchor="middle" dominant-baseline="central" font-size="8" fill="#2c2416" font-family="sans-serif">60</text><text x="117.2" y="72.1" text-anchor="middle" dominant-baseline="central" font-size="8" fill="#2c2416" font-family="sans-serif">80</text><text x="109.1" y="104.4" text-anchor="middle" dominant-baseline="central" font-size="8" fill="#2c2416" font-family="sans-serif">100</text><line x1="80" y1="80" x2="57" y2="113" stroke="#1a140e" stroke-width="2.2" stroke-linecap="round"/><circle cx="80" cy="80" r="5" fill="#c47b4a" stroke="#3a2c18"/><ellipse cx="58" cy="46" rx="26" ry="12" fill="rgba(255,255,255,0.35)" transform="rotate(-28 58 46)"/></svg>
+                    <svg class="analogue" viewBox="0 0 160 160" aria-hidden="true"><circle cx="80" cy="80" r="78" fill="#120e0a"/><circle cx="80" cy="80" r="76" fill="#f3e6c4"/><circle cx="80" cy="80" r="71" fill="#8d6a3a"/><circle cx="80" cy="80" r="64" fill="#1a120c"/><circle cx="80" cy="80" r="60" fill="#efe6d2"/><ellipse cx="54" cy="38" rx="30" ry="13" fill="rgba(255,255,255,0.46)" transform="rotate(-28 54 38)"/><ellipse cx="102" cy="112" rx="16" ry="6" fill="rgba(255,255,255,0.14)" transform="rotate(18 102 112)"/><circle cx="80" cy="80" r="58" fill="none" stroke="#c4a36a" stroke-width="2"/><line x1="37.1" y1="116.0" x2="44.8" y2="110.0" stroke="#3a2e1c" stroke-width="1.6"/><line x1="25.7" y1="93.5" x2="31.5" y2="92.1" stroke="#3a2e1c" stroke-width="0.8"/><line x1="25.2" y1="68.4" x2="35.0" y2="70.4" stroke="#3a2e1c" stroke-width="1.6"/><line x1="35.9" y1="45.5" x2="40.6" y2="49.2" stroke="#3a2e1c" stroke-width="0.8"/><line x1="55.5" y1="29.7" x2="59.8" y2="38.7" stroke="#3a2e1c" stroke-width="1.6"/><line x1="80.0" y1="24.0" x2="80.0" y2="30.0" stroke="#3a2e1c" stroke-width="0.8"/><line x1="104.5" y1="29.7" x2="100.2" y2="38.7" stroke="#3a2e1c" stroke-width="1.6"/><line x1="124.1" y1="45.5" x2="119.4" y2="49.2" stroke="#3a2e1c" stroke-width="0.8"/><line x1="134.8" y1="68.4" x2="125.0" y2="70.4" stroke="#3a2e1c" stroke-width="1.6"/><line x1="134.3" y1="93.5" x2="128.5" y2="92.1" stroke="#3a2e1c" stroke-width="0.8"/><line x1="122.9" y1="116.0" x2="115.2" y2="110.0" stroke="#3a2e1c" stroke-width="1.6"/><text x="50.9" y="104.4" text-anchor="middle" dominant-baseline="central" font-size="8" fill="#2c2416" font-family="sans-serif">0</text><text x="42.8" y="72.1" text-anchor="middle" dominant-baseline="central" font-size="8" fill="#2c2416" font-family="sans-serif">20</text><text x="63.3" y="45.8" text-anchor="middle" dominant-baseline="central" font-size="8" fill="#2c2416" font-family="sans-serif">40</text><text x="96.7" y="45.8" text-anchor="middle" dominant-baseline="central" font-size="8" fill="#2c2416" font-family="sans-serif">60</text><text x="117.2" y="72.1" text-anchor="middle" dominant-baseline="central" font-size="8" fill="#2c2416" font-family="sans-serif">80</text><text x="109.1" y="104.4" text-anchor="middle" dominant-baseline="central" font-size="8" fill="#2c2416" font-family="sans-serif">100</text><line x1="80" y1="80" x2="57" y2="113" stroke="#d3121a" stroke-width="2.8" stroke-linecap="round"/><circle cx="80" cy="80" r="5" fill="#c47b4a" stroke="#3a2c18"/><ellipse cx="58" cy="46" rx="26" ry="12" fill="rgba(255,255,255,0.35)" transform="rotate(-28 58 46)"/></svg>
                     <b id="gauge-load">UNKNOWN</b>
                   </section>
                   <section class="plate analyzer-plate">
                     <h3>CORE ANALYZER</h3>
                     <div class="analyzer">
-                      <div class="analyzer-row"><i class="knob" aria-hidden="true"></i><i class="slider"></i><span>PERSISTENCE</span><b id="analyzer-persistence">UNKNOWN</b></div>
-                      <div class="analyzer-row"><i class="knob" aria-hidden="true"></i><i class="slider"></i><span>Z-STATE</span><b id="analyzer-z">UNKNOWN</b></div>
-                      <div class="analyzer-row"><i class="knob" aria-hidden="true"></i><i class="slider"></i><span>LIMITS</span><b id="analyzer-limits">UNKNOWN</b></div>
-                      <div class="analyzer-row"><i class="knob" aria-hidden="true"></i><i class="slider"></i><span>PRESENCE</span><b id="analyzer-presence">UNKNOWN</b></div>
-                      <div class="analyzer-row"><i class="knob" aria-hidden="true"></i><i class="slider"></i><span>LIVE WORK</span><b id="analyzer-live">UNKNOWN</b></div>
+                      <div class="analyzer-row"><i class="knob" aria-hidden="true"></i><i class="slider"></i><i class="fader-scale" aria-hidden="true"><span>100</span><span>50</span><span>0</span></i><span>PERSISTENCE</span><b id="analyzer-persistence">UNKNOWN</b></div>
+                      <div class="analyzer-row"><i class="knob" aria-hidden="true"></i><i class="slider"></i><i class="fader-scale" aria-hidden="true"><span>100</span><span>50</span><span>0</span></i><span>Z-STATE</span><b id="analyzer-z">UNKNOWN</b></div>
+                      <div class="analyzer-row"><i class="knob" aria-hidden="true"></i><i class="slider"></i><i class="fader-scale" aria-hidden="true"><span>100</span><span>50</span><span>0</span></i><span>LIMITS</span><b id="analyzer-limits">UNKNOWN</b></div>
+                      <div class="analyzer-row"><i class="knob" aria-hidden="true"></i><i class="slider"></i><i class="fader-scale" aria-hidden="true"><span>100</span><span>50</span><span>0</span></i><span>PRESENCE</span><b id="analyzer-presence">UNKNOWN</b></div>
+                      <div class="analyzer-row"><i class="knob" aria-hidden="true"></i><i class="slider"></i><i class="fader-scale" aria-hidden="true"><span>100</span><span>50</span><span>0</span></i><span>LIVE WORK</span><b id="analyzer-live">UNKNOWN</b></div>
                     </div>
                     <div class="level" aria-hidden="true"><i id="totality-bar"></i></div>
                     <p id="totality-bar-label">UNKNOWN</p>
                   </section>
                   <section class="plate gauge-face">
                     <span>SYSTEM EFFICIENCY</span>
-                    <svg class="analogue" viewBox="0 0 160 160" aria-hidden="true"><circle cx="80" cy="80" r="78" fill="#120e0a"/><circle cx="80" cy="80" r="76" fill="#f3e6c4"/><circle cx="80" cy="80" r="71" fill="#8d6a3a"/><circle cx="80" cy="80" r="64" fill="#1a120c"/><circle cx="80" cy="80" r="60" fill="#efe6d2"/><ellipse cx="54" cy="38" rx="30" ry="13" fill="rgba(255,255,255,0.46)" transform="rotate(-28 54 38)"/><ellipse cx="102" cy="112" rx="16" ry="6" fill="rgba(255,255,255,0.14)" transform="rotate(18 102 112)"/><circle cx="80" cy="80" r="58" fill="none" stroke="#c4a36a" stroke-width="2"/><line x1="37.1" y1="116.0" x2="44.8" y2="110.0" stroke="#3a2e1c" stroke-width="1.6"/><line x1="25.7" y1="93.5" x2="31.5" y2="92.1" stroke="#3a2e1c" stroke-width="0.8"/><line x1="25.2" y1="68.4" x2="35.0" y2="70.4" stroke="#3a2e1c" stroke-width="1.6"/><line x1="35.9" y1="45.5" x2="40.6" y2="49.2" stroke="#3a2e1c" stroke-width="0.8"/><line x1="55.5" y1="29.7" x2="59.8" y2="38.7" stroke="#3a2e1c" stroke-width="1.6"/><line x1="80.0" y1="24.0" x2="80.0" y2="30.0" stroke="#3a2e1c" stroke-width="0.8"/><line x1="104.5" y1="29.7" x2="100.2" y2="38.7" stroke="#3a2e1c" stroke-width="1.6"/><line x1="124.1" y1="45.5" x2="119.4" y2="49.2" stroke="#3a2e1c" stroke-width="0.8"/><line x1="134.8" y1="68.4" x2="125.0" y2="70.4" stroke="#3a2e1c" stroke-width="1.6"/><line x1="134.3" y1="93.5" x2="128.5" y2="92.1" stroke="#3a2e1c" stroke-width="0.8"/><line x1="122.9" y1="116.0" x2="115.2" y2="110.0" stroke="#3a2e1c" stroke-width="1.6"/><text x="50.9" y="104.4" text-anchor="middle" dominant-baseline="central" font-size="8" fill="#2c2416" font-family="sans-serif">0</text><text x="42.8" y="72.1" text-anchor="middle" dominant-baseline="central" font-size="8" fill="#2c2416" font-family="sans-serif">20</text><text x="63.3" y="45.8" text-anchor="middle" dominant-baseline="central" font-size="8" fill="#2c2416" font-family="sans-serif">40</text><text x="96.7" y="45.8" text-anchor="middle" dominant-baseline="central" font-size="8" fill="#2c2416" font-family="sans-serif">60</text><text x="117.2" y="72.1" text-anchor="middle" dominant-baseline="central" font-size="8" fill="#2c2416" font-family="sans-serif">80</text><text x="109.1" y="104.4" text-anchor="middle" dominant-baseline="central" font-size="8" fill="#2c2416" font-family="sans-serif">100</text><line x1="80" y1="80" x2="57" y2="113" stroke="#1a140e" stroke-width="2.2" stroke-linecap="round"/><circle cx="80" cy="80" r="5" fill="#c47b4a" stroke="#3a2c18"/><ellipse cx="58" cy="46" rx="26" ry="12" fill="rgba(255,255,255,0.35)" transform="rotate(-28 58 46)"/></svg>
+                    <svg class="analogue" viewBox="0 0 160 160" aria-hidden="true"><circle cx="80" cy="80" r="78" fill="#120e0a"/><circle cx="80" cy="80" r="76" fill="#f3e6c4"/><circle cx="80" cy="80" r="71" fill="#8d6a3a"/><circle cx="80" cy="80" r="64" fill="#1a120c"/><circle cx="80" cy="80" r="60" fill="#efe6d2"/><ellipse cx="54" cy="38" rx="30" ry="13" fill="rgba(255,255,255,0.46)" transform="rotate(-28 54 38)"/><ellipse cx="102" cy="112" rx="16" ry="6" fill="rgba(255,255,255,0.14)" transform="rotate(18 102 112)"/><circle cx="80" cy="80" r="58" fill="none" stroke="#c4a36a" stroke-width="2"/><line x1="37.1" y1="116.0" x2="44.8" y2="110.0" stroke="#3a2e1c" stroke-width="1.6"/><line x1="25.7" y1="93.5" x2="31.5" y2="92.1" stroke="#3a2e1c" stroke-width="0.8"/><line x1="25.2" y1="68.4" x2="35.0" y2="70.4" stroke="#3a2e1c" stroke-width="1.6"/><line x1="35.9" y1="45.5" x2="40.6" y2="49.2" stroke="#3a2e1c" stroke-width="0.8"/><line x1="55.5" y1="29.7" x2="59.8" y2="38.7" stroke="#3a2e1c" stroke-width="1.6"/><line x1="80.0" y1="24.0" x2="80.0" y2="30.0" stroke="#3a2e1c" stroke-width="0.8"/><line x1="104.5" y1="29.7" x2="100.2" y2="38.7" stroke="#3a2e1c" stroke-width="1.6"/><line x1="124.1" y1="45.5" x2="119.4" y2="49.2" stroke="#3a2e1c" stroke-width="0.8"/><line x1="134.8" y1="68.4" x2="125.0" y2="70.4" stroke="#3a2e1c" stroke-width="1.6"/><line x1="134.3" y1="93.5" x2="128.5" y2="92.1" stroke="#3a2e1c" stroke-width="0.8"/><line x1="122.9" y1="116.0" x2="115.2" y2="110.0" stroke="#3a2e1c" stroke-width="1.6"/><text x="50.9" y="104.4" text-anchor="middle" dominant-baseline="central" font-size="8" fill="#2c2416" font-family="sans-serif">0</text><text x="42.8" y="72.1" text-anchor="middle" dominant-baseline="central" font-size="8" fill="#2c2416" font-family="sans-serif">20</text><text x="63.3" y="45.8" text-anchor="middle" dominant-baseline="central" font-size="8" fill="#2c2416" font-family="sans-serif">40</text><text x="96.7" y="45.8" text-anchor="middle" dominant-baseline="central" font-size="8" fill="#2c2416" font-family="sans-serif">60</text><text x="117.2" y="72.1" text-anchor="middle" dominant-baseline="central" font-size="8" fill="#2c2416" font-family="sans-serif">80</text><text x="109.1" y="104.4" text-anchor="middle" dominant-baseline="central" font-size="8" fill="#2c2416" font-family="sans-serif">100</text><line x1="80" y1="80" x2="57" y2="113" stroke="#d3121a" stroke-width="2.8" stroke-linecap="round"/><circle cx="80" cy="80" r="5" fill="#c47b4a" stroke="#3a2c18"/><ellipse cx="58" cy="46" rx="26" ry="12" fill="rgba(255,255,255,0.35)" transform="rotate(-28 58 46)"/></svg>
                     <b id="gauge-efficiency">UNKNOWN</b>
                   </section>
                 </div>

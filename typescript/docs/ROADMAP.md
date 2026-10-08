@@ -284,6 +284,16 @@ Decisions:
 Next: the nav-badge fold-in (active∩scheduled dedup) shipped — see the booked-jobs nav badge
 entry above.
 
+## Console 02 fidelity, second pass (2026-10-08)
+
+The focus frame is one viewport-filling bezel: thick weathered steel and brass,
+rivets, and a CRT vignette. The coast stays a muted dusk under smoked teal
+glass. Plates use thin outlines and small-caps titles. Empty meters keep dim
+rails, grids, and ghost traces. The core is the large centre instrument. The
+tactical sketch sits on the coast. The cream gauges overlap the bottom bezel.
+THE BEEZ TREEZ is printed once on the plaque. Readings are still real fields
+or UNKNOWN / no-signal.
+
 ## Console 02 fidelity (2026-10-08)
 
 Presentation-only pass on `src/mcp/dashboard-v1.html` toward the Console 02

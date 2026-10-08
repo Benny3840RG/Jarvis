@@ -28,13 +28,17 @@ and an unlabelled tactical node sketch. The reading stays `UNKNOWN`.
 Headers use an inlined Rajdhani subset (SIL OFL 1.1, see
 `src/mcp/assets/Rajdhani-OFL.txt`). The loopback page allows that face with
 `font-src data:` and does not load a font CDN.
-On a 1920×1080 desktop the brand plaque sits on the upper-left glass, the chips
-sit on the upper-right, and the nav is one row under the title so it does not
-cover either. The focus frame uses a heavier brass bezel, a brighter dusk
-coast, a brass Core Analyzer face with engraved channel names, and gauge
-captions painted above the dial art. Decorative chart traces are labelled
-ornament and are not readings. Desktop, tablet, and phone collapse the same
-regions; they do not get a second data model.
+On a 1920×1080 desktop one bezel fills the viewport. The brand plaque sits on
+the upper-left glass and reads THE BEEZ TREEZ once, with Property Solutions
+under it. The chips sit on the upper-right, and the nav is one row under the
+title. The focus frame is a thick weathered steel-and-brass bezel with rivets
+and a curved glass vignette. The coast is a muted dusk. Plates are smoked
+teal glass with thin outlines and small-caps titles. Empty meters keep dim
+grids, ghost traces, tick rails, and dial faces. The core is the large centre
+instrument. The tactical node sketch is drawn on the coast, not in a second
+box. The two cream gauges overlap the bottom bezel. Decorative chart traces
+are labelled ornament and are not readings. Desktop, tablet, and phone
+collapse the same regions; they do not get a second data model.
 
 | Zone      | What it shows                                                              | Mount                               |
 | --------- | -------------------------------------------------------------------------- | ----------------------------------- |
