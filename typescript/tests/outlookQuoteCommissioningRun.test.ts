@@ -317,6 +317,7 @@ describe("outlook quote commissioning run", () => {
       },
       { contact: "3840.zip@gmail.com", pattern: /matches a client contact/u },
       { contact: "3840zip+x@googlemail.com", pattern: /matches a client contact/u },
+      { contact: "3840.zip+x@GoogleMail.com", pattern: /matches a client contact/u },
       { contact: "3.8.4.0.z.i.p@gmail.com", pattern: /matches a client contact/u },
     ];
     for (const { contact, pattern } of cases) {
@@ -349,6 +350,46 @@ describe("outlook quote commissioning run", () => {
         pattern,
       );
       assert.deepEqual(calls, ["GET"], contact);
+    }
+  });
+
+  it("continues when the contact is a different mailbox or a plain display name", async () => {
+    const recipient = "3840zip@gmail.com";
+    const contacts = ["other.person@gmail.com", "Name <other@outlook.com>"];
+    for (const contact of contacts) {
+      const calls: string[] = [];
+      await assert.rejects(
+        () =>
+          executeOutlookQuoteCommissioning(
+            {
+              ...READY,
+              JARVIS_OUTLOOK_COMMISSIONING_RECIPIENT: recipient,
+              JARVIS_OUTLOOK_COMMISSIONING_RECIPIENT_ALLOWLIST: recipient,
+            },
+            {
+              request: (input) => {
+                calls.push(input.method);
+                if (input.method === "GET" && input.path === "/api/v1/clients") {
+                  return Promise.resolve({
+                    status: 200,
+                    body: { data: [{ contacts: [{ value: contact }] }] },
+                  });
+                }
+                if (input.method === "POST" && input.path === "/api/v1/clients") {
+                  return Promise.resolve({ status: 201, body: { data: { id: "client-1" } } });
+                }
+                if (input.method === "POST" && input.path === "/api/v1/quotes") {
+                  return Promise.reject(new Error("stop after the contact check"));
+                }
+                return Promise.reject(new Error(`unexpected ${input.method} ${input.path}`));
+              },
+              loadProjectRevision: () => Promise.resolve(7),
+              createOutlookRuntime: () => inertOutlook(),
+            },
+          ),
+        /stop after the contact check/u,
+      );
+      assert.deepEqual(calls, ["GET", "POST", "POST"], contact);
     }
   });
 

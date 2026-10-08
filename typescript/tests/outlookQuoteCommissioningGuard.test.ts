@@ -580,7 +580,12 @@ describe("outlook quote commissioning guard", () => {
       assert.equal(staged, 0, contact);
     }
 
-    const aliases = ["3840.zip@gmail.com", "3840zip+x@googlemail.com", "3.8.4.0.z.i.p@gmail.com"];
+    const aliases = [
+      "3840.zip@gmail.com",
+      "3840zip+x@googlemail.com",
+      "3840.zip+x@GoogleMail.com",
+      "3.8.4.0.z.i.p@gmail.com",
+    ];
     for (const contact of aliases) {
       assert.equal(recipientCollidesWithContacts(recipient, [contact]), true, contact);
       let staged = 0;
@@ -593,6 +598,15 @@ describe("outlook quote commissioning guard", () => {
         void plan;
       }, /matches a client contact/);
       assert.equal(staged, 0, contact);
+    }
+
+    for (const contact of ["other.person@gmail.com", "Name <other@outlook.com>"]) {
+      assert.equal(recipientCollidesWithContacts(recipient, [contact]), false, contact);
+      const plan = await beginOutlookQuoteCommissioning({
+        environment,
+        loadClientContactValues: () => Promise.resolve([contact]),
+      });
+      assert.equal(plan.recipient, recipient, contact);
     }
   });
 
