@@ -23,18 +23,20 @@ empty allowlist refuses the run, and the recipient must exactly match one
 entry. The client-contact check still runs after that. Client contacts are plain
 stored values, not MIME headers, so the kit does not decode RFC 2047 encoded words.
 NFKC and format, bidi, and zero-width stripping repeat until the contact stops
-changing. Before any comment is removed, a `=` or `?`, or any character outside
-letters, digits, space, and `. _ + - @ ( ) < > , ; : ' " /`, refuses the contact.
-That same string is then used to remove comments and extract mailboxes. Zero
-mailboxes are ignored. Exactly one comparable mailbox is kept. Any other shape
-refuses before any write, including an address in parentheses, angle brackets, or
-the display-name residue that is not one mailbox. A phone number or a name with no
-mailbox does not abort the run. A value that looks like an address but is not
-exactly one mailbox refuses the run. A contact that is that mailbox refuses the
-run. The recipient local part, compared case-insensitively after the same fold
-with non-alphanumerics removed, also refuses a contact that is not exactly that
-mailbox. A `+tag` is ignored only when comparing the
-mailbox with client contacts. `JARVIS_OUTLOOK_COMMISSIONING_CONFIRM`
+changing. A `=`, `?`, `(`, `)`, `"`, or any character outside letters, digits,
+space, and `. _ + - @ < > , ; : ' /` refuses the contact before a mailbox is read.
+Parentheses and quotes are not comments or quoted local parts. That same string
+is then used to extract one mailbox. Zero mailboxes are ignored when the text
+has no address shape. Exactly one mailbox is compared in canonical form:
+lowercase, with one `+tag` removed from every domain, and for `gmail.com` and
+`googlemail.com` with dots removed from the local part and the domain mapped to
+`gmail.com`. The configured recipient is canonicalised the same way. Equal
+canonical mailboxes refuse the run. The folded contact, reduced to `a-z` and
+`0-9`, also refuses when it contains the recipient's canonical local part and
+the contact is not exactly that recipient. A phone number or a name that stays
+inside the allowlist and has no mailbox does not abort the run. A value that
+looks like an address but is not exactly one mailbox refuses the run. A `+tag`
+is ignored for every domain when comparing the mailbox with client contacts. `JARVIS_OUTLOOK_COMMISSIONING_CONFIRM`
 must be exactly `non-customer`. `JARVIS_OUTLOOK_COMMISSIONING_PROJECT_KEY` must
 already be a Convex totality project. This kit does not create that project.
 The project is read before any client or quote is created. A missing project

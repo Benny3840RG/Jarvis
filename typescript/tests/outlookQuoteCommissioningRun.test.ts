@@ -100,7 +100,7 @@ function stagingRequest(calls: Call[]): CommissioningRequest {
           data: [
             {
               id: "phone-client",
-              contacts: [{ value: "+1 (555) 010-0000" }, { value: "Ada Lovelace" }],
+              contacts: [{ value: "+1 555 010-0000" }, { value: "Ada Lovelace" }],
             },
           ],
         },
@@ -244,11 +244,14 @@ describe("outlook quote commissioning run", () => {
   it("creates nothing when a comment or lookalike hides the recipient", async () => {
     const recipient = "3840zip@gmail.com";
     const contacts = [
-      "(3840zip@gmail.com)",
-      "+1 (555) 010-0000 (3840zip@gmail.com)",
-      "3840zip\u{FF20}gmail.com",
+      { contact: "(3840zip@gmail.com)", pattern: /could not be parsed into one mailbox/u },
+      {
+        contact: "+1 (555) 010-0000 (3840zip@gmail.com)",
+        pattern: /could not be parsed into one mailbox/u,
+      },
+      { contact: "3840zip\u{FF20}gmail.com", pattern: /matches a client contact/u },
     ];
-    for (const contact of contacts) {
+    for (const { contact, pattern } of contacts) {
       const calls: string[] = [];
       await assert.rejects(
         () =>
@@ -275,7 +278,75 @@ describe("outlook quote commissioning run", () => {
               },
             },
           ),
-        /matches a client contact/u,
+        pattern,
+      );
+      assert.deepEqual(calls, ["GET"], contact);
+    }
+  });
+
+  it("creates nothing when a Gmail alias or a parenthesised local part is a contact", async () => {
+    const recipient = "3840zip@gmail.com";
+    const cases = [
+      { contact: "3840.z(x)ip@gmail.com", pattern: /could not be parsed into one mailbox/u },
+      { contact: "38(a)40.zip@gmail.com", pattern: /could not be parsed into one mailbox/u },
+      { contact: '"3840.z(x)ip"@gmail.com', pattern: /could not be parsed into one mailbox/u },
+      {
+        contact: "Benny <3840.z(x)ip@gmail.com>",
+        pattern: /could not be parsed into one mailbox/u,
+      },
+      {
+        contact: "mailto:3840.z(x)ip@gmail.com",
+        pattern: /could not be parsed into one mailbox/u,
+      },
+      {
+        contact: "3840.z(x)ip@googlemail.com",
+        pattern: /could not be parsed into one mailbox/u,
+      },
+      {
+        contact: "3840.z(x)ip+tag@gmail.com",
+        pattern: /could not be parsed into one mailbox/u,
+      },
+      {
+        contact: "3840.z(\u0444)ip@gmail.com",
+        pattern: /could not be parsed into one mailbox/u,
+      },
+      { contact: "3840.z(9)ip@gmail.com", pattern: /could not be parsed into one mailbox/u },
+      {
+        contact: "(3840.z(x)ip@gmail.com)",
+        pattern: /could not be parsed into one mailbox/u,
+      },
+      { contact: "3840.zip@gmail.com", pattern: /matches a client contact/u },
+      { contact: "3840zip+x@googlemail.com", pattern: /matches a client contact/u },
+      { contact: "3.8.4.0.z.i.p@gmail.com", pattern: /matches a client contact/u },
+    ];
+    for (const { contact, pattern } of cases) {
+      const calls: string[] = [];
+      await assert.rejects(
+        () =>
+          executeOutlookQuoteCommissioning(
+            {
+              ...READY,
+              JARVIS_OUTLOOK_COMMISSIONING_RECIPIENT: recipient,
+              JARVIS_OUTLOOK_COMMISSIONING_RECIPIENT_ALLOWLIST: recipient,
+            },
+            {
+              request: (input) => {
+                calls.push(input.method);
+                if (input.method === "GET" && input.path === "/api/v1/clients") {
+                  return Promise.resolve({
+                    status: 200,
+                    body: { data: [{ contacts: [{ value: contact }] }] },
+                  });
+                }
+                return Promise.reject(new Error(`unexpected write ${input.method} ${input.path}`));
+              },
+              loadProjectRevision: () => Promise.reject(new Error("project must not be read")),
+              createOutlookRuntime: () => {
+                throw new Error("runtime must not be created");
+              },
+            },
+          ),
+        pattern,
       );
       assert.deepEqual(calls, ["GET"], contact);
     }
