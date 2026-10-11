@@ -2692,6 +2692,12 @@
             actuated: { label: "Actuated.", tone: "ok" },
             "actuation-failed": { label: "Actuation failed.", tone: "warn" },
           };
+          if (dispatch && dispatch.decision === "query-answered") {
+            return { label: dispatch.answer || "Answered.", tone: "ok" };
+          }
+          if (dispatch && dispatch.decision === "query-failed") {
+            return { label: "Query failed — " + (dispatch.reason || "failed closed."), tone: "warn" };
+          }
           return map[dispatch && dispatch.decision] || { label: "Unknown result.", tone: "muted" };
         }
         function voiceLatencyMs(startedAt, endedAt) {

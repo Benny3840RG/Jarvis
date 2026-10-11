@@ -2154,3 +2154,42 @@ Next: owner review of the draft PR + commissioning evidence; if commissioning on
 the host, apply the sandbox and provision a worker credential (Gate C/D) before
 any narrow advisory canary (Gate E). Do not merge, deploy, or enable the canary
 without Benny's explicit decision.
+
+### Voice read-only query provider — Stage 3 (#567)
+
+Connected the merged guarded voice interface to Jarvis's existing read models
+so `query` commands answer instead of always reporting `query-unavailable`.
+
+- New `VoiceQueryProvider` seam (`src/voice/voiceQuery.ts`), mirroring the
+  `VoiceActuationProvider`/`AbsentHardwareProvider` hardware boundary. The
+  default `DisconnectedQueryProvider` fails closed, so a session with no
+  provider behaves exactly as before.
+- `VoiceSession` routes `kind:"query"` through the provider and reports
+  `query-answered` / `query-unavailable` / `query-failed`; a throwing provider
+  fails closed to `query-failed` and never reads as an answer. Threaded through
+  `VoiceSessionRegistry`.
+- OpenAPI `VoiceDispatch` extended (contract-first): `query-answered`,
+  `query-failed`, and an `answer` field; redocly lint clean.
+- Concrete `DailyBriefVoiceQueryProvider` (`src/voice/briefVoiceQueryProvider.ts`)
+  answers the client/workshop business queries deterministically from the
+  existing `DailyBrief` projection — no second data layer, no LLM. Equipment
+  `*.status` queries report unavailable (not business data).
+- Shared `readDailyBrief` (`src/briefs/readDailyBrief.ts`) is now the single
+  source of truth for composing a brief from live stores; `hudSnapshot` and the
+  voice provider both use it so they cannot drift.
+- Wired into the HTTP composition root (`src/http/app.ts`) so the HUD voice
+  path answers "any unpaid invoices" etc. The dashboard HUD renders the answer
+  on `query-answered` and a warning on `query-failed`.
+
+Tests: `tests/voiceQuery.test.ts`, `tests/briefVoiceQueryProvider.test.ts`,
+updated `tests/voiceHttp.test.ts` and `tests/voiceHudConsole.test.ts`.
+`npm run check` green (2418 pass, 0 fail, 1 skipped); `npm run openapi:lint`
+clean.
+
+NOT done (out of scope / needs host): live microphone commissioning, a
+hardware-status query provider for the `*.status` commands, and the voice→
+governed-action mapping (Stage 4). Merge and any deployment remain Benny's
+decision.
+
+Next: Stage 4 (voice `propose` → existing governed ToolAction path) and/or a
+hardware-status query provider, as separate bounded missions.

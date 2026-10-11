@@ -119,7 +119,7 @@ describe("voice HTTP boundary", () => {
     assert.ok(body.commands.some((c: { id: string }) => c.id === "trailer.winch-up"));
   });
 
-  it("returns an explicit unavailable query result without inventing business data", async () => {
+  it("answers a business query from the authoritative read model, not invented data", async () => {
     const app = await makeApp();
     const sessionId = await openSession(app, "client");
     const response = await utter(app, sessionId, {
@@ -127,8 +127,26 @@ describe("voice HTTP boundary", () => {
       isFinal: true,
     });
     assert.equal(response.statusCode, 200);
-    assert.equal(response.json().dispatch.decision, "query-unavailable");
-    assert.match(response.json().dispatch.reason, /No read-only query provider/);
+    const dispatch = response.json().dispatch;
+    // The stores are empty, so the only honest answer is the empty-state one —
+    // derived from the real brief projection, never fabricated.
+    assert.equal(dispatch.decision, "query-answered");
+    assert.equal(dispatch.command.id, "client.unpaid-invoices");
+    assert.equal(dispatch.answer, "No unpaid invoices.");
+    assert.equal(response.json().pending, null);
+  });
+
+  it("fails closed on an equipment-status query the read model cannot answer", async () => {
+    const app = await makeApp();
+    const sessionId = await openSession(app, "workshop");
+    const response = await utter(app, sessionId, {
+      transcript: "workshop status",
+      isFinal: true,
+    });
+    assert.equal(response.statusCode, 200);
+    const dispatch = response.json().dispatch;
+    assert.equal(dispatch.decision, "query-unavailable");
+    assert.match(dispatch.reason, /not backed by the daily brief/);
     assert.equal(response.json().pending, null);
   });
 

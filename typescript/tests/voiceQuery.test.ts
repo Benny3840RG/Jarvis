@@ -31,7 +31,10 @@ function stubProvider(result: (commandId: string) => VoiceQueryResult): VoiceQue
 describe("DisconnectedQueryProvider", () => {
   it("reports every query unavailable and never answers", async () => {
     const provider = new DisconnectedQueryProvider();
-    const result = await provider.answer({ commandId: "client.unpaid-invoices", profile: "client" });
+    const result = await provider.answer({
+      commandId: "client.unpaid-invoices",
+      profile: "client",
+    });
     assert.equal(result.status, "unavailable");
     if (result.status === "unavailable") {
       assert.equal(result.commandId, "client.unpaid-invoices");

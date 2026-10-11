@@ -20,7 +20,9 @@ function loadVoiceLogic(): {
     wakeWord?: string,
   ) => { transcript: string; isFinal: boolean; alternatives: string[] } | null;
   finalVoiceRecognition: (event: unknown) => { transcript: string; alternatives: string[] } | null;
-  describeVoiceDispatch: (dispatch: { decision: string } | null) => { label: string; tone: string };
+  describeVoiceDispatch: (
+    dispatch: { decision: string; answer?: string; reason?: string } | null,
+  ) => { label: string; tone: string };
   voiceLatencyMs: (startedAt: unknown, endedAt: unknown) => number | null;
 } {
   const match = html.match(/\/\/ BEGIN voice-console[\s\S]*?\/\/ END voice-console/);
@@ -115,6 +117,24 @@ describe("voice HUD console logic (extracted from dashboard-v1.html)", () => {
       const info = logic.describeVoiceDispatch({ decision: "query-unavailable" });
       assert.equal(info.tone, "warn");
       assert.match(info.label, /query unavailable.*no data provider/i);
+    });
+
+    it("shows the read-only answer text for a query-answered decision", () => {
+      const info = logic.describeVoiceDispatch({
+        decision: "query-answered",
+        answer: "No unpaid invoices.",
+      });
+      assert.equal(info.tone, "ok");
+      assert.equal(info.label, "No unpaid invoices.");
+    });
+
+    it("marks a failed query as a warning carrying its reason, never an answer", () => {
+      const info = logic.describeVoiceDispatch({
+        decision: "query-failed",
+        reason: "The daily brief read model could not be read.",
+      });
+      assert.equal(info.tone, "warn");
+      assert.match(info.label, /query failed/i);
     });
 
     it("marks unavailable actuation as a warning, never success", () => {

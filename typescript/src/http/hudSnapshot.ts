@@ -1,4 +1,4 @@
-import { composeDailyBrief } from "../briefs/brief.js";
+import { readDailyBrief } from "../briefs/readDailyBrief.js";
 import { readLiveWorkPipeline, type DevelopmentLiveWorkSource } from "../development/liveWork.js";
 import type { DashboardSnapshot } from "../mcp/jarvisApiClient.js";
 import {
@@ -14,7 +14,6 @@ import type { InvoiceStore } from "../invoices/invoice.js";
 import type { ProjectStore } from "../projects/project.js";
 import type { QuoteStore } from "../quotes/quote.js";
 import type { QuoteRepository } from "../quotes/quoteRepository.js";
-import { resolveReminderTimezone } from "../reminders/due.js";
 import type { CredentialsRuntime } from "../settings/credentialsStatus.js";
 import type { HttpAppConfig } from "./config.js";
 import type { SystemStatusService } from "./systemStatusService.js";
@@ -46,31 +45,22 @@ export type HudSnapshotSources = {
  * same unavailable body those HTTP routes already return.
  */
 export async function readHudSnapshot(input: HudSnapshotSources): Promise<DashboardSnapshot> {
-  const timezone = resolveReminderTimezone(input.config.timezone);
   const now = Date.now();
-  const [tasks, reminders, projects, quotes, assets, enquiries, invoices, errands] =
-    await Promise.all([
-      input.persistence.listTasks(),
-      input.persistence.listReminders(),
-      input.projects.list(),
-      input.quotes.list(),
-      input.assets.list(),
-      input.enquiries.list({ status: "open" }),
-      input.invoices.list(),
-      input.errands.list(),
-    ]);
-  const brief = composeDailyBrief({
-    now,
-    timezone,
-    tasks,
-    reminders,
-    projects,
-    quotes,
-    assets,
-    enquiries,
-    invoices,
-    errands,
-  });
+  const [tasks, reminders, brief] = await Promise.all([
+    input.persistence.listTasks(),
+    input.persistence.listReminders(),
+    readDailyBrief({
+      persistence: input.persistence,
+      projects: input.projects,
+      quotes: input.quotes,
+      assets: input.assets,
+      enquiries: input.enquiries,
+      invoices: input.invoices,
+      errands: input.errands,
+      timezone: input.config.timezone,
+      now,
+    }),
+  ]);
   let quoteRegister: DashboardSnapshot["quoteRegister"];
   if (!input.quoteRepository) {
     quoteRegister = { status: "unavailable", quotes: [] };

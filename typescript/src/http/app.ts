@@ -82,6 +82,8 @@ import {
   selectCredentialsRuntime,
   type CredentialsRuntime,
 } from "../settings/credentialsStatus.js";
+import { readDailyBrief } from "../briefs/readDailyBrief.js";
+import { DailyBriefVoiceQueryProvider } from "../voice/briefVoiceQueryProvider.js";
 import { AbsentHardwareProvider } from "../voice/voiceHardware.js";
 import { VoiceSessionRegistry } from "../voice/voiceSessionRegistry.js";
 import {
@@ -450,7 +452,21 @@ export async function createJarvisHttpApp(
           : createInactiveDangerZone(providerName)),
       voiceSessionRegistry:
         options.voiceSessionRegistry ??
-        new VoiceSessionRegistry({ provider: new AbsentHardwareProvider() }),
+        new VoiceSessionRegistry({
+          provider: new AbsentHardwareProvider(),
+          queryProvider: new DailyBriefVoiceQueryProvider(() =>
+            readDailyBrief({
+              persistence,
+              projects: projectStore,
+              quotes: quoteStore,
+              assets: assetStore,
+              enquiries: enquiryStore,
+              invoices: invoiceStore,
+              errands: errandStore,
+              timezone: config.timezone,
+            }),
+          ),
+        }),
     }),
     adapter,
     { logger: options.logger, abortOnError: false },
