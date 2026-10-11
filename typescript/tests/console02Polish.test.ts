@@ -6,20 +6,20 @@ const widget = readFileSync(new URL("../src/mcp/dashboard-v1.html", import.meta.
 
 describe("Console 02 polish", () => {
   it("limits decorative chrome hiding to the desktop Focus view", () => {
-    const pass2 = widget.match(/<style id="console-02-pass2">([\\s\\S]*?)<\\/style>/)?.[1];
+    const pass2 = widget.match(/<style id="console-02-pass2">([\s\S]*?)<\/style>/)?.[1];
     assert.ok(pass2, "Console 02 second presentation pass is missing");
     const unscopedRules = pass2.split("@media (min-width: 1400px)")[0] ?? "";
-    assert.doesNotMatch(unscopedRules, /\\.rivets\\s*\\{\\s*display:\\s*none/);
-    assert.doesNotMatch(unscopedRules, /\\.brand-legal\\s*\\{/);
+    assert.doesNotMatch(unscopedRules, /\.rivets\s*\{\s*display:\s*none/);
+    assert.doesNotMatch(unscopedRules, /\.brand-legal\s*\{/);
     assert.match(
       pass2,
-      /@media\\s*\\(min-width:\\s*1400px\\)\\s*\\{\\s*body\\[data-console-view="focus"\\] \\.rivets\\s*\\{\\s*display:\\s*none/,
+      /@media\s*\(min-width:\s*1400px\)\s*\{\s*body\[data-console-view="focus"\] \.rivets\s*\{\s*display:\s*none/,
     );
     assert.match(
       pass2,
-      /body\\[data-console-view="focus"\\] \\.brand-legal\\s*\\{[^}]*clip:\\s*rect\\(0 0 0 0\\);/,
+      /body\[data-console-view="focus"\] \.brand-legal\s*\{[^}]*clip:\s*rect\(0 0 0 0\);/,
     );
-    assert.match(widget, /<b class="brand-legal">Beez Treez<\\/b> Property Solutions/);
+    assert.match(widget, /<b class="brand-legal">Beez Treez<\/b> Property Solutions/);
   });
 
   it("keeps honesty notes on titles and shows a short tag", () => {
