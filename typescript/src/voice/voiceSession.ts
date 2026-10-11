@@ -28,6 +28,7 @@ import {
   type VoiceProfile,
 } from "./voiceCommands.js";
 import type { VoiceActuationProvider } from "./voiceHardware.js";
+import { DisconnectedQueryProvider, type VoiceQueryProvider } from "./voiceQuery.js";
 import { parseUtterance } from "./voiceParser.js";
 
 const DEFAULT_HISTORY_LIMIT = 20;
@@ -93,6 +94,8 @@ export type VoiceDispatch =
   | Readonly<{ decision: "unrecognized"; normalizedTranscript: string }>
   | Readonly<{ decision: "ambiguous"; candidates: readonly string[] }>
   | Readonly<{ decision: "query-unavailable"; command: VoiceCommand; reason: string }>
+  | Readonly<{ decision: "query-answered"; command: VoiceCommand; answer: string }>
+  | Readonly<{ decision: "query-failed"; command: VoiceCommand; reason: string }>
   | Readonly<{ decision: "awaiting-confirmation"; command: VoiceCommand; expiresAt: number }>
   | Readonly<{ decision: "confirmation-not-pending" }>
   | Readonly<{ decision: "confirmation-expired"; command: VoiceCommand }>
@@ -115,6 +118,11 @@ export type VoiceDispatch =
 export type VoiceSessionOptions = Readonly<{
   profile: VoiceProfile;
   provider: VoiceActuationProvider;
+  /**
+   * Read-only query provider. Omitted ⇒ a {@link DisconnectedQueryProvider} is
+   * used, so every query fails closed as unavailable (pre-Stage-3 behaviour).
+   */
+  queryProvider?: VoiceQueryProvider;
   historyLimit?: number;
   confirmationTtlMs?: number;
   clock?: () => number;
@@ -131,6 +139,7 @@ export type VoiceSessionInput = Readonly<{
 export class VoiceSession {
   #profile: VoiceProfile;
   readonly #provider: VoiceActuationProvider;
+  readonly #queryProvider: VoiceQueryProvider;
   readonly #historyLimit: number;
   readonly #confirmationTtlMs: number;
   readonly #clock: () => number;
@@ -140,6 +149,7 @@ export class VoiceSession {
   constructor(options: VoiceSessionOptions) {
     this.#profile = options.profile;
     this.#provider = options.provider;
+    this.#queryProvider = options.queryProvider ?? new DisconnectedQueryProvider();
     this.#historyLimit = options.historyLimit ?? DEFAULT_HISTORY_LIMIT;
     this.#confirmationTtlMs = options.confirmationTtlMs ?? DEFAULT_CONFIRMATION_TTL_MS;
     this.#clock = options.clock ?? Date.now;
@@ -277,15 +287,36 @@ export class VoiceSession {
   async #dispatch(command: VoiceCommand): Promise<VoiceDispatch> {
     switch (command.kind) {
       case "query":
-        return {
-          decision: "query-unavailable",
-          command,
-          reason: "No read-only query provider is connected for this voice command.",
-        };
+        return this.#query(command);
       case "propose":
         return { decision: "proposed", command };
       case "actuate":
         return this.#actuate(command);
+    }
+  }
+
+  async #query(command: VoiceCommand): Promise<VoiceDispatch> {
+    let result;
+    try {
+      result = await this.#queryProvider.answer({
+        commandId: command.id,
+        profile: command.profile,
+      });
+    } catch {
+      // A throwing provider must never read as an answer: fail closed.
+      return {
+        decision: "query-failed",
+        command,
+        reason: "The read-only query provider failed; the query failed closed.",
+      };
+    }
+    switch (result.status) {
+      case "answered":
+        return { decision: "query-answered", command, answer: result.answer };
+      case "unavailable":
+        return { decision: "query-unavailable", command, reason: result.reason };
+      case "failed":
+        return { decision: "query-failed", command, reason: result.reason };
     }
   }
 

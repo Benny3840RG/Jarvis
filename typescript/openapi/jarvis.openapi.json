@@ -7818,7 +7818,7 @@
       },
       "VoiceDispatch": {
         "type": "object",
-        "description": "The authoritative decision for one submitted utterance. Query commands return query-unavailable until a read-only query provider is connected; recognizing a command is not a successful business or equipment answer.",
+        "description": "The authoritative decision for one submitted utterance. A query command returns query-answered (with the deterministic answer read from an authoritative read model) when a read-only query provider is connected, query-unavailable when none is connected or the read model cannot answer, and query-failed when the provider attempted the read and it failed; recognizing a command is never itself a successful business or equipment answer.",
         "required": ["decision"],
         "additionalProperties": false,
         "properties": {
@@ -7831,6 +7831,8 @@
               "unrecognized",
               "ambiguous",
               "query-unavailable",
+              "query-answered",
+              "query-failed",
               "awaiting-confirmation",
               "confirmation-not-pending",
               "confirmation-expired",
@@ -7861,7 +7863,11 @@
           },
           "reason": {
             "type": "string",
-            "description": "Why a query or actuation was unavailable, or an actuation failed."
+            "description": "Why a query or actuation was unavailable, or a query or actuation failed."
+          },
+          "answer": {
+            "type": "string",
+            "description": "The deterministic, read-only answer for a query-answered decision, read from an authoritative read model and safe to read out or render on the HUD."
           },
           "expiresAt": {
             "type": "integer",
