@@ -81,3 +81,34 @@ Everything else requires the host, real credentials, or Benny's deployment appro
 - **Paddock / Convex smoke / LV1-01 (P2-8):** a Convex **dev** deployment URL + service token; host.
 - **Recovery (LV1-09 / P2-15 drills):** host + isolated Convex backend for the restart re-proof.
 - **Remote/prod (P3-16..19):** TLS termination, public DNS/origin config, and **Benny's explicit deployment approval**.
+
+---
+
+## G. LV1-01 local usable-surface proof — verified 2026-10-12 (this container)
+
+Booted the real `createJarvisHttpApp()` + MCP server from current `main` source
+in **JSON-backed, credential-free** mode (via `.claude/skills/run-jarvis-backend`)
+and exercised the daily-driver surface over HTTP/MCP. All green:
+
+| Surface | Evidence |
+|---|---|
+| `GET /healthz`, `GET /api/v1/status` | 200 |
+| Operator **HUD** `GET /api/v1/hud/snapshot` | 200; full brief + counts + quoteRegister |
+| **Voice reads (LV1-04) answer live** | client "any unpaid invoices" → `answered: "No unpaid invoices."`; workshop "what is my next job" → `answered: "No upcoming job is booked."` |
+| **Home CRUD** | task create→get→complete (201/200/201); reminder create 201 → list count 1 |
+| **Business CRUD** | client create 201 → list 1 |
+| **MCP** `POST /mcp initialize` | handshake OK, protocol 2024-11-05, server `jarvis-private-preview` |
+| Fail-closed input validation | unknown field → 422 `invalid-reminder` |
+
+**Meaning:** the local, JSON-backed Jarvis surface a person would sit at
+(HUD + home + business + voice reads + MCP) **runs and is usable today**, with no
+external credentials. This is the LV1-01 baseline, proven here.
+
+**Still required for a full daily driver (host-gated, not code):** durable Convex
+persistence (so state survives beyond the JSON checkout), Outlook send
+(LV1-03), Google Home announce (LV1-07), and the LV1-09 restart/recovery
+re-proof. These need the supervised host + real credentials per §F.
+
+**Harness note (not a Jarvis defect):** the run skill's `smoke` driver fails its
+MCP step because it `JSON.parse`s the raw `text/event-stream` body; the MCP
+server itself responds correctly (proven above with SSE-aware parsing).
