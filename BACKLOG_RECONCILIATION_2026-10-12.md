@@ -112,3 +112,25 @@ re-proof. These need the supervised host + real credentials per §F.
 **Harness note (not a Jarvis defect):** the run skill's `smoke` driver fails its
 MCP step because it `JSON.parse`s the raw `text/event-stream` body; the MCP
 server itself responds correctly (proven above with SSE-aware parsing).
+
+---
+
+## H. LV1-06 golden business flow — local proof, verified 2026-10-12
+
+Ran the core Beez Treez lifecycle over HTTP in JSON-backed mode on current `main`:
+
+| Step | Result |
+|---|---|
+| `POST /clients` → `/properties` → `/enquiries` → `/projects` | all **201**, each persisted and linked by id |
+| `POST /quotes` (lifecycle revision) | **503 `quote-lifecycle-unavailable`** — fails closed, correctly: the lifecycle (revisions/PDF/delivery) needs Convex. This is the one externally-gated link in the flow. |
+| `POST /invoices` (draft) | **201**; server computed subtotal 320 → tax 32 (10%) → total 352 → balanceDue 352 |
+| `GET /hud/snapshot` brief | reflects the chain: "1 active project, 1 open enquiry", scheduled this-week 1, invoice draftCount 1 |
+
+**Meaning:** the business workflow (capture enquiry → client/property → schedule job
+→ draft invoice with correct money math → see it on the daily brief) **works locally
+today**. Only the quote *lifecycle* (draft→finalize→PDF→send) is Convex-gated, and it
+fails closed with a clear 503 rather than crashing — exactly the designed behaviour.
+
+Net: the remaining line between "usable now (JSON)" and "usable daily driver" is the
+host commissioning in §F — chiefly durable Convex persistence (which also unlocks the
+quote lifecycle) and Outlook send. No further local code gap was found in this flow.
