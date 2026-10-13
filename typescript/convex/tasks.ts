@@ -6,7 +6,7 @@ import { collectBounded, requireOwner } from "./authHelpers.js";
 import { cleanRequiredText, requirePageSize } from "./toolActionLogic.js";
 import { mutation, query, type MutationCtx } from "./_generated/server.js";
 
-const taskValidator = v.object({
+export const taskValidator = v.object({
   _id: v.id("tasks"),
   _creationTime: v.number(),
   ownerId: v.string(),

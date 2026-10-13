@@ -469,6 +469,7 @@ describe("Jarvis backup archives", () => {
               title: "Convex task",
               completed: true,
               category: "work",
+              createdAt: 1,
             },
           ],
           reminders: [
@@ -476,6 +477,7 @@ describe("Jarvis backup archives", () => {
               sourceId: "source-reminder",
               title: "Convex reminder",
               dueRaw: "Friday 9am",
+              createdAt: 1,
             },
           ],
         },
