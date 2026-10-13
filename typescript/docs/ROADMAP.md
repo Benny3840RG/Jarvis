@@ -9,6 +9,8 @@ desktop queue cards retain all three tasks and their clear actions. The
 development warning precedes decorative rails, and tactical titles have a
 scrollable area above their heading. Source-contract regressions and an
 isolated Chromium layout check cover the presentation without live writes.
+The narrow overview grows with its tactical content. Browser fixtures satisfy
+the inbox contract, and the gate rejects partial renders and JavaScript errors.
 
 Next: verify the exact candidate in CI, review the fresh browser captures,
 and obtain independent review and Benny's exact-candidate decision. No

@@ -46,7 +46,8 @@ the decorative core shrinks to leave those controls usable. Development
 status stays ahead of decorative rails. Tactical inbox titles scroll above
 their heading rather than painting over it. The browser layout check uses
 synthetic tasks and inbox titles, and checks Focus, Task Board, and reduced
-motion without contacting a runtime.
+motion without contacting a runtime. Below the desktop breakpoint, the
+overview grows with its content instead of clipping the tactical section.
 
 | Zone      | What it shows                                                              | Mount                               |
 | --------- | -------------------------------------------------------------------------- | ----------------------------------- |

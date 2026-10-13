@@ -35,6 +35,26 @@ describe("Console 02 polish", () => {
     assert.ok(controls, "The instrument layout must keep real labels readable");
     assert.match(controls, /#dev-status\s*\{[^}]*order:\s*-1;/);
     assert.match(controls, /\.tac-map\s*\{[^}]*bottom:\s*36px;[^}]*overflow-y:\s*auto;/);
+    assert.match(controls, /\.tac-plate h2\s*\{[^}]*bottom:\s*2px;/);
+  });
+
+  it("lets the narrow Focus overview grow around tactical content", () => {
+    const controls = widget.match(
+      /<style id="console-02-readable-controls">([\s\S]*?)<\/style>/,
+    )?.[1];
+    assert.ok(controls);
+    const narrow = controls.split("@media (max-width: 1399px)")[1];
+    assert.ok(narrow, "The narrow layout must size the overview to its content");
+    assert.match(narrow, /\.console-deck\s*\{[^}]*grid-template-rows:\s*auto;/);
+    assert.match(narrow, /\.fader-scale\s*\{\s*display:\s*none;/);
+    assert.match(
+      narrow,
+      /\.overview-plate\s*\{[^}]*height:\s*auto;[^}]*min-height:\s*min-content;/,
+    );
+    assert.match(
+      narrow,
+      /\.core-stage\s*\{[^}]*width:\s*min\(320px,\s*100%\);[^}]*height:\s*auto;/,
+    );
   });
 
   it("limits decorative chrome hiding to the desktop Focus view", () => {

@@ -2078,6 +2078,23 @@
       body[data-console-view="focus"] .now-strip .eyebrow { display: block; margin: 0 0 4px; }
       body[data-console-view="focus"] .now-strip .panel-header { min-height: 32px; padding: 6px 10px; }
       body[data-console-view="focus"] .now-strip .next-caption { margin: 4px 10px 0; }
+      body[data-console-view="focus"] .tac-node { max-width: 100%; overflow-wrap: anywhere; }
+      @media (max-width: 1399px) {
+        body[data-console-view="focus"] .console-deck { grid-template-rows: auto; }
+        body[data-console-view="focus"] .fader-scale { display: none; }
+        body[data-console-view="focus"] .overview-plate {
+          display: flex;
+          flex-direction: column;
+          height: auto;
+          min-height: min-content;
+        }
+        body[data-console-view="focus"] .core-stage {
+          width: min(320px, 100%);
+          height: auto;
+          flex: 0 0 auto;
+        }
+        body[data-console-view="focus"] .core-side { width: 100%; }
+      }
       @media (min-width: 1400px) {
         body[data-console-view="focus"] .shell { padding-bottom: 252px; }
         body[data-console-view="focus"] .now-strip {
@@ -2114,6 +2131,7 @@
           width: 100%;
           height: 96px;
         }
+        body[data-console-view="focus"] .core-side .tac-plate h2 { bottom: 2px; }
         body[data-console-view="focus"] .tac-map {
           top: 0;
           bottom: 36px;
@@ -2122,7 +2140,6 @@
           align-content: start;
           pointer-events: auto;
         }
-        body[data-console-view="focus"] .tac-node { max-width: 100%; overflow-wrap: anywhere; }
         body[data-console-view="focus"] .col-right > .plate:nth-child(4),
         body[data-console-view="focus"] .col-right > .plate:nth-child(5) {
           min-height: 86px;

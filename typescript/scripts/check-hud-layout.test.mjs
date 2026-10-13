@@ -1,6 +1,16 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { assessVisibility, assessNoOverlap, fixtureFor, parseArgs } from "./check-hud-layout.mjs";
+import { readFileSync } from "node:fs";
+import { runInNewContext } from "node:vm";
+import {
+  assessVisibility,
+  assessNoOverlap,
+  fixtureFor,
+  parseArgs,
+  measureElement,
+  responseForRequest,
+  browserError,
+} from "./check-hud-layout.mjs";
 
 const rect = (left, top, right, bottom) => ({ left, top, right, bottom });
 const measurement = (overrides = {}) => ({
@@ -85,4 +95,102 @@ test("tactical fixtures use six bounded labels long enough to exercise scrolling
   assert.equal(items.length, 6);
   assert.ok(items.every((item) => item.title.startsWith("[TEST ONLY]")));
   assert.ok(items.every((item) => item.title.length >= 60 && item.title.length <= 90));
+});
+
+test("display:contents ancestors do not produce fictional zero-sized clipping boxes", () => {
+  const style = {
+    display: "block",
+    visibility: "visible",
+    opacity: "1",
+    clip: "auto",
+    overflowX: "visible",
+    overflowY: "visible",
+  };
+  const parent = {
+    tagName: "DIV",
+    classList: ["core-side"],
+    getBoundingClientRect: () => ({ ...rect(0, 0, 0, 0), width: 0, height: 0 }),
+    clientLeft: 0,
+    clientTop: 0,
+    clientWidth: 0,
+    clientHeight: 0,
+    parentElement: null,
+  };
+  const element = {
+    tagName: "SPAN",
+    classList: [],
+    textContent: "test",
+    getBoundingClientRect: () => ({ ...rect(10, 10, 70, 24), width: 60, height: 14 }),
+    parentElement: parent,
+  };
+  const measure = (display) =>
+    runInNewContext(`(${measureElement.toString()})(".label", {text:false,hitTest:false})`, {
+      document: { querySelector: () => element },
+      innerWidth: 1920,
+      innerHeight: 1080,
+      getComputedStyle: (target) =>
+        target === parent ? { ...style, display, overflowX: "hidden", overflowY: "hidden" } : style,
+    });
+  assert.equal(assessVisibility(measure("contents")).length, 0);
+  assert.ok(assessVisibility(measure("block")).some((failure) => failure.includes("clipped")));
+});
+
+test("inbox fixtures execute the actual dashboard inbox renderer", () => {
+  const source = readFileSync(new URL("../src/mcp/dashboard-v1.html", import.meta.url), "utf8");
+  const match = source.match(
+    /(function inboxHasDegradedSource\(inbox\)[\s\S]*?function renderInbox\(\) \{[^\n]+\})/,
+  );
+  assert.ok(match);
+  const element = () => ({ append() {}, replaceChildren() {} });
+  for (const name of ["empty", "populated"]) {
+    assert.doesNotThrow(() =>
+      runInNewContext(`${match[1]}; renderInbox()`, {
+        state: fixtureFor(name),
+        document: { createElement: element },
+        byId: element,
+        text(target, value) {
+          target.textContent = value;
+        },
+        empty: element,
+        fillList(target, items, render) {
+          items.forEach(render);
+        },
+      }),
+    );
+  }
+});
+
+test("only the expected read-only startup catalog gets a synthetic response", () => {
+  const request = { url: "https://hud-layout.test/api/v1/voice/catalog", method: "GET" };
+  const response = responseForRequest(request, Buffer.from("html"), fixtureFor("empty"));
+  assert.deepEqual(JSON.parse(response.body.toString()), { commands: [] });
+  assert.equal(responseForRequest({ ...request, method: "POST" }), null);
+  assert.equal(
+    responseForRequest({ ...request, url: "https://live.example/api/v1/voice/catalog" }),
+    null,
+  );
+});
+
+test("browser exceptions and console errors fail the gate", () => {
+  assert.match(
+    browserError({
+      method: "Runtime.exceptionThrown",
+      params: { exceptionDetails: { exception: { description: "TypeError: render failed" } } },
+    }),
+    /render failed/,
+  );
+  assert.match(
+    browserError({
+      method: "Runtime.consoleAPICalled",
+      params: { type: "error", args: [{ value: "render failed" }] },
+    }),
+    /render failed/,
+  );
+  assert.equal(
+    browserError({
+      method: "Runtime.consoleAPICalled",
+      params: { type: "log", args: [{ value: "ready" }] },
+    }),
+    null,
+  );
 });

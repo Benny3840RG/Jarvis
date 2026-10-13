@@ -74,13 +74,25 @@ export function fixtureFor(name) {
           })),
     reminders: [],
     inbox: {
+      generatedAt: "2026-01-01T00:00:00.000Z",
+      sources: [
+        { source: "maintenance", status: "available", checkedAt: "2026-01-01T00:00:00.000Z" },
+      ],
       items:
         name === "empty"
           ? []
           : Array.from({ length: 6 }, (_, index) => ({
-              id: `layout-inbox-${index}`,
+              itemId: `layout-inbox-${index}`,
+              kind: "maintenance-due-soon",
+              explanation: "Synthetic browser-layout fixture; no live data.",
+              sourceSubsystem: "maintenance",
+              sourceRecordId: `layout-record-${index}`,
+              createdAt: "2026-01-01T00:00:00.000Z",
+              updatedAt: "2026-01-01T00:00:00.000Z",
+              status: "open",
+              actionRequired: false,
               title: `[TEST ONLY] Tactical queue entry ${index + 1} awaiting the visibility and scroll check`,
-              severity: "low",
+              severity: "normal",
             })),
     },
   };
@@ -122,7 +134,7 @@ export function assessVisibility(measurement) {
 }
 
 // Runs in the real browser. No production styles or element sizes are changed.
-function measureElement(selector, { text = true, hitTest = true } = {}) {
+export function measureElement(selector, { text = true, hitTest = true } = {}) {
   const element = document.querySelector(selector);
   const result = { label: selector, rects: [], clips: [], hidden: [], occluded: [] };
   if (!element) return result;
@@ -160,6 +172,7 @@ function measureElement(selector, { text = true, hitTest = true } = {}) {
       result.hidden.push(label);
     // Legacy clip is used to visually hide the brand in Focus. It must not
     // remain in effect after navigating to Task Board.
+    if (style.display === "contents") continue;
     if (style.clip !== "auto") result.hidden.push(`${label}: clip=${style.clip}`);
     const clipsX = /^(hidden|clip|scroll|auto)$/.test(style.overflowX);
     const clipsY = /^(hidden|clip|scroll|auto)$/.test(style.overflowY);
@@ -269,6 +282,26 @@ async function chromePath() {
   );
 }
 
+export function responseForRequest(request, html, fixture) {
+  if (request.method !== "GET") return null;
+  if (request.url === `${origin}/hud`) return { type: "text/html", body: html };
+  if (request.url === `${origin}/api/v1/hud/snapshot`)
+    return { type: "application/json", body: Buffer.from(JSON.stringify(fixture)) };
+  if (request.url === `${origin}/api/v1/voice/catalog`)
+    return { type: "application/json", body: Buffer.from(JSON.stringify({ commands: [] })) };
+  if (request.url === `${origin}/favicon.ico`)
+    return { type: "image/x-icon", body: Buffer.alloc(0) };
+  return null;
+}
+
+export function browserError(message) {
+  if (message.method === "Runtime.exceptionThrown")
+    return `Browser exception: ${message.params.exceptionDetails.exception?.description || message.params.exceptionDetails.text}`;
+  if (message.method === "Runtime.consoleAPICalled" && message.params.type === "error")
+    return `Browser console error: ${message.params.args.map((argument) => argument.description || argument.value || argument.type).join(" ")}`;
+  return null;
+}
+
 async function runScenario(cdp, html, fixtureName, viewport, outputDir) {
   const name = `${viewport.width}x${viewport.height}-${fixtureName}`;
   const fixture = fixtureFor(fixtureName);
@@ -293,20 +326,13 @@ async function runScenario(cdp, html, fixtureName, viewport, outputDir) {
   let fixtureRequests = 0;
   const listener = (message) => {
     if (message.sessionId !== sessionId) return;
-    if (message.method === "Runtime.exceptionThrown")
-      failures.push(
-        `Browser exception: ${message.params.exceptionDetails.exception?.description || message.params.exceptionDetails.text}`,
-      );
+    const error = browserError(message);
+    if (error) failures.push(error);
     if (message.method !== "Fetch.requestPaused") return;
     const { requestId, request } = message.params;
-    let response;
-    if (request.url === `${origin}/hud` && request.method === "GET")
-      response = { type: "text/html", body: html };
-    else if (request.url === `${origin}/api/v1/hud/snapshot` && request.method === "GET") {
+    const response = responseForRequest(request, html, fixture);
+    if (request.url === `${origin}/api/v1/hud/snapshot` && request.method === "GET")
       fixtureRequests += 1;
-      response = { type: "application/json", body: Buffer.from(JSON.stringify(fixture)) };
-    } else if (request.url === `${origin}/favicon.ico`)
-      response = { type: "image/x-icon", body: Buffer.alloc(0) };
     const action = response
       ? send("Fetch.fulfillRequest", {
           requestId,
@@ -340,7 +366,7 @@ async function runScenario(cdp, html, fixtureName, viewport, outputDir) {
     const deadline = Date.now() + 10000;
     while (Date.now() < deadline) {
       ready = await evaluate(
-        `document.readyState === "complete" && document.querySelector("#status-label")?.textContent === "OPERATIONAL" && document.querySelector("#current-task")?.textContent === ${JSON.stringify(expectedTitle)}`,
+        `document.readyState === "complete" && document.querySelector("#status-label")?.textContent === "OPERATIONAL" && document.querySelector("#current-task")?.textContent === ${JSON.stringify(expectedTitle)} && document.querySelectorAll("#tactical-map .tac-node").length === ${fixture.inbox.items.length} && document.querySelector("#tile-inbox")?.textContent === ${JSON.stringify(String(fixture.inbox.items.length))} && document.querySelector("#tile-tasks")?.textContent === ${JSON.stringify(String(fixture.tasks.length))}`,
       );
       if (ready) break;
       await delay(50);
