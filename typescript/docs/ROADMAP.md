@@ -1,5 +1,18 @@
 # Jarvis TypeScript Roadmap
 
+## Codex v1.13 startup compatibility (2026-10-13)
+
+PR #726 aligns the review and build workers with the unmodified upstream v1.13
+socket-isolation implementation. A shared read-only SHA-256 verifier replaces
+the v1.12 bundle patch. CI binds both workflow pins, the verifier and the Linux
+fixture to the same action, exercises the actual startup commands, and checks
+worker denial without removing unrelated service access.
+
+Next:
+
+- Verify exact-head CI, including the disposable Linux socket fixture, and obtain independent review before the owner merge decision.
+- Keep model-review quota, owner approval and deployment evidence separate from the startup repair.
+
 ## Outlook commissioning preflight (2026-10-07)
 
 Host preflight of the commissioning kit on a personal Outlook mailbox. The kit still uses the existing `quotes:send` stage, approval token, and reconciliation worker. Issues #294 and #297 stay open.

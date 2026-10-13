@@ -107,7 +107,7 @@ jobs:
       matrix:
         segment: ${{ fromJSON(needs.prepare.outputs.segments) }}
     steps:
-      - name: Check out trusted socket compatibility control only
+      - name: Check out trusted worker startup control only
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ github.workflow_sha }}
@@ -121,10 +121,7 @@ jobs:
             sudo apt-get update
             sudo apt-get install --no-install-recommends -y acl
           fi
-          actions_root="$(dirname "$(realpath "$RUNNER_TEMP")")/_actions"
-          bundle="$actions_root/openai/codex-action/86365089eb2b84e0a8fb0717b304f8bdcb13b20e/dist/main.js"
-          test -f "$bundle" && test ! -L "$bundle"
-          node .github/automation/patch-codex-sockets.mjs "$bundle"
+          node .github/automation/verify-codex-action.mjs
       - name: Reconstruct exact bounded segment on the trusted runner
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
         env:
@@ -146,7 +143,7 @@ jobs:
       - name: Review supplied evidence without executing candidate code
         id: reviewer
         timeout-minutes: 15
-        uses: openai/codex-action@86365089eb2b84e0a8fb0717b304f8bdcb13b20e # v1
+        uses: openai/codex-action@bdf19a4a223ec2549a3e2274a0cf61556bc07675 # v1
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           prompt-file: ${{ runner.temp }}/jarvis-independent-review/prompt.txt
@@ -173,7 +170,7 @@ jobs:
           fs.writeFileSync(`${root}/result.json`,JSON.stringify({...receipt,raw}),{flag:'wx',mode:0o600});
           JS
       - name: Retain exact segment result for the isolated publisher
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: jarvis-review-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.segment }}
           path: ${{ runner.temp }}/jarvis-independent-review/result.json
@@ -199,7 +196,7 @@ jobs:
           ref: ${{ github.workflow_sha }}
           persist-credentials: false
       - name: Read results from this workflow attempt only
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         continue-on-error: true
         with:
           pattern: jarvis-review-${{ github.run_id }}-${{ github.run_attempt }}-*
