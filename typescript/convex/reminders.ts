@@ -6,7 +6,7 @@ import { reminderActionResultValidator } from "./internalActionValidators.js";
 import { cleanRequiredText, requirePageSize } from "./toolActionLogic.js";
 import { mutation, query, type MutationCtx } from "./_generated/server.js";
 
-const reminderValidator = v.object({
+export const reminderValidator = v.object({
   _id: v.id("reminders"),
   _creationTime: v.number(),
   ownerId: v.string(),

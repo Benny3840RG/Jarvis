@@ -1,5 +1,33 @@
 # Jarvis TypeScript Roadmap
 
+## Codex v1.13 startup compatibility (2026-10-13)
+
+PR #726 aligns the review and build workers with the unmodified upstream v1.13
+socket-isolation implementation. A shared read-only SHA-256 verifier replaces
+the v1.12 bundle patch. CI binds both workflow pins, the verifier and the Linux
+fixture to the same action, exercises the actual startup commands, and checks
+worker denial without removing unrelated service access.
+
+Next:
+
+- Verify exact-head CI, including the disposable Linux socket fixture, and obtain independent review before the owner merge decision.
+- Keep model-review quota, owner approval and deployment evidence separate from the startup repair.
+
+## Outlook commissioning preflight (2026-10-07)
+
+Host preflight of the commissioning kit on a personal Outlook mailbox. The kit still uses the existing `quotes:send` stage, approval token, and reconciliation worker. Issues #294 and #297 stay open.
+
+- Named mode stages `senderConnection` for `JARVIS_OUTLOOK_COMMISSIONING_CONNECTION`. Legacy mode still omits it.
+- The totality project is required before a client or quote is created.
+- Phone numbers and names that stay inside the plain allowlist are not compared. Client contacts are not decoded as RFC 2047. After NFKC and format/bidi/zero-width stripping reach a fixed point, `=`, `?`, `(`, `)`, `"`, or a character outside the allowlist refuses the contact. Mailboxes are compared in canonical form: lowercase, `+tag` removed on every domain, and Gmail dots removed with `googlemail.com` mapped to `gmail.com`. An `a-z`/`0-9` skeleton of the folded contact also refuses when it contains the recipient's canonical local part and the contact is not exactly that recipient, before a client or quote write.
+- A consumers-authority mailbox uses Graph `/me` only when every non-empty signed-in `mail` and `userPrincipalName` matches. Tenant mailboxes stay on `/users/{mailbox}`.
+- An unquoted trailing comment on `CONVEX_DEPLOYMENT` is stripped for both `.env.local` and a systemd environment file.
+
+Next:
+
+- Leave #294 and #297 open until Benny runs the kit on the host.
+- Do not add a second send or approval path.
+
 ## LV1-05 safe voice writes (2026-10-07)
 
 Safe voice writes stage on the existing `ToolActionService` only. `tasks/create` and `reminders/create` are the executors voice may target (the same definitions the tool-execution allowlist already runs). Voice never calls `approve` or `execute`. A receipt is produced by the existing `ToolExecutionService` after the existing approval gate. Retry uses a stable action id and the existing execution idempotency key.
@@ -55,10 +83,24 @@ existing stores. `completeness` stays `partial`. Neither function is wired to
 collections are present, PDF blob digests match, the JSON completion marker
 and manifest stay `partial`, `assertRecoverable` still throws, and two
 injected reads return the same non-empty ids. A restarted `src/http/main.ts`
-matches client, task, and build GETs from scratch JSON. The quote GET on
-that restarted process is NOT YET MET. LV1-10 or LV1-11 still has to run the
-same entrypoint against an isolated local Convex backend that is not the
-configured `CONVEX_URL`. `clear-local` checksums cover the core, memory, and
+matches client, task, and build GETs from scratch JSON. Quote GET across a
+real restarted process is PROVEN on host at main `2d34a741` with an isolated
+self-hosted convex-local-backend on `127.0.0.1` (evidence: host
+`~/lv1-01/restart-proof.md`, quote body sha256 `c7fd9977…dbb8`). That run
+needed workarounds. A host re-proof of `990bd8c2` passed capture, restore,
+field fidelity, and tombstoned replay refusal; the restart step failed because
+the isolated child was not given `JARVIS_DELIVERY_RUNTIME_TOKEN`. The follow-up
+passes that token, refuses `.convex.cloud` and `.convex.site` (including a
+trailing dot or `%2e`), and treats the configured URL as the same host and
+port regardless of scheme, localhost aliases, or IPv4-mapped loopback. It
+tombstones a deleted task or reminder idempotency key in the same process,
+maps a persistence "no longer available" refusal to a non-retryable 409,
+projects HUD and brief tasks and reminders through the public HTTP shape, and
+restores a direct-create receipt only when it matches an entity key and
+fingerprint or a tombstone. Quote and receipt rows are stored under
+`jarvis-cli`. Full end-to-end recovery on realistic data stays NOT YET MET
+until the host repeats that restart step. `completeness`
+stays `partial`. `clear-local` checksums cover the core, memory, and
 business files that action quarantines. Full v4 recovery stays refused.
 Operator docs name `proveLocalV1Recovery` as that gate and state that classic
 restore still writes the live provider. Checkout-local business files stay
