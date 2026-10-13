@@ -124,6 +124,7 @@ test("display:contents ancestors do not produce fictional zero-sized clipping bo
     textContent: "test",
     getBoundingClientRect: () => ({ ...rect(10, 10, 70, 24), width: 60, height: 14 }),
     parentElement: parent,
+    closest: () => null,
   };
   const measure = (display) =>
     runInNewContext(`(${measureElement.toString()})(".label", {text:false,hitTest:false})`, {
@@ -271,4 +272,91 @@ test("narrow right readouts combine explicit column scrolling with page-only pos
   const { column, pageScrolls } = rightScrollHarness("auto", 1366);
   assert.equal(column.scrollTop, 49);
   assert.deepEqual(pageScrolls, [-193]);
+});
+
+function bezelMeasurement({
+  shellZ = 2,
+  bezelDisplay = "block",
+  filled = true,
+  fillOpacity = "1",
+} = {}) {
+  const shell = {};
+  const bezel = {};
+  const sampled = [];
+  const path = {
+    closest: () => bezel,
+    getScreenCTM: () => ({ inverse: () => ({ scale: 0.5 }) }),
+    isPointInFill: (point) => {
+      sampled.push(point);
+      return filled;
+    },
+  };
+  const element = {
+    id: "readout",
+    tagName: "SPAN",
+    classList: [],
+    textContent: "test",
+    parentElement: null,
+    closest: () => shell,
+    getBoundingClientRect: () => ({ ...rect(10, 10, 70, 24), width: 60, height: 14 }),
+  };
+  const style = {
+    display: "block",
+    visibility: "visible",
+    opacity: "1",
+    clip: "auto",
+    overflowX: "visible",
+    overflowY: "visible",
+    zIndex: "auto",
+    fill: "url(#steel)",
+    fillOpacity: "1",
+  };
+  class Point {
+    constructor(x, y) {
+      this.x = x;
+      this.y = y;
+    }
+    matrixTransform(matrix) {
+      return { x: this.x * matrix.scale, y: this.y * matrix.scale };
+    }
+  }
+  const result = runInNewContext(
+    `(${measureElement.toString()})("#readout",{text:false,hitTest:false})`,
+    {
+      innerWidth: 1920,
+      innerHeight: 1080,
+      DOMPoint: Point,
+      document: { querySelector: () => element, querySelectorAll: () => [path] },
+      getComputedStyle: (target) =>
+        target === shell
+          ? { ...style, zIndex: String(shellZ) }
+          : target === bezel
+            ? { ...style, zIndex: "8", display: bezelDisplay }
+            : target === path
+              ? { ...style, fillOpacity }
+              : style,
+    },
+  );
+  return { result, sampled };
+}
+
+test("opaque pointer-events-none bezel geometry still rejects covered content", () => {
+  const { result, sampled } = bezelMeasurement();
+  assert.ok(assessVisibility(result).some((failure) => failure.includes("bezel")));
+  assert.ok(
+    sampled.some((point) => point.x < 10 && point.y < 10),
+    "screen points must use the inverse SVG transform",
+  );
+});
+
+test("bezel openings and hidden or transparent masks do not cover content", () => {
+  assert.equal(assessVisibility(bezelMeasurement({ filled: false }).result).length, 0);
+  assert.equal(assessVisibility(bezelMeasurement({ bezelDisplay: "none" }).result).length, 0);
+  assert.equal(assessVisibility(bezelMeasurement({ fillOpacity: "0" }).result).length, 0);
+});
+
+test("wide Focus content above the bezel is not reported as covered", () => {
+  const { result, sampled } = bezelMeasurement({ shellZ: 10 });
+  assert.equal(assessVisibility(result).length, 0);
+  assert.equal(sampled.length, 0);
 });

@@ -13,6 +13,8 @@ The narrow overview grows with its tactical content. Browser fixtures satisfy
 the inbox contract, and the gate rejects partial renders and JavaScript errors.
 The right status column scrolls when needed rather than compressing live labels;
 the Stability Monitor keeps its content minimum while decorative charts flex.
+The new bezel/title treatment is restricted to wide Focus; other views keep the
+original opening, and narrow Focus gets side clearance from the opaque border.
 
 Next: verify the exact candidate in CI, review the fresh browser captures,
 and obtain independent review and Benny's exact-candidate decision. No

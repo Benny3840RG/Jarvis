@@ -50,6 +50,9 @@ motion without contacting a runtime. Below the desktop breakpoint, the
 overview grows with its content instead of clipping the tactical section.
 On shorter desktop viewports, the right status column scrolls within the frame
 so live task counts, integration state, and network details keep their full height.
+The rounded Console 02 bezel and enlarged title treatment apply only to wide
+Focus. Other views retain the original frame opening so it cannot cover their
+header. Narrow Focus content is inset from the fixed side borders.
 
 | Zone      | What it shows                                                              | Mount                               |
 | --------- | -------------------------------------------------------------------------- | ----------------------------------- |

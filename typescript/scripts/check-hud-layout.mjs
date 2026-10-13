@@ -189,6 +189,51 @@ export function measureElement(selector, { text = true, hitTest = true } = {}) {
       });
     }
   }
+  // Pointer hit-testing ignores the decorative bezel. Its even-odd path can
+  // still paint over text. Both the shell and bezel are root stacking contexts;
+  // wide Focus deliberately raises the shell above the frame.
+  const shell = element.closest(".shell");
+  if (shell) {
+    const shellZ = Number.parseFloat(getComputedStyle(shell).zIndex) || 0;
+    for (const path of document.querySelectorAll('.bezel-art path[fill-rule="evenodd"]')) {
+      const bezel = path.closest(".bezel-art");
+      const bezelStyle = getComputedStyle(bezel);
+      const pathStyle = getComputedStyle(path);
+      if (
+        shellZ >= (Number.parseFloat(bezelStyle.zIndex) || 0) ||
+        bezelStyle.display === "none" ||
+        bezelStyle.visibility !== "visible" ||
+        Number(bezelStyle.opacity) === 0 ||
+        pathStyle.display === "none" ||
+        pathStyle.visibility !== "visible" ||
+        Number(pathStyle.opacity) === 0 ||
+        Number(pathStyle.fillOpacity) === 0 ||
+        pathStyle.fill === "none"
+      )
+        continue;
+      const matrix = path.getScreenCTM();
+      if (!matrix) {
+        result.occluded.push("cannot measure visible bezel mask");
+        continue;
+      }
+      const inverse = matrix.inverse();
+      const covered = result.rects.some((rect) => {
+        const insetX = Math.min(0.5, (rect.right - rect.left) / 4);
+        const insetY = Math.min(0.5, (rect.bottom - rect.top) / 4);
+        const points = [
+          [rect.left + insetX, rect.top + insetY],
+          [rect.right - insetX, rect.top + insetY],
+          [rect.left + insetX, rect.bottom - insetY],
+          [rect.right - insetX, rect.bottom - insetY],
+          [(rect.left + rect.right) / 2, (rect.top + rect.bottom) / 2],
+        ];
+        return points.some(([x, y]) =>
+          path.isPointInFill(new DOMPoint(x, y).matrixTransform(inverse)),
+        );
+      });
+      if (covered) result.occluded.push("painted over by opaque bezel mask");
+    }
+  }
   if (hitTest) {
     for (const rect of result.rects) {
       // Three points catch partial overlays as well as entirely covered targets.

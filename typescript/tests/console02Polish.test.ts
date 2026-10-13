@@ -92,6 +92,30 @@ describe("Console 02 polish", () => {
     assert.match(widget, /<b class="brand-legal">Beez Treez<\/b> Property Solutions/);
   });
 
+  it("keeps the new opaque bezel and title treatment inside wide Focus", () => {
+    assert.match(widget, /class="bezel-art bezel-base"/);
+    assert.match(widget, /id="baseline-frame-brass"/);
+    assert.match(widget, /class="bezel-art bezel-focus"/);
+    const controls = widget.match(
+      /<style id="console-02-readable-controls">([\s\S]*?)<\/style>/,
+    )?.[1];
+    assert.ok(controls);
+    assert.match(controls, /\.bezel-focus\s*\{\s*display:\s*none;/);
+    assert.match(
+      controls,
+      /@media \(min-width: 781px\) and \(max-width: 1399px\)\s*\{[^}]*padding-inline:\s*84px;/,
+    );
+    const desktop = controls.split("@media (min-width: 1400px)")[1];
+    assert.match(desktop, /body\[data-console-view="focus"\] \.bezel-base\s*\{\s*display:\s*none;/);
+    assert.match(
+      desktop,
+      /body\[data-console-view="focus"\] \.bezel-focus\s*\{\s*display:\s*block;/,
+    );
+    const fidelity = widget.match(/<style id="console-02-fidelity">([\s\S]*?)<\/style>/)?.[1];
+    assert.ok(fidelity);
+    assert.doesNotMatch(fidelity.split("@media (min-width: 1400px)")[0], /\.title-plate\s*\{/);
+  });
+
   it("keeps honesty notes on titles and shows a short tag", () => {
     assert.match(widget, /title="Ornament traces are not a reading\."/);
     assert.match(widget, /title="The wave is ornament, not a signal\."/);
