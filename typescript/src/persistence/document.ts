@@ -37,6 +37,53 @@ export function cloneDocument(document: PersistedDocument): PersistedDocument {
   };
 }
 
+/** Identity fields written by direct and controlled creates. Absent on older documents. */
+export function directCreateFields(
+  value: Record<string, unknown>,
+  label: string,
+): Pick<
+  Task,
+  "projectId" | "directCreateIdempotencyKey" | "directCreateFingerprint" | "updatedAt" | "revision"
+> {
+  const text = (key: string): string | undefined => {
+    const item = value[key];
+    if (item === undefined) return undefined;
+    if (typeof item !== "string" || item.length === 0) {
+      throw new StateDocumentError(`${label} has an invalid ${key}.`);
+    }
+    return item;
+  };
+  const finite = (key: string): number | undefined => {
+    const item = value[key];
+    if (item === undefined) return undefined;
+    if (typeof item !== "number" || !Number.isFinite(item)) {
+      throw new StateDocumentError(`${label} has an invalid ${key}.`);
+    }
+    return item;
+  };
+  const projectId = text("projectId");
+  const directCreateIdempotencyKey = text("directCreateIdempotencyKey");
+  const directCreateFingerprint = text("directCreateFingerprint");
+  if ((directCreateIdempotencyKey === undefined) !== (directCreateFingerprint === undefined)) {
+    throw new StateDocumentError(
+      `${label} direct-create identity must include both the key and the fingerprint.`,
+    );
+  }
+  const updatedAt = finite("updatedAt");
+  const revision = finite("revision");
+  return {
+    ...(projectId === undefined ? {} : { projectId }),
+    ...(directCreateIdempotencyKey === undefined
+      ? {}
+      : {
+          directCreateIdempotencyKey,
+          directCreateFingerprint: directCreateFingerprint as string,
+        }),
+    ...(updatedAt === undefined ? {} : { updatedAt }),
+    ...(revision === undefined ? {} : { revision }),
+  };
+}
+
 function normalizeTask(value: unknown, index: number, strict: boolean): Task {
   if (!isRecord(value)) throw new StateDocumentError(`Task ${index} is not an object.`);
   if (typeof value.id !== "string" || value.id.length === 0) {
@@ -62,6 +109,7 @@ function normalizeTask(value: unknown, index: number, strict: boolean): Task {
     title: value.title,
     completed: value.completed,
     category: typeof value.category === "string" ? value.category : "personal",
+    ...directCreateFields(value, `Task ${index}`),
     createdAt: typeof value.createdAt === "number" ? value.createdAt : 0,
   };
 }
@@ -137,6 +185,7 @@ function normalizeReminder(
     id: value.id,
     title: value.title,
     ...due,
+    ...directCreateFields(value, `Reminder ${index}`),
     createdAt: typeof value.createdAt === "number" ? value.createdAt : 0,
   };
 }

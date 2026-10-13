@@ -17,12 +17,13 @@ import {
 import type { FastifyReply, FastifyRequest } from "fastify";
 
 import type { PersistenceProvider, Task } from "../persistence/persistence.js";
+import { publicTask } from "../persistence/publicRecords.js";
 import type { TaskUpdate } from "../persistence/updates.js";
 import { JarvisProblem } from "./problemDetails.js";
 import { parseCreateTask, parseIdempotencyKey, parseUpdateTask } from "./taskRequest.js";
 import { HTTP_PERSISTENCE } from "./tokens.js";
 
-type CachedCreate = { fingerprint: string; task: Task };
+type CachedCreate = { fingerprint: string; task: Task; deleted: boolean };
 type PendingCreate = { fingerprint: string; task: Promise<Task> };
 const IDEMPOTENCY_CACHE_LIMIT = 1_000;
 
@@ -52,6 +53,14 @@ function operationProblem(error: unknown): JarvisProblem {
       "Idempotency-Key was already used for a different task request.",
     );
   }
+  if (/no longer available/i.test(message)) {
+    return problem(
+      "task-no-longer-available",
+      "Task No Longer Available",
+      HttpStatus.CONFLICT,
+      "Task from this create request is no longer available.",
+    );
+  }
   if (/does not exist|not found/i.test(message)) {
     return problem(
       "task-not-found",
@@ -68,12 +77,23 @@ function operationProblem(error: unknown): JarvisProblem {
   );
 }
 
-function taskResponse(task: Task): { data: Task } {
-  return { data: task };
+function taskResponse(task: Task): {
+  data: Pick<Task, "id" | "title" | "completed" | "category" | "createdAt">;
+} {
+  return { data: publicTask(task) };
 }
 
 function requestFingerprint(input: unknown): string {
   return createHash("sha256").update(JSON.stringify(input), "utf8").digest("hex");
+}
+
+function unavailableTask(): JarvisProblem {
+  return problem(
+    "task-no-longer-available",
+    "Task No Longer Available",
+    HttpStatus.CONFLICT,
+    "Task from this create request is no longer available.",
+  );
 }
 
 @Controller("api/v1/tasks")
@@ -83,10 +103,21 @@ export class TaskController {
 
   constructor(@Inject(HTTP_PERSISTENCE) private readonly persistence: PersistenceProvider) {}
 
+  private tombstoneCachedTask(taskId: string): void {
+    for (const cached of this.cachedCreates.values()) {
+      if (cached.task.id === taskId) cached.deleted = true;
+    }
+  }
+
+  private async taskStillExists(taskId: string): Promise<boolean> {
+    const tasks = await this.persistence.listTasks();
+    return tasks.some((task) => task.id === taskId);
+  }
+
   @Get()
   async list() {
     try {
-      const data = await this.persistence.listTasks();
+      const data = (await this.persistence.listTasks()).map(publicTask);
       return { data, count: data.length };
     } catch (error: unknown) {
       throw operationProblem(error);
@@ -124,6 +155,17 @@ export class TaskController {
           "Idempotency-Key was already used for a different task request.",
         );
       }
+      if (cached.deleted) throw unavailableTask();
+      let stillThere: boolean;
+      try {
+        stillThere = await this.taskStillExists(cached.task.id);
+      } catch (error: unknown) {
+        throw operationProblem(error);
+      }
+      if (!stillThere) {
+        cached.deleted = true;
+        throw unavailableTask();
+      }
       reply.header("Location", `/api/v1/tasks/${cached.task.id}`);
       return taskResponse(cached.task);
     }
@@ -138,6 +180,16 @@ export class TaskController {
         );
       }
       const task = await pending.task;
+      let stillThere: boolean;
+      try {
+        stillThere = await this.taskStillExists(task.id);
+      } catch (error: unknown) {
+        throw operationProblem(error);
+      }
+      if (!stillThere) {
+        this.tombstoneCachedTask(task.id);
+        throw unavailableTask();
+      }
       reply.header("Location", `/api/v1/tasks/${task.id}`);
       return taskResponse(task);
     }
@@ -148,7 +200,7 @@ export class TaskController {
     this.pendingCreates.set(key, { fingerprint, task: create });
     try {
       const task = await create;
-      this.cachedCreates.set(key, { fingerprint, task });
+      this.cachedCreates.set(key, { fingerprint, task, deleted: false });
       while (this.cachedCreates.size > IDEMPOTENCY_CACHE_LIMIT) {
         const oldestKey = this.cachedCreates.keys().next().value;
         if (oldestKey === undefined) break;
@@ -196,6 +248,7 @@ export class TaskController {
     try {
       const task = await this.persistence.removeTask(taskId);
       if (!task) throw new Error("Task does not exist.");
+      this.tombstoneCachedTask(task.id);
       return taskResponse(task);
     } catch (error: unknown) {
       throw operationProblem(error);

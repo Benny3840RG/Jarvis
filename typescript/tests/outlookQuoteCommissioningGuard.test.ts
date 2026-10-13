@@ -5,7 +5,9 @@ import {
   assertOutlookCommissioningProof,
   assessOutlookQuoteCommissioningGuard,
   beginOutlookQuoteCommissioning,
+  normaliseCommissioningEnvironment,
   recipientCollidesWithContacts,
+  stripUnquotedTrailingComment,
 } from "../src/tools/outlookQuoteCommissioningGuard.js";
 
 const READY = {
@@ -311,26 +313,6 @@ describe("outlook quote commissioning guard", () => {
         recipient: "customer@example.com",
         contacts: ["Name <customer@example.com..>"],
       },
-      {
-        recipient: "customer@example.com",
-        contacts: ['"customer"@example.com'],
-      },
-      {
-        recipient: "customer@example.com",
-        contacts: ["customer(comment)@example.com"],
-      },
-      {
-        recipient: "customer@example.com",
-        contacts: ["(comment)customer@example.com"],
-      },
-      {
-        recipient: "customer@example.com",
-        contacts: ["customer@(comment)example.com"],
-      },
-      {
-        recipient: "customer@example.com",
-        contacts: ["=?utf-8?q?customer?=@example.com"],
-      },
     ];
     for (const entry of cases) {
       assert.equal(
@@ -357,19 +339,64 @@ describe("outlook quote commissioning guard", () => {
       assert.equal(loaded, true, entry.contacts[0]);
     }
 
-    let unparsed = false;
+    const punctuated = [
+      '"customer"@example.com',
+      "customer(comment)@example.com",
+      "(comment)customer@example.com",
+      "customer@(comment)example.com",
+    ];
+    for (const contact of punctuated) {
+      assert.equal(
+        recipientCollidesWithContacts("customer@example.com", [contact]),
+        false,
+        contact,
+      );
+      let loaded = false;
+      await assert.rejects(
+        () =>
+          beginOutlookQuoteCommissioning({
+            environment: {
+              ...READY,
+              JARVIS_OUTLOOK_COMMISSIONING_RECIPIENT: "customer@example.com",
+              JARVIS_OUTLOOK_COMMISSIONING_RECIPIENT_ALLOWLIST: "customer@example.com",
+            },
+            loadClientContactValues: () => {
+              loaded = true;
+              return Promise.resolve([contact]);
+            },
+          }),
+        /could not be parsed into one mailbox/,
+      );
+      assert.equal(loaded, true, contact);
+    }
+
+    assert.equal(
+      recipientCollidesWithContacts("customer@example.com", ["=?utf-8?q?customer?=@example.com"]),
+      false,
+    );
+    let encoded = false;
     await assert.rejects(
       () =>
         beginOutlookQuoteCommissioning({
-          environment: READY,
+          environment: {
+            ...READY,
+            JARVIS_OUTLOOK_COMMISSIONING_RECIPIENT: "customer@example.com",
+            JARVIS_OUTLOOK_COMMISSIONING_RECIPIENT_ALLOWLIST: "customer@example.com",
+          },
           loadClientContactValues: () => {
-            unparsed = true;
-            return Promise.resolve(["not-a-mailbox"]);
+            encoded = true;
+            return Promise.resolve(["=?utf-8?q?customer?=@example.com"]);
           },
         }),
       /could not be parsed into one mailbox/,
     );
-    assert.equal(unparsed, true);
+    assert.equal(encoded, true);
+
+    const skipped = await beginOutlookQuoteCommissioning({
+      environment: READY,
+      loadClientContactValues: () => Promise.resolve(["not-a-mailbox"]),
+    });
+    assert.equal(skipped.recipient, READY.JARVIS_OUTLOOK_COMMISSIONING_RECIPIENT);
 
     let contained = false;
     await assert.rejects(
@@ -385,7 +412,7 @@ describe("outlook quote commissioning guard", () => {
             return Promise.resolve(["customer@example.com.extra"]);
           },
         }),
-      /matches a client contact/,
+      /could not be parsed into one mailbox/,
     );
     assert.equal(contained, true);
   });
@@ -417,6 +444,360 @@ describe("outlook quote commissioning guard", () => {
       assert.equal(staged, 0, contact);
       assert.equal(sent, 0, contact);
     }
+  });
+
+  it("ignores phone numbers and names, and still refuses an ambiguous address", async () => {
+    const accepted = await beginOutlookQuoteCommissioning({
+      environment: READY,
+      loadClientContactValues: () =>
+        Promise.resolve(["07123 456789", "Ada Lovelace", "other@example.com"]),
+    });
+    assert.equal(accepted.recipient, "commissioning@example.invalid");
+
+    const ambiguous = [
+      "+1 (555) 010-0000",
+      "(other@example.com)",
+      "not-quite@",
+      "Name <not-an-email>",
+      "customer@example.com extra",
+      "+1 555 =?utf-8?q?customer=40example.com?=",
+      "=?utf-8?q?workshop_phone?=",
+    ];
+    for (const contact of ambiguous) {
+      let staged = 0;
+      let sent = 0;
+      await assert.rejects(async () => {
+        const plan = await beginOutlookQuoteCommissioning({
+          environment: READY,
+          loadClientContactValues: () => Promise.resolve([contact]),
+        });
+        staged += 1;
+        sent += 1;
+        void plan;
+      }, /could not be parsed into one mailbox/);
+      assert.equal(staged, 0, contact);
+      assert.equal(sent, 0, contact);
+    }
+
+    await assert.rejects(
+      () =>
+        beginOutlookQuoteCommissioning({
+          environment: READY,
+          loadClientContactValues: () =>
+            Promise.resolve(["07123 456789", "commissioning@example.invalid"]),
+        }),
+      /matches a client contact/,
+    );
+  });
+
+  it("refuses a comment-wrapped or lookalike mailbox before anything is staged", async () => {
+    const recipient = "3840zip@gmail.com";
+    const hidden = [
+      "3840zip\u{FF20}gmail.com",
+      "3840zip\u{FE6B}gmail.com",
+      "3840zip\u{FF20}gmail\u{FF0E}com",
+    ];
+    for (const contact of hidden) {
+      let staged = 0;
+      let sent = 0;
+      await assert.rejects(async () => {
+        const plan = await beginOutlookQuoteCommissioning({
+          environment: {
+            ...READY,
+            JARVIS_OUTLOOK_COMMISSIONING_RECIPIENT: recipient,
+            JARVIS_OUTLOOK_COMMISSIONING_RECIPIENT_ALLOWLIST: recipient,
+          },
+          loadClientContactValues: () => Promise.resolve([contact]),
+        });
+        staged += 1;
+        sent += 1;
+        void plan;
+      }, /matches a client contact/);
+      assert.equal(staged, 0, contact);
+      assert.equal(sent, 0, contact);
+    }
+
+    const unparseable = [
+      "(3840zip@gmail.com)",
+      "Ada Lovelace (3840zip@gmail.com)",
+      "+1 (555) 010-0000 (3840zip@gmail.com)",
+      "+61 400 000 000 (3840zip@gmail.com)",
+      "(not-quite@)",
+      "not-quite\u{FF20}",
+      "(3840zip@gmail.com extra)",
+      "=?utf-8?q?=283840zip=40gmail=2Ecom=29?=",
+    ];
+    for (const contact of unparseable) {
+      let staged = 0;
+      let sent = 0;
+      await assert.rejects(async () => {
+        const plan = await beginOutlookQuoteCommissioning({
+          environment: {
+            ...READY,
+            JARVIS_OUTLOOK_COMMISSIONING_RECIPIENT: recipient,
+            JARVIS_OUTLOOK_COMMISSIONING_RECIPIENT_ALLOWLIST: recipient,
+          },
+          loadClientContactValues: () => Promise.resolve([contact]),
+        });
+        staged += 1;
+        sent += 1;
+        void plan;
+      }, /could not be parsed into one mailbox/);
+      assert.equal(staged, 0, contact);
+      assert.equal(sent, 0, contact);
+    }
+  });
+
+  it("refuses a parenthesised or Gmail-equivalent mailbox before anything is staged", async () => {
+    const recipient = "3840zip@gmail.com";
+    const environment = {
+      ...READY,
+      JARVIS_OUTLOOK_COMMISSIONING_RECIPIENT: recipient,
+      JARVIS_OUTLOOK_COMMISSIONING_RECIPIENT_ALLOWLIST: recipient,
+    };
+    const punctuated = [
+      "3840.z(x)ip@gmail.com",
+      "38(a)40.zip@gmail.com",
+      '"3840.z(x)ip"@gmail.com',
+      "Benny <3840.z(x)ip@gmail.com>",
+      "mailto:3840.z(x)ip@gmail.com",
+      "3840.z(x)ip@googlemail.com",
+      "3840.z(x)ip+tag@gmail.com",
+      "3840.z(\u0444)ip@gmail.com",
+      "3840.z(9)ip@gmail.com",
+      "(3840.z(x)ip@gmail.com)",
+    ];
+    for (const contact of punctuated) {
+      let staged = 0;
+      await assert.rejects(async () => {
+        const plan = await beginOutlookQuoteCommissioning({
+          environment,
+          loadClientContactValues: () => Promise.resolve([contact]),
+        });
+        staged += 1;
+        void plan;
+      }, /could not be parsed into one mailbox/);
+      assert.equal(staged, 0, contact);
+    }
+
+    const aliases = [
+      "3840.zip@gmail.com",
+      "3840zip+x@googlemail.com",
+      "3840.zip+x@GoogleMail.com",
+      "3.8.4.0.z.i.p@gmail.com",
+    ];
+    for (const contact of aliases) {
+      assert.equal(recipientCollidesWithContacts(recipient, [contact]), true, contact);
+      let staged = 0;
+      await assert.rejects(async () => {
+        const plan = await beginOutlookQuoteCommissioning({
+          environment,
+          loadClientContactValues: () => Promise.resolve([contact]),
+        });
+        staged += 1;
+        void plan;
+      }, /matches a client contact/);
+      assert.equal(staged, 0, contact);
+    }
+
+    for (const contact of ["other.person@gmail.com", "Name <other@outlook.com>"]) {
+      assert.equal(recipientCollidesWithContacts(recipient, [contact]), false, contact);
+      const plan = await beginOutlookQuoteCommissioning({
+        environment,
+        loadClientContactValues: () => Promise.resolve([contact]),
+      });
+      assert.equal(plan.recipient, recipient, contact);
+    }
+  });
+
+  it("refuses a charset-decoded lookalike before anything is staged", async () => {
+    const recipient = "3840zip@gmail.com";
+    const environment = {
+      ...READY,
+      JARVIS_OUTLOOK_COMMISSIONING_RECIPIENT: recipient,
+      JARVIS_OUTLOOK_COMMISSIONING_RECIPIENT_ALLOWLIST: recipient,
+    };
+    const collisions = [
+      "3840zip@gmai\u200Bl.com",
+      "3840\u200Czip@gmail.com",
+      "3840zip@gmail\u2060.com",
+      "3840zip@gm\u00ADail.com",
+    ];
+    for (const contact of collisions) {
+      let staged = 0;
+      let sent = 0;
+      await assert.rejects(async () => {
+        const plan = await beginOutlookQuoteCommissioning({
+          environment,
+          loadClientContactValues: () => Promise.resolve([contact]),
+        });
+        staged += 1;
+        sent += 1;
+        void plan;
+      }, /matches a client contact/);
+      assert.equal(staged, 0, contact);
+      assert.equal(sent, 0, contact);
+    }
+
+    const unreadable = [
+      "=?utf-8?q?3840zip=EF=BC=A0gmail.com?=",
+      "=?utf-8?q?3840zip=EF=B9=ABgmail.com?=",
+      "=?iso-8859-1?q?3840zip=40gmail.com?=",
+      "=?not-a-charset?q?3840zip=40gmail.com?=",
+      "=?utf-8?q?=ZZ?=",
+      "=?utf-8?q?3840zip=40gmail.com",
+      "=?utf-8?b?Mzg0MHppcO+8oGdtYWlsLmNvbQ==?= <other@outlook.com>",
+      "<other@outlook.com> =?utf-8?b?Mzg0MHppcO+5q2dtYWlsLmNvbQ==?=",
+    ];
+    for (const contact of unreadable) {
+      let staged = 0;
+      let sent = 0;
+      await assert.rejects(async () => {
+        const plan = await beginOutlookQuoteCommissioning({
+          environment,
+          loadClientContactValues: () => Promise.resolve([contact]),
+        });
+        staged += 1;
+        sent += 1;
+        void plan;
+      }, /could not be parsed into one mailbox/);
+      assert.equal(staged, 0, contact);
+      assert.equal(sent, 0, contact);
+    }
+
+    await assert.rejects(
+      () =>
+        beginOutlookQuoteCommissioning({
+          environment,
+          loadClientContactValues: () =>
+            Promise.resolve(["=?iso-8859-1?q?3840zip=EF=BC=A0gmail.com?="]),
+        }),
+      /could not be parsed into one mailbox/,
+    );
+  });
+
+  it("refuses nested encoded words and charsets outside the allowlist", async () => {
+    const recipient = "3840zip@gmail.com";
+    const environment = {
+      ...READY,
+      JARVIS_OUTLOOK_COMMISSIONING_RECIPIENT: recipient,
+      JARVIS_OUTLOOK_COMMISSIONING_RECIPIENT_ALLOWLIST: recipient,
+    };
+    const refusedContacts = [
+      "=?utf-8?q?=3D=3Futf=2D8=3Fq=3F3840zip=3D40gmail=3D2Ecom=3F=3D?=",
+      "=?utf-8?q?=3D=3Futf=2D8=3Fq=3F=3D3D=3D3Futf=3D2D8=3D3Fq=3D3F3840zip=3D3D40gmail=3D3D2Ecom=3D3F=3D3D=3F=3D?=",
+      "=?utf-8?q?=3D=3Futf=2D8=3Fq=3F=3D283840zip=3D40gmail=3D2Ecom=3D29=3F=3D?=",
+      "=?utf-8?q?=3D=3Futf=2D8=3Fq=3F=3D3D=3D3Futf=3D2D8=3D3Fq=3D3F=3D3D283840zip=3D3D40gmail=3D3D2Ecom=3D3D29=3D3F=3D3D=3F=3D?=",
+      "=?utf-8?b?PT91dGYtOD9iP016ZzBNSHBwY0VCbmJXRnBiQzVqYjIwPT89?=",
+      "=?utf-8?b?PT91dGYtOD9iP1BUOTFkR1l0T0Q5aVAwMTZaekJOU0hCd1kwVkNibUpYUm5CaVF6VnFZakl3UFQ4OT89?=",
+      "=?utf-16?b?/v8AMwA4ADQAMAB6AGkAcABAAGcAbQBhAGkAbAAuAGMAbwBt?=",
+      "=?utf-16?b?//4zADgANAAwAHoAaQBwAEAAZwBtAGEAaQBsAC4AYwBvAG0A?=",
+      "=?utf-16be?b?ADMAOAA0ADAAegBpAHAAQABnAG0AYQBpAGwALgBjAG8AbQ==?=",
+      "=?utf-16le?b?MwA4ADQAMAB6AGkAcABAAGcAbQBhAGkAbAAuAGMAbwBtAA==?=",
+      "=?utf-7?q?3840zip=40gmail.com?=",
+      "=?latin1?q?3840zip=40gmail.com?=",
+      "=?utf-8*en?q?3840zip=40gmail.com?=",
+      "=?utf-8*en-us?q?3840zip=40gmail.com?=",
+    ];
+    for (const contact of refusedContacts) {
+      let staged = 0;
+      await assert.rejects(async () => {
+        const plan = await beginOutlookQuoteCommissioning({
+          environment,
+          loadClientContactValues: () => Promise.resolve([contact]),
+        });
+        staged += 1;
+        void plan;
+      }, /could not be parsed into one mailbox/);
+      assert.equal(staged, 0, contact);
+    }
+
+    for (const contact of [
+      "=?utf8?q?3840zip=40gmail.com?=",
+      "=?UTF-8?q?3840zip=40gmail.com?=",
+      "=?UTF8?q?3840zip=40gmail.com?=",
+      "=?us-ascii?q?3840zip=40gmail.com?=",
+      "=?ISO-8859-1?q?3840zip=40gmail.com?=",
+    ]) {
+      await assert.rejects(
+        () =>
+          beginOutlookQuoteCommissioning({
+            environment,
+            loadClientContactValues: () => Promise.resolve([contact]),
+          }),
+        /could not be parsed into one mailbox/,
+      );
+    }
+  });
+
+  it("refuses an encoded word whose opener is split before anything is staged", async () => {
+    const recipient = "3840zip@gmail.com";
+    const environment = {
+      ...READY,
+      JARVIS_OUTLOOK_COMMISSIONING_RECIPIENT: recipient,
+      JARVIS_OUTLOOK_COMMISSIONING_RECIPIENT_ALLOWLIST: recipient,
+    };
+    const split = [
+      "=()?utf-8?q?3840zip=40gmail.com?=",
+      "=(note)?utf-8?q?3840zip=40gmail.com?=",
+      "=\uFF08\uFF09?utf-8?q?3840zip=40gmail.com?=",
+      "=()?utf-8?b?Mzg0MHppcEBnbWFpbC5jb20?=",
+      "= ?utf-8?q?3840zip=40gmail.com?=",
+      "=\t?utf-8?q?3840zip=40gmail.com?=",
+      "=\n?utf-8?q?3840zip=40gmail.com?=",
+      "=((x))?utf-8?q?3840zip=40gmail.com?=",
+    ];
+    for (const contact of split) {
+      let staged = 0;
+      await assert.rejects(async () => {
+        const plan = await beginOutlookQuoteCommissioning({
+          environment,
+          loadClientContactValues: () => Promise.resolve([contact]),
+        });
+        staged += 1;
+        void plan;
+      }, /could not be parsed into one mailbox/);
+      assert.equal(staged, 0, contact);
+    }
+  });
+
+  it("strips one unquoted CONVEX_DEPLOYMENT comment and still refuses production", () => {
+    assert.equal(
+      stripUnquotedTrailingComment("dev:outgoing-ram-798 # systemd kept this comment"),
+      "dev:outgoing-ram-798",
+    );
+    assert.equal(
+      stripUnquotedTrailingComment('"dev:outgoing-ram-798 # comment"'),
+      '"dev:outgoing-ram-798 # comment"',
+    );
+    const plan = assessOutlookQuoteCommissioningGuard({
+      ...READY,
+      CONVEX_DEPLOYMENT: "dev:outgoing-ram-798 # systemd kept this comment",
+    });
+    assert.equal(plan.deployment, "dev:outgoing-ram-798");
+    const normalised = normaliseCommissioningEnvironment({
+      ...READY,
+      JARVIS_SERVICE_TOKEN: "service # not a comment",
+      CONVEX_DEPLOYMENT: "dev:outgoing-ram-798 # systemd kept this comment",
+    });
+    assert.equal(normalised.CONVEX_DEPLOYMENT, "dev:outgoing-ram-798");
+    assert.equal(normalised.JARVIS_SERVICE_TOKEN, "service # not a comment");
+    assert.throws(
+      () =>
+        assessOutlookQuoteCommissioningGuard({
+          ...READY,
+          CONVEX_DEPLOYMENT: "prod:outgoing-ram-798 # comment",
+        }),
+      /CONVEX_DEPLOYMENT must identify a development deployment/,
+    );
+    assert.throws(
+      () =>
+        assessOutlookQuoteCommissioningGuard({
+          ...READY,
+          CONVEX_DEPLOYMENT: "dev:outgoing-ram-798#glued",
+        }),
+      /CONVEX_DEPLOYMENT must identify a development deployment/,
+    );
   });
 
   it("records one terminal reconciliation and leaves #294 and #297 open", () => {
