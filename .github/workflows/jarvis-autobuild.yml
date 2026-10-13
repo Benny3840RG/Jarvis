@@ -532,13 +532,7 @@ jobs:
             sudo apt-get update
             sudo apt-get install --no-install-recommends -y acl
           fi
-          actions_root="$(dirname "$(realpath "$RUNNER_TEMP")")/_actions"
-          bundle="$actions_root/openai/codex-action/86365089eb2b84e0a8fb0717b304f8bdcb13b20e/dist/main.js"
-          if [[ ! -f "$bundle" || -L "$bundle" ]]; then
-            echo "::error::Expected pinned Codex action bundle is unavailable; refusing to start worker."
-            exit 1
-          fi
-          node .github/automation/patch-codex-sockets.mjs "$bundle"
+          node .github/automation/verify-codex-action.mjs
 
       - name: Guard cumulative candidate before checkout
         if: inputs.pull_request_number

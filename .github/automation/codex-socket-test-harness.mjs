@@ -1,7 +1,9 @@
-// Execute the actual pinned action functions; inject only OS boundaries/fixture root.
+// Execute verified upstream functions unchanged; inject only OS boundaries and
+// the disposable fixture root, never alternate discovery or restriction code.
 import * as fs from "node:fs";
 import path from "node:path";
 import * as childProcess from "node:child_process";
+import { verifyCodexBundle } from "./verify-codex-action.mjs";
 
 function section(source, startText, endText) {
   const start = source.indexOf(startText);
@@ -10,7 +12,8 @@ function section(source, startText, endText) {
   return source.slice(start, end);
 }
 
-export function socketPipeline(source, directory, options = {}) {
+export function socketPipeline(bundle, directory, options = {}) {
+  const source = verifyCodexBundle(bundle);
   const execSource = section(
     source,
     "async function execCommand(command, args, options = {})",
@@ -21,14 +24,14 @@ export function socketPipeline(source, directory, options = {}) {
     new Function("import_node_child_process", "return (" + execSource + ");")(
       childProcess,
     );
-  const discovery = section(
-    options.discoverySource ?? source,
-    "async function findRootServiceSockets(",
-    "\nasync function hasWritableSocketAcl(",
-  );
-  const remaining = section(
+  const credentials = section(
     source,
-    "async function hasWritableSocketAcl(",
+    "function validId(value)",
+    "\nfunction captureLinuxRunnerCredentials(",
+  );
+  const pipeline = section(
+    source,
+    "async function findRootServiceSockets(",
     "\nasync function ensurePasswordlessSudo(",
   );
   return new Function(
@@ -37,17 +40,9 @@ export function socketPipeline(source, directory, options = {}) {
     "LINUX_O_PATH",
     "execCommand",
     "LINUX_RUNTIME_DIRECTORY",
-    "process",
-    discovery +
+    credentials +
       "\n" +
-      remaining +
-      "\nreturn { findRootServiceSockets, restrictRootServiceSocket, verifyPrivilegedSocketsRestricted };",
-  )(
-    options.fs ?? fs,
-    path,
-    0o10000000,
-    execCommand,
-    directory,
-    options.process ?? process,
-  );
+      pipeline +
+      "\nreturn { execCommand, parseLinuxRunnerCredentials, findRootServiceSockets, canWriteRootServiceSocket, restrictRootServiceSocket, verifyPrivilegedSocketsRestricted };",
+  )(options.fs ?? fs, path, 0o10000000, execCommand, directory);
 }

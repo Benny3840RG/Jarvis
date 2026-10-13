@@ -107,7 +107,7 @@ jobs:
       matrix:
         segment: ${{ fromJSON(needs.prepare.outputs.segments) }}
     steps:
-      - name: Check out trusted socket compatibility control only
+      - name: Check out trusted worker startup control only
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ github.workflow_sha }}
@@ -121,10 +121,7 @@ jobs:
             sudo apt-get update
             sudo apt-get install --no-install-recommends -y acl
           fi
-          actions_root="$(dirname "$(realpath "$RUNNER_TEMP")")/_actions"
-          bundle="$actions_root/openai/codex-action/86365089eb2b84e0a8fb0717b304f8bdcb13b20e/dist/main.js"
-          test -f "$bundle" && test ! -L "$bundle"
-          node .github/automation/patch-codex-sockets.mjs "$bundle"
+          node .github/automation/verify-codex-action.mjs
       - name: Reconstruct exact bounded segment on the trusted runner
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
         env:

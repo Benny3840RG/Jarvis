@@ -57,11 +57,11 @@ jobs:
           .github/automation/review-segments.test.mjs
           .github/automation/paired-review-context.test.mjs
 
-      - name: Check out the pinned socket compatibility fixture
+      - name: Check out the pinned upstream socket isolation fixture
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           repository: openai/codex-action
-          ref: 86365089eb2b84e0a8fb0717b304f8bdcb13b20e
+          ref: bdf19a4a223ec2549a3e2274a0cf61556bc07675
           path: codex-action-fixture
           persist-credentials: false
       - name: Verify worker-only socket isolation on Linux
@@ -74,7 +74,7 @@ jobs:
             sudo apt-get install --no-install-recommends -y acl
           fi
           test -f "$CODEX_ACTION_BUNDLE"
-          node --test .github/automation/codex-socket-compat.test.mjs
+          node --test .github/automation/codex-action-startup.test.mjs .github/automation/codex-socket-compat.test.mjs
           sudo "$(command -v node)" .github/automation/test-codex-sockets.mjs "$CODEX_ACTION_BUNDLE"
 
   typecheck-lint-format-test:
