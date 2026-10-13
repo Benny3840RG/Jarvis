@@ -5,6 +5,38 @@ import { describe, it } from "node:test";
 const widget = readFileSync(new URL("../src/mcp/dashboard-v1.html", import.meta.url), "utf8");
 
 describe("Console 02 polish", () => {
+  it("reserves content space for the Now action and all three queued tasks", () => {
+    const controls = widget.match(
+      /<style id="console-02-readable-controls">([\s\S]*?)<\/style>/,
+    )?.[1];
+    assert.ok(controls, "The compact instrument frame must reserve space for its task controls");
+    assert.match(
+      controls,
+      /\.now-strip\s*\{[^}]*position:\s*static;[^}]*height:\s*auto;[^}]*max-height:\s*none;/,
+    );
+    assert.match(
+      controls,
+      /\.queue-panel\s*\{[^}]*grid-template-rows:\s*auto auto minmax\(0,\s*1fr\);/,
+    );
+    assert.match(
+      controls,
+      /#focus-queue\s*\{[^}]*grid-template-columns:\s*repeat\(3,\s*minmax\(0,\s*1fr\)\);/,
+    );
+    assert.match(
+      controls,
+      /#current-actions \.primary-button\s*\{[^}]*min-height:\s*var\(--touch\);/,
+    );
+  });
+
+  it("gives real status and tactical labels space before decorative marks", () => {
+    const controls = widget.match(
+      /<style id="console-02-readable-controls">([\s\S]*?)<\/style>/,
+    )?.[1];
+    assert.ok(controls, "The instrument layout must keep real labels readable");
+    assert.match(controls, /#dev-status\s*\{[^}]*order:\s*-1;/);
+    assert.match(controls, /\.tac-map\s*\{[^}]*bottom:\s*36px;[^}]*overflow-y:\s*auto;/);
+  });
+
   it("limits decorative chrome hiding to the desktop Focus view", () => {
     const pass2 = widget.match(/<style id="console-02-pass2">([\s\S]*?)<\/style>/)?.[1];
     assert.ok(pass2, "Console 02 second presentation pass is missing");

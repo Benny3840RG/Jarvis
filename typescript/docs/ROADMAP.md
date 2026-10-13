@@ -1,5 +1,19 @@
 # Jarvis TypeScript Roadmap
 
+## Console 02 readable controls (2026-10-13)
+
+PR #724 maintenance keeps its existing HUD presentation and incorporates
+current main. The earlier Focus-only branding/rivet fix remains in place.
+Now and Next 3 use a content-sized row instead of the 26px clipped strip;
+desktop queue cards retain all three tasks and their clear actions. The
+development warning precedes decorative rails, and tactical titles have a
+scrollable area above their heading. Source-contract regressions and an
+isolated Chromium layout check cover the presentation without live writes.
+
+Next: verify the exact candidate in CI, review the fresh browser captures,
+and obtain independent review and Benny's exact-candidate decision. No
+merge, deployment, host commissioning, or new operator authority is implied.
+
 ## Codex v1.13 startup compatibility (2026-10-13)
 
 PR #726 aligns the review and build workers with the unmodified upstream v1.13

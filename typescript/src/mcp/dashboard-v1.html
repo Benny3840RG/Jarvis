@@ -2051,6 +2051,97 @@
         }
       }
     </style>
+    <style id="console-02-readable-controls">
+      /* Real task controls keep their own space; decorative instruments flex around them. */
+      body[data-console-view="focus"] .now-strip {
+        position: static;
+        height: auto;
+        max-height: none;
+        min-width: 0;
+        overflow: visible;
+      }
+      body[data-console-view="focus"] .now-strip .mission-panel,
+      body[data-console-view="focus"] .now-strip .queue-panel {
+        min-width: 0;
+        height: auto;
+        max-height: none;
+        overflow: visible;
+      }
+      body[data-console-view="focus"] .now-strip .queue-panel {
+        grid-template-rows: auto auto minmax(0, 1fr);
+      }
+      body[data-console-view="focus"] #current-actions .primary-button {
+        min-height: var(--touch);
+      }
+      body[data-console-view="focus"] .now-strip .mission-core { padding: 10px; }
+      body[data-console-view="focus"] .now-strip .mission-copy { min-width: 0; }
+      body[data-console-view="focus"] .now-strip .eyebrow { display: block; margin: 0 0 4px; }
+      body[data-console-view="focus"] .now-strip .panel-header { min-height: 32px; padding: 6px 10px; }
+      body[data-console-view="focus"] .now-strip .next-caption { margin: 4px 10px 0; }
+      @media (min-width: 1400px) {
+        body[data-console-view="focus"] .shell { padding-bottom: 252px; }
+        body[data-console-view="focus"] .now-strip {
+          flex: 0 0 auto;
+          grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+          gap: 8px;
+        }
+        body[data-console-view="focus"] #focus-queue {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          max-height: none;
+          overflow: visible;
+        }
+        body[data-console-view="focus"] #focus-queue .priority-row { min-width: 0; }
+        body[data-console-view="focus"] #focus-queue .priority-row > div { min-width: 0; }
+        body[data-console-view="focus"] #focus-queue .priority-row strong { font-size: 13px; }
+        body[data-console-view="focus"] #focus-queue .ghost { min-height: var(--touch); }
+        body[data-console-view="focus"] .overview-plate {
+          grid-template-rows: auto auto auto minmax(0, 1fr) 96px;
+        }
+        body[data-console-view="focus"] .core-stage {
+          width: auto;
+          height: 100%;
+          max-width: 100%;
+          max-height: 420px;
+          aspect-ratio: 1;
+          align-self: center;
+        }
+        body[data-console-view="focus"] .core-side .tac-plate {
+          position: relative;
+          grid-row: 5;
+          left: auto;
+          right: auto;
+          bottom: auto;
+          width: 100%;
+          height: 96px;
+        }
+        body[data-console-view="focus"] .tac-map {
+          top: 0;
+          bottom: 36px;
+          min-height: 0;
+          overflow-y: auto;
+          align-content: start;
+          pointer-events: auto;
+        }
+        body[data-console-view="focus"] .tac-node { max-width: 100%; overflow-wrap: anywhere; }
+        body[data-console-view="focus"] .col-right > .plate:nth-child(4),
+        body[data-console-view="focus"] .col-right > .plate:nth-child(5) {
+          min-height: 86px;
+        }
+        body[data-console-view="focus"] .col-right .status-rows {
+          flex: 1 1 0;
+          min-height: 0;
+          gap: 3px;
+          overflow: hidden;
+        }
+        body[data-console-view="focus"] .col-right .status-rows .tick-row { min-height: 0; }
+        body[data-console-view="focus"] .col-right .plate:has(#dev-status) > h2 { order: -2; }
+        body[data-console-view="focus"] #dev-status {
+          order: -1;
+          flex: 0 0 auto;
+          margin: 0 0 4px;
+        }
+      }
+    </style>
 </head>
   <body data-backdrop-severity="UNKNOWN" data-console-view="focus"><!-- JARVIS // OPERATOR CONSOLE · LANDSCAPE COMMAND CENTRE -->
     <canvas id="hud-backdrop" class="hud-backdrop" aria-hidden="true"></canvas>

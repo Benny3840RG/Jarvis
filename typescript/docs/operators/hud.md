@@ -40,6 +40,14 @@ box. The two cream gauges overlap the bottom bezel. Decorative chart traces
 are labelled ornament and are not readings. Desktop, tablet, and phone
 collapse the same regions; they do not get a second data model.
 
+Now and Next 3 reserve a content-sized row above the analyzer. On a wide
+desktop, the three queued tasks sit side by side with their clear actions;
+the decorative core shrinks to leave those controls usable. Development
+status stays ahead of decorative rails. Tactical inbox titles scroll above
+their heading rather than painting over it. The browser layout check uses
+synthetic tasks and inbox titles, and checks Focus, Task Board, and reduced
+motion without contacting a runtime.
+
 | Zone      | What it shows                                                              | Mount                               |
 | --------- | -------------------------------------------------------------------------- | ----------------------------------- |
 | Now       | The first active durable task and its one primary action (`complete_task`) | `#current-task`, `#current-actions` |
