@@ -492,6 +492,67 @@ describe("JSONPersistence", () => {
     );
   });
 
+  it("keeps direct-create identity on a version 2 document and rejects a half pair", () => {
+    const document = normalizeDocument({
+      version: 2,
+      state: {},
+      tasks: [
+        {
+          id: "task-identity",
+          title: "Named",
+          completed: false,
+          category: "workshop",
+          projectId: "project-1",
+          directCreateIdempotencyKey: "http-key",
+          directCreateFingerprint: "http-fp",
+          updatedAt: 9,
+          revision: 2,
+          createdAt: 1,
+        },
+      ],
+      reminders: [
+        {
+          id: "reminder-identity",
+          title: "Due",
+          dueRaw: "Friday",
+          projectId: "project-1",
+          directCreateIdempotencyKey: "reminder-key",
+          directCreateFingerprint: "reminder-fp",
+          updatedAt: 10,
+          revision: 4,
+          createdAt: 2,
+        },
+      ],
+    });
+    assert.equal(document.tasks[0]?.directCreateFingerprint, "http-fp");
+    assert.equal(document.tasks[0]?.projectId, "project-1");
+    assert.equal(document.tasks[0]?.revision, 2);
+    assert.equal(document.reminders[0]?.directCreateIdempotencyKey, "reminder-key");
+    assert.equal(document.reminders[0]?.updatedAt, 10);
+    assert.throws(
+      () =>
+        normalizeDocument({
+          version: 2,
+          state: {},
+          tasks: [
+            {
+              id: "half",
+              title: "Half",
+              completed: false,
+              category: "workshop",
+              directCreateFingerprint: "only-fp",
+              createdAt: 1,
+            },
+          ],
+          reminders: [],
+        }),
+      {
+        constructor: StateDocumentError,
+        message: "Task 0 direct-create identity must include both the key and the fingerprint.",
+      },
+    );
+  });
+
   it("still accepts distinct task and reminder ids that happen to match each other", () => {
     const document = normalizeDocument({
       version: 2,

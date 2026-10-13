@@ -3,6 +3,12 @@ import { deriveAssetView, type AssetView } from "../assets/assetView.js";
 import { ENQUIRY_URGENCIES, type Enquiry, type EnquiryUrgency } from "../enquiries/enquiry.js";
 import type { Errand } from "../errands/errand.js";
 import type { Invoice } from "../invoices/invoice.js";
+import {
+  publicReminder,
+  publicTask,
+  type PublicReminder,
+  type PublicTask,
+} from "../persistence/publicRecords.js";
 import type { Reminder, Task } from "../persistence/types.js";
 import { PROJECT_STATUSES, type Project, type ProjectStatus } from "../projects/project.js";
 import { QUOTE_STATUSES, roundMoney, type Quote, type QuoteStatus } from "../quotes/quote.js";
@@ -19,18 +25,18 @@ export const BRIEF_MAINTENANCE_SOON_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
 export interface BriefTasks {
   openCount: number;
   completedCount: number;
-  /** Longest-outstanding open tasks first, capped. */
-  open: Task[];
+  /** Longest-outstanding open tasks first, capped. Public task fields only. */
+  open: PublicTask[];
 }
 
 export interface BriefReminders {
   dueCount: number;
   upcomingCount: number;
   undatedCount: number;
-  /** Reminders whose due time has passed, soonest overdue first, capped. */
-  due: Reminder[];
-  /** Reminders due within the next 24 hours, soonest first, capped. */
-  upcoming: Reminder[];
+  /** Reminders whose due time has passed, soonest overdue first, capped. Public fields only. */
+  due: PublicReminder[];
+  /** Reminders due within the next 24 hours, soonest first, capped. Public fields only. */
+  upcoming: PublicReminder[];
 }
 
 export interface BriefProjects {
@@ -348,14 +354,14 @@ export function composeDailyBrief(inputs: BriefInputs): DailyBrief {
     tasks: {
       openCount: openTasks.length,
       completedCount,
-      open: cap(openTasks),
+      open: cap(openTasks).map(publicTask),
     },
     reminders: {
       dueCount: due.length,
       upcomingCount: upcoming.length,
       undatedCount,
-      due: cap(due),
-      upcoming: cap(upcoming),
+      due: cap(due).map(publicReminder),
+      upcoming: cap(upcoming).map(publicReminder),
     },
     projects: {
       activeCount: activeProjects.length,

@@ -164,7 +164,7 @@ async function readSidecar(
   filePath: string,
   version: string,
   tables: readonly string[],
-): Promise<unknown[]> {
+): Promise<{ tables: unknown[]; tombstones: unknown[] }> {
   const raw = await fs.readFile(filePath, "utf8");
   if (new TextEncoder().encode(raw).length > S4_MAX_PAYLOAD_BYTES) {
     throw new LocalV1RestoreError("Local V1 restore sidecar exceeds its payload byte limit.");
@@ -207,7 +207,13 @@ async function readSidecar(
       );
     }
   }
-  return payload.tables;
+  if ("tombstones" in payload && !Array.isArray(payload.tombstones)) {
+    throw new LocalV1RestoreError("Local V1 restore direct-create tombstones are invalid.");
+  }
+  return {
+    tables: payload.tables,
+    tombstones: Array.isArray(payload.tombstones) ? payload.tombstones : [],
+  };
 }
 
 function quoteIds(tables: unknown[]): {
@@ -285,16 +291,18 @@ export async function restoreLocalV1Archive(
   const memory = archive.groups.memory;
   if (!business || !core || !memory)
     throw new LocalV1RestoreError("Local V1 restore archive is missing a group.");
-  const s6Tables = await readSidecar(
+  const s6Sidecar = await readSidecar(
     path.join(capture, LOCAL_V1_S6_FILE),
     S6_CAPTURE_VERSION,
     S6_TABLES,
   );
-  const receiptTables = await readSidecar(
+  const receiptSidecar = await readSidecar(
     path.join(capture, LOCAL_V1_RECEIPTS_FILE),
     LOCAL_V1_RECEIPT_CAPTURE_VERSION,
     LOCAL_V1_RECEIPT_TABLES,
   );
+  const s6Tables = s6Sidecar.tables;
+  const receiptTables = receiptSidecar.tables;
   const linked = quoteIds(s6Tables);
   assertInvoiceLinks(business, linked.convex);
   const blobDir = path.join(capture, LOCAL_V1_BLOB_DIR);
@@ -342,6 +350,7 @@ export async function restoreLocalV1Archive(
     },
     s6: s6Tables,
     receipts: receiptTables,
+    receiptTombstones: receiptSidecar.tombstones,
   });
 
   await restoreArchiveV4(archive, destination, {
