@@ -67,6 +67,14 @@ function fixture(connections = [personal, business]) {
         auth: new Headers(init?.headers).get("Authorization"),
         body: String(init?.body ?? ""),
       });
+      if (String(url).includes("/v1.0/me?")) {
+        return new Response(
+          JSON.stringify({
+            mail: "personal@outlook.com",
+            userPrincipalName: "personal@outlook.com",
+          }),
+        );
+      }
       if (String(url).endsWith("/token")) {
         const form = new URLSearchParams(String(init?.body));
         return new Response(
@@ -164,10 +172,8 @@ describe("isolated Outlook connections", () => {
       [personal.refreshTokenFile, business.refreshTokenFile].sort(),
     );
     for (const req of requests.filter((r) => r.auth)) {
-      assert.equal(
-        req.auth,
-        `Bearer ${req.url.includes("personal%40") ? personal.clientId : business.clientId}`,
-      );
+      const personalCall = req.url.includes("/v1.0/me?") || req.url.includes("/v1.0/me/");
+      assert.equal(req.auth, `Bearer ${personalCall ? personal.clientId : business.clientId}`);
     }
     const restarted = fixture([business, personal]);
     await restarted.runtime.quoteEmailProvider.sendPrepared(refs[0], signal);

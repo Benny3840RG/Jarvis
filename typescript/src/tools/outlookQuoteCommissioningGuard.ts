@@ -11,6 +11,8 @@ export type CommissioningPlan = {
   apiBaseUrl: string;
   convexUrl: string;
   deployment: string;
+  /** Set only for named Outlook connections. Legacy mode omits it. */
+  senderConnection?: string;
 };
 
 export type ReconciliationObservation = {
@@ -67,6 +69,28 @@ function parseHttpUrl(value: string, name: string): URL {
 
 const DEPLOYMENT_SLUG = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/u;
 
+/**
+ * Node's `.env.local` parser drops an unquoted trailing `#` comment.
+ * A systemd EnvironmentFile keeps that comment in the value. Strip one
+ * so both sources name the same deployment. Quoted values are left whole.
+ */
+export function stripUnquotedTrailingComment(value: string): string {
+  const trimmed = value.trim();
+  if (trimmed.startsWith('"') || trimmed.startsWith("'")) return trimmed;
+  const hash = trimmed.search(/\s+#/u);
+  return hash === -1 ? trimmed : trimmed.slice(0, hash).trim();
+}
+
+export function normaliseCommissioningEnvironment<T extends CommissioningEnvironment>(
+  environment: T,
+): T {
+  const deployment = environment.CONVEX_DEPLOYMENT;
+  if (deployment === undefined) return environment;
+  const stripped = stripUnquotedTrailingComment(deployment);
+  if (stripped === deployment) return environment;
+  return { ...environment, CONVEX_DEPLOYMENT: stripped };
+}
+
 function developmentSlug(deployment: string): string {
   if (deployment.startsWith("prod:") || !deployment.startsWith("dev:")) {
     throw refused("CONVEX_DEPLOYMENT must identify a development deployment (dev:...).");
@@ -109,7 +133,6 @@ const ATEXT = "[a-z0-9!#$%&'*+/=?^_`{|}~-]";
 const DOT_ATOM = `${ATEXT}+(?:\\.${ATEXT}+)*`;
 const DOMAIN = "[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+";
 const PLAIN_MAILBOX = new RegExp(`^${DOT_ATOM}@${DOMAIN}$`, "u");
-const DOT_ATOM_ONLY = new RegExp(`^${DOT_ATOM}$`, "u");
 
 function stripMailto(value: string): string {
   return value.toLowerCase().startsWith("mailto:") ? value.slice("mailto:".length).trim() : value;
@@ -123,97 +146,49 @@ function plainMailbox(value: string): string | null {
   return text;
 }
 
-function applyOneEncodedWord(value: string): string | null {
-  const matches = [...value.matchAll(/=\?([^?]*)\?([bBqQ])\?([^?]*)\?=/gu)];
-  if (matches.length > 1) return null;
-  const match = matches[0];
-  if (!match) return value;
-  const encoding = match[2]?.toLowerCase();
-  const payload = match[3] ?? "";
-  let decoded: string;
-  if (encoding === "q") {
-    decoded = payload.replaceAll("_", " ").replace(/=([0-9a-fA-F]{2})/gu, (_full, hex: string) => {
-      return String.fromCharCode(Number.parseInt(hex, 16));
-    });
-  } else if (encoding === "b") {
-    decoded = Buffer.from(payload, "base64").toString("utf8");
-  } else {
-    return null;
-  }
-  return value.replace(match[0], decoded);
-}
-
-function removeComments(value: string): string | null {
-  let depth = 0;
-  let out = "";
-  for (const char of value) {
-    if (char === "(") {
-      depth += 1;
-      continue;
-    }
-    if (char === ")") {
-      if (depth === 0) return null;
-      depth -= 1;
-      continue;
-    }
-    if (depth === 0) out += char;
-  }
-  return depth === 0 ? out : null;
-}
-
 function stripTrailingDots(value: string): string {
   let end = value.length;
   while (end > 0 && value[end - 1] === ".") end -= 1;
   return value.slice(0, end);
 }
 
-function unquoteDotAtomLocal(value: string): string | null {
-  const at = value.lastIndexOf("@");
-  if (at <= 0) return null;
-  const local = value.slice(0, at);
-  const domain = value.slice(at + 1);
-  if (!local.startsWith('"')) return `${local}@${domain}`;
-  if (!local.endsWith('"') || local.length < 2) return null;
-  const inner = local.slice(1, -1);
-  if (!DOT_ATOM_ONLY.test(inner)) return null;
-  return `${inner}@${domain}`;
+/** Format, bidi, and zero-width marks. Stripped before a contact is compared. */
+const CONTACT_MARKS = /[\p{Cf}\p{Bidi_Control}]/gu;
+
+/**
+ * Letters, digits, space, and the punctuation a stored Jarvis contact may use.
+ * Parentheses, quotes, `=`, and `?` are excluded: comments and encoded words are not contacts.
+ */
+const CONTACT_ALLOWED = new RegExp(String.raw`^[\p{L}\p{N} ._+\-@<> ,;:'/]*$`, "u");
+const CONTACT_FORBIDDEN = /[=?()"]/u;
+
+/**
+ * NFKC, then format/bidi/zero-width stripping, repeated until the string is unchanged.
+ * A value that does not reach a fixed point is unparseable.
+ */
+function foldContact(value: string): string | null {
+  let current = value;
+  for (let pass = 0; pass < 8; pass += 1) {
+    const next = current.normalize("NFKC").replace(CONTACT_MARKS, "");
+    if (next === current) return current;
+    current = next;
+  }
+  return null;
 }
 
-function decodeEncodedWords(value: string): string | null {
-  let invalid = false;
-  const decoded = value.replace(
-    /=\?([^?]*)\?([bBqQ])\?([^?]*)\?=/gu,
-    (_full, _charset: string, encoding: string, payload: string) => {
-      const encodingName = encoding.toLowerCase();
-      if (encodingName === "q") {
-        return payload
-          .replaceAll("_", " ")
-          .replace(/=([0-9a-fA-F]{2})/gu, (_hex, digits: string) => {
-            return String.fromCharCode(Number.parseInt(digits, 16));
-          });
-      }
-      if (encodingName === "b") return Buffer.from(payload, "base64").toString("utf8");
-      invalid = true;
-      return "";
-    },
-  );
-  return invalid ? null : decoded;
+/** True when the folded contact is plain text. Checked before any mailbox is read. */
+function contactIsPlain(value: string): boolean {
+  return !CONTACT_FORBIDDEN.test(value) && CONTACT_ALLOWED.test(value);
 }
 
-function unquoteQuotedAtoms(value: string): string {
-  return value.replace(/"([^"]*)"/gu, (full, inner: string) => {
-    return DOT_ATOM_ONLY.test(inner) ? inner : full;
-  });
+/** a-z and 0-9 only, lowercased. Used on the folded contact, not the extracted mailbox. */
+function asciiSkeleton(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]/gu, "");
 }
 
-/** Fold comments, encoded-words, and quoted locals. True when an address remains or the fold is invalid. */
+/** True when display-name residue still holds an address. */
 function residueContainsMailbox(value: string): boolean {
-  if (value.trim().length === 0) return false;
-  const decoded = decodeEncodedWords(value);
-  if (decoded === null) return true;
-  const uncommented = removeComments(decoded.toLowerCase());
-  if (uncommented === null) return true;
-  return unquoteQuotedAtoms(uncommented).includes("@");
+  return value.toLowerCase().includes("@");
 }
 
 /**
@@ -238,26 +213,40 @@ function singleAngleAddr(text: string): string | null {
 }
 
 /**
- * Contact mailbox after one encoded-word, comment removal, a dot-atom unquote,
- * and every trailing dot. Plus-tags stay. More than one mailbox is null.
+ * One mailbox in an already-folded plain contact.
+ * Plus-tags and Gmail dots stay here; canonical comparison removes them.
  */
 function exactMailbox(value: string): string | null {
   const stripped = stripMailto(value.trim());
   const angled = singleAngleAddr(stripped);
   if (angled === null) return null;
-  let text = stripMailto(angled.trim());
-  const decoded = applyOneEncodedWord(text.trim());
-  if (decoded === null) return null;
-  text = decoded.toLowerCase();
-  const uncommented = removeComments(text);
-  if (uncommented === null) return null;
-  if ((uncommented.match(/@/gu) ?? []).length !== 1) return null;
-  const unquoted = unquoteDotAtomLocal(stripTrailingDots(uncommented.trim()));
-  if (unquoted === null) return null;
-  text = unquoted.trim();
+  const text = stripTrailingDots(stripMailto(angled.trim()).toLowerCase()).trim();
   if ((text.match(/@/gu) ?? []).length !== 1) return null;
   if (text.length === 0 || text.length > 320 || !PLAIN_MAILBOX.test(text)) return null;
   return text;
+}
+
+const GMAIL_DOMAINS = new Set(["gmail.com", "googlemail.com"]);
+
+/**
+ * Lowercase, drop one `+tag` from every domain, and for Gmail also drop dots
+ * and treat googlemail.com as gmail.com.
+ */
+function canonicalMailbox(mailbox: string): string | null {
+  const text = mailbox.trim().toLowerCase();
+  const at = text.lastIndexOf("@");
+  if (at <= 0 || text.indexOf("@") !== at) return null;
+  let local = text.slice(0, at);
+  let domain = text.slice(at + 1);
+  const plus = local.indexOf("+");
+  if (plus >= 0) local = local.slice(0, plus);
+  if (local.length === 0 || domain.length === 0) return null;
+  if (GMAIL_DOMAINS.has(domain)) {
+    local = local.replaceAll(".", "");
+    domain = "gmail.com";
+  }
+  if (local.length === 0) return null;
+  return `${local}@${domain}`;
 }
 
 function recipientAllowlist(environment: CommissioningEnvironment): ReadonlySet<string> {
@@ -284,17 +273,13 @@ function recipientAllowlist(environment: CommissioningEnvironment): ReadonlySet<
   return mailboxes;
 }
 
-/** Customer-contact key: exact mailbox with one `+tag` removed from the local part. */
+/** Customer-contact key: the canonical mailbox, or null when the contact is not one. */
 function contactKey(value: string): string | null {
-  const mailbox = exactMailbox(value);
+  const folded = foldContact(value);
+  if (folded === null || !contactIsPlain(folded)) return null;
+  const mailbox = exactMailbox(folded);
   if (!mailbox) return null;
-  const at = mailbox.lastIndexOf("@");
-  const local = mailbox.slice(0, at);
-  const domain = mailbox.slice(at + 1);
-  const plus = local.indexOf("+");
-  const base = plus > 0 ? local.slice(0, plus) : local;
-  if (!base) return null;
-  return `${base}@${domain}`;
+  return canonicalMailbox(mailbox);
 }
 
 /**
@@ -314,7 +299,7 @@ export function assessOutlookQuoteCommissioningGuard(
     throw refused("JARVIS_ENVIRONMENT must be development.");
   }
 
-  const deployment = required(environment, "CONVEX_DEPLOYMENT");
+  const deployment = stripUnquotedTrailingComment(required(environment, "CONVEX_DEPLOYMENT"));
   const slug = developmentSlug(deployment);
 
   const convexRaw = required(environment, "CONVEX_URL");
@@ -373,9 +358,51 @@ export function recipientCollidesWithContacts(
   return contactValues.some((value) => contactKey(value) === recipientKey);
 }
 
+/** Canonical local part of the configured recipient, after the same mailbox fold. */
+function canonicalLocalPart(recipient: string): string {
+  const canonical = canonicalMailbox(recipient);
+  if (!canonical) return "";
+  const at = canonical.lastIndexOf("@");
+  return at <= 0 ? "" : canonical.slice(0, at);
+}
+
+/**
+ * The recipient's canonical local part inside a folded contact that is not
+ * exactly that recipient. An exact contact is a customer collision instead.
+ */
+function skeletonThreat(folded: string, recipient: string): boolean {
+  if (folded.trim().toLowerCase() === recipient) return false;
+  const local = canonicalLocalPart(recipient);
+  return local.length > 0 && asciiSkeleton(folded).includes(local);
+}
+
+/**
+ * Phone numbers and names that contain no address are ignored.
+ * Parentheses and quotes refuse before a mailbox is read. The same folded
+ * string is the only input to extraction, the canonical comparison, and the skip.
+ */
+function contactForComparison(
+  value: string,
+  recipient: string,
+): "skip" | "refuse" | { mailbox: string } {
+  const folded = foldContact(value);
+  if (folded === null || !contactIsPlain(folded)) return "refuse";
+  const visible = exactMailbox(folded);
+  if (!visible) {
+    if (folded.includes("@") || folded.includes("<") || folded.includes(">")) return "refuse";
+    if (skeletonThreat(folded, recipient)) return "refuse";
+    return "skip";
+  }
+  const canonical = canonicalMailbox(visible);
+  const recipientCanonical = canonicalMailbox(recipient);
+  if (canonical !== null && canonical === recipientCanonical) return { mailbox: visible };
+  if (skeletonThreat(folded, recipient)) return "refuse";
+  return { mailbox: visible };
+}
+
 /**
  * Loads client contacts only after the environment guard has passed, and
- * refuses when the mailbox is already a client contact.
+ * refuses when an email-shaped contact is the commissioning mailbox.
  */
 export async function beginOutlookQuoteCommissioning(input: {
   environment: CommissioningEnvironment;
@@ -383,13 +410,16 @@ export async function beginOutlookQuoteCommissioning(input: {
 }): Promise<CommissioningPlan> {
   const plan = assessOutlookQuoteCommissioningGuard(input.environment);
   const contacts = await input.loadClientContactValues();
+  const emailContacts: string[] = [];
   for (const value of contacts) {
-    if (!exactMailbox(value)) {
+    const disposition = contactForComparison(value, plan.recipient);
+    if (disposition === "skip") continue;
+    if (disposition === "refuse") {
       throw refused("a client contact could not be parsed into one mailbox.");
     }
+    emailContacts.push(disposition.mailbox);
   }
-  const contained = contacts.some((value) => value.toLowerCase().includes(plan.recipient));
-  if (recipientCollidesWithContacts(plan.recipient, contacts) || contained) {
+  if (recipientCollidesWithContacts(plan.recipient, emailContacts)) {
     throw refused(
       "the commissioning recipient matches a client contact and is not a non-customer mailbox.",
     );

@@ -1,5 +1,20 @@
 # Jarvis TypeScript Roadmap
 
+## Outlook commissioning preflight (2026-10-07)
+
+Host preflight of the commissioning kit on a personal Outlook mailbox. The kit still uses the existing `quotes:send` stage, approval token, and reconciliation worker. Issues #294 and #297 stay open.
+
+- Named mode stages `senderConnection` for `JARVIS_OUTLOOK_COMMISSIONING_CONNECTION`. Legacy mode still omits it.
+- The totality project is required before a client or quote is created.
+- Phone numbers and names that stay inside the plain allowlist are not compared. Client contacts are not decoded as RFC 2047. After NFKC and format/bidi/zero-width stripping reach a fixed point, `=`, `?`, `(`, `)`, `"`, or a character outside the allowlist refuses the contact. Mailboxes are compared in canonical form: lowercase, `+tag` removed on every domain, and Gmail dots removed with `googlemail.com` mapped to `gmail.com`. An `a-z`/`0-9` skeleton of the folded contact also refuses when it contains the recipient's canonical local part and the contact is not exactly that recipient, before a client or quote write.
+- A consumers-authority mailbox uses Graph `/me` only when every non-empty signed-in `mail` and `userPrincipalName` matches. Tenant mailboxes stay on `/users/{mailbox}`.
+- An unquoted trailing comment on `CONVEX_DEPLOYMENT` is stripped for both `.env.local` and a systemd environment file.
+
+Next:
+
+- Leave #294 and #297 open until Benny runs the kit on the host.
+- Do not add a second send or approval path.
+
 ## LV1-05 safe voice writes (2026-10-07)
 
 Safe voice writes stage on the existing `ToolActionService` only. `tasks/create` and `reminders/create` are the executors voice may target (the same definitions the tool-execution allowlist already runs). Voice never calls `approve` or `execute`. A receipt is produced by the existing `ToolExecutionService` after the existing approval gate. Retry uses a stable action id and the existing execution idempotency key.
