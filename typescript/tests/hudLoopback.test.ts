@@ -82,11 +82,52 @@ function credentials(host: string): CredentialsRuntime {
   });
 }
 
-async function open(host: string): Promise<NestFastifyApplication> {
+function persistenceWithIdentity(): PersistenceProvider {
+  const task: Task = {
+    id: "task-1",
+    title: "Clear the deck",
+    category: "personal",
+    completed: false,
+    createdAt: 1,
+    projectId: "project-secret",
+    directCreateIdempotencyKey: "idem-secret",
+    directCreateFingerprint: "fp-secret",
+    updatedAt: 9,
+    revision: 4,
+  };
+  const reminder: Reminder = {
+    id: "reminder-1",
+    title: "Call the yard",
+    dueRaw: "yesterday",
+    dueAt: 1,
+    dueTimezone: "Australia/Melbourne",
+    createdAt: 1,
+    projectId: "project-secret",
+    directCreateIdempotencyKey: "reminder-idem-secret",
+    directCreateFingerprint: "reminder-fp-secret",
+    updatedAt: 8,
+    revision: 3,
+  };
+  const base = persistence();
+  return {
+    ...base,
+    async listTasks(): Promise<Task[]> {
+      return [task];
+    },
+    async listReminders(): Promise<Reminder[]> {
+      return [reminder];
+    },
+  };
+}
+
+async function open(
+  host: string,
+  store: PersistenceProvider = persistence(),
+): Promise<NestFastifyApplication> {
   const app = await createJarvisHttpApp({
     config: config(),
     credentialsRuntime: credentials(host),
-    persistence: persistence(),
+    persistence: store,
     providerName: "json",
     logger: false,
   });
@@ -131,6 +172,65 @@ describe("loopback Console 02 HUD", () => {
     assert.equal(typeof body.credentials.tokens[0]?.fingerprint, "string");
     assert.doesNotMatch(snapshot.body, new RegExp(SERVICE_TOKEN));
     assert.doesNotMatch(snapshot.body, /serviceDigests/);
+  });
+
+  it("omits direct-create identity from the HUD snapshot and brief", async () => {
+    const app = await open("127.0.0.1", persistenceWithIdentity());
+    const snapshot = await app.inject({
+      method: "GET",
+      url: "/api/v1/hud/snapshot",
+      headers: { accept: "application/json" },
+    });
+    assert.equal(snapshot.statusCode, 200);
+    for (const secret of [
+      "directCreateFingerprint",
+      "directCreateIdempotencyKey",
+      "fp-secret",
+      "idem-secret",
+      "reminder-fp-secret",
+      "reminder-idem-secret",
+      "project-secret",
+    ]) {
+      assert.equal(snapshot.body.includes(secret), false, secret);
+    }
+    const body = snapshot.json<{
+      tasks: Array<Record<string, unknown>>;
+      reminders: Array<Record<string, unknown>>;
+      brief: {
+        tasks: { open: Array<Record<string, unknown>> };
+        reminders: { due: Array<Record<string, unknown>> };
+      };
+    }>();
+    assert.deepEqual(Object.keys(body.tasks[0] ?? {}).sort(), [
+      "category",
+      "completed",
+      "createdAt",
+      "id",
+      "title",
+    ]);
+    assert.deepEqual(Object.keys(body.reminders[0] ?? {}).sort(), [
+      "createdAt",
+      "dueAt",
+      "dueRaw",
+      "dueTimezone",
+      "id",
+      "title",
+    ]);
+    assert.deepEqual(Object.keys(body.brief.tasks.open[0] ?? {}).sort(), [
+      "category",
+      "completed",
+      "createdAt",
+      "id",
+      "title",
+    ]);
+    assert.deepEqual(Object.keys(body.brief.reminders.due[0] ?? {}).sort(), [
+      "createdAt",
+      "dueAt",
+      "dueRaw",
+      "dueTimezone",
+      "id",
+      "title",
+    ]);
   });
 
   it("does not serve the HUD off loopback", async () => {

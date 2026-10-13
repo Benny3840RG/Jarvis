@@ -12,6 +12,7 @@ import {
   LOCAL_V1_RECEIPT_CAPTURE_VERSION,
   LOCAL_V1_RECEIPT_ROW_CAP,
   LOCAL_V1_RECEIPT_TABLES,
+  type LocalV1DirectCreateTombstone,
   type LocalV1ReceiptTable,
 } from "../src/backup/v4/localV1Receipts.js";
 export type BackupTable = S4Table | S6Table | LocalV1ReceiptTable;
@@ -210,6 +211,7 @@ export function buildLocalV1ReceiptCapture(
   ownerId: string,
   capturedAt: number,
   rows: CapturedTable[],
+  tombstones: LocalV1DirectCreateTombstone[],
 ) {
   const tables = LOCAL_V1_RECEIPT_TABLES.map((table) => {
     const entry = rows.find((row) => row.table === table);
@@ -225,6 +227,7 @@ export function buildLocalV1ReceiptCapture(
       ownerId,
       capturedAt,
       tables,
+      tombstones,
     });
   } catch (error: unknown) {
     if (error instanceof Error && error.message.includes("payload byte limit")) {
