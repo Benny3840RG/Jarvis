@@ -57,6 +57,19 @@ describe("Console 02 polish", () => {
     );
   });
 
+  it("scrolls live right-column panels instead of shrinking their labels away", () => {
+    const controls = widget.match(
+      /<style id="console-02-readable-controls">([\s\S]*?)<\/style>/,
+    )?.[1];
+    assert.ok(controls);
+    assert.match(controls, /\.col-right\s*\{[^}]*overflow-y:\s*auto;/);
+    assert.match(
+      controls,
+      /\.console-deck \.col-right > \.plate\s*\{[^}]*flex:\s*0 0 auto;[^}]*min-height:\s*min-content;/,
+    );
+    assert.match(controls, /\.col-left > \.plate:last-child\s*\{[^}]*min-height:\s*min-content;/);
+  });
+
   it("limits decorative chrome hiding to the desktop Focus view", () => {
     const pass2 = widget.match(/<style id="console-02-pass2">([\s\S]*?)<\/style>/)?.[1];
     assert.ok(pass2, "Console 02 second presentation pass is missing");

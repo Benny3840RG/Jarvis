@@ -48,6 +48,8 @@ their heading rather than painting over it. The browser layout check uses
 synthetic tasks and inbox titles, and checks Focus, Task Board, and reduced
 motion without contacting a runtime. Below the desktop breakpoint, the
 overview grows with its content instead of clipping the tactical section.
+On shorter desktop viewports, the right status column scrolls within the frame
+so live task counts, integration state, and network details keep their full height.
 
 | Zone      | What it shows                                                              | Mount                               |
 | --------- | -------------------------------------------------------------------------- | ----------------------------------- |

@@ -2157,6 +2157,18 @@
           flex: 0 0 auto;
           margin: 0 0 4px;
         }
+        body[data-console-view="focus"] .col-right {
+          overflow-y: auto;
+          scrollbar-color: var(--brass) transparent;
+        }
+        body[data-console-view="focus"] .console-deck .col-right > .plate {
+          flex: 0 0 auto;
+          min-height: min-content;
+        }
+        body[data-console-view="focus"] .col-left > .plate:last-child {
+          flex: 0 0 auto;
+          min-height: min-content;
+        }
       }
     </style>
 </head>

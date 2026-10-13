@@ -10,6 +10,8 @@ import {
   measureElement,
   responseForRequest,
   browserError,
+  scrollTacticalNode,
+  scrollRightReadout,
 } from "./check-hud-layout.mjs";
 
 const rect = (left, top, right, bottom) => ({ left, top, right, bottom });
@@ -193,4 +195,80 @@ test("browser exceptions and console errors fail the gate", () => {
     }),
     null,
   );
+});
+
+test("narrow tactical checks scroll the page only, preserving the complete plate", () => {
+  const calls = [];
+  runInNewContext(`(${scrollTacticalNode.toString()})(".node", 1366)`, {
+    innerHeight: 768,
+    document: {
+      querySelector: (selector) =>
+        selector === ".node"
+          ? { scrollIntoView: () => calls.push("hidden ancestor scroll") }
+          : { getBoundingClientRect: () => ({ top: 350, height: 222 }) },
+    },
+    window: {
+      scrollBy: (options) =>
+        calls.push({ top: options.top, left: options.left, behavior: options.behavior }),
+    },
+  });
+  assert.deepEqual(calls, [{ top: 77, left: 0, behavior: "instant" }]);
+});
+
+test("desktop tactical checks still scroll individual labels within their list", () => {
+  const calls = [];
+  runInNewContext(`(${scrollTacticalNode.toString()})(".node", 1920)`, {
+    document: { querySelector: () => ({ scrollIntoView: (options) => calls.push(options.block) }) },
+    window: { scrollBy: () => calls.push("unexpected page scroll") },
+  });
+  assert.deepEqual(calls, ["nearest"]);
+});
+
+function rightScrollHarness(overflowY, width) {
+  const pageScrolls = [];
+  const column = {
+    clientTop: 1,
+    clientHeight: 100,
+    scrollHeight: 400,
+    scrollTop: 0,
+    contains: () => true,
+    getBoundingClientRect: () => ({ top: 100 }),
+  };
+  const target = {
+    getBoundingClientRect: () => ({
+      top: 230 - column.scrollTop,
+      bottom: 250 - column.scrollTop,
+      height: 20,
+    }),
+    scrollIntoView: () => {
+      throw new Error("Hidden ancestor scrolling is forbidden");
+    },
+  };
+  const result = runInNewContext(`(${scrollRightReadout.toString()})("#value", ${width})`, {
+    innerHeight: 768,
+    document: { querySelector: (selector) => (selector === ".col-right" ? column : target) },
+    getComputedStyle: () => ({ overflowY }),
+    window: { scrollBy: (options) => pageScrolls.push(options.top) },
+  });
+  return { column, result, pageScrolls };
+}
+
+test("right readouts use only their explicitly scrollable column", () => {
+  const { column, result, pageScrolls } = rightScrollHarness("auto", 1920);
+  assert.equal(column.scrollTop, 49);
+  assert.equal(result.scrollHeight, 400);
+  assert.equal(result.scrollTop, 49);
+  assert.deepEqual(pageScrolls, []);
+});
+
+test("right readouts never programmatically scroll hidden overflow", () => {
+  const { column, pageScrolls } = rightScrollHarness("hidden", 1920);
+  assert.equal(column.scrollTop, 0);
+  assert.deepEqual(pageScrolls, []);
+});
+
+test("narrow right readouts combine explicit column scrolling with page-only positioning", () => {
+  const { column, pageScrolls } = rightScrollHarness("auto", 1366);
+  assert.equal(column.scrollTop, 49);
+  assert.deepEqual(pageScrolls, [-193]);
 });

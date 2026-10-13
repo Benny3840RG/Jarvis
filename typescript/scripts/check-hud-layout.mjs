@@ -302,12 +302,64 @@ export function browserError(message) {
   return null;
 }
 
+export function scrollTacticalNode(selector, width) {
+  if (width >= 1400) {
+    document
+      .querySelector(selector)
+      ?.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "instant" });
+    return;
+  }
+  // All narrow labels fit in normal flow. scrollIntoView on each child can
+  // scroll overflow:hidden ancestors and hide the heading artificially.
+  const plate = document.querySelector(".core-side .tac-plate");
+  if (!plate) return;
+  const rect = plate.getBoundingClientRect();
+  window.scrollBy({
+    top: rect.top - Math.max(0, (innerHeight - rect.height) / 2),
+    left: 0,
+    behavior: "instant",
+  });
+}
+
+export function scrollRightReadout(selector, width) {
+  const column = document.querySelector(".col-right");
+  const target = document.querySelector(selector);
+  if (!column || !target || !column.contains(target)) return null;
+  const overflowY = getComputedStyle(column).overflowY;
+  const scrollBefore = column.scrollTop;
+  if (/^(auto|scroll)$/.test(overflowY)) {
+    const bounds = column.getBoundingClientRect();
+    const rect = target.getBoundingClientRect();
+    const top = bounds.top + column.clientTop;
+    const bottom = top + column.clientHeight;
+    if (rect.top < top) column.scrollTop += rect.top - top;
+    else if (rect.bottom > bottom) column.scrollTop += rect.bottom - bottom;
+  }
+  if (width < 1400) {
+    const rect = target.getBoundingClientRect();
+    window.scrollBy({
+      top: rect.top - Math.max(0, (innerHeight - rect.height) / 2),
+      left: 0,
+      behavior: "instant",
+    });
+  }
+  return {
+    selector,
+    overflowY,
+    clientHeight: column.clientHeight,
+    scrollHeight: column.scrollHeight,
+    scrollBefore,
+    scrollTop: column.scrollTop,
+  };
+}
+
 async function runScenario(cdp, html, fixtureName, viewport, outputDir) {
   const name = `${viewport.width}x${viewport.height}-${fixtureName}`;
   const fixture = fixtureFor(fixtureName);
   const failures = [];
   const measurements = [];
   const scrollChecks = [];
+  const rightColumnScrollChecks = [];
   const { targetId } = await cdp.send("Target.createTarget", { url: "about:blank" });
   const { sessionId } = await cdp.send("Target.attachToTarget", { targetId, flatten: true });
   const send = (method, params) => cdp.send(method, params, sessionId);
@@ -377,10 +429,20 @@ async function runScenario(cdp, html, fixtureName, viewport, outputDir) {
       "document.fonts.ready.then(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))",
     );
     const inspect = async (selector, options = {}) => {
-      // Narrow layout is a scrolling page; desktop Focus must fit its viewport.
-      if (viewport.width < 1400)
+      const rightScroll = await evaluate(
+        `(${scrollRightReadout.toString()})(${JSON.stringify(selector)}, ${viewport.width})`,
+      );
+      if (rightScroll) rightColumnScrollChecks.push(rightScroll);
+      // The right column scrolls only at its explicit scrollport; narrow page
+      // movement must not programmatically scroll hidden plate ancestors.
+      if (viewport.width < 1400 && !rightScroll)
         await evaluate(
-          `document.querySelector(${JSON.stringify(selector)})?.scrollIntoView({block:"center",inline:"nearest",behavior:"instant"})`,
+          `(() => {
+            const target = document.querySelector(${JSON.stringify(selector)});
+            if (!target) return;
+            const rect = target.getBoundingClientRect();
+            window.scrollBy({top:rect.top - Math.max(0, (innerHeight - rect.height) / 2),left:0,behavior:"instant"});
+          })()`,
         );
       const measurement = await evaluate(
         `(${measureElement.toString()})(${JSON.stringify(selector)}, ${JSON.stringify(options)})`,
@@ -393,6 +455,27 @@ async function runScenario(cdp, html, fixtureName, viewport, outputDir) {
       await inspect("#current-task");
       await inspect(".queue-panel .panel-header h3");
       await inspect("#dev-status");
+      await inspect("#data-list .empty");
+      for (const selector of [
+        "#predictor-state",
+        "#waveform-state",
+        ".col-left > .plate:last-child .signal-tag",
+        "#dial-host",
+        "#dial-mem",
+        "#dial-store",
+        "#dial-link",
+      ])
+        await inspect(selector);
+      for (let index = 1; index <= 3; index += 1)
+        await inspect(`.tile-row .tile:nth-child(${index}) span`);
+      for (const selector of [
+        "#tile-tasks",
+        "#tile-reminders",
+        "#tile-inbox",
+        ".network-plate h2",
+        "#network-version",
+      ])
+        await inspect(selector);
       if (fixtureName === "populated") {
         const scrollSize = await evaluate(`(() => {
           const list = document.querySelector("#tactical-map");
@@ -408,7 +491,7 @@ async function runScenario(cdp, html, fixtureName, viewport, outputDir) {
           // Calling inspect() separately would scroll the narrow viewport twice
           // and compare rectangles from different coordinate spaces.
           const [node, heading, scrollTop] = await evaluate(`(() => {
-            document.querySelector(${JSON.stringify(selector)})?.scrollIntoView({block:${JSON.stringify(viewport.width < 1400 ? "center" : "nearest")},inline:"nearest",behavior:"instant"});
+            (${scrollTacticalNode.toString()})(${JSON.stringify(selector)}, ${viewport.width});
             const measure = ${measureElement.toString()};
             return [measure(${JSON.stringify(selector)}, {hitTest:false}), measure(".core-side .tac-plate h2", {hitTest:false}), document.querySelector("#tactical-map").scrollTop];
           })()`);
@@ -465,6 +548,14 @@ async function runScenario(cdp, html, fixtureName, viewport, outputDir) {
         await screenshot("board");
       } else await inspectFocus();
     }
+    const overflowingRightChecks = rightColumnScrollChecks.filter(
+      (check) => check.scrollHeight > check.clientHeight + 0.5,
+    );
+    if (
+      overflowingRightChecks.length &&
+      !overflowingRightChecks.some((check) => check.scrollTop > 0)
+    )
+      failures.push("Overflowing right-column readouts never exercised their scrollport");
     const animated = await evaluate(
       'document.querySelectorAll(".core-rings .spin-slow").length > 0 && [...document.querySelectorAll(".core-rings .spin-slow")].some(el => el.getAnimations().some(animation => animation.playState === "running"))',
     );
@@ -489,6 +580,7 @@ async function runScenario(cdp, html, fixtureName, viewport, outputDir) {
       fixtureRequests,
       measurements,
       scrollChecks,
+      rightColumnScrollChecks,
       motion,
       failures,
     };
@@ -501,6 +593,7 @@ async function runScenario(cdp, html, fixtureName, viewport, outputDir) {
       fixtureRequests,
       measurements,
       scrollChecks,
+      rightColumnScrollChecks,
       failures,
     };
   } finally {
