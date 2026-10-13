@@ -123,6 +123,35 @@ jobs:
       - name: Test Convex suite
         run: timeout --foreground --kill-after=10s 5m npm run test:convex
 
+  hud-layout:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: typescript
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          # Preserve merge-ref integration tests above; bind this evidence to the PR head.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: "24"
+      - name: Check real HUD layout in Chromium
+        run: |
+          node --test scripts/check-hud-layout.test.mjs
+          node scripts/check-hud-layout.mjs --output-dir "${{ runner.temp }}/hud-layout"
+      - name: Retain exact-head HUD browser evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: hud-layout-${{ github.event.pull_request.head.sha || github.sha }}
+          path: ${{ runner.temp }}/hud-layout
+          if-no-files-found: error
+          retention-days: 7
+
   jarvis-console-01-build:
     runs-on: ubuntu-latest
     defaults:

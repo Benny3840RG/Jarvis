@@ -1,5 +1,25 @@
 # Jarvis TypeScript Roadmap
 
+## Console 02 readable controls (2026-10-13)
+
+PR #724 maintenance keeps its existing HUD presentation and incorporates
+current main. The earlier Focus-only branding/rivet fix remains in place.
+Now and Next 3 use a content-sized row instead of the 26px clipped strip;
+desktop queue cards retain all three tasks and their clear actions. The
+development warning precedes decorative rails, and tactical titles have a
+scrollable area above their heading. Source-contract regressions and an
+isolated Chromium layout check cover the presentation without live writes.
+The narrow overview grows with its tactical content. Browser fixtures satisfy
+the inbox contract, and the gate rejects partial renders and JavaScript errors.
+The right status column scrolls when needed rather than compressing live labels;
+the Stability Monitor keeps its content minimum while decorative charts flex.
+The new bezel/title treatment is restricted to wide Focus; other views keep the
+original opening, and narrow Focus gets side clearance from the opaque border.
+
+Next: verify the exact candidate in CI, review the fresh browser captures,
+and obtain independent review and Benny's exact-candidate decision. No
+merge, deployment, host commissioning, or new operator authority is implied.
+
 ## Codex v1.13 startup compatibility (2026-10-13)
 
 PR #726 aligns the review and build workers with the unmodified upstream v1.13
@@ -325,6 +345,51 @@ Decisions:
 
 Next: the nav-badge fold-in (active∩scheduled dedup) shipped — see the booked-jobs nav badge
 entry above.
+
+## Console 02 polish (2026-10-08)
+
+The focus header sits on the top bezel: brand at the left, title in the
+centre, section nav under the title, status chips at the right. NOW and Next 3
+are a short pair above the analyzer, clear of the left column and the tactical
+sketch. Instrument plates show one `UNKNOWN` or `NO SIGNAL` tag. The longer
+notes (ornament traces, parked needles, uninvented names) stay on the element
+title and in this file's operator HUD contract. The bezel is darker gunmetal
+with a brass lip and a heavier glass vignette. Core bloom is tighter, with
+faint leaders toward the side columns. The tactical node sketch is drawn over
+the lower-right coast. Dev Status and Hextrick Nams keep dim icon-and-rail
+rows until a real reading arrives.
+
+A later layout pass moved the tactical title to the lower-right of the stage,
+beside a scattered node network. The core is 420px so NOW and Next 3 sit clear
+of the ring. Status chips wrap inside the top bezel. The Core Analyzer shows
+the LIMITS reading once.
+
+## Console 02 fidelity, second pass (2026-10-08)
+
+The focus frame is one viewport-filling bezel: thick weathered steel and brass,
+rivets, and a CRT vignette. The coast stays a muted dusk under smoked teal
+glass. Plates use thin outlines and small-caps titles. Empty meters keep dim
+rails, grids, and ghost traces. The core is the large centre instrument. The
+tactical sketch sits on the coast. The cream gauges overlap the bottom bezel.
+THE BEEZ TREEZ is printed once on the plaque. Readings are still real fields
+or UNKNOWN / no-signal.
+
+## Console 02 fidelity (2026-10-08)
+
+Presentation-only pass on `src/mcp/dashboard-v1.html` toward the Console 02
+reference picture. The focus frame has a heavier brass bezel, a brighter dusk
+coast, denser instrument chrome, a larger glowing core, thicker tactical
+strokes, brass analyzer faders with engraved labels, and gauge captions above
+the dial faces. The nav sits on its own row under the title. Every number is
+still a real HUD field or `UNKNOWN` / no-signal copy. Ornament waveforms are
+labelled as ornament. Screenshots: `docs/screenshots/console-02-1920x1080.png`
+and `docs/screenshots/console-02-vs-reference.png`.
+
+Still unlike the reference, on purpose: no copied percents, device totals,
+version strings, facility names, or fictional fader names. NOW, Next 3, the
+section nav, and the status chips stay because they are operator controls.
+The bee-and-tree mark is the existing SVG. Capture, reminders, and the voice
+safe-write reason stay on their existing views.
 
 ## Console 02 HUD (2026-10-02)
 
