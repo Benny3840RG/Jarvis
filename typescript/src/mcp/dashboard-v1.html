@@ -2079,9 +2079,16 @@
       body[data-console-view="focus"] .now-strip .panel-header { min-height: 32px; padding: 6px 10px; }
       body[data-console-view="focus"] .now-strip .next-caption { margin: 4px 10px 0; }
       body[data-console-view="focus"] .tac-node { max-width: 100%; overflow-wrap: anywhere; }
+      body[data-console-view="focus"] .col-right .tile b,
+      body[data-console-view="focus"] .col-right .tile span,
+      body[data-console-view="focus"] #tile-tasks { line-height: 1.4; }
       @media (max-width: 1399px) {
         body[data-console-view="focus"] .console-deck { grid-template-rows: auto; }
         body[data-console-view="focus"] .fader-scale { display: none; }
+        body[data-console-view="focus"] .console-col > .plate {
+          flex: 0 0 auto;
+          min-height: min-content;
+        }
         body[data-console-view="focus"] .overview-plate {
           display: flex;
           flex-direction: column;

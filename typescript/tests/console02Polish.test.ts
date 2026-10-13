@@ -49,6 +49,10 @@ describe("Console 02 polish", () => {
     assert.match(narrow, /\.fader-scale\s*\{\s*display:\s*none;/);
     assert.match(
       narrow,
+      /\.console-col > \.plate\s*\{[^}]*flex:\s*0 0 auto;[^}]*min-height:\s*min-content;/,
+    );
+    assert.match(
+      narrow,
       /\.overview-plate\s*\{[^}]*height:\s*auto;[^}]*min-height:\s*min-content;/,
     );
     assert.match(
@@ -68,6 +72,7 @@ describe("Console 02 polish", () => {
       /\.console-deck \.col-right > \.plate\s*\{[^}]*flex:\s*0 0 auto;[^}]*min-height:\s*min-content;/,
     );
     assert.match(controls, /\.col-left > \.plate:last-child\s*\{[^}]*min-height:\s*min-content;/);
+    assert.match(controls, /#tile-tasks\s*\{\s*line-height:\s*1\.4;/);
   });
 
   it("limits decorative chrome hiding to the desktop Focus view", () => {
