@@ -10,6 +10,7 @@ The runtime is limited to:
 
 - delegated `Mail.ReadWrite` for creating and observing the immutable draft;
 - delegated `Mail.Send` for sending that prepared draft;
+- delegated `User.Read` for reading only the signed-in account's own basic profile (`/me`), used solely by the signed-in-mailbox match gate;
 - `offline_access` for background refresh and reconciliation;
 - approved, finalised quote PDFs through the existing `quotes:send` allowlist.
 
@@ -71,7 +72,7 @@ Invalid booleans, incomplete enabled configuration, insecure token files, missin
 Before any live activation:
 
 1. Register or select a Microsoft application that permits the intended personal or tenant-pinned business account.
-2. Review and grant only `Mail.ReadWrite`, `Mail.Send`, and `offline_access`.
+2. Review and grant only `Mail.ReadWrite`, `Mail.Send`, `User.Read`, and `offline_access`.
 3. Provision the refresh token through a separately approved consent workflow.
 4. Install it at the configured owner-only path.
 5. Validate in a non-production environment without a customer recipient.
@@ -126,7 +127,7 @@ The script installs locked Node dependencies without install scripts, then:
 3. Creates two dedicated native/public-client registrations with `http://localhost`
    redirect URIs: personal accounts only and business single-tenant respectively.
 4. Resolves permission IDs from the tenant's Microsoft Graph service principal.
-   Requests only delegated `offline_access Mail.ReadWrite Mail.Send` for Jarvis.
+   Requests only delegated `offline_access Mail.ReadWrite Mail.Send User.Read` for Jarvis.
 5. Grants those delegated permissions for the business user using
    `consentType=Principal`; never `AllPrincipals` or application permissions.
 6. Saves and flushes non-secret effect intent **before** each application,

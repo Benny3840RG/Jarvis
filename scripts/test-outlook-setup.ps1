@@ -17,11 +17,12 @@ $global:outlookSetupTestFixture.hideApp = $false
 $global:outlookSetupTestFixture.hidePrincipal = $false
 $global:outlookSetupTestFixture.hideGrant = $false
 $tenant = '11111111-2222-3333-4444-555555555555'
-$names = @('offline_access', 'Mail.ReadWrite', 'Mail.Send')
+$names = @('offline_access', 'Mail.ReadWrite', 'Mail.Send', 'User.Read')
 $global:outlookSetupTestFixture.resource = @{ id = 'graph-sp'; appId = '00000003-0000-0000-c000-000000000000'; oauth2PermissionScopes = @(
     @{ id = 'scope-offline'; value = 'offline_access'; isEnabled = $true },
     @{ id = 'scope-write'; value = 'Mail.ReadWrite'; isEnabled = $true },
-    @{ id = 'scope-send'; value = 'Mail.Send'; isEnabled = $true }
+    @{ id = 'scope-send'; value = 'Mail.Send'; isEnabled = $true },
+    @{ id = 'scope-user-read'; value = 'User.Read'; isEnabled = $true }
 ) }
 function Read-Host($Prompt) {
     if ($Prompt -match 'tenant ID') { return $tenant }
