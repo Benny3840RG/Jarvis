@@ -54,6 +54,7 @@ sequenceDiagram
 - Use `Prefer: IdType="ImmutableId"` for both draft creation and sending.
 - Create a plain-text message with one `#microsoft.graph.fileAttachment`.
 - Require delegated `Mail.ReadWrite` for draft creation and delegated `Mail.Send` for sending, only at the later activation boundary.
+- The approved delegated scope set is `offline_access Mail.ReadWrite Mail.Send User.Read`. `User.Read` (own basic profile, `/me`) is used only by the signed-in-mailbox match gate for personal accounts; it grants no mail access and the mail scopes above remain the only required grants.
 - Keep the provider factory returning `null` until activation is separately authorised.
 
 ## Failure semantics

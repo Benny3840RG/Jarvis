@@ -74,6 +74,13 @@ Before any live activation:
 1. Register or select a Microsoft application that permits the intended personal or tenant-pinned business account.
 2. Review and grant only `Mail.ReadWrite`, `Mail.Send`, `User.Read`, and `offline_access`.
 3. Provision the refresh token through a separately approved consent workflow.
+
+> **Upgrading from the three-scope set (before `User.Read` was approved):** the Entra app
+> registration must have the delegated `User.Read` permission added, and every existing
+> connection must be re-consented by re-running `npm run outlook -- connect` (then `verify`).
+> Refresh now requests `User.Read`; with an old registration or an old refresh token Microsoft
+> may reject it with `microsoft-oauth-refresh-rejected-400`. Do not hand-edit token files.
+
 4. Install it at the configured owner-only path.
 5. Validate in a non-production environment without a customer recipient.
 6. Obtain separate approval for a live customer email.

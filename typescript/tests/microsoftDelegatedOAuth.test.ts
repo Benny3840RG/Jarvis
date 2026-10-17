@@ -237,6 +237,7 @@ describe("MicrosoftDelegatedAccessTokenSupplier", () => {
       ["Mail.ReadWrite Mail.Send User.ReadWrite", "microsoft-oauth-scopes-excessive"],
       ["Mail.ReadWrite Mail.Send User.Read User.ReadBasic.All", "microsoft-oauth-scopes-excessive"],
       ["Mail.ReadWrite User.Read", "microsoft-oauth-scopes-missing"],
+      ["Mail.Send User.Read", "microsoft-oauth-scopes-missing"],
     ] as const) {
       await assert.rejects(supplierGranting(scope).getAccessToken(signal), (error) => {
         assert.ok(error instanceof MicrosoftDelegatedOAuthError);
