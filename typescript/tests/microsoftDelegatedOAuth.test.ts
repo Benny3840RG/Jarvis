@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { describe, it } from "node:test";
 
 import {
+  APPROVED_SCOPES,
   FileRefreshTokenStore,
   MicrosoftDelegatedAccessTokenSupplier,
   MicrosoftDelegatedOAuthError,
@@ -54,7 +55,7 @@ describe("Microsoft delegated OAuth configuration", () => {
         mailbox: "thebeeztreez@outlook.com",
         refreshTokenFile: "/run/secrets/jarvis-outlook-refresh-token",
         tokenEndpoint: "https://login.microsoftonline.com/consumers/oauth2/v2.0/token",
-        scopes: ["offline_access", "Mail.ReadWrite", "Mail.Send"],
+        scopes: ["offline_access", "Mail.ReadWrite", "Mail.Send", "User.Read"],
       },
     );
   });
@@ -158,7 +159,7 @@ describe("MicrosoftDelegatedAccessTokenSupplier", () => {
     let now = 1_000_000;
     const supplier = new MicrosoftDelegatedAccessTokenSupplier({
       clientId: "client-id",
-      scopes: ["offline_access", "Mail.ReadWrite", "Mail.Send"],
+      scopes: ["offline_access", "Mail.ReadWrite", "Mail.Send", "User.Read"],
       tokenEndpoint: "https://login.microsoftonline.com/consumers/oauth2/v2.0/token",
       refreshTokenStore: store,
       now: () => now,
@@ -189,11 +190,60 @@ describe("MicrosoftDelegatedAccessTokenSupplier", () => {
     assert.equal(body.get("client_id"), "client-id");
     assert.equal(body.get("grant_type"), "refresh_token");
     assert.equal(body.get("refresh_token"), "refresh-token-1");
-    assert.equal(body.get("scope"), "offline_access Mail.ReadWrite Mail.Send");
+    assert.equal(body.get("scope"), "offline_access Mail.ReadWrite Mail.Send User.Read");
 
     now += 3_601_000;
     assert.equal(await supplier.getAccessToken(signal), "access-token-1");
     assert.equal(requests.length, 2);
+  });
+
+  it("approves exactly offline_access, Mail.ReadWrite, Mail.Send and User.Read", () => {
+    assert.deepEqual(
+      [...APPROVED_SCOPES],
+      ["offline_access", "Mail.ReadWrite", "Mail.Send", "User.Read"],
+    );
+  });
+
+  const supplierGranting = (scope: string) =>
+    new MicrosoftDelegatedAccessTokenSupplier({
+      clientId: "client-id",
+      scopes: [...APPROVED_SCOPES],
+      tokenEndpoint: "https://login.microsoftonline.com/consumers/oauth2/v2.0/token",
+      refreshTokenStore: new MemoryRefreshTokenStore("refresh-token-1"),
+      fetch: async () =>
+        new Response(
+          JSON.stringify({ token_type: "Bearer", access_token: "a", expires_in: 3600, scope }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+    });
+
+  it("accepts a token response that grants User.Read, bare or Graph-prefixed", async () => {
+    const signal = new AbortController().signal;
+    assert.equal(
+      await supplierGranting("Mail.ReadWrite Mail.Send User.Read").getAccessToken(signal),
+      "a",
+    );
+    assert.equal(
+      await supplierGranting(
+        "https://graph.microsoft.com/Mail.ReadWrite https://graph.microsoft.com/Mail.Send https://graph.microsoft.com/User.Read",
+      ).getAccessToken(signal),
+      "a",
+    );
+  });
+
+  it("still rejects scopes beyond the approved set and responses missing the mail scopes", async () => {
+    const signal = new AbortController().signal;
+    for (const [scope, code] of [
+      ["Mail.ReadWrite Mail.Send User.ReadWrite", "microsoft-oauth-scopes-excessive"],
+      ["Mail.ReadWrite Mail.Send User.Read User.ReadBasic.All", "microsoft-oauth-scopes-excessive"],
+      ["Mail.ReadWrite User.Read", "microsoft-oauth-scopes-missing"],
+    ] as const) {
+      await assert.rejects(supplierGranting(scope).getAccessToken(signal), (error) => {
+        assert.ok(error instanceof MicrosoftDelegatedOAuthError);
+        assert.match(String((error as Error).message), new RegExp(code, "u"));
+        return true;
+      });
+    }
   });
 
   it("deduplicates concurrent refreshes", async () => {
@@ -205,7 +255,7 @@ describe("MicrosoftDelegatedAccessTokenSupplier", () => {
     });
     const supplier = new MicrosoftDelegatedAccessTokenSupplier({
       clientId: "client-id",
-      scopes: ["offline_access", "Mail.ReadWrite", "Mail.Send"],
+      scopes: ["offline_access", "Mail.ReadWrite", "Mail.Send", "User.Read"],
       tokenEndpoint: "https://login.microsoftonline.com/consumers/oauth2/v2.0/token",
       refreshTokenStore: store,
       fetch: async () => {
@@ -236,7 +286,7 @@ describe("MicrosoftDelegatedAccessTokenSupplier", () => {
     const store = new MemoryRefreshTokenStore(secret);
     const supplier = new MicrosoftDelegatedAccessTokenSupplier({
       clientId: "client-id",
-      scopes: ["offline_access", "Mail.ReadWrite", "Mail.Send"],
+      scopes: ["offline_access", "Mail.ReadWrite", "Mail.Send", "User.Read"],
       tokenEndpoint: "https://login.microsoftonline.com/consumers/oauth2/v2.0/token",
       refreshTokenStore: store,
       fetch: async () => new Response(`diagnostic ${secret}`, { status: 401 }),
