@@ -238,11 +238,21 @@ async function loadContacts(
   return values;
 }
 
-async function projectRevision(
-  plan: CommissioningPlan,
+/**
+ * The guard stores the Convex URL as `URL.toString()`, which ends in `/`. The Convex client
+ * appends `/api/query`, so a trailing slash would produce `//api/query` (a 404 with an empty body).
+ */
+export async function projectRevision(
+  plan: Pick<CommissioningPlan, "convexUrl" | "projectKey">,
   serviceToken: string,
+  fetchImplementation?: typeof globalThis.fetch,
 ): Promise<number | null> {
-  const project = await new ConvexHttpClient(plan.convexUrl).query(api.projects.get, {
+  const address = plan.convexUrl.replace(/\/+$/u, "");
+  const client = new ConvexHttpClient(
+    address,
+    fetchImplementation ? { fetch: fetchImplementation } : undefined,
+  );
+  const project = await client.query(api.projects.get, {
     serviceToken,
     projectKey: plan.projectKey,
   });
@@ -604,6 +614,19 @@ export async function executeOutlookQuoteCommissioning(
   });
 }
 
+/** Always returns a non-empty, single-line message so a failed run is never silent. */
+export function describeCommissioningFailure(error: unknown): string {
+  const fallback = "Outlook quote commissioning failed";
+  if (error instanceof Error) {
+    const message = error.message.trim();
+    return message.length > 0
+      ? message
+      : `${fallback}: ${error.name || "Error"} with no message (nothing was sent unless evidence was written).`;
+  }
+  if (typeof error === "string" && error.trim().length > 0) return error.trim();
+  return `${fallback}: non-Error value thrown (nothing was sent unless evidence was written).`;
+}
+
 async function main(): Promise<void> {
   loadLocalEnvironment();
   const evidence = await executeOutlookQuoteCommissioning(process.env);
@@ -621,8 +644,7 @@ async function main(): Promise<void> {
 const entryPoint = process.argv[1];
 if (entryPoint && import.meta.url === pathToFileURL(entryPoint).href) {
   main().catch((error: unknown) => {
-    const message = error instanceof Error ? error.message : "Outlook quote commissioning failed.";
-    console.error(message);
+    console.error(describeCommissioningFailure(error));
     process.exitCode = 1;
   });
 }

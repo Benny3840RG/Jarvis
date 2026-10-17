@@ -4,7 +4,9 @@ import { describe, it } from "node:test";
 import { resolveOutlookConnections } from "../src/auth/microsoftOutlookConnections.js";
 import type { MicrosoftOutlookRuntime } from "../src/auth/microsoftOutlookRuntime.js";
 import {
+  describeCommissioningFailure,
   executeOutlookQuoteCommissioning,
+  projectRevision,
   type CommissioningRequest,
 } from "../src/tools/runOutlookQuoteCommissioning.js";
 
@@ -554,5 +556,52 @@ describe("outlook quote commissioning run", () => {
       /only valid when named Outlook connections are enabled/u,
     );
     assert.deepEqual(calls, ["GET"]);
+  });
+});
+
+describe("commissioning project read and failure reporting", () => {
+  it("never builds a //api/query URL when the plan's Convex URL has a trailing slash", async () => {
+    const urls: string[] = [];
+    const fetchStub: typeof fetch = async (input) => {
+      urls.push(String(input));
+      return new Response(JSON.stringify({ status: "success", value: { revision: 4 } }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    };
+    for (const convexUrl of [
+      "https://outgoing-ram-798.convex.cloud/",
+      "https://outgoing-ram-798.convex.cloud//",
+      "https://outgoing-ram-798.convex.cloud",
+    ]) {
+      assert.equal(
+        await projectRevision(
+          { convexUrl, projectKey: "totality-dev" },
+          "service-token",
+          fetchStub,
+        ),
+        4,
+      );
+    }
+    assert.equal(urls.length, 3);
+    for (const url of urls) {
+      assert.equal(url, "https://outgoing-ram-798.convex.cloud/api/query");
+      assert.ok(!url.replace("https://", "").includes("//"));
+    }
+  });
+
+  it("reports a non-empty message for empty, non-Error and normal failures", () => {
+    assert.match(
+      describeCommissioningFailure(new Error("")),
+      /commissioning failed: Error with no message/u,
+    );
+    assert.match(describeCommissioningFailure(new TypeError("  ")), /TypeError with no message/u);
+    assert.match(describeCommissioningFailure(undefined), /non-Error value thrown/u);
+    assert.match(describeCommissioningFailure(""), /non-Error value thrown/u);
+    assert.equal(describeCommissioningFailure("plain failure"), "plain failure");
+    assert.equal(
+      describeCommissioningFailure(new Error("Outlook quote commissioning refused: x")),
+      "Outlook quote commissioning refused: x",
+    );
   });
 });
