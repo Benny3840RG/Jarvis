@@ -2,7 +2,12 @@ export { FileRefreshTokenStore } from "./fileRefreshTokenStore.js";
 
 const PERSONAL_ACCOUNT_TOKEN_ENDPOINT =
   "https://login.microsoftonline.com/consumers/oauth2/v2.0/token";
-export const APPROVED_SCOPES = ["offline_access", "Mail.ReadWrite", "Mail.Send"] as const;
+export const APPROVED_SCOPES = [
+  "offline_access",
+  "Mail.ReadWrite",
+  "Mail.Send",
+  "User.Read",
+] as const;
 const REFRESH_EARLY_MS = 60_000;
 
 type Environment = Readonly<Record<string, string | undefined>>;

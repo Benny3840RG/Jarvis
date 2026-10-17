@@ -384,6 +384,10 @@ describe("Outlook browser onboarding", () => {
               const auth = new URL(url);
               assert.equal(auth.searchParams.get("code_challenge_method"), "S256");
               assert.equal(auth.searchParams.get("prompt"), "select_account");
+              assert.equal(
+                auth.searchParams.get("scope"),
+                "offline_access Mail.ReadWrite Mail.Send User.Read",
+              );
               const callback = new URL(auth.searchParams.get("redirect_uri")!);
               const malformedStatus = await new Promise<number | undefined>((resolve, reject) => {
                 const req = request(

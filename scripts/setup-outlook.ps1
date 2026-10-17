@@ -99,7 +99,7 @@ try {
     $resources = @(Get-GraphCollection "$graph/servicePrincipals?`$filter=appId eq '00000003-0000-0000-c000-000000000000'")
     if ($resources.Count -ne 1) { throw 'Cannot identify Microsoft Graph in this tenant.' }
     $resource = $resources[0]
-    $scopeNames = @('offline_access', 'Mail.ReadWrite', 'Mail.Send')
+    $scopeNames = @('offline_access', 'Mail.ReadWrite', 'Mail.Send', 'User.Read')
     $scopes = @()
     foreach ($scopeName in $scopeNames) {
         $scope = @($resource.oauth2PermissionScopes | Where-Object { $_.value -ceq $scopeName -and $_.isEnabled })

@@ -233,7 +233,7 @@ describe("isolated Outlook connections", () => {
   it("rejects arbitrary token destinations and excessive granted scopes", async () => {
     const base = {
       clientId: personal.clientId,
-      scopes: ["offline_access", "Mail.ReadWrite", "Mail.Send"],
+      scopes: ["offline_access", "Mail.ReadWrite", "Mail.Send", "User.Read"],
       refreshTokenStore: {
         async read() {
           return "secret";
