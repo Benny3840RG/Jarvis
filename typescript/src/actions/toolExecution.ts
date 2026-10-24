@@ -11,6 +11,7 @@ import {
 } from "../reconciliation/externalReconciliation.js";
 import { bindSafety, type SafetyBinding } from "../safety/safetyBinder.js";
 import type { ToolAuthority } from "../runtime/totalityPolicy.js";
+import { securityEducation, type SecurityEducation } from "./securityEducation.js";
 import { canonicalJson } from "./canonicalJson.js";
 import { sha256Hex } from "./sha256.js";
 import type { ToolAction } from "./toolActions.js";
@@ -495,7 +496,36 @@ export class ToolExecutionService {
     );
   }
 
-  async execute(input: ExecuteInput): Promise<ToolExecutionReceipt> {
+  async execute(
+    input: ExecuteInput,
+  ): Promise<ToolExecutionReceipt & { education?: SecurityEducation }> {
+    const result = await this.executeReceipt(input);
+    // Only these fixed local educational results may be returned. No general
+    // executor output channel or new persisted fields are introduced.
+    if (
+      result.status !== "succeeded" ||
+      input.dryRun ||
+      input.action.state !== "approved" ||
+      input.action.isApprovalExpired ||
+      input.authority === "T0" ||
+      AUTHORITY_LEVEL[input.authority] < AUTHORITY_LEVEL[input.action.requiredAuthority] ||
+      input.action.tool !== "security" ||
+      !["explain", "interpret"].includes(input.action.operation) ||
+      !this.isRegistered("security", input.action.operation) ||
+      result.actionFingerprint !== fingerprintToolAction(input.action)
+    )
+      return result;
+    try {
+      const education = securityEducation(input.action.operation, input.action.arguments);
+      // Replays after a catalogue/parser update must not claim the new answer
+      // is the old approved output. Keep the original digest-only receipt.
+      return digest(education) === result.outputDigest ? { ...result, education } : result;
+    } catch {
+      return result;
+    }
+  }
+
+  private async executeReceipt(input: ExecuteInput): Promise<ToolExecutionReceipt> {
     const definition = this.definitions.get(`${input.action.tool}:${input.action.operation}`);
     const effectFingerprint = fingerprintToolEffect(input.action);
     const external = definition?.externalProvider !== undefined;

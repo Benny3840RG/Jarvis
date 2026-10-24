@@ -1,3 +1,4 @@
+import { createSecurityEducationTools } from "./securityEducation.js";
 import type { NoteStore } from "../notes/note.js";
 import { ConvexControlledReminderStore } from "../persistence/convexControlledReminders.js";
 import { ConvexControlledTaskStore } from "../persistence/convexControlledTasks.js";
@@ -56,6 +57,7 @@ export function createToolExecutionDefinitions(
 
   return [
     createNoteToolDefinition(noteStore),
+    ...createSecurityEducationTools(),
     ...(taskStore === undefined || reminderStore === undefined
       ? []
       : createTaskReminderToolDefinitions(taskStore, reminderStore)),

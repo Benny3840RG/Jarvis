@@ -605,6 +605,102 @@ action_families:
         type: string
         required: true
 
+  - id: AM-014
+    name: Explain a cybersecurity concept
+    lifecycle_status: planned
+    owner: shared_domain
+    version: 1
+    classification:
+      verb: explain
+      object: security_education
+      domains: [shared]
+      capability: security
+    policy_overlay: read_only
+    approval:
+      mode: always
+      binding: exact_action_fingerprint
+    sensitivity:
+      mode: fixed
+      value: private
+    execution:
+      external_side_effects:
+        mode: false
+      offline_support: true
+    idempotency:
+      enabled: true
+      key_strategy: normalized_payload_hash
+      scope: owner_and_action_family
+      replay_policy: return_original_result
+      collision_policy: reject_and_log
+    bindings:
+      executor_id: TOOL-SECURITY-EXPLAIN
+      state_target_id: STORE-TOOL-EXECUTION-RECEIPTS
+      tool_contract_version: "1"
+    reconciliation:
+      required: false
+    traceability:
+      requirements:
+        primary: [R-055, R-056, R-057, R-058, R-062]
+        supporting: [R-039, R-060, R-063, R-066]
+      test_ids: [TEST-SECURITY-EDUCATION-001]
+      evidence_ids: [EVD-SECURITY-EDUCATION-001]
+    parameters:
+      - name: topic
+        type: string
+        required: true
+        values: [ports, dns, tls, phishing, permissions, least-privilege]
+
+  - id: AM-015
+    name: Interpret supplied port-state rows
+    lifecycle_status: planned
+    owner: shared_domain
+    version: 1
+    classification:
+      verb: interpret
+      object: security_education
+      domains: [shared]
+      capability: security
+    policy_overlay: read_only
+    approval:
+      mode: always
+      binding: exact_action_fingerprint
+    sensitivity:
+      mode: fixed
+      value: private
+    execution:
+      external_side_effects:
+        mode: false
+      offline_support: true
+    idempotency:
+      enabled: true
+      key_strategy: normalized_payload_hash
+      scope: owner_and_action_family
+      replay_policy: return_original_result
+      collision_policy: reject_and_log
+    bindings:
+      executor_id: TOOL-SECURITY-INTERPRET
+      state_target_id: STORE-TOOL-EXECUTION-RECEIPTS
+      tool_contract_version: "1"
+    reconciliation:
+      required: false
+    traceability:
+      requirements:
+        primary: [R-055, R-056, R-057, R-058, R-062]
+        supporting: [R-039, R-060, R-063, R-066]
+      test_ids: [TEST-SECURITY-EDUCATION-001]
+      evidence_ids: [EVD-SECURITY-EDUCATION-001]
+    parameters:
+      - name: format
+        type: string
+        required: true
+        values: [port-states]
+      - name: output
+        type: string
+        required: true
+        constraints:
+          min_length: 1
+          max_length: 8192
+
 workflows:
   - id: WF-QUOTE-001
     name: Finalize and send quote

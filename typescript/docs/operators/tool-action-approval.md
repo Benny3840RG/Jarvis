@@ -304,3 +304,11 @@ effect's outcome is not yet known — neither a proven success nor a proven fail
 revocation, is what eventually resolves an indeterminate receipt to its true terminal outcome. Revoke a
 proposal to stop _future_ executions of it; consult the receipt and its reconciliation state, not the
 `ToolAction`'s own `state` field, to find out whether an external write actually happened.
+
+## Education-only security actions
+
+The development education slice adds `security:explain` and `security:interpret`
+to the same governed allowlist, with T1 minimum and unchanged approval gates.
+See [security-education.md](security-education.md) for supported arguments,
+pre-storage minimisation, transient digest-bound responses and limitations.
+No diagnostic executor or production activation is included.
