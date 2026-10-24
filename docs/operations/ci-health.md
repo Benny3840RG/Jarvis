@@ -4,13 +4,13 @@ This document describes the expected state of each GitHub Actions workflow, what
 
 ## Workflows
 
-| Workflow | File | Trigger | Purpose |
-| --- | --- | --- | --- |
-| TypeScript checks | `typescript.yml` | Push to `main`, PR to `main` (TypeScript, automation, or workflow paths) | Full verification gate: automation policy, type-check, lint, format, OpenAPI lint, tests with coverage |
-| Python checks | `python-app.yml` | Push to `main`, PR to `main` (Python paths) | Lint and test the legacy Python prototype |
-| Queue development commissioning | `queue-development-commissioning.yml` | Push to `main` when a request file changes | Queues and monitors one uniquely identified development commissioning request; duplicate request IDs are ignored and issue #54 records consumption |
-| Development commissioning | `development-commissioning.yml` | Manual dispatch only (`workflow_dispatch`) | Authorised end-to-end commissioning: deps, checks, Convex sync, smoke test, HTTP start, Totality probe, backup verify |
-| Jarvis autonomous build | `jarvis-autobuild.yml` | `automation-approved` issue label or manual issue retry | Bounded Codex implementation that opens a draft PR; never merges, commissions, or deploys |
+| Workflow                        | File                                  | Trigger                                                 | Purpose                                                                                                                                            |
+| ------------------------------- | ------------------------------------- | ------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| TypeScript checks               | `typescript.yml`                      | Every push to `main` and every PR to `main`             | Full verification gate: automation policy, type-check, lint, format, OpenAPI lint, tests with coverage                                             |
+| Python checks                   | `python-app.yml`                      | Push to `main`, PR to `main` (Python paths)             | Lint and test the legacy Python prototype                                                                                                          |
+| Queue development commissioning | `queue-development-commissioning.yml` | Push to `main` when a request file changes              | Queues and monitors one uniquely identified development commissioning request; duplicate request IDs are ignored and issue #54 records consumption |
+| Development commissioning       | `development-commissioning.yml`       | Manual dispatch only (`workflow_dispatch`)              | Authorised end-to-end commissioning: deps, checks, Convex sync, smoke test, HTTP start, Totality probe, backup verify                              |
+| Jarvis autonomous build         | `jarvis-autobuild.yml`                | `automation-approved` issue label or manual issue retry | Bounded Codex implementation that opens a draft PR; never merges, commissions, or deploys                                                          |
 
 ## Expected baseline state
 
@@ -52,13 +52,13 @@ This check verifies issue eligibility, forbidden diff paths, secret redaction, i
 
 Common failure modes:
 
-| Symptom | Likely cause | Fix |
-| --- | --- | --- |
-| `tsc` type error | Type mismatch or missing type update | Fix the TypeScript type error in the reported file |
-| ESLint error | Lint rule violation | Run `npm run lint` locally and fix the reported line |
-| Prettier format error | Code not formatted | Run `npm run format` to auto-fix, then commit |
-| OpenAPI lint warning | OpenAPI contract has a warning or error | Run `npm run openapi:lint` and fix the reported issue |
-| Test failure | Logic regression or a flaky test | Run `npm run test` locally and inspect the failure output |
+| Symptom               | Likely cause                            | Fix                                                       |
+| --------------------- | --------------------------------------- | --------------------------------------------------------- |
+| `tsc` type error      | Type mismatch or missing type update    | Fix the TypeScript type error in the reported file        |
+| ESLint error          | Lint rule violation                     | Run `npm run lint` locally and fix the reported line      |
+| Prettier format error | Code not formatted                      | Run `npm run format` to auto-fix, then commit             |
+| OpenAPI lint warning  | OpenAPI contract has a warning or error | Run `npm run openapi:lint` and fix the reported issue     |
+| Test failure          | Logic regression or a flaky test        | Run `npm run test` locally and inspect the failure output |
 
 ### Python checks (`python-tests`)
 
@@ -87,6 +87,18 @@ If commissioning fails:
 - **`main` must never have a failing `typecheck-lint-format-test` or `automation-policy` run.** If it does, treat it as a blocking defect.
 - **Draft PRs are allowed to have failing CI** while work is in progress, but a PR must not be promoted from draft to ready-for-review while CI is red.
 - **Preview workflows** (see `docs/operations/preview-features.md`) may have targeted failures during active development but must not introduce regressions in the stable test suite.
+
+## HUD browser cleanup
+
+The `hud-layout` job runs the real Chromium scenarios separately from the
+application test suite. A green scheduled CI health check does not cover this
+browser job. Inspect the individual jobs when the TypeScript workflow is red.
+
+If all scenarios pass but cleanup reports `ENOTEMPTY`, Chromium descendants may
+still be finishing profile writes. The gate uses native recursive removal with
+five retries and a 100 ms linear retry delay. It does not ignore persistent
+cleanup errors, browser startup failures, clipping or JavaScript errors. Fix
+repeated failures at their cause rather than weakening the layout checks.
 
 ## Adding new required checks
 
