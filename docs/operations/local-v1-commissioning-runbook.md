@@ -321,15 +321,23 @@ Key rules (from `typescript/docs/operators/archive-v4.md` and the gap analysis):
   any `.convex.cloud`/`.convex.site`).
 
 Host action required (manual, no packaged command): stand up the isolated
-convex-local-backend on `127.0.0.1`, supply `JARVIS_DELIVERY_RUNTIME_TOKEN`,
-capture a Local V1 archive with `captureLocalV1Archive`, restore it with
-`restoreLocalV1Archive` into a fresh JSON directory plus the isolated backend,
-then repeat the restart step so a restarted `src/http/main.ts` serves matching
+convex-local-backend on `127.0.0.1` and supply `JARVIS_DELIVERY_RUNTIME_TOKEN`,
+then capture a Local V1 archive with `captureLocalV1Archive`. Restore it with
+`restoreLocalV1Archive`, which does two things: it writes the JSON documents
+(business/core/memory) into a fresh directory, and it inserts the Convex rows
+through a **caller-supplied empty Convex client** — it never constructs a client
+from `CONVEX_URL` and never writes live data. The isolated backend is therefore
+**seeded by that insert**: for a host run the driver must pass a client pointed at
+the isolated self-hosted backend (not `CONVEX_URL`), and `restoreLocalV1Archive`
+populates it. (Off-host, the same function takes a `convex-test` in-memory client
+instead — which is exactly why 8a is harness-only and not the host proof.) Then
+repeat the restart step so a restarted `src/http/main.ts` serves matching
 client/task/build **and quote** GETs. Because these functions have no CLI entry
-today, this currently needs a small driver script; packaging it as a reviewed
-`commission:local-v1-recovery` command — with exact setup, invocation,
-expected-output, evidence-capture and teardown — is the smallest way to make this
-stage turnkey, and is tracked as follow-up, not done here.
+today, this currently needs a small driver script to wire that client and
+sequence the steps; packaging it as a reviewed `commission:local-v1-recovery`
+command — with exact setup, invocation, expected-output, evidence-capture and
+teardown — is the smallest way to make this stage turnkey, and is tracked as
+follow-up, not done here.
 
 Prior evidence: quote GET across a real restart is **PROVEN** at `2d34a741`
 (host `~/lv1-01/restart-proof.md`, quote sha256 `c7fd9977…dbb8`, with
