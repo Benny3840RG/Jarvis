@@ -3,13 +3,17 @@
 **Audience:** Benny (owner/operator), running on the J-arvis host.
 **Tracker:** #697. **Release plan:** `docs/operations/local-v1-release-plan.md`.
 **What this is:** the host-side sequence that turns the green code baseline into
-the evidence #697's definition of done requires. Stages 0–7 and 9 each list exact
-commands, the environment they need, and an explicit pass / stop line. **Stage 8
-(recovery + restart) is the exception and is not turnkey:** the Local V1 recovery
-proof has no operator command today — only an off-host test invocation plus a
-manual host procedure — so Stage 8 is marked BLOCKED until a
-`commission:local-v1-recovery` wrapper is built and reviewed (a separate code
-change, out of scope for this doc).
+the evidence #697's definition of done requires. Every stage names the
+environment it needs and an explicit pass / stop line. The stages that are
+executable as commands — 0–2 (baseline, checks, local runtime), 4 (Outlook), and
+6 (home) — give those commands exactly; the rest — 3 (voice), 5 (golden
+workflow), 7 (workshop), 9 (dogfood), and 10 (release) — are operator procedures
+that cite the detailed steps in the referenced runbook/operator docs rather than
+a single command. **Stage 8 (recovery + restart) is the exception and is not
+turnkey:** the Local V1 recovery proof has no operator command today — only an
+off-host test invocation plus a manual host procedure — so Stage 8 is marked
+BLOCKED until a `commission:local-v1-recovery` wrapper is built and reviewed (a
+separate code change, out of scope for this doc).
 
 **What this is not:** a merge or deploy authority. Per
 `docs/operations/dual-agent-coordination.md`, merge, deployment and
