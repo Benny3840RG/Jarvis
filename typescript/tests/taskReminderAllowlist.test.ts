@@ -151,7 +151,7 @@ function service(taskStore: RecordingTaskStore, reminderStore: RecordingReminder
 }
 
 describe("task and reminder tool allowlist", () => {
-  it("registers exactly the five reviewed internal operations", () => {
+  it("registers exactly the reviewed internal and education operations", () => {
     const definitions = createToolExecutionDefinitions(
       new StubNoteStore(),
       new RecordingTaskStore(),
@@ -159,7 +159,15 @@ describe("task and reminder tool allowlist", () => {
     );
     assert.deepEqual(
       definitions.map(({ tool, operation }) => `${tool}:${operation}`),
-      ["notes:create", "tasks:create", "tasks:complete", "reminders:create", "reminders:cancel"],
+      [
+        "notes:create",
+        "security:explain",
+        "security:interpret",
+        "tasks:create",
+        "tasks:complete",
+        "reminders:create",
+        "reminders:cancel",
+      ],
     );
   });
 

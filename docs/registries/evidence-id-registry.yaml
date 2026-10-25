@@ -37,3 +37,7 @@ evidence:
   - id: EVD-OS-CI-001
     path: docs/traceability/omega-completion-integrity-tdd.md
     description: "PR #383 / issue #378 RED-to-GREEN completion-integrity evidence covering OS-CI-001 through OS-CI-012, exact implementation-head CI runs, compatibility projection demotion, current proof/evidence authority, append-only contradiction resolution, bounded reads and repository-only scope."
+
+  - id: EVD-SECURITY-EDUCATION-001
+    path: docs/evidence/security-education-mvp.md
+    description: Education-only design, threat boundaries, test commands and review handoff. No live commissioning, deployment or diagnostics authority.

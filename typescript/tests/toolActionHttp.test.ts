@@ -1,3 +1,4 @@
+import { createSecurityEducationTools } from "../src/actions/securityEducation.js";
 import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
 
@@ -688,5 +689,42 @@ describe("Tool action approval HTTP boundary", () => {
 
     assert.equal(response.statusCode, 422);
     assert.equal(called, false);
+  });
+});
+
+describe("security education HTTP result", () => {
+  it("returns a readable digest-bound answer through the existing authenticated execute route", async () => {
+    const securityAction = {
+      ...action("approved"),
+      tool: "security",
+      operation: "interpret",
+      arguments: { format: "port-states", output: "22/tcp open secret-label" },
+    };
+    const app = await makeApp(
+      successfulService({
+        async get() {
+          return securityAction;
+        },
+      }),
+      new ToolExecutionService(createSecurityEducationTools()),
+    );
+    const path = "/api/v1/projects/project-1/tool-actions/action-1/execute";
+    const denied = await app.inject({
+      method: "POST",
+      url: path,
+      payload: { idempotencyKey: "education" },
+    });
+    assert.equal(denied.statusCode, 401);
+    const result = await app.inject({
+      method: "POST",
+      url: path,
+      headers: authHeaders(),
+      payload: { idempotencyKey: "education" },
+    });
+    assert.equal(result.statusCode, 200);
+    assert.equal(result.json().status, "succeeded");
+    assert.equal(result.json().education.supported, true);
+    assert.match(result.json().education.summary, /1 open/);
+    assert.doesNotMatch(result.body, /secret-label|22\/tcp/);
   });
 });

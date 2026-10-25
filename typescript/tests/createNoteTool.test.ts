@@ -199,12 +199,12 @@ describe("AM-003 create note tool", () => {
     assert.equal(store.creates.length, 1);
   });
 
-  it("allowlists only notes:create and blocks every other operation", async () => {
+  it("allowlists note creation and education while blocking other note operations", async () => {
     const store = new RecordingNoteStore();
     const definitions = createToolExecutionDefinitions(store);
     assert.deepEqual(
       definitions.map(({ tool, operation }) => `${tool}:${operation}`),
-      ["notes:create"],
+      ["notes:create", "security:explain", "security:interpret"],
     );
 
     const service = new ToolExecutionService(definitions);
