@@ -10086,6 +10086,28 @@
           }
         }
       },
+      "SecurityEducation": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["version", "supported", "summary", "limitations"],
+        "properties": {
+          "version": {
+            "type": "integer",
+            "const": 1
+          },
+          "supported": {
+            "type": "boolean"
+          },
+          "summary": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "limitations": {
+            "type": "string",
+            "maxLength": 1000
+          }
+        }
+      },
       "ToolExecutionReceipt": {
         "type": "object",
         "additionalProperties": false,
@@ -10127,6 +10149,10 @@
           "status": {
             "type": "string",
             "enum": ["dry-run", "succeeded", "failed", "timed-out", "blocked"]
+          },
+          "education": {
+            "$ref": "#/components/schemas/SecurityEducation",
+            "description": "Transient education-only answer, reconstructed only for registered security actions after a successful receipt and matching output digest. Never stored in receipts. No arbitrary executor output is exposed."
           },
           "outputDigest": {
             "type": "string",

@@ -1311,3 +1311,59 @@ describe("regression: a caller-supplied clock can no longer skew execution-gate 
     }
   });
 });
+
+describe("security education proposal minimisation", () => {
+  it("drops pasted service labels before storage and audit; equivalent minimised retries replay", async () => {
+    const t = harness();
+    const first = await stageAndReturn(t, {
+      tool: "security",
+      operation: "interpret",
+      arguments: { format: "port-states", output: "PORT STATE SERVICE\n22/tcp open secret-label" },
+    });
+    expect(first.arguments).toEqual({ format: "port-states", output: "22/tcp open" });
+    const replay = await t.mutation(
+      api.toolActions.stage,
+      stageArgs({
+        tool: "security",
+        operation: "interpret",
+        arguments: { format: "port-states", output: "22/tcp open" },
+      }),
+    );
+    expect(replay._id).toBe(first._id);
+    const records = await t.run(async (ctx) => ({
+      actions: await ctx.db.query("toolActions").collect(),
+      audit: await ctx.db.query("auditEvents").collect(),
+    }));
+    expect(JSON.stringify(records)).not.toContain("secret-label");
+  });
+  it("stores only an unsupported marker for hostile or credential-bearing pasted text", async () => {
+    const t = harness();
+    const row = await stageAndReturn(t, {
+      tool: "security",
+      operation: "interpret",
+      arguments: { format: "port-states", output: "22/tcp open ssh\nAuthorization: Bearer SECRET" },
+    });
+    expect(row.arguments).toEqual({ format: "port-states", output: "[unsupported]" });
+    expect(
+      JSON.stringify(await t.run((ctx) => ctx.db.query("toolActions").collect())),
+    ).not.toContain("SECRET");
+  });
+  it("rejects unknown security operations and over-limit inputs before storing a proposal", async () => {
+    const t = harness();
+    await t.run((ctx) => seedProject(ctx));
+    await expect(
+      t.mutation(api.toolActions.stage, stageArgs({ tool: "security", operation: "scan" })),
+    ).rejects.toThrow();
+    await expect(
+      t.mutation(
+        api.toolActions.stage,
+        stageArgs({
+          tool: "security",
+          operation: "interpret",
+          arguments: { format: "port-states", output: "x".repeat(8193) },
+        }),
+      ),
+    ).rejects.toThrow();
+    expect(await t.run((ctx) => ctx.db.query("toolActions").collect())).toHaveLength(0);
+  });
+});

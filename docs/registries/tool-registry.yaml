@@ -67,3 +67,19 @@ tools:
     implementation: typescript/src/actions/quoteSendTool.ts
     allowlist: typescript/src/actions/toolExecutionFactory.ts
     bound_by: [AM-013]
+
+  - id: TOOL-SECURITY-EXPLAIN
+    lifecycle_status: planned
+    implemented: true
+    description: Education-only security:explain binding. Local deterministic results through existing approval and execution gates; no shell, network or model calls. Not commissioned or deployed.
+    implementation: typescript/src/actions/securityEducation.ts
+    allowlist: typescript/src/actions/toolExecutionFactory.ts
+    bound_by: [AM-014]
+
+  - id: TOOL-SECURITY-INTERPRET
+    lifecycle_status: planned
+    implemented: true
+    description: Education-only security:interpret binding. Local deterministic results through existing approval and execution gates; no shell, network or model calls. Not commissioned or deployed.
+    implementation: typescript/src/actions/securityEducation.ts
+    allowlist: typescript/src/actions/toolExecutionFactory.ts
+    bound_by: [AM-015]

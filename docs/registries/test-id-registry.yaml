@@ -134,3 +134,7 @@ tests:
   - id: TEST-OS-CI-012-001
     path: docs/traceability/omega-completion-integrity-tdd.md
     verifies: the increment is repository-only and records no deployment, commissioning or production-authorisation change
+
+  - id: TEST-SECURITY-EDUCATION-001
+    path: typescript/tests/securityEducation.test.ts
+    verifies: bounded lessons, port-state grammar, unsupported input, hostile text, authority and consent refusal, digest-only storage, replay, cancellation and factory binding; HTTP and authoritative staging coverage also lives in toolActionHttp.test.ts and convex/toolActions.test.ts

@@ -12,6 +12,8 @@ Generated from `docs/traceability/action-family-registry.yaml`. This view is non
 | AM-007 | Cancel reminder | active | business, home, workshop, shared | reminders | destructive_internal_mutation | destructive | always | false | false |
 | AM-004 | Create task | active | business, home, workshop, shared | tasks | internal_mutation | mutate | never | false | false |
 | AM-005 | Complete task | active | business, home, workshop, shared | tasks | internal_mutation | mutate | never | false | false |
+| AM-014 | Explain a cybersecurity concept | planned | shared | security | read_only | read | always | false | false |
+| AM-015 | Interpret supplied port-state rows | planned | shared | security | read_only | read | always | false | false |
 
 ## Workflows
 

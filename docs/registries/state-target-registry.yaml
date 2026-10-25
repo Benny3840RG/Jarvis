@@ -43,3 +43,12 @@ state_targets:
     implemented: true
     note: "Convex-backed QuoteRepository (typescript/src/quotes/convexQuoteRepository.ts) with aggregate, numbered revisions, controlled finalisation, and provider-neutral delivery ledger. AM-012 and TOOL-QUOTE-FINALIZE are active after PR #292 and guarded development commissioning run 30956407980. AM-013 and TOOL-QUOTE-SEND remain planned and unavailable pending separate Outlook delivery commissioning."
     bound_by: [AM-012, AM-013]
+
+  - id: STORE-TOOL-EXECUTION-RECEIPTS
+    lifecycle_status: planned
+    implemented: true
+    description: Existing owner/project-scoped execution receipts reused without schema changes. Education results are transient and digest-bound; only normal receipt metadata and digests persist. Education bindings are not commissioned.
+    implementation:
+      - typescript/src/actions/toolExecution.ts
+      - typescript/convex/toolExecutionReceipts.ts
+    bound_by: [AM-014, AM-015]

@@ -22,6 +22,7 @@ import {
 } from "./toolActionValidators.js";
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server.js";
 import type { Doc } from "./_generated/dataModel.js";
+import { prepareSecurityArguments } from "../src/actions/securityEducation.js";
 import { bindSafety, type SafetyPhase } from "../src/safety/safetyBinder.js";
 
 const toolActionViewValidator = v.object({
@@ -222,7 +223,9 @@ export const stage = mutation({
     const operation = cleanRequiredText(args.operation, "Tool operation");
     const rationale = cleanRequiredText(args.rationale, "Tool action rationale");
     const idempotencyKey = cleanRequiredText(args.idempotencyKey, "Tool idempotency key");
-    const normalisedArguments = normaliseToolArguments(args.arguments);
+    const normalisedArguments = normaliseToolArguments(
+      tool === "security" ? prepareSecurityArguments(operation, args.arguments) : args.arguments,
+    );
     validateToolAuthority(args.requiredAuthority, args.destructive);
 
     const proposal = {
