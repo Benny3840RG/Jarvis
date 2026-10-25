@@ -2,9 +2,14 @@
 
 **Audience:** Benny (owner/operator), running on the J-arvis host.
 **Tracker:** #697. **Release plan:** `docs/operations/local-v1-release-plan.md`.
-**What this is:** the turnkey host-side sequence that turns the green code
-baseline into the evidence #697's definition of done requires. Each stage lists
-the exact commands, the environment it needs, and an explicit pass / stop line.
+**What this is:** the host-side sequence that turns the green code baseline into
+the evidence #697's definition of done requires. Stages 0–7 and 9 each list exact
+commands, the environment they need, and an explicit pass / stop line. **Stage 8
+(recovery + restart) is the exception and is not turnkey:** the Local V1 recovery
+proof has no operator command today — only an off-host test invocation plus a
+manual host procedure — so Stage 8 is marked BLOCKED until a
+`commission:local-v1-recovery` wrapper is built and reviewed (a separate code
+change, out of scope for this doc).
 
 **What this is not:** a merge or deploy authority. Per
 `docs/operations/dual-agent-coordination.md`, merge, deployment and
@@ -268,11 +273,33 @@ and fail closed (already covered by Stage 3 step 6 and the absent-hardware tests
 
 ## Stage 8 — Recovery + restart (LV1-09, DoD items 11 & 12)
 
-This is the one genuinely-unfinished **technical** item. The capture → restore →
-reread code and the restart harness exist; the end-to-end restart proof on
-realistic data is **NOT YET MET** off-host and must be repeated on this host
-against an **isolated self-hosted convex-local-backend** (never the shared dev
-deployment).
+**Status: BLOCKED — no single operator command exists for this stage.** The
+capture → restore → reread code and the restart harness exist and pass off-host,
+but there is **no** `commission:local-v1-recovery` (or equivalent) script:
+`captureLocalV1Archive`, `restoreLocalV1Archive`, `proveLocalV1Recovery` and
+`readRestartedProcess` are invoked only from tests, not from `package.json` or
+`src/tools/`. The realistic end-to-end restart on realistic data is **NOT YET
+MET** and must be repeated on this host against an **isolated self-hosted
+convex-local-backend** (never the shared dev deployment).
+
+### 8a. Off-host proof (exact command, verified)
+
+This runs the proof gate (`proveLocalV1Recovery`) and the restarted-process
+harness (`readRestartedProcess`) on bounded synthetic fixtures / injected
+isolated stores — the portion reproducible without a host backend:
+
+```sh
+cd typescript
+node --import tsx --test tests/localV1Proof.test.ts tests/localV1ProcessRestart.test.ts
+```
+
+**Expected (verified on `918e753`, 2026-10-25):** `tests 7 … pass 7 … fail 0`,
+exit 0 — including "serves the same client, task, build, and quote GET from a
+second HTTP app" and "compares quote GET across two isolated processes when the
+delivery token is set". This is harness-level evidence on synthetic data, **not**
+the realistic host end-to-end proof in 8b.
+
+### 8b. Host end-to-end restart (manual — no wrapper exists yet)
 
 Key rules (from `typescript/docs/operators/archive-v4.md` and the gap analysis):
 
@@ -289,9 +316,16 @@ Key rules (from `typescript/docs/operators/archive-v4.md` and the gap analysis):
   `CONVEX_URL` (by host+port, scheme-insensitive, loopback aliases included, and
   any `.convex.cloud`/`.convex.site`).
 
-Host action required: stand up the isolated convex-local-backend on `127.0.0.1`,
-supply `JARVIS_DELIVERY_RUNTIME_TOKEN`, and repeat the restart step so a restarted
-`src/http/main.ts` serves matching client/task/build **and quote** GETs.
+Host action required (manual, no packaged command): stand up the isolated
+convex-local-backend on `127.0.0.1`, supply `JARVIS_DELIVERY_RUNTIME_TOKEN`,
+capture a Local V1 archive with `captureLocalV1Archive`, restore it with
+`restoreLocalV1Archive` into a fresh JSON directory plus the isolated backend,
+then repeat the restart step so a restarted `src/http/main.ts` serves matching
+client/task/build **and quote** GETs. Because these functions have no CLI entry
+today, this currently needs a small driver script; packaging it as a reviewed
+`commission:local-v1-recovery` command — with exact setup, invocation,
+expected-output, evidence-capture and teardown — is the smallest way to make this
+stage turnkey, and is tracked as follow-up, not done here.
 
 Prior evidence: quote GET across a real restart is **PROVEN** at `2d34a741`
 (host `~/lv1-01/restart-proof.md`, quote sha256 `c7fd9977…dbb8`, with
@@ -359,7 +393,7 @@ makes it.
 | golden workflow end to end | 5 | host |
 | home + Google Home commissioned | 6 | host (pinned devices) |
 | workshop daily-driver | 7 | host |
-| dataset recoverable (isolated restore) | 8 | host (isolated backend) — **NOT YET MET** |
+| dataset recoverable (isolated restore) | 8 | host (isolated backend); **BLOCKED — no operator command, off-host tests only (8a), host end-to-end NOT YET MET** |
 | restart preserves state, hardware fails closed | 8 + 3 | host |
 | dogfood, no blocker | 9 | host |
 | independent review, no blocker | 10 | owner |
