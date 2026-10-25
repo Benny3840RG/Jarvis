@@ -1,6 +1,6 @@
 version: 1
 status: canonical
-updated_at: 2026-10-06
+updated_at: 2026-10-26
 
 vision:
   name: Governed Cognitive Operating System
@@ -20,6 +20,7 @@ release_tracks:
     status: active
     tracker_issue: 697
     plan: docs/operations/local-v1-release-plan.md
+    runbook: docs/operations/local-v1-commissioning-runbook.md
     objective: >-
       Ship a stable local daily-driver across The Beez Treez business, home and
       workshop by commissioning and composing existing capabilities before
@@ -38,8 +39,14 @@ release_tracks:
     workstreams:
       - id: lv1-baseline
         priority: 100
-        status: ready
+        status: commissioning_required
         objective: Lock one known-good local runtime and exact source revision.
+        note: >-
+          Code gate green off-host (maintained checks and OpenAPI lint on
+          ee3340e0). JSON-backed HUD, MCP, home, business and voice-read
+          surface proven off-host 2026-10-12 (BACKLOG_RECONCILIATION_2026-10-12.md
+          section G). Host candidate lock and Convex dev runtime remain
+          (runbook stages 0-2).
       - id: lv1-voice-commissioning
         priority: 98
         status: commissioning_required
@@ -52,6 +59,9 @@ release_tracks:
           microphone/wake handling where available, confirmation safety, HUD
           feedback and measured dispatch round trips.
         non_goal: Physical equipment actuation.
+        note: >-
+          Software merged (#696). Remaining work is host microphone, HUD and
+          measured round-trip commissioning (runbook stage 3).
       - id: lv1-outlook-commissioning
         priority: 97
         status: commissioning_required
@@ -64,56 +74,84 @@ release_tracks:
           Use one non-customer development quote send/reconcile exercise to
           prove immutable provider identity, one terminal outcome and duplicate
           send prevention.
+        note: >-
+          Guarded non-customer commissioning kit (#712) and preflight (#723)
+          merged. Needs a dev Graph OAuth secret and one host session (runbook
+          stage 4).
       - id: lv1-voice-query-bridge
         priority: 94
-        status: planned
+        status: commissioning_required
         depends_on:
           - lv1-voice-commissioning
         objective: >-
           Route deterministic voice query intents to existing authoritative
           Jarvis read models for business, home and workshop information.
+        note: >-
+          Implemented and merged (#704). Answers from existing read models
+          off-host; host proof follows voice commissioning.
       - id: lv1-voice-safe-writes
         priority: 92
-        status: planned
+        status: commissioning_required
         depends_on:
           - lv1-voice-query-bridge
         objective: >-
           Route safe voice writes through existing API, MCP and ToolAction
           paths without creating a voice-specific authority or execution path.
+        note: >-
+          Implemented and merged (#714) on the existing ToolAction path. Host
+          proof follows voice commissioning.
       - id: lv1-business-golden-flow
         priority: 90
-        status: planned
+        status: in_progress
         depends_on:
           - lv1-outlook-commissioning
         objective: >-
           Prove enquiry through client/property/project, quote finalisation and
           delivery/reconciliation to invoice draft and daily operational views.
+        note: >-
+          Off-host rehearsal recorded (docs/operations/lv1-06-offhost-rehearsal.md).
+          Quote send stays not-commissioned until lv1-outlook-commissioning, and
+          the operator must supply an existing totality project key for quote
+          tool actions; no business-job-to-project mapping exists by design
+          (docs/operations/lv1-06-business-project-tool-actions.md).
       - id: lv1-home-daily-driver
         priority: 86
-        status: planned
+        status: commissioning_required
         depends_on:
           - lv1-baseline
         objective: >-
           Prove tasks, reminders, errands, restart persistence and the existing
           governed Google Home announcement path against pinned local devices.
+        note: >-
+          Off-host flows proven and merged (#710). Needs host restart proof
+          and pinned Google Home devices (runbook stage 6).
       - id: lv1-workshop-daily-driver
         priority: 84
-        status: planned
+        status: commissioning_required
         depends_on:
           - lv1-baseline
         objective: >-
           Prove assets, builds, build logs, upgrades and maintenance records
           through the normal Jarvis interaction surfaces.
         non_goal: Physical machine actuation.
+        note: >-
+          Off-host flows proven and merged (#710). Needs a host run (runbook
+          stage 7).
       - id: lv1-recovery
         priority: 99
-        status: planned
+        status: in_progress
         depends_on:
           - lv1-baseline
         objective: >-
           Demonstrate recoverability of the authoritative dataset actually
           relied upon by Local V1 using isolated restore and normal-store/API
           readback evidence.
+        note: >-
+          Capture, isolated restore, reread and proof gate merged (#706, #707,
+          #709, #717, #718, #721, #722). Archive completeness stays partial by
+          design. The host restart re-proof against an isolated
+          convex-local-backend is NOT YET MET
+          (docs/operations/local-v1-recovery-gap-analysis.md, runbook stage 8).
       - id: lv1-dogfood
         priority: 82
         status: planned
