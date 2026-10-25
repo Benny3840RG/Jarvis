@@ -718,7 +718,10 @@ async function main() {
         join(options.outputDir, "results.json"),
         `${JSON.stringify(evidence, null, 2)}\n`,
       );
-    await rm(profile, { recursive: true, force: true });
+    // Chromium descendants can briefly retain or recreate profile entries after
+    // the browser exits. Retry only the native transient filesystem failures;
+    // persistent cleanup errors still fail this gate after a finite budget.
+    await rm(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   }
 }
 

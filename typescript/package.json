@@ -81,6 +81,7 @@
     "@convex-dev/eslint-plugin": "^4.0.0",
     "@edge-runtime/vm": "5.0.0",
     "@eslint/js": "^10.0.1",
+    "@opentelemetry/api": "^1.9.1",
     "@redocly/cli": "^2.64.0",
     "@temporalio/testing": "^1.24.0",
     "@types/node": "^24.19.2",
@@ -107,9 +108,9 @@
     "find-my-way": "^9.7.0",
     "@hono/node-server": "^2.0.11",
     "brace-expansion": "^5.0.12",
-    "fast-uri": "^4.2.1",
+    "fast-uri": "^4.2.3",
     "hono": "^4.12.34",
-    "ip-address": "^10.7.2",
+    "ip-address": "^10.7.4",
     "js-yaml": "^4.3.2",
     "nanoid": "^3.3.18",
     "castv2": {
@@ -117,6 +118,9 @@
     },
     "concurrently": {
       "shell-quote": "1.11.0"
+    },
+    "@nestjs/platform-fastify": {
+      "fastify": "$fastify"
     }
   }
 }

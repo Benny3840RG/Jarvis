@@ -1,5 +1,22 @@
 # Jarvis TypeScript Roadmap
 
+## Maintenance sweep (2026-10-21)
+
+Mission #745 repairs the observed Chromium profile-removal race with bounded
+native retries and aligns both agent handovers with the current required-check
+policy. Exact-head CI, independent review, concrete findings and owner merge/
+deployment decisions remain separate. The dated record is
+`docs/operations/system-sweep-2026-10-21.md`.
+
+Read-only host inspection found healthy loopback user services on older checkout
+`2d34a741`; no deployment or restart was performed. Outlook has a recorded
+18 October dev commissioning run, but acceptance gaps remain and #294/#297 stay
+open. Advisory reviewer quota, host update planning and Local V1 commissioning
+are follow-through items, not reasons to add new authority or duplicate sends.
+
+Next: verify this exact maintenance candidate in CI and obtain independent review;
+then Benny decides landing and any separately scoped host/release work.
+
 ## Console 02 readable controls (2026-10-13)
 
 PR #724 maintenance keeps its existing HUD presentation and incorporates

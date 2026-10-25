@@ -48,9 +48,13 @@ repository write.
     coordination protocol.
 12. Apply validated review repairs on the same branch, rerun all affected
     checks, and request a fresh review of the new exact head.
-13. After Codex reports the exact head clean, wait for Jarvis to publish a
-    successful `jarvis-pr-maintenance/review` status on that same head. Any new
-    commit or base change requires fresh peer review and a fresh Jarvis PASS.
+13. After Codex reports the exact head clean, verify every trusted check
+    required by the current branch-protection policy, plus mission-specific
+    proof, on that same candidate. `jarvis-pr-maintenance/review` is advisory
+    unless that policy or the mission explicitly requires it. A blocked advisory
+    review caused only by infrastructure or missing context does not add a gate;
+    concrete findings still require repair or independent disproof. Any new
+    commit or base change requires fresh peer review and candidate-bound evidence.
 
 Claude must not review its own work, mark the PR ready, submit an approval,
 merge, deploy, close an issue or weaken a gate.
@@ -71,9 +75,11 @@ Remain read-only for the entire mission.
 7. If repair is required, give Codex the smallest reproducible repair target.
    Review the repaired exact head afresh.
 8. If clean, hand the exact reviewed head to the Jarvis gate. State
-   `OWNER DECISION REQUIRED` only after that same head receives
-   `jarvis-pr-maintenance/review = success`. Do not formally approve, mark ready,
-   merge or deploy.
+   `OWNER DECISION REQUIRED` only when current required trusted CI and
+   mission-specific proof pass on that exact candidate, independent review is
+   clean, and no concrete finding remains unresolved. Apply the current policy
+   in `branch-protection.md`; advisory review infrastructure failures alone do
+   not add a required check. Do not formally approve, mark ready, merge or deploy.
 
 ## Required end-of-session report
 
