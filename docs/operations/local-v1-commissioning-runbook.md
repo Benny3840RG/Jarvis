@@ -8,8 +8,9 @@ environment it needs and an explicit pass / stop line. The stages that are
 executable as commands — 0–2 (baseline, checks, local runtime), 4 (Outlook), and
 6 (home) — give those commands exactly; the rest — 3 (voice), 5 (golden
 workflow), 7 (workshop), 9 (dogfood), and 10 (release) — are operator procedures
-that cite the detailed steps in the referenced runbook/operator docs rather than
-a single command. **Stage 8 (recovery + restart) is the exception and is not
+run through supported interfaces (MCP / HUD / HTTP / voice) rather than a single
+command, and where a dedicated operator doc exists the stage cites it (Stage 3 →
+`typescript/docs/operators/voice.md`). **Stage 8 (recovery + restart) is the exception and is not
 turnkey:** the Local V1 recovery proof has no operator command today — only an
 off-host test invocation plus a manual host procedure — so Stage 8 is marked
 BLOCKED until a `commission:local-v1-recovery` wrapper is built and reviewed (a
