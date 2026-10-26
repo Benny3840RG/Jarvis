@@ -248,27 +248,16 @@
         --bg: #f3f5fb; --panel: #ffffff; --panel-2: #f7f8fc; --panel-3: #e8ebf4;
         --line: #6d758c; --line-bright: #2c3348; --text: #12141c; --muted: #3c445c;
       }
-      @media (prefers-color-scheme: light) {
-        html[data-console-theme="system"] {
-          color-scheme: light;
-          --bg: #f3f5fb; --panel: #ffffff; --panel-2: #f7f8fc; --panel-3: #e8ebf4;
-          --line: #6d758c; --line-bright: #2c3348; --text: #12141c; --muted: #3c445c;
-        }
-      }
+      /* Console 02 is a dark instrument over a dark photographic backdrop, so
+         "system" keeps the dark palette even when the OS prefers light. Only an
+         explicit Light choice switches palettes. */
       html[data-console-theme="light"] input,
-      html[data-console-theme="light"] select,
-      html[data-console-theme="system"] input,
-      html[data-console-theme="system"] select { background: #fff; }
+      html[data-console-theme="light"] select { background: #fff; }
       html[data-console-contrast="increase"] {
         --text: #ffffff; --muted: #f4f5fb; --line: #d5d9ea; --line-bright: #ffffff; --bg: #000000; --panel: #05060a;
       }
       html[data-console-theme="light"][data-console-contrast="increase"] {
         --text: #000000; --muted: #1a1a1a; --line: #000000; --line-bright: #000000; --bg: #ffffff; --panel: #ffffff;
-      }
-      @media (prefers-color-scheme: light) {
-        html[data-console-theme="system"][data-console-contrast="increase"] {
-          --text: #000000; --muted: #1a1a1a; --line: #000000; --line-bright: #000000; --bg: #ffffff; --panel: #ffffff;
-        }
       }
       html[data-console-motion="reduce"] *,
       html[data-console-motion="reduce"] *::before,
@@ -2184,6 +2173,116 @@
         }
       }
     </style>
+    <style id="console-02-legibility">
+      /* Legibility pass over the photographic backdrop: an 11px floor for real
+         labels and values, denser glass behind text, and decorative marks moved
+         clear of the text they frame. */
+      :root {
+        --glass: rgba(6, 10, 16, 0.6);
+        --glass-strong: rgba(6, 10, 16, 0.52);
+      }
+      body .telemetry span,
+      body .mini-stat span,
+      body .core-label span,
+      body .core-label small,
+      body .system-item span,
+      body .matrix-item span,
+      body .provider-card span,
+      body .completion-copy span,
+      body .priority-row small,
+      body .activity-row small,
+      body .compact-row small,
+      body .panel-header > span,
+      body #capture-title-label,
+      body #capture-detail-copy,
+      body .capture-tab,
+      body .chip,
+      body .priority-row > button.ghost,
+      body .dial span,
+      body .dial b,
+      body .source-status-row > span,
+      body .layer > span,
+      body .category-row > span,
+      body .category-row > b,
+      body .analyzer-row > b,
+      body[data-console-view="focus"] .analyzer-row > b,
+      body .layer > b,
+      body .panel small,
+      body .panel .empty,
+      body .panel > p.eyebrow {
+        font-size: 11px;
+      }
+      body .matrix-item > b,
+      body .system-item > b,
+      body .priority-row strong,
+      body .compact-row > strong,
+      body .activity-row > strong {
+        font-size: 12px;
+      }
+      body .panel > p.eyebrow { color: #e0a070; }
+      body .lw-node .lw-label,
+      body .lw-node .lw-status,
+      body .lw-node .lw-detail,
+      body .lw-pipeline > .empty,
+      body .compact-list > .empty {
+        font-size: 11px;
+        line-height: 1.35;
+      }
+      body .lw-node { min-height: min-content; }
+      body .footer { min-height: 44px; padding-block: 8px; line-height: 1.4; }
+      /* Views and rails scroll inside their own area instead of running under the lower dock. */
+      body #view-livework.active { min-height: 0; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--brass) transparent; }
+      body .livework-view > .panel { min-height: 0; }
+      body .left-rail { grid-template-rows: max-content minmax(max-content, 1fr) max-content; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--brass) transparent; }
+      body .core-label span { letter-spacing: 0.08em; }
+      body #view-settings { scrollbar-width: thin; scrollbar-color: var(--brass) transparent; }
+      body #voice-command-list .operations-row { display: grid; gap: 2px; padding-block: 5px; }
+      body #voice-command-list .operations-row small { display: block; font-size: 11px; line-height: 1.35; }
+      body .top-actions .pill,
+      body .top-actions .team-chip,
+      body .top-actions .source-pill,
+      body .top-actions a.limits-now,
+      body[data-console-view="focus"] .top-actions .pill,
+      body[data-console-view="focus"] .top-actions .team-chip,
+      body[data-console-view="focus"] .top-actions .source-pill,
+      body[data-console-view="focus"] .top-actions a.limits-now {
+        font-size: 11px;
+      }
+      body[data-console-view="focus"] .console-deck .plate {
+        background-size: 10px 2px, 2px 10px, 10px 2px, 2px 10px, 10px 2px, 2px 10px, 10px 2px, 2px 10px;
+        background-position: 3px 3px, 3px 3px, right 3px top 3px, right 3px top 3px, left 3px bottom 3px, left 3px bottom 3px, right 3px bottom 3px, right 3px bottom 3px;
+      }
+      body[data-console-view="focus"] .console-deck .console-col > .plate {
+        background-color: rgba(7, 14, 22, 0.56);
+      }
+      body[data-console-view="focus"] .data-row { grid-template-columns: minmax(0, 1fr) 32px max-content; }
+      body .chart text { paint-order: stroke; stroke: rgba(8, 10, 14, 0.85); stroke-width: 3px; }
+      /* State reads on the same line as its label so the plate stays clear of the nav rail. */
+      body[data-console-view="focus"] .title-plate {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        align-items: baseline;
+        column-gap: 10px;
+      }
+      body[data-console-view="focus"] .title-plate h1 { flex: 0 0 100%; }
+      body[data-console-view="focus"] .title-plate .sub-plate,
+      body[data-console-view="focus"] .title-plate .live-state { margin: 0; line-height: 1.2; }
+      body[data-console-view="focus"] .title-plate .live-state { font-size: 11px; }
+      body[data-console-view="focus"] #current-meta .chip,
+      body[data-console-view="focus"] #queue-count,
+      body[data-console-view="focus"] .next-caption { font-size: 12px; }
+      @media (min-width: 1400px) {
+        /* The fixed lower deck must fit inside a 1080px-tall viewport. */
+        body[data-console-view="focus"] .console-lower { bottom: 16px; height: 232px; margin: 0; align-items: end; }
+        body[data-console-view="focus"] .gauge-face { width: 232px; height: 232px; }
+        body[data-console-view="focus"] .gauge-face svg { width: 210px; height: 210px; margin: 11px auto 0; }
+        body[data-console-view="focus"] .gauge-face > span { top: 84px; font-size: 12px; }
+        body[data-console-view="focus"] .gauge-face > b { bottom: 48px; }
+        body[data-console-view="focus"] .analyzer-plate { height: 200px; }
+        body[data-console-view="focus"] #totality-bar-label { font-size: 10px; line-height: 1.2; }
+      }
+    </style>
 </head>
   <body data-backdrop-severity="UNKNOWN" data-console-view="focus"><!-- JARVIS // OPERATOR CONSOLE · LANDSCAPE COMMAND CENTRE -->
     <canvas id="hud-backdrop" class="hud-backdrop" aria-hidden="true"></canvas>
@@ -2349,7 +2448,7 @@
                     </section>
                     <section class="plate">
                       <h2>WAVEFORM ANALYSIS</h2>
-                      <svg class="chart" viewBox="0 0 300 72" aria-hidden="true"><g class="chart-grid" stroke="rgba(255,154,60,0.62)" stroke-width="1.15" fill="none"><path d="M8 14 H292 M8 36 H292 M8 58 H292"/><path d="M8 8 V64 M80 8 V64 M150 8 V64 M220 8 V64 M292 8 V64"/></g><g fill="#ffb15a" font-size="8" font-family="Rajdhani, sans-serif"><text x="2" y="12">100</text><text x="6" y="40">50</text><text x="10" y="62">0</text></g><g class="ornament" aria-hidden="true"><polyline points="8.0,35.0 12.5,38.3 17.0,39.8 21.5,38.0 26.0,33.7 30.5,28.9 35.0,26.4 39.6,28.0 44.1,33.2 48.6,39.3 53.1,43.1 57.6,42.1 62.1,36.5 66.6,29.0 71.1,23.8 75.6,23.9 80.1,29.6 84.6,38.0 89.1,44.7 93.7,45.8 98.2,40.5 102.7,31.5 107.2,23.4 111.7,20.9 116.2,25.4 120.7,34.7 125.2,43.8 129.7,47.8 134.2,44.4 138.7,35.4 143.2,25.6 147.7,20.2 152.3,22.2 156.8,30.6 161.3,40.7 165.8,47.1 170.3,46.6 174.8,39.3 179.3,29.4 183.8,22.1 188.3,21.3 192.8,27.2 197.3,36.5 201.8,44.2 206.3,46.2 210.9,41.7 215.4,33.4 219.9,25.8 224.4,22.9 228.9,25.9 233.4,33.0 237.9,40.1 242.4,43.5 246.9,41.8 251.4,36.2 255.9,30.0 260.4,26.4 265.0,27.1 269.5,31.2 274.0,36.3 278.5,39.6 283.0,39.6 287.5,36.8 292.0,33.0" fill="none" stroke="rgba(255,244,230,0.7)" stroke-width="1.15"/><polyline points="8.0,43.4 12.5,43.6 17.0,42.7 21.5,40.8 26.0,38.4 30.5,36.2 35.0,34.7 39.6,34.6 44.1,36.0 48.6,38.6 53.1,42.0 57.6,45.0 62.1,47.0 66.6,47.1 71.1,45.3 75.6,41.9 80.1,37.8 84.6,34.0 89.1,31.7 93.7,31.5 98.2,33.6 102.7,37.5 107.2,42.2 111.7,46.5 116.2,49.2 120.7,49.4 125.2,47.2 129.7,43.0 134.2,37.9 138.7,33.4 143.2,30.5 147.7,30.2 152.3,32.5 156.8,36.7 161.3,41.8 165.8,46.4 170.3,49.2 174.8,49.6 179.3,47.5 183.8,43.4 188.3,38.6 192.8,34.2 197.3,31.5 201.8,31.1 206.3,33.0 210.9,36.7 215.4,41.0 219.9,44.9 224.4,47.3 228.9,47.6 233.4,46.0 237.9,43.0 242.4,39.4 246.9,36.2 251.4,34.3 255.9,34.0 260.4,35.3 265.0,37.6 269.5,40.3 274.0,42.6 278.5,44.0 283.0,44.1 287.5,43.2 292.0,41.6" fill="none" stroke="#ff7a18" stroke-width="1.35" opacity="0.75"/><text x="214" y="12" fill="#ffb15a" font-size="8" font-family="Rajdhani, sans-serif">ORNAMENT</text></g><path d="M8 36 H292" stroke="#ff7a18" fill="none" stroke-width="2"/></svg>
+                      <svg class="chart" viewBox="0 0 300 72" aria-hidden="true"><g class="chart-grid" stroke="rgba(255,154,60,0.62)" stroke-width="1.15" fill="none"><path d="M8 14 H292 M8 36 H292 M8 58 H292"/><path d="M8 8 V64 M80 8 V64 M150 8 V64 M220 8 V64 M292 8 V64"/></g><g class="ornament" aria-hidden="true"><polyline points="8.0,35.0 12.5,38.3 17.0,39.8 21.5,38.0 26.0,33.7 30.5,28.9 35.0,26.4 39.6,28.0 44.1,33.2 48.6,39.3 53.1,43.1 57.6,42.1 62.1,36.5 66.6,29.0 71.1,23.8 75.6,23.9 80.1,29.6 84.6,38.0 89.1,44.7 93.7,45.8 98.2,40.5 102.7,31.5 107.2,23.4 111.7,20.9 116.2,25.4 120.7,34.7 125.2,43.8 129.7,47.8 134.2,44.4 138.7,35.4 143.2,25.6 147.7,20.2 152.3,22.2 156.8,30.6 161.3,40.7 165.8,47.1 170.3,46.6 174.8,39.3 179.3,29.4 183.8,22.1 188.3,21.3 192.8,27.2 197.3,36.5 201.8,44.2 206.3,46.2 210.9,41.7 215.4,33.4 219.9,25.8 224.4,22.9 228.9,25.9 233.4,33.0 237.9,40.1 242.4,43.5 246.9,41.8 251.4,36.2 255.9,30.0 260.4,26.4 265.0,27.1 269.5,31.2 274.0,36.3 278.5,39.6 283.0,39.6 287.5,36.8 292.0,33.0" fill="none" stroke="rgba(255,244,230,0.7)" stroke-width="1.15"/><polyline points="8.0,43.4 12.5,43.6 17.0,42.7 21.5,40.8 26.0,38.4 30.5,36.2 35.0,34.7 39.6,34.6 44.1,36.0 48.6,38.6 53.1,42.0 57.6,45.0 62.1,47.0 66.6,47.1 71.1,45.3 75.6,41.9 80.1,37.8 84.6,34.0 89.1,31.7 93.7,31.5 98.2,33.6 102.7,37.5 107.2,42.2 111.7,46.5 116.2,49.2 120.7,49.4 125.2,47.2 129.7,43.0 134.2,37.9 138.7,33.4 143.2,30.5 147.7,30.2 152.3,32.5 156.8,36.7 161.3,41.8 165.8,46.4 170.3,49.2 174.8,49.6 179.3,47.5 183.8,43.4 188.3,38.6 192.8,34.2 197.3,31.5 201.8,31.1 206.3,33.0 210.9,36.7 215.4,41.0 219.9,44.9 224.4,47.3 228.9,47.6 233.4,46.0 237.9,43.0 242.4,39.4 246.9,36.2 251.4,34.3 255.9,34.0 260.4,35.3 265.0,37.6 269.5,40.3 274.0,42.6 278.5,44.0 283.0,44.1 287.5,43.2 292.0,41.6" fill="none" stroke="#ff7a18" stroke-width="1.35" opacity="0.75"/><text x="214" y="12" fill="#ffb15a" font-size="8" font-family="Rajdhani, sans-serif">ORNAMENT</text></g><path d="M8 36 H292" stroke="#ff7a18" fill="none" stroke-width="2"/><g fill="#ffb15a" font-size="8" font-family="Rajdhani, sans-serif"><text x="2" y="12">100</text><text x="6" y="40">50</text><text x="10" y="62">0</text></g></svg>
                       <p class="signal-tag" title="The wave is ornament, not a signal." id="waveform-state">No waveform signal.</p>
                     </section>
                     <section class="plate">
