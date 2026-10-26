@@ -1,8 +1,9 @@
 import { readFileSync } from "node:fs";
 
-import { Controller, Get, Header, Inject, Res } from "@nestjs/common";
+import { Controller, Get, Header, Inject, Optional, Res } from "@nestjs/common";
 import type { FastifyReply } from "fastify";
 
+import type { ToolActionService } from "../actions/toolActions.js";
 import type { AssetStore } from "../assets/asset.js";
 import type { DevelopmentLiveWorkSource } from "../development/liveWork.js";
 import type { EnquiryStore } from "../enquiries/enquiry.js";
@@ -34,6 +35,7 @@ import {
   HTTP_QUOTE_DELIVERY_REPOSITORY,
   HTTP_QUOTE_REPOSITORY,
   HTTP_QUOTE_STORE,
+  HTTP_TOOL_ACTIONS,
 } from "./tokens.js";
 
 const HUD_HTML = readFileSync(new URL("../mcp/dashboard-v1.html", import.meta.url), "utf8");
@@ -69,6 +71,9 @@ export class HudController {
     @Inject(HTTP_ACTIVITY_EVENTS) private readonly activity: ActivityEventReader | null,
     @Inject(HTTP_DEVELOPMENT_LIVE_WORK)
     private readonly liveWork: DevelopmentLiveWorkSource | null,
+    @Optional()
+    @Inject(HTTP_TOOL_ACTIONS)
+    private readonly toolActions?: ToolActionService | null,
   ) {}
 
   @PublicRoute()
@@ -103,6 +108,7 @@ export class HudController {
       activity: this.activity,
       liveWork: this.liveWork,
       credentials: this.credentials,
+      toolActions: this.toolActions ?? null,
     });
   }
 }

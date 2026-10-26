@@ -1,7 +1,8 @@
 import { readLifecycleQuoteRegister } from "../briefs/lifecycleBriefQuotes.js";
 import { composeDailyBrief } from "../briefs/brief.js";
 import { readLiveWorkPipeline, type DevelopmentLiveWorkSource } from "../development/liveWork.js";
-import type { DashboardSnapshot } from "../mcp/jarvisApiClient.js";
+import type { ToolActionService } from "../actions/toolActions.js";
+import type { DashboardSnapshot, HudApprovalsSummary } from "../mcp/jarvisApiClient.js";
 import {
   readActivityTimelinePage,
   type ActivityEventReader,
@@ -25,6 +26,11 @@ import type { SystemStatusService } from "./systemStatusService.js";
 const ACTIVITY_UNAVAILABLE =
   "The operations activity timeline requires the configured Convex persistence provider.";
 const LIVE_WORK_UNAVAILABLE = "Development Live Work requires configured Convex persistence.";
+const APPROVALS_UNAVAILABLE =
+  "Governed ToolAction proposals require configured Convex persistence.";
+const APPROVALS_READ_FAILED = "Governed ToolAction proposals could not be read.";
+/** Presence only needs "any pending"; the cap keeps the read bounded. */
+const APPROVALS_COUNT_LIMIT = 100;
 
 export type HudSnapshotSources = {
   status: SystemStatusService;
@@ -41,7 +47,18 @@ export type HudSnapshotSources = {
   activity: ActivityEventReader | null;
   liveWork: DevelopmentLiveWorkSource | null;
   credentials: CredentialsRuntime;
+  toolActions: ToolActionService | null;
 };
+
+async function readApprovals(service: ToolActionService | null): Promise<HudApprovalsSummary> {
+  if (!service?.countProposed) return { status: "unavailable", reason: APPROVALS_UNAVAILABLE };
+  try {
+    const { count, capped } = await service.countProposed({ limit: APPROVALS_COUNT_LIMIT });
+    return { status: "ready", proposedCount: count, capped };
+  } catch {
+    return { status: "unavailable", reason: APPROVALS_READ_FAILED };
+  }
+}
 
 /**
  * In-process read of the operator dashboard. Fingerprints only: the credentials
@@ -109,6 +126,7 @@ export async function readHudSnapshot(input: HudSnapshotSources): Promise<Dashbo
     activity,
     liveWork,
     credentials: input.credentials.status,
+    approvals: await readApprovals(input.toolActions),
     counts: {
       activeTasks: tasks.filter((task) => !task.completed).length,
       completedTasks: tasks.filter((task) => task.completed).length,

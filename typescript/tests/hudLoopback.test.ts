@@ -3,6 +3,7 @@ import { afterEach, describe, it } from "node:test";
 
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 
+import type { ToolActionService } from "../src/actions/toolActions.js";
 import { createJarvisHttpApp } from "../src/http/app.js";
 import type { HttpAppConfig } from "../src/http/config.js";
 import type {
@@ -123,6 +124,7 @@ function persistenceWithIdentity(): PersistenceProvider {
 async function open(
   host: string,
   store: PersistenceProvider = persistence(),
+  toolActionService: ToolActionService | null = null,
 ): Promise<NestFastifyApplication> {
   const app = await createJarvisHttpApp({
     config: config(),
@@ -130,6 +132,7 @@ async function open(
     persistence: store,
     providerName: "json",
     logger: false,
+    toolActionService,
   });
   openApps.push(app);
   return app;
@@ -231,6 +234,44 @@ describe("loopback Console 02 HUD", () => {
       "id",
       "title",
     ]);
+  });
+
+  it("reports the governed proposal count the HUD presence needs", async () => {
+    const limits: number[] = [];
+    const service = {
+      async countProposed(input: { limit: number }) {
+        limits.push(input.limit);
+        return { count: 2, capped: false };
+      },
+    } as unknown as ToolActionService;
+    const app = await open("127.0.0.1", persistence(), service);
+    const snapshot = await app.inject({ method: "GET", url: "/api/v1/hud/snapshot" });
+    assert.equal(snapshot.statusCode, 200);
+    assert.deepEqual(snapshot.json<{ approvals: unknown }>().approvals, {
+      status: "ready",
+      proposedCount: 2,
+      capped: false,
+    });
+    assert.deepEqual(limits, [100]);
+  });
+
+  it("reports the proposal count as unavailable, never zero, when it cannot be read", async () => {
+    const withoutService = await open("127.0.0.1");
+    const missing = await withoutService.inject({ method: "GET", url: "/api/v1/hud/snapshot" });
+    assert.equal(missing.json<{ approvals: { status: string } }>().approvals.status, "unavailable");
+
+    const failing = {
+      async countProposed(): Promise<never> {
+        throw new Error("convex unreachable");
+      },
+    } as unknown as ToolActionService;
+    const app = await open("127.0.0.1", persistence(), failing);
+    const snapshot = await app.inject({ method: "GET", url: "/api/v1/hud/snapshot" });
+    assert.equal(snapshot.statusCode, 200);
+    const approvals = snapshot.json<{ approvals: Record<string, unknown> }>().approvals;
+    assert.equal(approvals.status, "unavailable");
+    assert.equal("proposedCount" in approvals, false);
+    assert.doesNotMatch(snapshot.body, /convex unreachable/);
   });
 
   it("does not serve the HUD off loopback", async () => {

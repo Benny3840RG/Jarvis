@@ -147,6 +147,13 @@ export class ConvexToolActionService implements ToolActionService {
     return (rows as ToolActionRow[]).map(actionFromConvex);
   }
 
+  async countProposed(input: { limit: number }): Promise<{ count: number; capped: boolean }> {
+    return (await this.client.query(toolActionFunctions.countProposed, {
+      serviceToken: this.serviceToken,
+      limit: input.limit,
+    })) as { count: number; capped: boolean };
+  }
+
   async approve(input: Parameters<ToolActionService["approve"]>[0]): Promise<ToolAction> {
     const row = await this.client.mutation(toolActionFunctions.approve, {
       serviceToken: this.serviceToken,

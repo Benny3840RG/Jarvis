@@ -68,12 +68,21 @@ export type DashboardSnapshot = {
   liveWork: LiveWorkResult | null;
   /** `null` means the credentials endpoint itself could not be reached. */
   credentials: CredentialsStatus | null;
+  /**
+   * Governed ToolAction proposals awaiting approval. Only the loopback HUD
+   * snapshot reads this; the MCP dashboard omits it, which the HUD shows as unknown.
+   */
+  approvals?: HudApprovalsSummary;
   counts: {
     activeTasks: number;
     completedTasks: number;
     reminders: number;
   };
 };
+
+export type HudApprovalsSummary =
+  | { status: "ready"; proposedCount: number; capped: boolean }
+  | { status: "unavailable"; reason: string };
 
 type DataResponse<T> = { data: T };
 type ListResponse<T> = { data: T[]; count: number };
