@@ -59,5 +59,10 @@ export const toolActionDocumentValidator = v.object({
   revokedAt: v.optional(v.number()),
   singleUseClaimedAt: v.optional(v.number()),
   singleUseClaimId: v.optional(v.string()),
+  executionLeases: v.optional(
+    v.array(
+      v.object({ executionId: v.string(), leasedAt: v.number(), leaseExpiresAt: v.number() }),
+    ),
+  ),
   safetyBinding: v.optional(safetyBindingValidator),
 });
