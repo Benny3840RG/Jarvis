@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { z } from "zod";
 
 import type {
@@ -924,7 +925,10 @@ export class ToolExecutionService {
     // that were never given a claim to make atomic. `verify()` closes it
     // without any consumption semantics. (Finding from a full-repo audit:
     // this re-check previously ran only for single-use actions.)
-    let leasedForExecution = false;
+    // A fresh ID per attempt: two concurrent executions sharing an
+    // idempotency key must not share one lease, or the first to finish would
+    // release it while the other's effect still runs.
+    let leaseExecutionId: string | undefined;
     if (input.action.consumptionPolicy === "single-use") {
       const claim = await this.claims.claim(input.action, input.idempotencyKey);
       if (!claim.claimed) {
@@ -941,7 +945,8 @@ export class ToolExecutionService {
         );
       }
     } else {
-      const verification = await this.eligibility.verify(input.action, input.idempotencyKey);
+      const executionId = randomUUID();
+      const verification = await this.eligibility.verify(input.action, executionId);
       if (!verification.eligible) {
         return this.persistDecision(
           key,
@@ -955,7 +960,7 @@ export class ToolExecutionService {
           ),
         );
       }
-      leasedForExecution = true;
+      leaseExecutionId = executionId;
     }
 
     const controller = new AbortController();
@@ -1000,9 +1005,16 @@ export class ToolExecutionService {
       },
     };
 
+    let effect: Promise<unknown> | undefined;
+    let effectSettled = false;
     try {
+      effect = definition.execute(parsed.data, controller.signal, context);
+      effect.then(
+        () => (effectSettled = true),
+        () => (effectSettled = true),
+      );
       const output = await Promise.race([
-        definition.execute(parsed.data, controller.signal, context),
+        effect,
         new Promise<never>((_, reject) =>
           controller.signal.addEventListener("abort", () => reject(new Error("timeout")), {
             once: true,
@@ -1151,10 +1163,16 @@ export class ToolExecutionService {
       return result;
     } finally {
       clearTimeout(timeout);
-      if (leasedForExecution) {
-        // The receipt is already decided; a lost release only delays a
-        // revoke until the lease expires, so it must not change the outcome.
-        await this.eligibility.release?.(input.action, input.idempotencyKey).catch(() => undefined);
+      if (leaseExecutionId !== undefined) {
+        // Release only once the provider has actually settled. A timed-out
+        // provider may ignore the abort signal and still act, so its lease is
+        // kept until it settles, or until the lease expires on its own. A
+        // lost release only delays a revoke, so it never changes the receipt.
+        const executionId = leaseExecutionId;
+        const release = () =>
+          this.eligibility.release?.(input.action, executionId).catch(() => undefined);
+        if (!effect || effectSettled) await release();
+        else void effect.then(release, release);
       }
     }
   }

@@ -673,6 +673,11 @@ const singleUseClaimBlockReasonValidator = v.union(
  */
 export const EXECUTION_LEASE_MS = 35_000;
 
+// Bounds the lease list carried on the action document. Executors generate
+// UUIDs, so the ID cap only stops a misbehaving caller from bloating the row.
+const MAX_EXECUTION_ID_LENGTH = 128;
+const MAX_LIVE_EXECUTION_LEASES = 32;
+
 type ExecutionLease = { executionId: string; leasedAt: number; leaseExpiresAt: number };
 
 function liveExecutionLeases(action: Doc<"toolActions">, now: number): ExecutionLease[] {
@@ -842,6 +847,9 @@ export const verifyExecutionEligibility = mutation({
     const projectKey = cleanRequiredText(args.projectKey, "Project key");
     const actionId = cleanRequiredText(args.actionId, "Tool action ID");
     const executionId = cleanRequiredText(args.executionId, "Execution ID");
+    if (executionId.length > MAX_EXECUTION_ID_LENGTH) {
+      throw new Error(`Execution ID must be at most ${MAX_EXECUTION_ID_LENGTH} characters.`);
+    }
     const action = await requireAction(ctx, ownerId, projectKey, actionId);
 
     if (action.consumptionPolicy === "single-use") {
@@ -881,6 +889,12 @@ export const verifyExecutionEligibility = mutation({
     const leases = liveExecutionLeases(action, now).filter(
       (lease) => lease.executionId !== executionId,
     );
+    if (leases.length >= MAX_LIVE_EXECUTION_LEASES) {
+      // Fail closed: no lease, no effect. Expired leases were already pruned.
+      throw new Error(
+        `Tool action already has ${MAX_LIVE_EXECUTION_LEASES} executions in flight; retry once one finishes.`,
+      );
+    }
     await ctx.db.patch("toolActions", action._id, {
       executionLeases: [...leases, { executionId, leasedAt: now, leaseExpiresAt }],
     });

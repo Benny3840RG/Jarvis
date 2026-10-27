@@ -74,9 +74,12 @@ as the single-use path above, and expiry is durably observed the same way. Neith
 provider.
 
 A re-check alone still left a gap: it committed, then the effect ran, and a revoke or expiry could land in
-between. A successful `verifyExecutionEligibility` therefore also writes a short **execution lease** (keyed by
-the execution's idempotency key) in the same transaction, and the executor releases it with
-`releaseExecutionLease` once the effect ends, whatever the outcome. `revoke()` refuses while a live lease exists
+between. A successful `verifyExecutionEligibility` therefore also writes a short **execution lease** in the
+same transaction, keyed by a fresh ID per attempt (never the idempotency key, so two concurrent attempts never
+share a lease). The executor releases it with `releaseExecutionLease` once the provider has actually settled,
+whatever the outcome. A timed-out provider may ignore its abort signal and still act, so its lease is kept
+until it settles or the lease expires. An action holds at most 32 live leases, with IDs of at most 128
+characters; beyond that the check fails closed. `revoke()` refuses while a live lease exists
 ("execution in flight"). Convex serializes the two writes to the same document, so either the revoke lands first
 and the check reports `"not-approved"`, or the check lands first and the revoke waits for the lease. A lease
 lasts 35s (the executor's 30s maximum effect timeout plus a 5s margin) and ends on its own if the release is

@@ -606,12 +606,59 @@ describe("consent-lifecycle execution enforcement (R-048/R-049/R-050)", () => {
 
     assert.equal(succeeded.status, "succeeded");
     assert.equal(failed.status, "failed");
+    const [okId, failedId] = [events[0]!, events[2]!].map((event) => event.split(":")[1]!);
     assert.deepEqual(events, [
-      "verify:lease-ok",
-      "release:lease-ok:after-1-effects",
-      "verify:lease-failed",
-      "release:lease-failed:after-2-effects",
+      `verify:${okId}`,
+      `release:${okId}:after-1-effects`,
+      `verify:${failedId}`,
+      `release:${failedId}:after-2-effects`,
     ]);
+    // Each attempt gets its own lease ID, never the caller's idempotency key.
+    assert.notEqual(okId, failedId);
+    assert.ok(![okId, failedId].includes("lease-ok") && ![okId, failedId].includes("lease-failed"));
+  });
+
+  it("keeps the lease of a timed-out provider until the provider actually settles", async () => {
+    const released: string[] = [];
+    let finishProvider!: () => void;
+    const eligibility: ExecutionEligibilityStore = {
+      async verify(): Promise<ExecutionEligibilityResult> {
+        return { eligible: true };
+      },
+      async release(_action, executionId) {
+        released.push(executionId);
+      },
+    };
+    // Ignores the abort signal, as a misbehaving provider may.
+    const stubborn = {
+      ...definition({ count: 0 }),
+      async execute() {
+        await new Promise<void>((resolve) => {
+          finishProvider = resolve;
+        });
+        return { now: "late" };
+      },
+    };
+    const executor = new ToolExecutionService(
+      [stubborn],
+      new InMemoryToolExecutionReceiptStore(),
+      undefined,
+      undefined,
+      eligibility,
+    );
+
+    const result = await executor.execute({
+      action,
+      authority: "T1",
+      idempotencyKey: "stubborn",
+      timeoutMs: 5,
+    });
+    assert.equal(result.status, "indeterminate");
+    assert.deepEqual(released, [], "the provider may still act, so the lease must hold");
+
+    finishProvider();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(released.length, 1, "the lease is released once the provider settles");
   });
 
   it("keeps the receipt when releasing the lease fails, and never releases a refused check", async () => {

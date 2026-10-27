@@ -1322,6 +1322,18 @@ describe("reusable execution leases close the revoke-after-check race", () => {
     expect((await revoke(t)).state).toBe("revoked");
   });
 
+  it("bounds the lease list: execution ID length and live lease count", async () => {
+    const t = harness();
+    await approveReusable(t);
+    await expect(verify(t, "x".repeat(129))).rejects.toThrow(/at most 128/);
+    for (let index = 0; index < 32; index += 1) await verify(t, `exec-${index}`);
+    await expect(verify(t, "exec-overflow")).rejects.toThrow(/32 executions in flight/);
+    // Re-leasing an existing execution does not count as a new one.
+    expect((await verify(t, "exec-0")).eligible).toBe(true);
+    await release(t, "exec-1");
+    expect((await verify(t, "exec-overflow")).eligible).toBe(true);
+  });
+
   it("requires the service token and an execution ID", async () => {
     const t = harness();
     await approveReusable(t);
