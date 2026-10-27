@@ -362,6 +362,27 @@ export const listRecent = query({
   },
 });
 
+/**
+ * Owner-wide count of proposals awaiting approval, for the HUD presence read.
+ * Bounded: reads at most `limit + 1` rows and reports `capped` past `limit`.
+ */
+export const countProposed = query({
+  args: {
+    serviceToken: v.string(),
+    limit: v.optional(v.number()),
+  },
+  returns: v.object({ count: v.number(), capped: v.boolean() }),
+  handler: async (ctx, args) => {
+    const ownerId = requireOwner(args.serviceToken);
+    const limit = boundedLimit(args.limit);
+    const rows = await ctx.db
+      .query("toolActions")
+      .withIndex("by_owner_and_state", (q) => q.eq("ownerId", ownerId).eq("state", "proposed"))
+      .take(limit + 1);
+    return { count: Math.min(rows.length, limit), capped: rows.length > limit };
+  },
+});
+
 export const approve = mutation({
   args: {
     serviceToken: v.string(),

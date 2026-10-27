@@ -3103,7 +3103,7 @@
     <script>
       (() => {
         "use strict";
-        const state = { status: null, generalSettings: null, lastStatusAt: 0, tasks: [], reminders: [], tasksLoaded: false, remindersLoaded: false, brief: null, quotes: [], quoteRegisterStatus: "unavailable", counts: { activeTasks: 0, completedTasks: 0, reminders: 0 }, captureMode: "task", activities: [], selectedQuoteSummary: null, selectedQuote: null, quoteDetailState: "empty", quoteRequestGeneration: 0, inbox: null, activity: null, liveWork: null, credentials: null };
+        const state = { status: null, generalSettings: null, lastStatusAt: 0, tasks: [], reminders: [], tasksLoaded: false, remindersLoaded: false, brief: null, quotes: [], quoteRegisterStatus: "unavailable", counts: { activeTasks: 0, completedTasks: 0, reminders: 0 }, captureMode: "task", activities: [], selectedQuoteSummary: null, selectedQuote: null, quoteDetailState: "empty", quoteRequestGeneration: 0, inbox: null, activity: null, liveWork: null, credentials: null, approvals: null };
         const STATUS_STALE_MS = 45000;
         let rpcId = 0;
         let healthCheckInFlight = false;
@@ -3242,7 +3242,7 @@
             healthCheckInFlight = false;
           }
         }
-        function update(result) { const data = structured(result); if (!data || typeof data !== "object") return; if (data.status && typeof data.status === "object") { state.status = data.status; state.lastStatusAt = Date.now(); } if (data.settings && data.settings.timezone && typeof data.settings.timezone === "object") state.generalSettings = data.settings; if (Array.isArray(data.tasks)) { state.tasks = data.tasks; state.tasksLoaded = true; } if (Array.isArray(data.reminders)) { state.reminders = data.reminders; state.remindersLoaded = true; } if (data.brief && typeof data.brief === "object") state.brief = data.brief; if (data.quoteRegister && typeof data.quoteRegister === "object") { state.quoteRegisterStatus = data.quoteRegister.status === "ready" ? "ready" : "unavailable"; state.quotes = Array.isArray(data.quoteRegister.quotes) ? data.quoteRegister.quotes : []; } if ("inbox" in data) state.inbox = data.inbox; if ("activity" in data) state.activity = data.activity; if ("liveWork" in data) state.liveWork = data.liveWork; if ("credentials" in data) state.credentials = data.credentials; if (data.counts && typeof data.counts === "object") state.counts = data.counts; else recalc(); render(); }
+        function update(result) { const data = structured(result); if (!data || typeof data !== "object") return; if (data.status && typeof data.status === "object") { state.status = data.status; state.lastStatusAt = Date.now(); } if (data.settings && data.settings.timezone && typeof data.settings.timezone === "object") state.generalSettings = data.settings; if (Array.isArray(data.tasks)) { state.tasks = data.tasks; state.tasksLoaded = true; } if (Array.isArray(data.reminders)) { state.reminders = data.reminders; state.remindersLoaded = true; } if (data.brief && typeof data.brief === "object") state.brief = data.brief; if (data.quoteRegister && typeof data.quoteRegister === "object") { state.quoteRegisterStatus = data.quoteRegister.status === "ready" ? "ready" : "unavailable"; state.quotes = Array.isArray(data.quoteRegister.quotes) ? data.quoteRegister.quotes : []; } if ("inbox" in data) state.inbox = data.inbox; if ("activity" in data) state.activity = data.activity; if ("liveWork" in data) state.liveWork = data.liveWork; if ("credentials" in data) state.credentials = data.credentials; if ("approvals" in data) state.approvals = data.approvals; else if (data.counts && typeof data.counts === "object") state.approvals = null; if (data.counts && typeof data.counts === "object") state.counts = data.counts; else recalc(); render(); }
         window.addEventListener("message", (event) => { if (event.source !== window.parent) return; const message = event.data; if (!message || message.jsonrpc !== "2.0") return; if (typeof message.id === "number") { const waiting = pending.get(message.id); if (!waiting) return; pending.delete(message.id); if (message.error) waiting.reject(message.error); else waiting.resolve(message.result); return; } if (message.method === "ui/notifications/tool-result") update(message.params); }, { passive: true });
         const bridgeReady = (async () => { await request("ui/initialize", { appInfo: { name: "jarvis-dashboard", version: "0.2.0" }, appCapabilities: {}, protocolVersion: "2026-01-26" }); notify("ui/notifications/initialized", {}); bridgeInitialised = true; void checkConnectionHealth(true); activity("HUD bridge online", "MCP Apps connection initialised"); })();
         async function callTool(name, args = {}) { await bridgeReady; const result = await request("tools/call", { name, arguments: args }); update(result); return result; }
@@ -3665,6 +3665,13 @@
           if (layers.some((layer) => !layer || layer.status !== "ready")) return "degraded";
           return "idle";
         }
+        function hudPresenceInput() {
+          const approvals = state.approvals;
+          if (approvals && approvals.status === "ready") {
+            return { status: state.status, proposedApprovalCount: approvals.proposedCount };
+          }
+          return { status: state.status };
+        }
         function limitsChipState() {
           const chip = byId("limits-now-chip");
           const label = chip && chip.textContent ? chip.textContent : "";
@@ -3675,6 +3682,15 @@
           const stage = byId("approvals-stage");
           const source = byId("approvals-source");
           if (!stage || !source) return;
+          const approvals = state.approvals;
+          if (approvals && approvals.status === "ready") {
+            const count = approvals.proposedCount + (approvals.capped ? "+" : "");
+            text(stage, approvals.proposedCount > 0 ? count + " PROPOSED" : "NONE PROPOSED");
+            text(source, approvals.proposedCount > 0
+              ? count + " governed tool-action proposal(s) await approval. This console does not approve, reject, or execute."
+              : "No governed tool-action proposals await approval. This console does not approve, reject, or execute.");
+            return;
+          }
           const inbox = state.inbox;
           if (!inbox || !Array.isArray(inbox.sources)) {
             text(stage, "UNKNOWN");
@@ -3702,7 +3718,7 @@
             const next = upcoming[0];
             text(byId("chip-next"), next ? "Next · " + reminderTime(next) : "Next · NONE");
           }
-          const presence = deriveHudPresence({ status: state.status });
+          const presence = deriveHudPresence(hudPresenceInput());
           text(byId("chip-presence"), "Presence · " + presence.toUpperCase());
           const presenceEl = byId("hud-presence");
           if (presenceEl) text(presenceEl, presence.toUpperCase());
@@ -3811,7 +3827,7 @@
           text(byId("analyzer-persistence"), persistence);
           text(byId("analyzer-z"), zState);
           text(byId("analyzer-limits"), limitsChipState());
-          text(byId("analyzer-presence"), deriveHudPresence({ status: state.status }).toUpperCase());
+          text(byId("analyzer-presence"), deriveHudPresence(hudPresenceInput()).toUpperCase());
           const live = state.liveWork;
           let liveWord = "UNKNOWN";
           if (live && live.status === "unavailable") liveWord = "UNAVAILABLE";

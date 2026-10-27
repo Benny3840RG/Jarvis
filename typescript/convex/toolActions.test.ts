@@ -1367,3 +1367,54 @@ describe("security education proposal minimisation", () => {
     expect(await t.run((ctx) => ctx.db.query("toolActions").collect())).toHaveLength(0);
   });
 });
+
+describe("countProposed()", () => {
+  it("counts proposals awaiting approval across every project for the owner", async () => {
+    const t = harness();
+    await stageAndReturn(t);
+    await t.mutation(
+      api.toolActions.stage,
+      stageArgs({ actionId: "action-2", requestId: "request-2", idempotencyKey: "idempotency-2" }),
+    );
+    await t.run(async (ctx) => {
+      const { _id, _creationTime, ...project } = (await ctx.db.query("projects").first())!;
+      void _id;
+      void _creationTime;
+      await ctx.db.insert("projects", { ...project, projectKey: "project-2" });
+    });
+    await t.mutation(
+      api.toolActions.stage,
+      stageArgs({
+        actionId: "action-3",
+        requestId: "request-3",
+        idempotencyKey: "idempotency-3",
+        projectKey: "project-2",
+      }),
+    );
+    await t.mutation(api.toolActions.approve, {
+      serviceToken: SERVICE_TOKEN,
+      approvalToken: APPROVAL_TOKEN,
+      projectKey: PROJECT_KEY,
+      actionId: "action-1",
+      expectedRevision: 1,
+    });
+
+    expect(await t.query(api.toolActions.countProposed, { serviceToken: SERVICE_TOKEN })).toEqual({
+      count: 2,
+      capped: false,
+    });
+    expect(
+      await t.query(api.toolActions.countProposed, { serviceToken: SERVICE_TOKEN, limit: 1 }),
+    ).toEqual({ count: 1, capped: true });
+  });
+
+  it("requires the service token and a bounded limit", async () => {
+    const t = harness();
+    await expect(
+      t.query(api.toolActions.countProposed, { serviceToken: "wrong-token" }),
+    ).rejects.toThrow();
+    await expect(
+      t.query(api.toolActions.countProposed, { serviceToken: SERVICE_TOKEN, limit: 101 }),
+    ).rejects.toThrow(/Limit/);
+  });
+});
