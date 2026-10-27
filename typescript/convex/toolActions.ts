@@ -665,11 +665,12 @@ const singleUseClaimBlockReasonValidator = v.union(
 );
 
 /**
- * How long a reusable execution lease holds off revocation: the executor's
- * 30s maximum effect timeout plus a 5s margin, so a lease outlives the effect
- * it cleared even when the release call is lost, and an abandoned lease ends
- * on its own instead of blocking revocation forever. It stays below the 60s
- * approval TTL floor, so a fresh minimum-TTL approval can still be executed.
+ * How long a reusable execution lease holds off revocation without renewal:
+ * the executor's 30s maximum effect timeout plus a 5s margin. A provider that
+ * outlives it keeps it alive through renewExecutionLease; an abandoned lease
+ * (its process gone) ends on its own instead of blocking revocation forever.
+ * It stays below the 60s approval TTL floor, so a fresh minimum-TTL approval
+ * can still be executed.
  */
 export const EXECUTION_LEASE_MS = 35_000;
 
@@ -899,6 +900,39 @@ export const verifyExecutionEligibility = mutation({
       executionLeases: [...leases, { executionId, leasedAt: now, leaseExpiresAt }],
     });
     return { eligible: true, leaseExpiresAt };
+  },
+});
+
+/**
+ * Extends a live lease while its provider is still running. The executor
+ * renews well inside the lease, so a lease only lapses once the process
+ * running the provider has stopped renewing. An ended lease is never revived:
+ * revoke may already have committed against it.
+ */
+export const renewExecutionLease = mutation({
+  args: {
+    serviceToken: v.string(),
+    projectKey: v.string(),
+    actionId: v.string(),
+    executionId: v.string(),
+  },
+  returns: v.object({ renewed: v.boolean(), leaseExpiresAt: v.optional(v.number()) }),
+  handler: async (ctx, args) => {
+    const ownerId = requireOwner(args.serviceToken);
+    const projectKey = cleanRequiredText(args.projectKey, "Project key");
+    const actionId = cleanRequiredText(args.actionId, "Tool action ID");
+    const executionId = cleanRequiredText(args.executionId, "Execution ID");
+    const action = await requireAction(ctx, ownerId, projectKey, actionId);
+    const now = Date.now();
+    const live = liveExecutionLeases(action, now);
+    if (!live.some((lease) => lease.executionId === executionId)) return { renewed: false };
+    const leaseExpiresAt = now + EXECUTION_LEASE_MS;
+    await ctx.db.patch("toolActions", action._id, {
+      executionLeases: live.map((lease) =>
+        lease.executionId === executionId ? { ...lease, leaseExpiresAt } : lease,
+      ),
+    });
+    return { renewed: true, leaseExpiresAt };
   },
 });
 

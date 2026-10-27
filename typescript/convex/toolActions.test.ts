@@ -1322,6 +1322,37 @@ describe("reusable execution leases close the revoke-after-check race", () => {
     expect((await revoke(t)).state).toBe("revoked");
   });
 
+  it("renews a live lease so a long-running provider keeps revoke blocked, but never revives an ended one", async () => {
+    vi.useFakeTimers({ now: 10_000 });
+    try {
+      const t = harness();
+      await approveReusable(t);
+      await verify(t, "exec-long");
+      const renew = (executionId: string) =>
+        t.mutation(api.toolActions.renewExecutionLease, {
+          serviceToken: SERVICE_TOKEN,
+          projectKey: PROJECT_KEY,
+          actionId: "action-1",
+          executionId,
+        });
+
+      // Renewed every 10s, the lease outlives its original 35s.
+      for (let elapsed = 10_000; elapsed <= 60_000; elapsed += 10_000) {
+        vi.setSystemTime(10_000 + elapsed);
+        expect((await renew("exec-long")).renewed).toBe(true);
+      }
+      await expect(revoke(t)).rejects.toThrow(/execution in flight/);
+
+      expect(await renew("never-leased")).toEqual({ renewed: false });
+      // Once renewals stop, the lease ends and cannot be revived.
+      vi.setSystemTime(10_000 + 60_000 + EXECUTION_LEASE_MS);
+      expect(await renew("exec-long")).toEqual({ renewed: false });
+      expect((await revoke(t)).state).toBe("revoked");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("bounds the lease list: execution ID length and live lease count", async () => {
     const t = harness();
     await approveReusable(t);

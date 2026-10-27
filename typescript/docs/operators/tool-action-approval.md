@@ -77,8 +77,9 @@ A re-check alone still left a gap: it committed, then the effect ran, and a revo
 between. A successful `verifyExecutionEligibility` therefore also writes a short **execution lease** in the
 same transaction, keyed by a fresh ID per attempt (never the idempotency key, so two concurrent attempts never
 share a lease). The executor releases it with `releaseExecutionLease` once the provider has actually settled,
-whatever the outcome. A timed-out provider may ignore its abort signal and still act, so its lease is kept
-until it settles or the lease expires. An action holds at most 32 live leases, with IDs of at most 128
+whatever the outcome. A timed-out provider may ignore its abort signal and still act, so while it runs the
+executor renews the lease every 10s (`renewExecutionLease`); revoke stays blocked for as long as the provider
+runs. A lease only lapses once renewals stop, which means the process running the provider has stopped too. An action holds at most 32 live leases, with IDs of at most 128
 characters; beyond that the check fails closed. `revoke()` refuses while a live lease exists
 ("execution in flight"). Convex serializes the two writes to the same document, so either the revoke lands first
 and the check reports `"not-approved"`, or the check lands first and the revoke waits for the lease. A lease
@@ -110,8 +111,8 @@ produced a completed execution receipt — whichever terminal fact (execution co
 recorded first is authoritative; the loser gets a clear, non-destructive rejection, never a silent no-op. A
 **reusable** action has no such single-attempt invariant to protect: it may be revoked after approval
 regardless of how many completed execution receipts already exist, except while an execution lease is live.
-Then the revoke is refused with "execution in flight" and succeeds once that execution finishes or its lease
-ends (at most 35s). Revocation there only ever stops the _next_ attempt (see "Operator recovery" below). Neither `expired` nor `revoked` deletes the action
+Then the revoke is refused with "execution in flight" and succeeds once that execution finishes (or, if its
+process died, 35s after the last renewal). Revocation there only ever stops the _next_ attempt (see "Operator recovery" below). Neither `expired` nor `revoked` deletes the action
 or any audit evidence; both are recorded exactly like `approved`/`rejected` today.
 
 ## Proposal requirements

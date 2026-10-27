@@ -618,12 +618,17 @@ describe("consent-lifecycle execution enforcement (R-048/R-049/R-050)", () => {
     assert.ok(![okId, failedId].includes("lease-ok") && ![okId, failedId].includes("lease-failed"));
   });
 
-  it("keeps the lease of a timed-out provider until the provider actually settles", async () => {
+  it("keeps renewing the lease of a timed-out provider until the provider actually settles", async () => {
     const released: string[] = [];
+    let renewals = 0;
     let finishProvider!: () => void;
     const eligibility: ExecutionEligibilityStore = {
       async verify(): Promise<ExecutionEligibilityResult> {
         return { eligible: true };
+      },
+      async renew() {
+        renewals += 1;
+        return { renewed: true };
       },
       async release(_action, executionId) {
         released.push(executionId);
@@ -645,6 +650,7 @@ describe("consent-lifecycle execution enforcement (R-048/R-049/R-050)", () => {
       undefined,
       undefined,
       eligibility,
+      5,
     );
 
     const result = await executor.execute({
@@ -656,9 +662,17 @@ describe("consent-lifecycle execution enforcement (R-048/R-049/R-050)", () => {
     assert.equal(result.status, "indeterminate");
     assert.deepEqual(released, [], "the provider may still act, so the lease must hold");
 
+    // Outlive several renewal intervals: the lease keeps being renewed.
+    const before = renewals;
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    assert.ok(renewals > before, "a still-running provider keeps renewing its lease");
+
     finishProvider();
     await new Promise((resolve) => setImmediate(resolve));
     assert.equal(released.length, 1, "the lease is released once the provider settles");
+    const settled = renewals;
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    assert.equal(renewals, settled, "renewal stops once the provider settles");
   });
 
   it("keeps the receipt when releasing the lease fails, and never releases a refused check", async () => {

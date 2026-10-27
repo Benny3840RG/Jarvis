@@ -262,6 +262,15 @@ export class ConvexExecutionEligibilityStore implements ExecutionEligibilityStor
     })) as ExecutionEligibilityResult;
   }
 
+  async renew(action: ToolAction, executionId: string): Promise<{ renewed: boolean }> {
+    return (await this.client.mutation(toolActionFunctions.renewExecutionLease, {
+      serviceToken: this.serviceToken,
+      projectKey: action.projectId,
+      actionId: action.actionId,
+      executionId,
+    })) as { renewed: boolean };
+  }
+
   async release(action: ToolAction, executionId: string): Promise<void> {
     await this.client.mutation(toolActionFunctions.releaseExecutionLease, {
       serviceToken: this.serviceToken,
