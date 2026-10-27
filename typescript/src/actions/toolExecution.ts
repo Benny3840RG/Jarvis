@@ -197,6 +197,8 @@ export type ExecutionEligibilityResult = {
   eligible: boolean;
   /** Present when `eligible` is false; same meaning as the identically-named `SingleUseExecutionClaimResult` reasons. */
   blockReason?: "not-approved" | "expired";
+  /** When the execution lease taken by a successful check ends. */
+  leaseExpiresAt?: number;
 };
 
 /**
@@ -210,7 +212,13 @@ export type ExecutionEligibilityResult = {
  * make atomic in the first place.
  */
 export interface ExecutionEligibilityStore {
-  verify(action: ToolAction): Promise<ExecutionEligibilityResult>;
+  /**
+   * A successful check also leases the action for `executionId`, so a revoke
+   * cannot commit between this check and the effect it cleared.
+   */
+  verify(action: ToolAction, executionId: string): Promise<ExecutionEligibilityResult>;
+  /** Ends the lease once the effect has finished. Best effort: leases also expire. */
+  release?(action: ToolAction, executionId: string): Promise<void>;
 }
 
 /**
@@ -916,6 +924,7 @@ export class ToolExecutionService {
     // that were never given a claim to make atomic. `verify()` closes it
     // without any consumption semantics. (Finding from a full-repo audit:
     // this re-check previously ran only for single-use actions.)
+    let leasedForExecution = false;
     if (input.action.consumptionPolicy === "single-use") {
       const claim = await this.claims.claim(input.action, input.idempotencyKey);
       if (!claim.claimed) {
@@ -932,7 +941,7 @@ export class ToolExecutionService {
         );
       }
     } else {
-      const verification = await this.eligibility.verify(input.action);
+      const verification = await this.eligibility.verify(input.action, input.idempotencyKey);
       if (!verification.eligible) {
         return this.persistDecision(
           key,
@@ -946,6 +955,7 @@ export class ToolExecutionService {
           ),
         );
       }
+      leasedForExecution = true;
     }
 
     const controller = new AbortController();
@@ -1141,6 +1151,11 @@ export class ToolExecutionService {
       return result;
     } finally {
       clearTimeout(timeout);
+      if (leasedForExecution) {
+        // The receipt is already decided; a lost release only delays a
+        // revoke until the lease expires, so it must not change the outcome.
+        await this.eligibility.release?.(input.action, input.idempotencyKey).catch(() => undefined);
+      }
     }
   }
 }

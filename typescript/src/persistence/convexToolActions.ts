@@ -253,11 +253,21 @@ export class ConvexExecutionEligibilityStore implements ExecutionEligibilityStor
     this.client = new ConvexHttpClient(convexUrl);
   }
 
-  async verify(action: ToolAction): Promise<ExecutionEligibilityResult> {
+  async verify(action: ToolAction, executionId: string): Promise<ExecutionEligibilityResult> {
     return (await this.client.mutation(toolActionFunctions.verifyExecutionEligibility, {
       serviceToken: this.serviceToken,
       projectKey: action.projectId,
       actionId: action.actionId,
+      executionId,
     })) as ExecutionEligibilityResult;
+  }
+
+  async release(action: ToolAction, executionId: string): Promise<void> {
+    await this.client.mutation(toolActionFunctions.releaseExecutionLease, {
+      serviceToken: this.serviceToken,
+      projectKey: action.projectId,
+      actionId: action.actionId,
+      executionId,
+    });
   }
 }

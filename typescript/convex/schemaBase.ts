@@ -236,6 +236,16 @@ export default defineSchema({
     // concurrent executions from both crossing the effect boundary.
     singleUseClaimedAt: v.optional(v.number()),
     singleUseClaimId: v.optional(v.string()),
+    // Reusable execution leases: one entry per in-flight execution, written by
+    // verifyExecutionEligibility in the same transaction that re-checks state
+    // and expiry, and removed by releaseExecutionLease (or by expiry). revoke()
+    // refuses while a live lease exists, so a revoke can never land between the
+    // eligibility check and the external effect it cleared.
+    executionLeases: v.optional(
+      v.array(
+        v.object({ executionId: v.string(), leasedAt: v.number(), leaseExpiresAt: v.number() }),
+      ),
+    ),
     safetyBinding: v.optional(safetyBindingValidator),
   })
     .index("by_owner_and_action_id", ["ownerId", "actionId"])

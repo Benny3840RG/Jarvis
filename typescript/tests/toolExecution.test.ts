@@ -565,6 +565,90 @@ describe("consent-lifecycle execution enforcement (R-048/R-049/R-050)", () => {
     assert.equal(executions.count, 0, "the provider must never be invoked for an expired action");
   });
 
+  it("leases a reusable action for its execution and releases the lease once the effect ends", async () => {
+    const executions = { count: 0 };
+    const events: string[] = [];
+    const eligibility: ExecutionEligibilityStore = {
+      async verify(_action, executionId): Promise<ExecutionEligibilityResult> {
+        events.push(`verify:${executionId}`);
+        return { eligible: true, leaseExpiresAt: Date.now() + 35_000 };
+      },
+      async release(_action, executionId) {
+        events.push(`release:${executionId}:after-${executions.count}-effects`);
+      },
+    };
+    const failing = {
+      ...definition(executions),
+      tool: "clock-failing",
+      async execute(): Promise<never> {
+        executions.count += 1;
+        throw new Error("provider down");
+      },
+    };
+    const executor = new ToolExecutionService(
+      [definition(executions), failing],
+      new InMemoryToolExecutionReceiptStore(),
+      undefined,
+      undefined,
+      eligibility,
+    );
+
+    const succeeded = await executor.execute({
+      action,
+      authority: "T1",
+      idempotencyKey: "lease-ok",
+    });
+    const failed = await executor.execute({
+      action: { ...action, actionId: "action-failing", tool: "clock-failing" },
+      authority: "T1",
+      idempotencyKey: "lease-failed",
+    });
+
+    assert.equal(succeeded.status, "succeeded");
+    assert.equal(failed.status, "failed");
+    assert.deepEqual(events, [
+      "verify:lease-ok",
+      "release:lease-ok:after-1-effects",
+      "verify:lease-failed",
+      "release:lease-failed:after-2-effects",
+    ]);
+  });
+
+  it("keeps the receipt when releasing the lease fails, and never releases a refused check", async () => {
+    const executions = { count: 0 };
+    let released = 0;
+    let eligible = true;
+    const eligibility: ExecutionEligibilityStore = {
+      async verify(): Promise<ExecutionEligibilityResult> {
+        return eligible ? { eligible: true } : { eligible: false, blockReason: "not-approved" };
+      },
+      async release() {
+        released += 1;
+        throw new Error("convex unreachable");
+      },
+    };
+    const executor = new ToolExecutionService(
+      [definition(executions)],
+      new InMemoryToolExecutionReceiptStore(),
+      undefined,
+      undefined,
+      eligibility,
+    );
+
+    const result = await executor.execute({
+      action,
+      authority: "T1",
+      idempotencyKey: "release-lost",
+    });
+    assert.equal(result.status, "succeeded");
+    assert.equal(released, 1);
+
+    eligible = false;
+    const blocked = await executor.execute({ action, authority: "T1", idempotencyKey: "refused" });
+    assert.equal(blocked.status, "blocked");
+    assert.equal(released, 1, "a refused check took no lease, so there is nothing to release");
+  });
+
   it("does not block a dry-run against an already-consumed single-use action", async () => {
     const executions = { count: 0 };
     const receipts = new InMemoryToolExecutionReceiptStore();

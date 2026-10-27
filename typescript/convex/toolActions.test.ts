@@ -5,6 +5,7 @@ import { api } from "./_generated/api.js";
 import type { MutationCtx } from "./_generated/server.js";
 import schema from "./schema.js";
 import { modules } from "./test.setup.js";
+import { EXECUTION_LEASE_MS } from "./toolActions.js";
 
 const SERVICE_TOKEN = "tool-actions-consent-test-service-token-0000";
 const APPROVAL_TOKEN = "tool-actions-human-approval-token-0000000";
@@ -1097,6 +1098,7 @@ describe("concurrency: racing mutations against the same approved action", () =>
       serviceToken: SERVICE_TOKEN,
       projectKey: PROJECT_KEY,
       actionId: "action-1",
+      executionId: "exec-1",
     });
 
     expect(verification).toEqual({ eligible: false, blockReason: "not-approved" });
@@ -1128,6 +1130,7 @@ describe("concurrency: racing mutations against the same approved action", () =>
         serviceToken: SERVICE_TOKEN,
         projectKey: PROJECT_KEY,
         actionId: "action-1",
+        executionId: "exec-1",
       });
 
       expect(verification).toEqual({ eligible: false, blockReason: "expired" });
@@ -1159,9 +1162,10 @@ describe("concurrency: racing mutations against the same approved action", () =>
       serviceToken: SERVICE_TOKEN,
       projectKey: PROJECT_KEY,
       actionId: "action-1",
+      executionId: "exec-1",
     });
 
-    expect(verification).toEqual({ eligible: true });
+    expect(verification).toEqual({ eligible: true, leaseExpiresAt: expect.any(Number) });
     const stored = await t.query(api.toolActions.get, {
       serviceToken: SERVICE_TOKEN,
       projectKey: PROJECT_KEY,
@@ -1186,8 +1190,157 @@ describe("concurrency: racing mutations against the same approved action", () =>
         serviceToken: SERVICE_TOKEN,
         projectKey: PROJECT_KEY,
         actionId: "action-1",
+        executionId: "exec-1",
       }),
     ).rejects.toThrow(/single-use/i);
+  });
+});
+
+describe("reusable execution leases close the revoke-after-check race", () => {
+  async function approveReusable(t: ReturnType<typeof harness>, approvalTtlMs?: number) {
+    await stageAndReturn(t, { destructive: false });
+    await t.mutation(api.toolActions.approve, {
+      serviceToken: SERVICE_TOKEN,
+      approvalToken: APPROVAL_TOKEN,
+      projectKey: PROJECT_KEY,
+      actionId: "action-1",
+      expectedRevision: 1,
+      ...(approvalTtlMs === undefined ? {} : { approvalTtlMs }),
+    });
+  }
+  const verify = (t: ReturnType<typeof harness>, executionId: string) =>
+    t.mutation(api.toolActions.verifyExecutionEligibility, {
+      serviceToken: SERVICE_TOKEN,
+      projectKey: PROJECT_KEY,
+      actionId: "action-1",
+      executionId,
+    });
+  const release = (t: ReturnType<typeof harness>, executionId: string) =>
+    t.mutation(api.toolActions.releaseExecutionLease, {
+      serviceToken: SERVICE_TOKEN,
+      projectKey: PROJECT_KEY,
+      actionId: "action-1",
+      executionId,
+    });
+  const revoke = (t: ReturnType<typeof harness>) =>
+    t.mutation(api.toolActions.revoke, {
+      serviceToken: SERVICE_TOKEN,
+      approvalToken: APPROVAL_TOKEN,
+      projectKey: PROJECT_KEY,
+      actionId: "action-1",
+      reason: "Operator changed their mind.",
+    });
+
+  it("refuses a revoke while an execution cleared by the check is still in flight", async () => {
+    vi.useFakeTimers({ now: 10_000 });
+    try {
+      const t = harness();
+      await approveReusable(t);
+      expect(await verify(t, "exec-1")).toEqual({
+        eligible: true,
+        leaseExpiresAt: 10_000 + EXECUTION_LEASE_MS,
+      });
+
+      await expect(revoke(t)).rejects.toThrow(/execution in flight/);
+      const stored = await t.query(api.toolActions.get, {
+        serviceToken: SERVICE_TOKEN,
+        projectKey: PROJECT_KEY,
+        actionId: "action-1",
+      });
+      expect(stored?.state).toBe("approved");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("allows the revoke once every in-flight execution has released its lease", async () => {
+    const t = harness();
+    await approveReusable(t);
+    await verify(t, "exec-1");
+    await verify(t, "exec-2");
+
+    await release(t, "exec-1");
+    await expect(revoke(t)).rejects.toThrow(/execution in flight/);
+    await release(t, "exec-2");
+    expect((await revoke(t)).state).toBe("revoked");
+    expect(await verify(t, "exec-3")).toEqual({ eligible: false, blockReason: "not-approved" });
+  });
+
+  it("lets an abandoned lease expire instead of blocking revocation forever", async () => {
+    vi.useFakeTimers({ now: 10_000 });
+    try {
+      const t = harness();
+      await approveReusable(t);
+      await verify(t, "exec-lost");
+
+      vi.setSystemTime(10_000 + EXECUTION_LEASE_MS);
+      expect((await revoke(t)).state).toBe("revoked");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("refuses a check whose lease would outlast the approval", async () => {
+    vi.useFakeTimers({ now: 10_000 });
+    try {
+      const t = harness();
+      await approveReusable(t, 60_000);
+      // A fresh minimum-TTL approval still covers a whole lease.
+      expect((await verify(t, "exec-1")).eligible).toBe(true);
+      await release(t, "exec-1");
+
+      // 30s left on the approval is less than one lease: the effect could
+      // otherwise still be running after the approval lapsed.
+      vi.setSystemTime(10_000 + 30_000);
+      expect(await verify(t, "exec-2")).toEqual({ eligible: false, blockReason: "expired" });
+      const stored = await t.query(api.toolActions.get, {
+        serviceToken: SERVICE_TOKEN,
+        projectKey: PROJECT_KEY,
+        actionId: "action-1",
+      });
+      expect(stored?.state).toBe("approved");
+      expect(stored?.executionLeases).toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("re-leases the same execution idempotently and treats an unknown release as a no-op", async () => {
+    const t = harness();
+    await approveReusable(t);
+    await verify(t, "exec-1");
+    await verify(t, "exec-1");
+    const stored = await t.query(api.toolActions.get, {
+      serviceToken: SERVICE_TOKEN,
+      projectKey: PROJECT_KEY,
+      actionId: "action-1",
+    });
+    expect(stored?.executionLeases?.map((lease) => lease.executionId)).toEqual(["exec-1"]);
+
+    await expect(release(t, "never-leased")).resolves.toBeNull();
+    await release(t, "exec-1");
+    expect((await revoke(t)).state).toBe("revoked");
+  });
+
+  it("requires the service token and an execution ID", async () => {
+    const t = harness();
+    await approveReusable(t);
+    await expect(
+      t.mutation(api.toolActions.verifyExecutionEligibility, {
+        serviceToken: SERVICE_TOKEN,
+        projectKey: PROJECT_KEY,
+        actionId: "action-1",
+        executionId: "   ",
+      }),
+    ).rejects.toThrow(/Execution ID/);
+    await expect(
+      t.mutation(api.toolActions.releaseExecutionLease, {
+        serviceToken: "wrong-token",
+        projectKey: PROJECT_KEY,
+        actionId: "action-1",
+        executionId: "exec-1",
+      }),
+    ).rejects.toThrow();
   });
 });
 
@@ -1263,6 +1416,7 @@ describe("regression: a caller-supplied clock can no longer skew execution-gate 
           serviceToken: SERVICE_TOKEN,
           projectKey: PROJECT_KEY,
           actionId: "action-1",
+          executionId: "exec-1",
           ...({ now: 5_000 } as Record<string, unknown>),
         }),
       ).rejects.toThrow();
@@ -1271,6 +1425,7 @@ describe("regression: a caller-supplied clock can no longer skew execution-gate 
         serviceToken: SERVICE_TOKEN,
         projectKey: PROJECT_KEY,
         actionId: "action-1",
+        executionId: "exec-1",
       });
       expect(verification).toEqual({ eligible: false, blockReason: "expired" });
     } finally {
