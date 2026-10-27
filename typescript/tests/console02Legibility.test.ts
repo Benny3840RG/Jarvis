@@ -46,10 +46,7 @@ describe("Console 02 legibility", () => {
     assert.ok(desktop, "The desktop lower deck sizing is missing");
     assert.match(desktop, /\.console-lower\s*\{[^}]*bottom:\s*16px;[^}]*height:\s*232px;/);
     assert.match(desktop, /\.gauge-face\s*\{\s*width:\s*232px;\s*height:\s*232px;/);
-    assert.match(
-      legibility,
-      /body\[data-console-view="focus"\] \.title-plate\s*\{[^}]*flex-wrap:\s*wrap;/,
-    );
+    assert.match(legibility, /body\[data-console-view\] \.title-plate\s*\{[^}]*flex-wrap:\s*wrap;/);
   });
 
   it("scrolls crowded views and rails instead of clipping or hiding panels", () => {
