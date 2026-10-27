@@ -908,6 +908,14 @@ export const verifyExecutionEligibility = mutation({
  * renews well inside the lease, so a lease only lapses once the process
  * running the provider has stopped renewing. An ended lease is never revived:
  * revoke may already have committed against it.
+ *
+ * Renewal deliberately ignores approval expiry. A lease is not permission to
+ * run: verifyExecutionEligibility only starts an effect whose whole first
+ * lease fits inside the approval, and nothing here can stop a provider that is
+ * already running. The lease only records that an effect is in flight, so
+ * revoke reports that honestly instead of committing mid-effect. Capping
+ * renewal at approval expiry would not stop the provider; it would only let a
+ * revoke commit while the effect still runs.
  */
 export const renewExecutionLease = mutation({
   args: {
