@@ -63,6 +63,11 @@ describe("HUD presence and approvals", () => {
 
   it("stores the snapshot approvals and names the count on the Approvals panel", () => {
     assert.match(widget, /if \("approvals" in data\) state\.approvals = data\.approvals;/);
+    // A full snapshot without approvals (the MCP dashboard path) drops a stale count.
+    assert.match(
+      widget,
+      /else if \(data\.counts && typeof data\.counts === "object"\) state\.approvals = null;/,
+    );
     assert.deepEqual(
       approvalsPanelFor({ status: "ready", proposedCount: 3, capped: false }).stage,
       "3 PROPOSED",
