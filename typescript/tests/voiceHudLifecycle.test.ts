@@ -54,7 +54,7 @@ type Request = {
   body: { profile?: VoiceProfile; transcript?: string; isFinal?: boolean; alternatives?: string[] };
 };
 
-function harness(options: { microphone?: boolean } = {}) {
+function harness(options: { microphone?: boolean; switchWaitMs?: number } = {}) {
   const elements = new Map<string, Element>();
   const get = (id: string) => {
     let element = elements.get(id);
@@ -195,7 +195,14 @@ function harness(options: { microphone?: boolean } = {}) {
     "document",
     "fetch",
     "SpeechSynthesisUtterance",
-    `${block}\nsetupVoiceConsole();`,
+    `${
+      options.switchWaitMs === undefined
+        ? block
+        : block!.replace(
+            "var PROFILE_SWITCH_WAIT_MS = 10000;",
+            `var PROFILE_SWITCH_WAIT_MS = ${options.switchWaitMs};`,
+          )
+    }\nsetupVoiceConsole();`,
   )(
     window,
     { getElementById: get, createElement: () => new Element() },
@@ -416,6 +423,67 @@ describe("voice HUD lifecycle (actual setupVoiceConsole and real session registr
       h.get("voice-result").textContent,
       "Query unavailable — no data provider connected.",
     );
+  });
+
+  for (const status of [503, 404]) {
+    it(`finishes a profile switch when the queued command before it fails (${status})`, async () => {
+      // Review finding on #759: a failed command queued ahead of a switch was
+      // said to advance the session generation and leave the profile paused.
+      // Its failure handler checks the generation first, so it must not.
+      const h = harness();
+      await armCrawler(h);
+      const release = h.pause("/sessions/s1/utterances");
+      h.fail("/sessions/s1/utterances", status);
+      h.type("crawler status");
+      await flush();
+      h.profile("client");
+      await flush();
+      assert.match(h.get("voice-result").textContent, /Changing voice profile/);
+
+      release();
+      for (let index = 0; index < 5; index += 1) await flush();
+
+      assert.equal(h.get("voice-profile-label").textContent, "CLIENT");
+      assert.match(h.get("voice-result").textContent, /Voice profile ready: CLIENT/);
+      h.type("any unpaid invoices");
+      await flush();
+      assert.equal(
+        h.get("voice-result").textContent,
+        "Query unavailable — no data provider connected.",
+      );
+    });
+  }
+
+  it("does not stay paused when the command queued before a switch never answers", async () => {
+    const h = harness({ switchWaitMs: 20 });
+    await armCrawler(h);
+    const releaseHung = h.pause("/sessions/s1/utterances");
+    h.type("crawler status");
+    await flush();
+    h.profile("client");
+    await flush();
+    assert.match(h.get("voice-result").textContent, /Changing voice profile/);
+
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    for (let index = 0; index < 5; index += 1) await flush();
+
+    // The hung session is retired and the switch completes on a fresh one,
+    // so the stale utterance can never land in the new profile.
+    assert.equal(h.get("voice-profile-label").textContent, "CLIENT");
+    assert.match(h.get("voice-result").textContent, /Voice profile ready: CLIENT/);
+    assert.equal(h.registry.get("s1"), undefined);
+    assert.equal(h.registry.get("s2")?.profile, "client");
+
+    releaseHung();
+    for (let index = 0; index < 5; index += 1) await flush();
+    assert.equal(h.get("voice-profile-label").textContent, "CLIENT");
+    h.type("any unpaid invoices");
+    await flush();
+    assert.equal(
+      h.get("voice-result").textContent,
+      "Query unavailable — no data provider connected.",
+    );
+    assert.deepEqual(h.actuations, []);
   });
 
   it("discards an old session created while a new profile is being selected", async () => {

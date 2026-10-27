@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { z } from "zod";
 
 import type {
@@ -197,6 +198,8 @@ export type ExecutionEligibilityResult = {
   eligible: boolean;
   /** Present when `eligible` is false; same meaning as the identically-named `SingleUseExecutionClaimResult` reasons. */
   blockReason?: "not-approved" | "expired";
+  /** When the execution lease taken by a successful check ends. */
+  leaseExpiresAt?: number;
 };
 
 /**
@@ -210,8 +213,28 @@ export type ExecutionEligibilityResult = {
  * make atomic in the first place.
  */
 export interface ExecutionEligibilityStore {
-  verify(action: ToolAction): Promise<ExecutionEligibilityResult>;
+  /**
+   * A successful check also leases the action for `executionId`, so a revoke
+   * cannot commit between this check and the effect it cleared.
+   */
+  verify(action: ToolAction, executionId: string): Promise<ExecutionEligibilityResult>;
+  /**
+   * Extends a live lease while its provider is still running, so a provider
+   * that outlives one lease (it may ignore its abort signal) keeps revoke
+   * blocked. Returns false when the lease had already ended.
+   */
+  renew?(action: ToolAction, executionId: string): Promise<{ renewed: boolean }>;
+  /** Ends the lease once the effect has finished. Best effort: leases also expire. */
+  release?(action: ToolAction, executionId: string): Promise<void>;
 }
+
+/**
+ * How often a running execution renews its lease. Well inside the 35s Convex
+ * lease, so two lost renewals still leave it live. A lease therefore only
+ * lapses once the process running the provider has stopped, and with it the
+ * in-process provider.
+ */
+export const EXECUTION_LEASE_RENEW_MS = 10_000;
 
 /**
  * Matches `InMemorySingleUseConsumptionClaimStore`'s own scope: this default
@@ -463,6 +486,7 @@ export class ToolExecutionService {
     private readonly reconciliations?: ExternalReconciliationStore,
     private readonly claims: SingleUseConsumptionClaimStore = new InMemorySingleUseConsumptionClaimStore(),
     private readonly eligibility: ExecutionEligibilityStore = new InMemoryExecutionEligibilityStore(),
+    private readonly leaseRenewMs: number = EXECUTION_LEASE_RENEW_MS,
   ) {
     for (const definition of definitions) {
       const key = `${definition.tool}:${definition.operation}`;
@@ -916,6 +940,11 @@ export class ToolExecutionService {
     // that were never given a claim to make atomic. `verify()` closes it
     // without any consumption semantics. (Finding from a full-repo audit:
     // this re-check previously ran only for single-use actions.)
+    // A fresh ID per attempt: two concurrent executions sharing an
+    // idempotency key must not share one lease, or the first to finish would
+    // release it while the other's effect still runs.
+    let leaseExecutionId: string | undefined;
+    let leaseRenewal: NodeJS.Timeout | undefined;
     if (input.action.consumptionPolicy === "single-use") {
       const claim = await this.claims.claim(input.action, input.idempotencyKey);
       if (!claim.claimed) {
@@ -932,7 +961,8 @@ export class ToolExecutionService {
         );
       }
     } else {
-      const verification = await this.eligibility.verify(input.action);
+      const executionId = randomUUID();
+      const verification = await this.eligibility.verify(input.action, executionId);
       if (!verification.eligible) {
         return this.persistDecision(
           key,
@@ -946,6 +976,11 @@ export class ToolExecutionService {
           ),
         );
       }
+      leaseExecutionId = executionId;
+      leaseRenewal = setInterval(() => {
+        void this.eligibility.renew?.(input.action, executionId).catch(() => undefined);
+      }, this.leaseRenewMs);
+      leaseRenewal.unref();
     }
 
     const controller = new AbortController();
@@ -990,9 +1025,16 @@ export class ToolExecutionService {
       },
     };
 
+    let effect: Promise<unknown> | undefined;
+    let effectSettled = false;
     try {
+      effect = definition.execute(parsed.data, controller.signal, context);
+      effect.then(
+        () => (effectSettled = true),
+        () => (effectSettled = true),
+      );
       const output = await Promise.race([
-        definition.execute(parsed.data, controller.signal, context),
+        effect,
         new Promise<never>((_, reject) =>
           controller.signal.addEventListener("abort", () => reject(new Error("timeout")), {
             once: true,
@@ -1141,6 +1183,19 @@ export class ToolExecutionService {
       return result;
     } finally {
       clearTimeout(timeout);
+      if (leaseExecutionId !== undefined) {
+        // Release only once the provider has actually settled. A timed-out
+        // provider may ignore the abort signal and still act, so its lease
+        // keeps renewing until it settles. A lost release only delays a
+        // revoke until the lease expires, so it never changes the receipt.
+        const executionId = leaseExecutionId;
+        const release = () => {
+          clearInterval(leaseRenewal);
+          return this.eligibility.release?.(input.action, executionId).catch(() => undefined);
+        };
+        if (!effect || effectSettled) await release();
+        else void effect.then(release, release);
+      }
     }
   }
 }
