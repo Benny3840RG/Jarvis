@@ -4071,6 +4071,9 @@
           var root = document.getElementById("voice-profiles");
           if (!root) return;
           var VOICE_PROFILES = ["crawler", "workshop", "trailer", "client"];
+          // How long a profile switch waits for the command queued before it.
+          // A request that never answers must not leave the profile paused.
+          var PROFILE_SWITCH_WAIT_MS = 10000;
           var WAKE_WORD = "jarvis";
           var caps = voiceCapabilities(typeof window !== "undefined" ? window : {});
           var state = {
@@ -4236,6 +4239,15 @@
           function cancelSpeech() {
             if (caps.synthesis) try { window.speechSynthesis.cancel(); } catch (error) { /* best-effort */ }
           }
+          function settledWithin(promise, ms) {
+            return new Promise(function (resolve) {
+              var timer = setTimeout(function () { resolve(false); }, ms);
+              promise.then(
+                function () { clearTimeout(timer); resolve(true); },
+                function () { clearTimeout(timer); resolve(true); },
+              );
+            });
+          }
           function switchProfile(profile) {
             var previousCommands = state.commandQueue;
             var id = invalidateSession();
@@ -4245,11 +4257,13 @@
             interruptRecognition();
             cancelSpeech();
             renderNotice("Changing voice profile. Commands are paused until the server acknowledges it.");
-            var path = id ? "/sessions/" + encodeURIComponent(id) + "/profile" : "/sessions";
             // Do not let an already-sent utterance arrive in a different profile on this id.
-            (id ? previousCommands : Promise.resolve())
-              .then(function () {
-                if (generation !== state.generation) { retireSession(id); return null; }
+            // If it never settles, give up on the id: retire it and start a fresh session.
+            (id ? settledWithin(previousCommands, PROFILE_SWITCH_WAIT_MS) : Promise.resolve(true))
+              .then(function (settled) {
+                if (generation !== state.generation || !settled) retireSession(id);
+                if (generation !== state.generation) return null;
+                var path = id && settled ? "/sessions/" + encodeURIComponent(id) + "/profile" : "/sessions";
                 return api(path, { method: "POST", body: JSON.stringify({ profile: profile }) }).then(readResponse);
               })
               .then(function (data) {
