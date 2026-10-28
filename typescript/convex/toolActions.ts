@@ -362,6 +362,27 @@ export const listRecent = query({
   },
 });
 
+/**
+ * Owner-wide count of proposals awaiting approval, for the HUD presence read.
+ * Bounded: reads at most `limit + 1` rows and reports `capped` past `limit`.
+ */
+export const countProposed = query({
+  args: {
+    serviceToken: v.string(),
+    limit: v.optional(v.number()),
+  },
+  returns: v.object({ count: v.number(), capped: v.boolean() }),
+  handler: async (ctx, args) => {
+    const ownerId = requireOwner(args.serviceToken);
+    const limit = boundedLimit(args.limit);
+    const rows = await ctx.db
+      .query("toolActions")
+      .withIndex("by_owner_and_state", (q) => q.eq("ownerId", ownerId).eq("state", "proposed"))
+      .take(limit + 1);
+    return { count: Math.min(rows.length, limit), capped: rows.length > limit };
+  },
+});
+
 export const approve = mutation({
   args: {
     serviceToken: v.string(),
@@ -576,6 +597,16 @@ export const revoke = mutation({
     }
 
     const now = args.now ?? Date.now();
+    // verifyExecutionEligibility cleared these executions against an approved
+    // document. Revoking under them would let an effect run after the
+    // revocation committed, so revoke waits for the leases to end instead.
+    const inFlight = liveExecutionLeases(action, Date.now());
+    if (inFlight.length > 0) {
+      const until = Math.max(...inFlight.map((lease) => lease.leaseExpiresAt));
+      throw new Error(
+        `Tool action has an execution in flight until ${new Date(until).toISOString()}; revoke it after that execution finishes.`,
+      );
+    }
     const safetyBinding = safetyBindingForAction("tool-revoke", action, true);
     await ctx.db.patch("toolActions", action._id, {
       state: "revoked",
@@ -632,6 +663,27 @@ const singleUseClaimBlockReasonValidator = v.union(
   v.literal("omega-contract-expired"),
   v.literal("omega-contract-authority-mismatch"),
 );
+
+/**
+ * How long a reusable execution lease holds off revocation without renewal:
+ * the executor's 30s maximum effect timeout plus a 5s margin. A provider that
+ * outlives it keeps it alive through renewExecutionLease; an abandoned lease
+ * (its process gone) ends on its own instead of blocking revocation forever.
+ * It stays below the 60s approval TTL floor, so a fresh minimum-TTL approval
+ * can still be executed.
+ */
+export const EXECUTION_LEASE_MS = 35_000;
+
+// Bounds the lease list carried on the action document. Executors generate
+// UUIDs, so the ID cap only stops a misbehaving caller from bloating the row.
+const MAX_EXECUTION_ID_LENGTH = 128;
+const MAX_LIVE_EXECUTION_LEASES = 32;
+
+type ExecutionLease = { executionId: string; leasedAt: number; leaseExpiresAt: number };
+
+function liveExecutionLeases(action: Doc<"toolActions">, now: number): ExecutionLease[] {
+  return (action.executionLeases ?? []).filter((lease) => lease.leaseExpiresAt > now);
+}
 
 const executionEligibilityBlockReasonValidator = v.union(
   v.literal("not-approved"),
@@ -784,15 +836,21 @@ export const verifyExecutionEligibility = mutation({
     serviceToken: v.string(),
     projectKey: v.string(),
     actionId: v.string(),
+    executionId: v.string(),
   },
   returns: v.object({
     eligible: v.boolean(),
     blockReason: v.optional(executionEligibilityBlockReasonValidator),
+    leaseExpiresAt: v.optional(v.number()),
   }),
   handler: async (ctx, args) => {
     const ownerId = requireOwner(args.serviceToken);
     const projectKey = cleanRequiredText(args.projectKey, "Project key");
     const actionId = cleanRequiredText(args.actionId, "Tool action ID");
+    const executionId = cleanRequiredText(args.executionId, "Execution ID");
+    if (executionId.length > MAX_EXECUTION_ID_LENGTH) {
+      throw new Error(`Execution ID must be at most ${MAX_EXECUTION_ID_LENGTH} characters.`);
+    }
     const action = await requireAction(ctx, ownerId, projectKey, actionId);
 
     if (action.consumptionPolicy === "single-use") {
@@ -813,6 +871,107 @@ export const verifyExecutionEligibility = mutation({
     if (!revision.ok) {
       return { eligible: false, blockReason: revision.blockReason };
     }
-    return { eligible: true };
+
+    // The whole lease must sit inside the approval. An approval that lapses
+    // mid-lease would otherwise let the effect it cleared run after expiry.
+    const leaseExpiresAt = now + EXECUTION_LEASE_MS;
+    if (
+      action.approvalExpiryPolicy === "ttl" &&
+      action.approvalExpiresAt !== undefined &&
+      action.approvalExpiresAt < leaseExpiresAt
+    ) {
+      return { eligible: false, blockReason: "expired" as const };
+    }
+
+    // Writing the lease in this transaction is what closes the race: revoke()
+    // reads and writes the same document, so Convex serializes the two and
+    // revoke either lands first (and this check sees "not-approved") or sees
+    // the lease and refuses.
+    const leases = liveExecutionLeases(action, now).filter(
+      (lease) => lease.executionId !== executionId,
+    );
+    if (leases.length >= MAX_LIVE_EXECUTION_LEASES) {
+      // Fail closed: no lease, no effect. Expired leases were already pruned.
+      throw new Error(
+        `Tool action already has ${MAX_LIVE_EXECUTION_LEASES} executions in flight; retry once one finishes.`,
+      );
+    }
+    await ctx.db.patch("toolActions", action._id, {
+      executionLeases: [...leases, { executionId, leasedAt: now, leaseExpiresAt }],
+    });
+    return { eligible: true, leaseExpiresAt };
+  },
+});
+
+/**
+ * Extends a live lease while its provider is still running. The executor
+ * renews well inside the lease, so a lease only lapses once the process
+ * running the provider has stopped renewing. An ended lease is never revived:
+ * revoke may already have committed against it.
+ *
+ * Renewal deliberately ignores approval expiry. A lease is not permission to
+ * run: verifyExecutionEligibility only starts an effect whose whole first
+ * lease fits inside the approval, and nothing here can stop a provider that is
+ * already running. The lease only records that an effect is in flight, so
+ * revoke reports that honestly instead of committing mid-effect. Capping
+ * renewal at approval expiry would not stop the provider; it would only let a
+ * revoke commit while the effect still runs.
+ */
+export const renewExecutionLease = mutation({
+  args: {
+    serviceToken: v.string(),
+    projectKey: v.string(),
+    actionId: v.string(),
+    executionId: v.string(),
+  },
+  returns: v.object({ renewed: v.boolean(), leaseExpiresAt: v.optional(v.number()) }),
+  handler: async (ctx, args) => {
+    const ownerId = requireOwner(args.serviceToken);
+    const projectKey = cleanRequiredText(args.projectKey, "Project key");
+    const actionId = cleanRequiredText(args.actionId, "Tool action ID");
+    const executionId = cleanRequiredText(args.executionId, "Execution ID");
+    const action = await requireAction(ctx, ownerId, projectKey, actionId);
+    const now = Date.now();
+    const live = liveExecutionLeases(action, now);
+    if (!live.some((lease) => lease.executionId === executionId)) return { renewed: false };
+    const leaseExpiresAt = now + EXECUTION_LEASE_MS;
+    await ctx.db.patch("toolActions", action._id, {
+      executionLeases: live.map((lease) =>
+        lease.executionId === executionId ? { ...lease, leaseExpiresAt } : lease,
+      ),
+    });
+    return { renewed: true, leaseExpiresAt };
+  },
+});
+
+/**
+ * Ends a reusable execution lease once its effect has finished, so a revoke
+ * need not wait for the lease to expire. Releasing an unknown or already
+ * expired lease is a no-op: the lease bounds revocation, never execution.
+ */
+export const releaseExecutionLease = mutation({
+  args: {
+    serviceToken: v.string(),
+    projectKey: v.string(),
+    actionId: v.string(),
+    executionId: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const ownerId = requireOwner(args.serviceToken);
+    const projectKey = cleanRequiredText(args.projectKey, "Project key");
+    const actionId = cleanRequiredText(args.actionId, "Tool action ID");
+    const executionId = cleanRequiredText(args.executionId, "Execution ID");
+    const action = await requireAction(ctx, ownerId, projectKey, actionId);
+    const current = action.executionLeases ?? [];
+    const remaining = liveExecutionLeases(action, Date.now()).filter(
+      (lease) => lease.executionId !== executionId,
+    );
+    if (remaining.length !== current.length) {
+      await ctx.db.patch("toolActions", action._id, {
+        executionLeases: remaining.length > 0 ? remaining : undefined,
+      });
+    }
+    return null;
   },
 });

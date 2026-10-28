@@ -248,27 +248,16 @@
         --bg: #f3f5fb; --panel: #ffffff; --panel-2: #f7f8fc; --panel-3: #e8ebf4;
         --line: #6d758c; --line-bright: #2c3348; --text: #12141c; --muted: #3c445c;
       }
-      @media (prefers-color-scheme: light) {
-        html[data-console-theme="system"] {
-          color-scheme: light;
-          --bg: #f3f5fb; --panel: #ffffff; --panel-2: #f7f8fc; --panel-3: #e8ebf4;
-          --line: #6d758c; --line-bright: #2c3348; --text: #12141c; --muted: #3c445c;
-        }
-      }
+      /* Console 02 is a dark instrument over a dark photographic backdrop, so
+         "system" keeps the dark palette even when the OS prefers light. Only an
+         explicit Light choice switches palettes. */
       html[data-console-theme="light"] input,
-      html[data-console-theme="light"] select,
-      html[data-console-theme="system"] input,
-      html[data-console-theme="system"] select { background: #fff; }
+      html[data-console-theme="light"] select { background: #fff; }
       html[data-console-contrast="increase"] {
         --text: #ffffff; --muted: #f4f5fb; --line: #d5d9ea; --line-bright: #ffffff; --bg: #000000; --panel: #05060a;
       }
       html[data-console-theme="light"][data-console-contrast="increase"] {
         --text: #000000; --muted: #1a1a1a; --line: #000000; --line-bright: #000000; --bg: #ffffff; --panel: #ffffff;
-      }
-      @media (prefers-color-scheme: light) {
-        html[data-console-theme="system"][data-console-contrast="increase"] {
-          --text: #000000; --muted: #1a1a1a; --line: #000000; --line-bright: #000000; --bg: #ffffff; --panel: #ffffff;
-        }
       }
       html[data-console-motion="reduce"] *,
       html[data-console-motion="reduce"] *::before,
@@ -737,10 +726,10 @@
       .live-state { margin: 0; font-size: 12px; font-weight: 800; letter-spacing: 0.18em; color: var(--cream); }
       .title-plate .live-state { text-align: center; font-size: 11px; letter-spacing: 0.22em; color: #ffb15a; text-shadow: none; }
       .tree-mark { width: 42px; height: 42px; }
-      body[data-console-view="focus"] .left-rail,
-      body[data-console-view="focus"] .right-rail,
-      body[data-console-view="focus"] .bottom-band { display: none; }
-      body[data-console-view="focus"] .workspace { grid-column: 1 / -1; }
+      body[data-console-view] .left-rail,
+      body[data-console-view] .right-rail,
+      body[data-console-view] .bottom-band { display: none; }
+      body[data-console-view] .workspace { grid-column: 1 / -1; }
       .console-deck {
         display: grid;
         grid-template-columns: minmax(210px, 0.78fr) minmax(0, 1.22fr) minmax(230px, 0.86fr);
@@ -777,9 +766,9 @@
       .plate h2, .plate h3 { margin: 0 0 4px; font-size: 11px; letter-spacing: 0.16em; font-variant: small-caps; color: #ff7a18; text-shadow: 0 0 8px rgba(255, 122, 24, 0.75); }
       .plate p, .plate small { margin: 4px 0 0; color: #ffb15a; font-size: 12px; text-shadow: 0 0 6px rgba(255, 122, 24, 0.35); }
       .plate b, .ring-gauge b, .tile b, .gauge-face b { color: #fff1dc; text-shadow: 0 0 8px rgba(255, 122, 24, 0.55); }
-      body[data-console-view="focus"] .telemetry { display: none; }
-      body[data-console-view="focus"] .hud-grid { min-height: 0; grid-template-rows: auto; }
-      body[data-console-view="focus"] .footer { display: none; }
+      body[data-console-view] .telemetry { display: none; }
+      body[data-console-view] .hud-grid { min-height: 0; grid-template-rows: auto; }
+      body[data-console-view] .footer { display: none; }
       .focus-layout { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(160px, 0.7fr); gap: 8px; height: auto; }
       .now-strip { margin-top: 8px; }
       .now-strip .mission-panel, .now-strip .queue-panel { min-height: 0; }
@@ -845,12 +834,12 @@
       @media (min-width: 1400px) {
         .shell { padding: 168px 92px 96px; }
         .topbar { flex: 0 0 0px; height: 0; min-height: 0; overflow: visible; padding: 0; margin: 0; border: 0; }
-        body[data-console-view="focus"] .hud-grid {
+        body[data-console-view] .hud-grid {
           flex: 1 1 auto; min-height: 0; height: 100%;
           grid-template-columns: minmax(0, 1fr);
           grid-template-rows: minmax(0, 1fr);
         }
-        body[data-console-view="focus"] .workspace { min-height: 0; height: 100%; display: flex; flex-direction: column; }
+        body[data-console-view] .workspace { min-height: 0; height: 100%; display: flex; flex-direction: column; }
         .workspace > .panel-content { flex: 1 1 auto; height: 100%; min-height: 0; }
         #view-focus.active { flex: 1 1 auto; min-height: 0; height: 100%; gap: 8px; }
         .console-deck {
@@ -1135,7 +1124,7 @@
       }
       .ornament { pointer-events: none; }
       @media (min-width: 1400px) {
-        body[data-console-view="focus"] .title-plate {
+        body[data-console-view] .title-plate {
           width: min(760px, 48vw);
           padding: 9px 34px 8px;
           border-radius: 6px 6px 16px 16px;
@@ -1148,32 +1137,32 @@
             0 6px 0 #0c0a08,
             0 14px 22px rgba(0, 0, 0, 0.55);
         }
-        body[data-console-view="focus"] .wordmark {
+        body[data-console-view] .wordmark {
           font-size: clamp(26px, 2.15vw, 40px);
           letter-spacing: 0.16em;
           font-weight: 700;
           color: #fff8ec;
           text-shadow: 0 1px 0 #6a5030, 0 0 14px rgba(255, 214, 150, 0.85), 0 2px 2px rgba(0, 0, 0, 0.65);
         }
-        body[data-console-view="focus"] .console-no { font-size: clamp(13px, 1.05vw, 18px); letter-spacing: 0.14em; }
-        body[data-console-view="focus"] .title-plate .sub-plate { font-size: 11px; letter-spacing: 0.28em; color: #f6e7c4; }
-        body[data-console-view="focus"][data-backdrop-severity="UNKNOWN"] .hud-photo {
+        body[data-console-view] .console-no { font-size: clamp(13px, 1.05vw, 18px); letter-spacing: 0.14em; }
+        body[data-console-view] .title-plate .sub-plate { font-size: 11px; letter-spacing: 0.28em; color: #f6e7c4; }
+        body[data-console-view][data-backdrop-severity="UNKNOWN"] .hud-photo {
           filter: saturate(1.48) brightness(1.24) contrast(1.08);
         }
-        body[data-console-view="focus"][data-backdrop-severity="OK"] .hud-photo {
+        body[data-console-view][data-backdrop-severity="OK"] .hud-photo {
           filter: saturate(1.52) brightness(1.26) contrast(1.06);
         }
-        body[data-console-view="focus"][data-backdrop-severity="WARN"] .hud-photo {
+        body[data-console-view][data-backdrop-severity="WARN"] .hud-photo {
           filter: sepia(0.12) saturate(1.22) brightness(1.08) contrast(1.05);
         }
-        body[data-console-view="focus"][data-backdrop-severity="STOPPED"] .hud-photo {
+        body[data-console-view][data-backdrop-severity="STOPPED"] .hud-photo {
           filter: saturate(0.72) brightness(0.82) hue-rotate(-12deg);
         }
-        body[data-console-view="focus"] .hud-vignette {
+        body[data-console-view] .hud-vignette {
           background: radial-gradient(ellipse 84% 76% at 50% 48%, rgba(8, 10, 14, 0.02), rgba(6, 8, 12, 0.28) 86%);
         }
-        body[data-console-view="focus"] .shell { padding: 168px 78px 46px; }
-        body[data-console-view="focus"] .brand {
+        body[data-console-view] .shell { padding: 168px 78px 46px; }
+        body[data-console-view] .brand {
           top: 96px;
           left: 102px;
           width: auto;
@@ -1184,27 +1173,27 @@
           border: 1px solid rgba(240, 214, 160, 0.62);
           box-shadow: inset 0 1px 0 rgba(255, 236, 200, 0.45), 0 6px 14px rgba(0, 0, 0, 0.35);
         }
-        body[data-console-view="focus"] .brand-kicker {
+        body[data-console-view] .brand-kicker {
           display: block;
           color: #f0d7a4;
           font-size: 10px;
           letter-spacing: 0.16em;
         }
-        body[data-console-view="focus"] .brand .plaque p { font-size: 12px; color: #fff1dc; }
-        body[data-console-view="focus"] .mark { width: 42px; height: 42px; flex: 0 0 42px; }
-        body[data-console-view="focus"] .top-actions {
+        body[data-console-view] .brand .plaque p { font-size: 12px; color: #fff1dc; }
+        body[data-console-view] .mark { width: 42px; height: 42px; flex: 0 0 42px; }
+        body[data-console-view] .top-actions {
           top: 96px;
           right: 100px;
           width: 430px;
           max-width: 430px;
         }
-        body[data-console-view="focus"] .team-nav {
+        body[data-console-view] .team-nav {
           top: 136px;
           left: 50%;
           width: 860px;
           transform: translateX(-50%);
         }
-        body[data-console-view="focus"] .team-nav .rail-button {
+        body[data-console-view] .team-nav .rail-button {
           min-height: 26px;
           border-radius: 4px;
           background: linear-gradient(180deg, rgba(74, 52, 28, 0.62), rgba(14, 10, 8, 0.5));
@@ -1213,14 +1202,14 @@
           letter-spacing: 0.06em;
           box-shadow: inset 0 1px 0 rgba(255, 230, 190, 0.28);
         }
-        body[data-console-view="focus"] .team-nav .rail-button.active {
+        body[data-console-view] .team-nav .rail-button.active {
           color: #fff6e8;
           border-color: #ffb15a;
           box-shadow: inset 0 0 10px rgba(255, 140, 40, 0.35), 0 0 8px rgba(255, 122, 24, 0.35);
         }
-        body[data-console-view="focus"] .top-actions .pill,
-        body[data-console-view="focus"] .top-actions .team-chip,
-        body[data-console-view="focus"] .top-actions a.limits-now {
+        body[data-console-view] .top-actions .pill,
+        body[data-console-view] .top-actions .team-chip,
+        body[data-console-view] .top-actions a.limits-now {
           border-radius: 3px;
           background: rgba(10, 8, 6, 0.58);
           border: 1px solid rgba(255, 176, 90, 0.42);
@@ -1575,40 +1564,40 @@
         box-shadow: inset 0 0 90px rgba(0, 0, 0, 0.42), inset 0 0 0 1px rgba(255, 220, 180, 0.14);
       }
       @media (min-width: 1400px) {
-        body[data-console-view="focus"] .rivets { display: none; }
-        body[data-console-view="focus"] .brand-legal {
+        body[data-console-view] .rivets { display: none; }
+        body[data-console-view] .brand-legal {
           position: absolute;
           width: 1px;
           height: 1px;
           overflow: hidden;
           clip: rect(0 0 0 0);
         }
-        body[data-console-view="focus"] .hud-frame,
-        body[data-console-view="focus"] .hud-frame::before,
-        body[data-console-view="focus"] .hud-frame::after {
+        body[data-console-view] .hud-frame,
+        body[data-console-view] .hud-frame::before,
+        body[data-console-view] .hud-frame::after {
           border: 0;
           box-shadow: none;
           background: transparent;
           outline: 0;
         }
-        body[data-console-view="focus"][data-backdrop-severity="UNKNOWN"] .hud-photo {
+        body[data-console-view][data-backdrop-severity="UNKNOWN"] .hud-photo {
           filter: saturate(0.8) brightness(1.14) contrast(1.06) hue-rotate(20deg);
         }
-        body[data-console-view="focus"][data-backdrop-severity="OK"] .hud-photo {
+        body[data-console-view][data-backdrop-severity="OK"] .hud-photo {
           filter: saturate(0.78) brightness(1.08) contrast(1.02) hue-rotate(10deg);
         }
-        body[data-console-view="focus"][data-backdrop-severity="WARN"] .hud-photo {
+        body[data-console-view][data-backdrop-severity="WARN"] .hud-photo {
           filter: sepia(0.18) saturate(0.62) brightness(0.68) contrast(1.04);
         }
-        body[data-console-view="focus"][data-backdrop-severity="STOPPED"] .hud-photo {
+        body[data-console-view][data-backdrop-severity="STOPPED"] .hud-photo {
           filter: saturate(0.4) brightness(0.52) hue-rotate(8deg);
         }
-        body[data-console-view="focus"] .hud-vignette {
+        body[data-console-view] .hud-vignette {
           background:
             linear-gradient(180deg, rgba(10, 18, 28, 0.12), rgba(8, 36, 42, 0.1) 55%, rgba(4, 16, 22, 0.2)),
             radial-gradient(ellipse 86% 76% at 50% 48%, rgba(4, 12, 18, 0.0), rgba(2, 8, 12, 0.22) 100%);
         }
-        body[data-console-view="focus"] .shell { z-index: 10; padding: 118px 96px 210px; }
+        body[data-console-view] .shell { z-index: 10; padding: 118px 96px 210px; }
         body[data-console-view="focus"] .console-deck {
           grid-template-columns: minmax(250px, 0.78fr) minmax(0, 1.72fr) minmax(230px, 0.74fr);
         }
@@ -1802,7 +1791,7 @@
         text-shadow: none;
       }
       @media (min-width: 1400px) {
-        body[data-console-view="focus"] .crt-glass {
+        body[data-console-view] .crt-glass {
           inset: 86px 58px 78px;
           border-radius: 64px;
           background:
@@ -1810,26 +1799,26 @@
             radial-gradient(ellipse 68% 62% at 50% 46%, transparent 28%, rgba(0, 0, 0, 0.38) 72%, rgba(0, 0, 0, 0.72) 100%);
           box-shadow: inset 0 0 120px rgba(0, 0, 0, 0.55), inset 0 0 0 1px rgba(196, 163, 106, 0.18);
         }
-        body[data-console-view="focus"] .hud-vignette {
+        body[data-console-view] .hud-vignette {
           background:
             radial-gradient(ellipse 62% 58% at 50% 46%, transparent 30%, rgba(2, 8, 12, 0.28) 78%, rgba(0, 0, 0, 0.55) 100%);
         }
-        body[data-console-view="focus"] .title-plate {
+        body[data-console-view] .title-plate {
           top: 8px;
           z-index: 17;
           width: min(560px, 38vw);
           padding: 2px 22px 2px;
         }
-        body[data-console-view="focus"] .wordmark { font-size: 22px; letter-spacing: 0.14em; }
-        body[data-console-view="focus"] .console-no { font-size: 12px; }
-        body[data-console-view="focus"] .title-plate .sub-plate,
-        body[data-console-view="focus"] .title-plate .live-state {
+        body[data-console-view] .wordmark { font-size: 22px; letter-spacing: 0.14em; }
+        body[data-console-view] .console-no { font-size: 12px; }
+        body[data-console-view] .title-plate .sub-plate,
+        body[data-console-view] .title-plate .live-state {
           margin: 0;
           font-size: 9px;
           line-height: 1.15;
           letter-spacing: 0.2em;
         }
-        body[data-console-view="focus"] .brand {
+        body[data-console-view] .brand {
           top: 14px;
           left: 36px;
           z-index: 18;
@@ -1839,22 +1828,22 @@
           background: rgba(12, 10, 8, 0.35);
           border-color: rgba(196, 163, 106, 0.4);
         }
-        body[data-console-view="focus"] .brand-kicker { font-size: 9px; letter-spacing: 0.14em; }
-        body[data-console-view="focus"] .brand .plaque p { font-size: 11px; }
-        body[data-console-view="focus"] .mark { width: 28px; height: 28px; flex-basis: 28px; }
-        body[data-console-view="focus"] .team-nav {
+        body[data-console-view] .brand-kicker { font-size: 9px; letter-spacing: 0.14em; }
+        body[data-console-view] .brand .plaque p { font-size: 11px; }
+        body[data-console-view] .mark { width: 28px; height: 28px; flex-basis: 28px; }
+        body[data-console-view] .team-nav {
           top: 58px;
           left: 50%;
           width: 860px;
           z-index: 18;
           transform: translateX(-50%);
         }
-        body[data-console-view="focus"] .team-nav .rail-button {
+        body[data-console-view] .team-nav .rail-button {
           min-height: 22px;
           padding: 0 8px;
           font-size: 11px;
         }
-        body[data-console-view="focus"] .top-actions {
+        body[data-console-view] .top-actions {
           top: 12px;
           right: 28px;
           z-index: 18;
@@ -1863,7 +1852,7 @@
           max-height: 42px;
           overflow: hidden;
         }
-        body[data-console-view="focus"] .shell { padding: 112px 84px 198px; }
+        body[data-console-view] .shell { padding: 112px 84px 198px; }
         body[data-console-view="focus"] .console-deck,
         body[data-console-view="focus"] .console-col,
         body[data-console-view="focus"] .col-center,
@@ -1968,7 +1957,7 @@
         body[data-console-view="focus"] .status-rows .tick-row:nth-child(3) .slot { transform: rotate(45deg); border-radius: 1px; }
         body[data-console-view="focus"] .status-rows .tick-row:nth-child(4) .slot { border-radius: 0; clip-path: polygon(50% 0, 100% 100%, 0 100%); }
         body[data-console-view="focus"] .status-rows .tick-row:nth-child(5) .slot { border-radius: 2px 8px; }
-        body[data-console-view="focus"] .top-actions {
+        body[data-console-view] .top-actions {
           top: 10px;
           right: 128px;
           width: 520px;
@@ -1977,10 +1966,10 @@
           overflow: visible;
           gap: 3px 4px;
         }
-        body[data-console-view="focus"] .top-actions .pill,
-        body[data-console-view="focus"] .top-actions .team-chip,
-        body[data-console-view="focus"] .top-actions .source-pill,
-        body[data-console-view="focus"] .top-actions a.limits-now {
+        body[data-console-view] .top-actions .pill,
+        body[data-console-view] .top-actions .team-chip,
+        body[data-console-view] .top-actions .source-pill,
+        body[data-console-view] .top-actions a.limits-now {
           font-size: 9px;
           padding: 0 6px;
           min-height: 18px;
@@ -2054,7 +2043,7 @@
     <style id="console-02-readable-controls">
       .bezel-focus { display: none; }
       @media (min-width: 781px) and (max-width: 1399px) {
-        body[data-console-view="focus"] .shell { padding-inline: 84px; }
+        body[data-console-view] .shell { padding-inline: 84px; }
       }
       /* Real task controls keep their own space; decorative instruments flex around them. */
       body[data-console-view="focus"] .now-strip {
@@ -2109,7 +2098,7 @@
       @media (min-width: 1400px) {
         body[data-console-view="focus"] .bezel-base { display: none; }
         body[data-console-view="focus"] .bezel-focus { display: block; }
-        body[data-console-view="focus"] .shell { padding-bottom: 252px; }
+        body[data-console-view] .shell { padding-bottom: 252px; }
         body[data-console-view="focus"] .now-strip {
           flex: 0 0 auto;
           grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
@@ -2182,6 +2171,208 @@
           flex: 0 0 auto;
           min-height: min-content;
         }
+      }
+    </style>
+    <style id="console-02-declutter">
+      /* One shell for every view: the Console 02 header, a full-width workspace,
+         and panels that scroll inside themselves instead of clipping. */
+      .capture-drawer[hidden] { display: none; }
+      .capture-drawer {
+        position: fixed; z-index: 30; right: 96px; top: 92px;
+        width: min(640px, calc(100vw - 32px));
+        box-shadow: 0 18px 48px rgba(0, 0, 0, 0.6);
+      }
+      .capture-drawer .capture-panel {
+        height: auto; min-height: 0; padding-bottom: 4px;
+        background: rgba(16, 12, 9, 0.97); border: 1px solid rgba(255, 177, 90, 0.55);
+        backdrop-filter: blur(12px);
+      }
+      .capture-drawer .capture-body { height: auto; }
+      .top-actions .capture-toggle { cursor: pointer; font-weight: 800; color: #1a0f06; background: #ffb15a; border-color: #ffb15a; }
+      .top-actions .capture-toggle[aria-expanded="true"] { color: #ffb15a; background: rgba(12, 10, 8, 0.6); }
+      .workspace .scroll-list, .systems-governance, .systems-recent .panel-content, #quote-detail-content {
+        overflow-y: auto; overscroll-behavior: contain;
+        scrollbar-width: thin; scrollbar-color: rgba(255, 177, 90, 0.55) transparent;
+        mask-image: linear-gradient(180deg, #000 calc(100% - 22px), transparent);
+      }
+      @media (min-width: 1400px) {
+        body:not([data-console-view="focus"]) .shell { padding-bottom: 92px; }
+        body:not([data-console-view="focus"]) .workspace > .panel-content { overflow: hidden; }
+        body:not([data-console-view="focus"]) .view.active { height: 100%; min-height: 0; overflow: hidden; }
+        body:not([data-console-view="focus"]) .view.active > div { height: 100%; min-height: 0; box-sizing: border-box; }
+        .view .panel { min-height: 0; }
+        .view .list-panel { display: grid; grid-template-rows: auto minmax(0, 1fr); overflow: hidden; }
+
+        .board-view { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(300px, 0.8fr); }
+        .board-load-panel .panel-content { display: flex; flex-direction: column; }
+        .board-load-panel .category-content { flex: 1 1 auto; height: auto; grid-template-columns: 1fr; grid-template-rows: auto auto; align-content: start; gap: 24px; }
+        .board-load-panel .category-bars, .board-load-panel .completion-card { border: 0; padding: 0; }
+
+        .systems-view { grid-template-columns: minmax(0, 1fr) minmax(0, 0.9fr) minmax(0, 1fr); overflow: hidden; }
+        .systems-view > .panel { overflow-y: auto; }
+        .systems-side { display: grid; grid-template-rows: minmax(0, 1fr) auto minmax(120px, 0.55fr); gap: 9px; min-height: 0; }
+        .systems-side .chart-wrap { height: calc(100% - 44px); }
+        .systems-side .chart-wrap svg { height: 100%; width: 100%; }
+        .systems-recent .panel-content { display: grid; grid-template-rows: auto minmax(0, 1fr); }
+
+        .operations-view {
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          grid-template-rows: minmax(0, 0.9fr) minmax(0, 1fr) minmax(0, 1fr);
+          overflow: hidden;
+        }
+        .operations-view {
+          grid-template-areas:
+            "snapshot snapshot inbox timeline"
+            "projects scheduled enquiries errands"
+            "quotes invoices maintenance inspector";
+        }
+        .operations-view > .panel:first-child { grid-area: snapshot; overflow-y: auto; }
+        .operations-view > :has(#inbox-item-list) { grid-area: inbox; }
+        .operations-view > :has(#activity-timeline-list) { grid-area: timeline; }
+        .operations-view > :has(#operations-project-list) { grid-area: projects; }
+        .operations-view > :has(#operations-scheduled-list) { grid-area: scheduled; }
+        .operations-view > :has(#operations-enquiry-list) { grid-area: enquiries; }
+        .operations-view > :has(#operations-errand-list) { grid-area: errands; }
+        .operations-view > :has(#operations-quote-list) { grid-area: quotes; }
+        .operations-view > :has(#operations-invoice-list) { grid-area: invoices; }
+        .operations-view > :has(#operations-maintenance-list) { grid-area: maintenance; }
+        .operations-view > .quote-detail-panel { grid-area: inspector; }
+        .operations-view > :has(#inbox-item-list) { grid-template-rows: auto minmax(0, 1fr) auto; }
+        .operations-view .operations-summary .matrix { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+        .operations-view .quote-detail-panel { display: grid; grid-template-rows: auto minmax(0, 1fr); }
+
+        .livework-view {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          grid-template-rows: minmax(0, 0.8fr) auto minmax(0, 1fr);
+          grid-template-areas: "mission pipeline" "details details" "events crew";
+          gap: 9px; padding: 9px; align-content: stretch; height: 100%; overflow: hidden;
+        }
+        .livework-view > .panel:nth-child(1) { grid-area: mission; }
+        .livework-view > .panel:nth-child(2) { grid-area: pipeline; }
+        .livework-view > :has(#livework-details) { grid-area: details; }
+        .livework-view > #panel-crew { grid-area: crew; }
+        .livework-view > :has(#livework-events) { grid-area: events; }
+        .livework-view #livework-details { display: grid; grid-template-columns: repeat(9, minmax(0, 1fr)); }
+        .livework-view > .panel { overflow-y: auto; }
+        #view-voice .two-column-view > .panel { display: grid; grid-template-rows: auto minmax(0, 1fr); overflow: hidden; }
+        #view-voice .voice-controls { overflow-y: auto; }
+        #view-voice #voice-command-list { padding: 4px 12px 12px; }
+        body[data-console-view] .top-actions { right: 40px; width: calc(31vw - 64px); max-width: 560px; }
+      }
+      @media (min-width: 1400px) and (max-width: 1699px) {
+        /* The status chips wrap to a third row here; drop the nav below them. */
+        body[data-console-view] .team-nav { top: 86px; }
+        body[data-console-view] .shell { padding-top: 132px; }
+      }
+    </style>
+    <style id="console-02-legibility">
+      /* Legibility pass over the photographic backdrop: an 11px floor for real
+         labels and values, denser glass behind text, and decorative marks moved
+         clear of the text they frame. */
+      :root {
+        --glass: rgba(6, 10, 16, 0.6);
+        --glass-strong: rgba(6, 10, 16, 0.52);
+      }
+      body .telemetry span,
+      body .mini-stat span,
+      body .core-label span,
+      body .core-label small,
+      body .system-item span,
+      body .matrix-item span,
+      body .provider-card span,
+      body .completion-copy span,
+      body .priority-row small,
+      body .activity-row small,
+      body .compact-row small,
+      body .panel-header > span,
+      body #capture-title-label,
+      body #capture-detail-copy,
+      body .capture-tab,
+      body .chip,
+      body .priority-row > button.ghost,
+      body .dial span,
+      body .dial b,
+      body .source-status-row > span,
+      body .layer > span,
+      body .category-row > span,
+      body .category-row > b,
+      body .analyzer-row > b,
+      body[data-console-view="focus"] .analyzer-row > b,
+      body .layer > b,
+      body .panel small,
+      body .panel .empty,
+      body .panel > p.eyebrow {
+        font-size: 11px;
+      }
+      body .matrix-item > b,
+      body .system-item > b,
+      body .priority-row strong,
+      body .compact-row > strong,
+      body .activity-row > strong {
+        font-size: 12px;
+      }
+      body .panel > p.eyebrow { color: #e0a070; }
+      body .lw-node .lw-label,
+      body .lw-node .lw-status,
+      body .lw-node .lw-detail,
+      body .lw-pipeline > .empty,
+      body .compact-list > .empty {
+        font-size: 11px;
+        line-height: 1.35;
+      }
+      body .lw-node { min-height: min-content; }
+      body .footer { min-height: 44px; padding-block: 8px; line-height: 1.4; }
+      /* Views and rails scroll inside their own area instead of running under the lower dock. */
+      body #view-livework.active { min-height: 0; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--brass) transparent; }
+      body .livework-view > .panel { min-height: 0; }
+      body .left-rail { grid-template-rows: max-content minmax(max-content, 1fr) max-content; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--brass) transparent; }
+      body .core-label span { letter-spacing: 0.08em; }
+      body #view-settings { scrollbar-width: thin; scrollbar-color: var(--brass) transparent; }
+      body #voice-command-list .operations-row { display: grid; gap: 2px; padding-block: 5px; }
+      body #voice-command-list .operations-row small { display: block; font-size: 11px; line-height: 1.35; }
+      body .top-actions .pill,
+      body .top-actions .team-chip,
+      body .top-actions .source-pill,
+      body .top-actions a.limits-now,
+      body[data-console-view] .top-actions .pill,
+      body[data-console-view] .top-actions .team-chip,
+      body[data-console-view] .top-actions .source-pill,
+      body[data-console-view] .top-actions a.limits-now {
+        font-size: 11px;
+      }
+      body[data-console-view="focus"] .console-deck .plate {
+        background-size: 10px 2px, 2px 10px, 10px 2px, 2px 10px, 10px 2px, 2px 10px, 10px 2px, 2px 10px;
+        background-position: 3px 3px, 3px 3px, right 3px top 3px, right 3px top 3px, left 3px bottom 3px, left 3px bottom 3px, right 3px bottom 3px, right 3px bottom 3px;
+      }
+      body[data-console-view="focus"] .console-deck .console-col > .plate {
+        background-color: rgba(7, 14, 22, 0.56);
+      }
+      body[data-console-view="focus"] .data-row { grid-template-columns: minmax(0, 1fr) 32px max-content; }
+      body .chart text { paint-order: stroke; stroke: rgba(8, 10, 14, 0.85); stroke-width: 3px; }
+      /* State reads on the same line as its label so the plate stays clear of the nav rail. */
+      body[data-console-view] .title-plate {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        align-items: baseline;
+        column-gap: 10px;
+      }
+      body[data-console-view] .title-plate h1 { flex: 0 0 100%; }
+      body[data-console-view] .title-plate .sub-plate,
+      body[data-console-view] .title-plate .live-state { margin: 0; line-height: 1.2; }
+      body[data-console-view] .title-plate .live-state { font-size: 11px; }
+      body[data-console-view="focus"] #current-meta .chip,
+      body[data-console-view="focus"] #queue-count,
+      body[data-console-view="focus"] .next-caption { font-size: 12px; }
+      @media (min-width: 1400px) {
+        /* The fixed lower deck must fit inside a 1080px-tall viewport. */
+        body[data-console-view="focus"] .console-lower { bottom: 16px; height: 232px; margin: 0; align-items: end; }
+        body[data-console-view="focus"] .gauge-face { width: 232px; height: 232px; }
+        body[data-console-view="focus"] .gauge-face svg { width: 210px; height: 210px; margin: 11px auto 0; }
+        body[data-console-view="focus"] .gauge-face > span { top: 84px; font-size: 12px; }
+        body[data-console-view="focus"] .gauge-face > b { bottom: 48px; }
+        body[data-console-view="focus"] .analyzer-plate { height: 200px; }
+        body[data-console-view="focus"] #totality-bar-label { font-size: 10px; line-height: 1.2; }
       }
     </style>
 </head>
@@ -2289,6 +2480,7 @@
             <span class="pill ok" id="status-pill"><span class="dot"></span><span id="status-label">CONNECTING</span></span>
             <a class="pill limits-now" id="limits-now-chip" data-now-chip="limits" href="/settings/limits">Limits · UNKNOWN</a>
             <span class="pill" id="clock">00:00:00</span>
+            <button class="pill capture-toggle" id="capture-toggle" type="button" aria-controls="capture-drawer" aria-expanded="false">+ Add</button>
             <button class="icon-button" id="refresh" type="button" aria-label="Refresh Jarvis">↻</button>
           </div>
         </header>
@@ -2324,12 +2516,6 @@
                 </div>
               </div>
             </section>
-            <section class="panel" id="panel-crew" data-hud-panel="crew">
-              <div class="panel-content">
-                <div class="panel-header"><h2>Crew</h2><span id="crew-status">UNKNOWN</span></div>
-                <p class="crew-detail" id="crew-detail">No crew roster is on this Jarvis. Names are not invented.</p>
-              </div>
-            </section>
             <section class="panel violet left-priorities">
               <div class="panel-content">
                 <div class="panel-header"><h2>Priority stack</h2><span id="priority-count">0 QUEUED</span></div>
@@ -2349,7 +2535,7 @@
                     </section>
                     <section class="plate">
                       <h2>WAVEFORM ANALYSIS</h2>
-                      <svg class="chart" viewBox="0 0 300 72" aria-hidden="true"><g class="chart-grid" stroke="rgba(255,154,60,0.62)" stroke-width="1.15" fill="none"><path d="M8 14 H292 M8 36 H292 M8 58 H292"/><path d="M8 8 V64 M80 8 V64 M150 8 V64 M220 8 V64 M292 8 V64"/></g><g fill="#ffb15a" font-size="8" font-family="Rajdhani, sans-serif"><text x="2" y="12">100</text><text x="6" y="40">50</text><text x="10" y="62">0</text></g><g class="ornament" aria-hidden="true"><polyline points="8.0,35.0 12.5,38.3 17.0,39.8 21.5,38.0 26.0,33.7 30.5,28.9 35.0,26.4 39.6,28.0 44.1,33.2 48.6,39.3 53.1,43.1 57.6,42.1 62.1,36.5 66.6,29.0 71.1,23.8 75.6,23.9 80.1,29.6 84.6,38.0 89.1,44.7 93.7,45.8 98.2,40.5 102.7,31.5 107.2,23.4 111.7,20.9 116.2,25.4 120.7,34.7 125.2,43.8 129.7,47.8 134.2,44.4 138.7,35.4 143.2,25.6 147.7,20.2 152.3,22.2 156.8,30.6 161.3,40.7 165.8,47.1 170.3,46.6 174.8,39.3 179.3,29.4 183.8,22.1 188.3,21.3 192.8,27.2 197.3,36.5 201.8,44.2 206.3,46.2 210.9,41.7 215.4,33.4 219.9,25.8 224.4,22.9 228.9,25.9 233.4,33.0 237.9,40.1 242.4,43.5 246.9,41.8 251.4,36.2 255.9,30.0 260.4,26.4 265.0,27.1 269.5,31.2 274.0,36.3 278.5,39.6 283.0,39.6 287.5,36.8 292.0,33.0" fill="none" stroke="rgba(255,244,230,0.7)" stroke-width="1.15"/><polyline points="8.0,43.4 12.5,43.6 17.0,42.7 21.5,40.8 26.0,38.4 30.5,36.2 35.0,34.7 39.6,34.6 44.1,36.0 48.6,38.6 53.1,42.0 57.6,45.0 62.1,47.0 66.6,47.1 71.1,45.3 75.6,41.9 80.1,37.8 84.6,34.0 89.1,31.7 93.7,31.5 98.2,33.6 102.7,37.5 107.2,42.2 111.7,46.5 116.2,49.2 120.7,49.4 125.2,47.2 129.7,43.0 134.2,37.9 138.7,33.4 143.2,30.5 147.7,30.2 152.3,32.5 156.8,36.7 161.3,41.8 165.8,46.4 170.3,49.2 174.8,49.6 179.3,47.5 183.8,43.4 188.3,38.6 192.8,34.2 197.3,31.5 201.8,31.1 206.3,33.0 210.9,36.7 215.4,41.0 219.9,44.9 224.4,47.3 228.9,47.6 233.4,46.0 237.9,43.0 242.4,39.4 246.9,36.2 251.4,34.3 255.9,34.0 260.4,35.3 265.0,37.6 269.5,40.3 274.0,42.6 278.5,44.0 283.0,44.1 287.5,43.2 292.0,41.6" fill="none" stroke="#ff7a18" stroke-width="1.35" opacity="0.75"/><text x="214" y="12" fill="#ffb15a" font-size="8" font-family="Rajdhani, sans-serif">ORNAMENT</text></g><path d="M8 36 H292" stroke="#ff7a18" fill="none" stroke-width="2"/></svg>
+                      <svg class="chart" viewBox="0 0 300 72" aria-hidden="true"><g class="chart-grid" stroke="rgba(255,154,60,0.62)" stroke-width="1.15" fill="none"><path d="M8 14 H292 M8 36 H292 M8 58 H292"/><path d="M8 8 V64 M80 8 V64 M150 8 V64 M220 8 V64 M292 8 V64"/></g><g class="ornament" aria-hidden="true"><polyline points="8.0,35.0 12.5,38.3 17.0,39.8 21.5,38.0 26.0,33.7 30.5,28.9 35.0,26.4 39.6,28.0 44.1,33.2 48.6,39.3 53.1,43.1 57.6,42.1 62.1,36.5 66.6,29.0 71.1,23.8 75.6,23.9 80.1,29.6 84.6,38.0 89.1,44.7 93.7,45.8 98.2,40.5 102.7,31.5 107.2,23.4 111.7,20.9 116.2,25.4 120.7,34.7 125.2,43.8 129.7,47.8 134.2,44.4 138.7,35.4 143.2,25.6 147.7,20.2 152.3,22.2 156.8,30.6 161.3,40.7 165.8,47.1 170.3,46.6 174.8,39.3 179.3,29.4 183.8,22.1 188.3,21.3 192.8,27.2 197.3,36.5 201.8,44.2 206.3,46.2 210.9,41.7 215.4,33.4 219.9,25.8 224.4,22.9 228.9,25.9 233.4,33.0 237.9,40.1 242.4,43.5 246.9,41.8 251.4,36.2 255.9,30.0 260.4,26.4 265.0,27.1 269.5,31.2 274.0,36.3 278.5,39.6 283.0,39.6 287.5,36.8 292.0,33.0" fill="none" stroke="rgba(255,244,230,0.7)" stroke-width="1.15"/><polyline points="8.0,43.4 12.5,43.6 17.0,42.7 21.5,40.8 26.0,38.4 30.5,36.2 35.0,34.7 39.6,34.6 44.1,36.0 48.6,38.6 53.1,42.0 57.6,45.0 62.1,47.0 66.6,47.1 71.1,45.3 75.6,41.9 80.1,37.8 84.6,34.0 89.1,31.7 93.7,31.5 98.2,33.6 102.7,37.5 107.2,42.2 111.7,46.5 116.2,49.2 120.7,49.4 125.2,47.2 129.7,43.0 134.2,37.9 138.7,33.4 143.2,30.5 147.7,30.2 152.3,32.5 156.8,36.7 161.3,41.8 165.8,46.4 170.3,49.2 174.8,49.6 179.3,47.5 183.8,43.4 188.3,38.6 192.8,34.2 197.3,31.5 201.8,31.1 206.3,33.0 210.9,36.7 215.4,41.0 219.9,44.9 224.4,47.3 228.9,47.6 233.4,46.0 237.9,43.0 242.4,39.4 246.9,36.2 251.4,34.3 255.9,34.0 260.4,35.3 265.0,37.6 269.5,40.3 274.0,42.6 278.5,44.0 283.0,44.1 287.5,43.2 292.0,41.6" fill="none" stroke="#ff7a18" stroke-width="1.35" opacity="0.75"/><text x="214" y="12" fill="#ffb15a" font-size="8" font-family="Rajdhani, sans-serif">ORNAMENT</text></g><path d="M8 36 H292" stroke="#ff7a18" fill="none" stroke-width="2"/><g fill="#ffb15a" font-size="8" font-family="Rajdhani, sans-serif"><text x="2" y="12">100</text><text x="6" y="40">50</text><text x="10" y="62">0</text></g></svg>
                       <p class="signal-tag" title="The wave is ornament, not a signal." id="waveform-state">No waveform signal.</p>
                     </section>
                     <section class="plate">
@@ -2568,9 +2754,12 @@
                 </div>
               </section>
               <section class="view" id="view-board">
-                <div class="two-column-view">
+                <div class="two-column-view board-view">
                   <article class="panel list-panel violet"><div class="panel-header"><h2>Active tasks</h2><span id="board-active-count"></span></div><div class="scroll-list" id="active-list"></div></article>
                   <article class="panel list-panel green"><div class="panel-header"><h2>Completed</h2><span id="board-done-count"></span></div><div class="scroll-list" id="done-list"></div></article>
+                      <article class="panel violet board-load-panel">
+                        <div class="panel-content"><div class="panel-header"><h2>Task load by domain</h2><span>LIVE DURABLE STATE</span></div><div class="category-content"><div class="category-bars" id="category-bars"></div><div class="completion-card"><div class="completion-ring"><svg viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r="49" fill="none" stroke="var(--line)" stroke-width="8" /><circle id="completion-ring" cx="60" cy="60" r="49" pathLength="100" fill="none" stroke="var(--green)" stroke-width="8" stroke-linecap="round" stroke-dasharray="0 100" transform="rotate(-90 60 60)" /></svg><div class="completion-copy"><b id="completion-percent">0%</b><span>Complete</span></div></div></div></div></div>
+                      </article>
                 </div>
               </section>
               <section class="view" id="view-reminders">
@@ -2691,6 +2880,12 @@
                       <div class="lw-node" id="lw-node-omega"><span class="lw-label"><span class="lw-dot"></span>ΩΣ</span><b class="lw-status" id="lw-status-omega">—</b><span class="lw-detail" id="lw-detail-omega">Awaiting ΩΣ completion.</span></div>
                     </div>
                   </article>
+                      <section class="panel" id="panel-crew" data-hud-panel="crew">
+                        <div class="panel-content">
+                          <div class="panel-header"><h2>Crew</h2><span id="crew-status">UNKNOWN</span></div>
+                          <p class="crew-detail" id="crew-detail">No crew roster is on this Jarvis. Names are not invented.</p>
+                        </div>
+                      </section>
                   <article class="panel list-panel green">
                     <div class="panel-header"><h2>Mission events</h2><span id="livework-events-status">AWAITING DATA</span></div>
                     <ul class="compact-list scroll-list" id="livework-events"></ul>
@@ -2710,7 +2905,9 @@
                       <div class="system-item"><span>Timezone</span><b id="timezone">UNKNOWN</b></div>
                     </div>
                     <div class="layer-grid" id="layer-grid"></div>
-                    <div class="panel-header"><h3>Integration commissioning</h3><span>EVIDENCE-BACKED</span></div>
+                  </article>
+                  <article class="panel green systems-governance">
+                    <div class="panel-header"><h2>Integration commissioning</h2><span>EVIDENCE-BACKED</span></div>
                     <div class="system-grid" id="integration-grid"></div>
                     <div class="panel-header"><h3>Reasoning</h3><span id="reasoning-verification">UNKNOWN</span></div>
                     <div class="system-grid">
@@ -2723,7 +2920,24 @@
                     <div class="panel-header"><h3>Approvals</h3><span id="approvals-stage">UNKNOWN</span></div>
                     <p class="operations-headline" id="approvals-source">Tool-action proposals are not on this snapshot. This console does not approve, reject, or execute.</p>
                   </article>
-                  <article class="panel green"><div class="panel-header"><h2>Layer readiness radar</h2><span>LIVE STATUS</span></div><div class="chart-wrap"><svg viewBox="0 0 400 400" role="img" aria-label="Jarvis runtime layer readiness"><g class="radar-grid" id="radar-grid"></g><g class="radar-axes" id="radar-axes"></g><polygon id="layer-radar-polygon" points="200,200" fill="rgba(196,123,74,.18)" stroke="var(--violet)" stroke-width="3" /><g class="radar-labels" id="radar-labels"></g></svg></div></article>
+                  <div class="systems-side">
+                    <article class="panel violet systems-radar"><div class="panel-header"><h2>Layer readiness radar</h2><span>LIVE STATUS</span></div><div class="chart-wrap"><svg viewBox="0 0 400 400" role="img" aria-label="Jarvis runtime layer readiness"><g class="radar-grid" id="radar-grid"></g><g class="radar-axes" id="radar-axes"></g><polygon id="layer-radar-polygon" points="200,200" fill="rgba(196,123,74,.18)" stroke="var(--violet)" stroke-width="3" /><g class="radar-labels" id="radar-labels"></g></svg></div></article>
+                      <section class="panel green systems-provider">
+                        <div class="panel-content">
+                          <div class="panel-header"><h2>Provider</h2><span id="provider-link-state">CONNECTING</span></div>
+                          <div class="provider-card"><span>Authorised provider</span><b id="right-provider">AWAITING SNAPSHOT</b></div>
+                          <div class="matrix">
+                            <div class="matrix-item"><span>Reachability</span><b id="provider-reachability">UNKNOWN</b></div>
+                            <div class="matrix-item"><span>Authentication</span><b id="provider-authentication">UNKNOWN</b></div>
+                            <div class="matrix-item"><span>Schema</span><b id="provider-schema">UNKNOWN</b></div>
+                            <div class="matrix-item"><span>Version</span><b id="provider-version">DEVELOPMENT</b></div>
+                          </div>
+                        </div>
+                      </section>
+                      <section class="panel violet systems-recent">
+                        <div class="panel-content"><div class="panel-header"><h2>Recent</h2><span>SESSION</span></div><ul class="activity-list" id="activity-list"></ul></div>
+                      </section>
+                  </div>
                 </div>
               </section>
               <section class="view" id="view-settings">
@@ -2970,32 +3184,14 @@
           </section>
           <aside class="right-rail">
             <section class="panel green">
-              <div class="panel-content">
-                <div class="panel-header"><h2>Ops</h2><span id="provider-link-state">CONNECTING</span></div>
-                <div class="provider-card"><span>Authorised provider</span><b id="right-provider">AWAITING SNAPSHOT</b></div>
-                <div class="matrix">
-                  <div class="matrix-item"><span>Reachability</span><b id="provider-reachability">UNKNOWN</b></div>
-                  <div class="matrix-item"><span>Authentication</span><b id="provider-authentication">UNKNOWN</b></div>
-                  <div class="matrix-item"><span>Schema</span><b id="provider-schema">UNKNOWN</b></div>
-                  <div class="matrix-item"><span>Version</span><b id="provider-version">DEVELOPMENT</b></div>
-                </div>
-              </div>
-            </section>
-            <section class="panel violet">
-              <div class="panel-content"><div class="panel-header"><h2>Recent</h2><span>SESSION</span></div><ul class="activity-list" id="activity-list"></ul></div>
-            </section>
-            <section class="panel green">
               <div class="panel-content"><div class="panel-header"><h2>Upcoming</h2><span id="right-reminder-count">0 TRACKED</span></div><ul class="compact-list" id="right-reminder-list"></ul></div>
             </section>
           </aside>
-          <section class="bottom-band">
-            <article class="panel violet">
-              <div class="panel-content"><div class="panel-header"><h2>Task load by domain</h2><span>LIVE DURABLE STATE</span></div><div class="category-content"><div class="category-bars" id="category-bars"></div><div class="completion-card"><div class="completion-ring"><svg viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r="49" fill="none" stroke="var(--line)" stroke-width="8" /><circle id="completion-ring" cx="60" cy="60" r="49" pathLength="100" fill="none" stroke="var(--green)" stroke-width="8" stroke-linecap="round" stroke-dasharray="0 100" transform="rotate(-90 60 60)" /></svg><div class="completion-copy"><b id="completion-percent">0%</b><span>Complete</span></div></div></div></div></div>
-            </article>
-            <article class="panel green">
+        </section>
+        <section class="capture-drawer" id="capture-drawer" aria-label="Command capture" hidden>
+            <article class="panel green capture-panel">
               <div class="panel-content"><div class="panel-header"><h2>Command capture</h2><span>REAL MCP OPERATIONS</span></div><div class="capture-body"><div class="capture-tabs"><button class="capture-tab active" type="button" data-capture="task">TASK</button><button class="capture-tab" type="button" data-capture="reminder">REMINDER</button></div><form class="capture-form" id="capture-form"><label><span id="capture-title-label">Task command</span><input id="capture-title" maxlength="500" autocomplete="off" required /></label><label id="capture-detail-label"><span id="capture-detail-copy">Category</span><select id="capture-category"><option value="personal">Personal</option><option value="work">Work</option><option value="builds">Builds</option><option value="money">Money</option><option value="life">Life</option></select><input id="capture-due" maxlength="500" placeholder="Friday 9am" autocomplete="off" hidden /></label><button class="capture-submit" id="capture-submit" type="submit">ADD TASK</button></form></div></div>
             </article>
-          </section>
         </section>
         <footer class="footer"><div class="stream"><span class="live">● LIVE</span><span id="footer-status">Jarvis bridge initialising</span><span>Warm Instrument · calm glass · one focus · standing distance</span><span>Durable operations snapshot</span><span class="guard">Production boundary secured</span></div><span>JARVIS PRIME OMNI · DEVELOPMENT</span></footer>
       </section>
@@ -3004,7 +3200,7 @@
     <script>
       (() => {
         "use strict";
-        const state = { status: null, generalSettings: null, lastStatusAt: 0, tasks: [], reminders: [], tasksLoaded: false, remindersLoaded: false, brief: null, quotes: [], quoteRegisterStatus: "unavailable", counts: { activeTasks: 0, completedTasks: 0, reminders: 0 }, captureMode: "task", activities: [], selectedQuoteSummary: null, selectedQuote: null, quoteDetailState: "empty", quoteRequestGeneration: 0, inbox: null, activity: null, liveWork: null, credentials: null };
+        const state = { status: null, generalSettings: null, lastStatusAt: 0, tasks: [], reminders: [], tasksLoaded: false, remindersLoaded: false, brief: null, quotes: [], quoteRegisterStatus: "unavailable", counts: { activeTasks: 0, completedTasks: 0, reminders: 0 }, captureMode: "task", activities: [], selectedQuoteSummary: null, selectedQuote: null, quoteDetailState: "empty", quoteRequestGeneration: 0, inbox: null, activity: null, liveWork: null, credentials: null, approvals: null };
         const STATUS_STALE_MS = 45000;
         let rpcId = 0;
         let healthCheckInFlight = false;
@@ -3143,7 +3339,7 @@
             healthCheckInFlight = false;
           }
         }
-        function update(result) { const data = structured(result); if (!data || typeof data !== "object") return; if (data.status && typeof data.status === "object") { state.status = data.status; state.lastStatusAt = Date.now(); } if (data.settings && data.settings.timezone && typeof data.settings.timezone === "object") state.generalSettings = data.settings; if (Array.isArray(data.tasks)) { state.tasks = data.tasks; state.tasksLoaded = true; } if (Array.isArray(data.reminders)) { state.reminders = data.reminders; state.remindersLoaded = true; } if (data.brief && typeof data.brief === "object") state.brief = data.brief; if (data.quoteRegister && typeof data.quoteRegister === "object") { state.quoteRegisterStatus = data.quoteRegister.status === "ready" ? "ready" : "unavailable"; state.quotes = Array.isArray(data.quoteRegister.quotes) ? data.quoteRegister.quotes : []; } if ("inbox" in data) state.inbox = data.inbox; if ("activity" in data) state.activity = data.activity; if ("liveWork" in data) state.liveWork = data.liveWork; if ("credentials" in data) state.credentials = data.credentials; if (data.counts && typeof data.counts === "object") state.counts = data.counts; else recalc(); render(); }
+        function update(result) { const data = structured(result); if (!data || typeof data !== "object") return; if (data.status && typeof data.status === "object") { state.status = data.status; state.lastStatusAt = Date.now(); } if (data.settings && data.settings.timezone && typeof data.settings.timezone === "object") state.generalSettings = data.settings; if (Array.isArray(data.tasks)) { state.tasks = data.tasks; state.tasksLoaded = true; } if (Array.isArray(data.reminders)) { state.reminders = data.reminders; state.remindersLoaded = true; } if (data.brief && typeof data.brief === "object") state.brief = data.brief; if (data.quoteRegister && typeof data.quoteRegister === "object") { state.quoteRegisterStatus = data.quoteRegister.status === "ready" ? "ready" : "unavailable"; state.quotes = Array.isArray(data.quoteRegister.quotes) ? data.quoteRegister.quotes : []; } if ("inbox" in data) state.inbox = data.inbox; if ("activity" in data) state.activity = data.activity; if ("liveWork" in data) state.liveWork = data.liveWork; if ("credentials" in data) state.credentials = data.credentials; if ("approvals" in data) state.approvals = data.approvals; else if (data.counts && typeof data.counts === "object") state.approvals = null; if (data.counts && typeof data.counts === "object") state.counts = data.counts; else recalc(); render(); }
         window.addEventListener("message", (event) => { if (event.source !== window.parent) return; const message = event.data; if (!message || message.jsonrpc !== "2.0") return; if (typeof message.id === "number") { const waiting = pending.get(message.id); if (!waiting) return; pending.delete(message.id); if (message.error) waiting.reject(message.error); else waiting.resolve(message.result); return; } if (message.method === "ui/notifications/tool-result") update(message.params); }, { passive: true });
         const bridgeReady = (async () => { await request("ui/initialize", { appInfo: { name: "jarvis-dashboard", version: "0.2.0" }, appCapabilities: {}, protocolVersion: "2026-01-26" }); notify("ui/notifications/initialized", {}); bridgeInitialised = true; void checkConnectionHealth(true); activity("HUD bridge online", "MCP Apps connection initialised"); })();
         async function callTool(name, args = {}) { await bridgeReady; const result = await request("tools/call", { name, arguments: args }); update(result); return result; }
@@ -3566,6 +3762,13 @@
           if (layers.some((layer) => !layer || layer.status !== "ready")) return "degraded";
           return "idle";
         }
+        function hudPresenceInput() {
+          const approvals = state.approvals;
+          if (approvals && approvals.status === "ready") {
+            return { status: state.status, proposedApprovalCount: approvals.proposedCount };
+          }
+          return { status: state.status };
+        }
         function limitsChipState() {
           const chip = byId("limits-now-chip");
           const label = chip && chip.textContent ? chip.textContent : "";
@@ -3576,6 +3779,15 @@
           const stage = byId("approvals-stage");
           const source = byId("approvals-source");
           if (!stage || !source) return;
+          const approvals = state.approvals;
+          if (approvals && approvals.status === "ready") {
+            const count = approvals.proposedCount + (approvals.capped ? "+" : "");
+            text(stage, approvals.proposedCount > 0 ? count + " PROPOSED" : "NONE PROPOSED");
+            text(source, approvals.proposedCount > 0
+              ? count + " governed tool-action proposal(s) await approval. This console does not approve, reject, or execute."
+              : "No governed tool-action proposals await approval. This console does not approve, reject, or execute.");
+            return;
+          }
           const inbox = state.inbox;
           if (!inbox || !Array.isArray(inbox.sources)) {
             text(stage, "UNKNOWN");
@@ -3603,7 +3815,7 @@
             const next = upcoming[0];
             text(byId("chip-next"), next ? "Next · " + reminderTime(next) : "Next · NONE");
           }
-          const presence = deriveHudPresence({ status: state.status });
+          const presence = deriveHudPresence(hudPresenceInput());
           text(byId("chip-presence"), "Presence · " + presence.toUpperCase());
           const presenceEl = byId("hud-presence");
           if (presenceEl) text(presenceEl, presence.toUpperCase());
@@ -3712,7 +3924,7 @@
           text(byId("analyzer-persistence"), persistence);
           text(byId("analyzer-z"), zState);
           text(byId("analyzer-limits"), limitsChipState());
-          text(byId("analyzer-presence"), deriveHudPresence({ status: state.status }).toUpperCase());
+          text(byId("analyzer-presence"), deriveHudPresence(hudPresenceInput()).toUpperCase());
           const live = state.liveWork;
           let liveWord = "UNKNOWN";
           if (live && live.status === "unavailable") liveWord = "UNAVAILABLE";
@@ -3859,6 +4071,9 @@
           var root = document.getElementById("voice-profiles");
           if (!root) return;
           var VOICE_PROFILES = ["crawler", "workshop", "trailer", "client"];
+          // How long a profile switch waits for the command queued before it.
+          // A request that never answers must not leave the profile paused.
+          var PROFILE_SWITCH_WAIT_MS = 10000;
           var WAKE_WORD = "jarvis";
           var caps = voiceCapabilities(typeof window !== "undefined" ? window : {});
           var state = {
@@ -4024,6 +4239,15 @@
           function cancelSpeech() {
             if (caps.synthesis) try { window.speechSynthesis.cancel(); } catch (error) { /* best-effort */ }
           }
+          function settledWithin(promise, ms) {
+            return new Promise(function (resolve) {
+              var timer = setTimeout(function () { resolve(false); }, ms);
+              promise.then(
+                function () { clearTimeout(timer); resolve(true); },
+                function () { clearTimeout(timer); resolve(true); },
+              );
+            });
+          }
           function switchProfile(profile) {
             var previousCommands = state.commandQueue;
             var id = invalidateSession();
@@ -4033,11 +4257,13 @@
             interruptRecognition();
             cancelSpeech();
             renderNotice("Changing voice profile. Commands are paused until the server acknowledges it.");
-            var path = id ? "/sessions/" + encodeURIComponent(id) + "/profile" : "/sessions";
             // Do not let an already-sent utterance arrive in a different profile on this id.
-            (id ? previousCommands : Promise.resolve())
-              .then(function () {
-                if (generation !== state.generation) { retireSession(id); return null; }
+            // If it never settles, give up on the id: retire it and start a fresh session.
+            (id ? settledWithin(previousCommands, PROFILE_SWITCH_WAIT_MS) : Promise.resolve(true))
+              .then(function (settled) {
+                if (generation !== state.generation || !settled) retireSession(id);
+                if (generation !== state.generation) return null;
+                var path = id && settled ? "/sessions/" + encodeURIComponent(id) + "/profile" : "/sessions";
                 return api(path, { method: "POST", body: JSON.stringify({ profile: profile }) }).then(readResponse);
               })
               .then(function (data) {
@@ -4364,6 +4590,14 @@
         byId("persistence-restore-v4-submit").addEventListener("click", () => { void runPersistence("restore-v4", { file: byId("persistence-restore-v4-file").value.trim(), destination: byId("persistence-restore-v4-dir").value.trim(), allowPartial: byId("persistence-restore-v4-partial").checked, acknowledgePartial: byId("persistence-restore-v4-ack").checked, resume: false, typedConfirmation: byId("persistence-restore-v4-phrase").value.trim() }, "persistence-restore-v4-result"); });
         byId("persistence-resume-v4-check").addEventListener("click", async () => { const outcome = await runPersistence("inspect-v4-destination", { file: byId("persistence-resume-v4-file").value.trim(), destination: byId("persistence-resume-v4-dir").value.trim() }, "persistence-resume-v4-result"); byId("persistence-resume-v4-submit").disabled = !(outcome && outcome.destination && outcome.destination.resumeAvailable); });
         byId("persistence-resume-v4-submit").addEventListener("click", () => { void runPersistence("resume-v4", { file: byId("persistence-resume-v4-file").value.trim(), destination: byId("persistence-resume-v4-dir").value.trim(), allowPartial: byId("persistence-resume-v4-partial").checked, acknowledgePartial: byId("persistence-resume-v4-ack").checked, resume: true, typedConfirmation: byId("persistence-resume-v4-phrase").value.trim() }, "persistence-resume-v4-result"); });
+        function setCaptureDrawer(open) {
+          const drawer = byId("capture-drawer"), toggle = byId("capture-toggle");
+          drawer.hidden = !open;
+          toggle.setAttribute("aria-expanded", String(open));
+          if (open) byId("capture-title").focus(); else toggle.focus();
+        }
+        byId("capture-toggle").addEventListener("click", () => setCaptureDrawer(byId("capture-drawer").hidden));
+        document.addEventListener("keydown", (event) => { if (event.key === "Escape" && !byId("capture-drawer").hidden) setCaptureDrawer(false); });
         byId("capture-form").addEventListener("submit",async (event) => { event.preventDefault(); const input = byId("capture-title"); const title = input.value.trim(); if (!title) return; const button = byId("capture-submit"); button.disabled = true; try { if (state.captureMode === "task") { await callTool("create_task",{ title, category: byId("capture-category").value }); activity("Task captured",title); toast(`Added ${title}`); } else { const due = byId("capture-due").value.trim(); await callTool("create_reminder",{ title, ...(due ? { due: { text: due } } : {}) }); byId("capture-due").value = ""; activity("Reminder captured",title); toast(`Added reminder ${title}`); } input.value = ""; } catch { toast(state.captureMode === "task" ? "Could not add that task." : "Could not add that reminder.",true); } finally { button.disabled = false; } });
         function clock() { text(byId("clock"),new Date().toLocaleTimeString("en-AU",{hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:false})); }
         bridgeReady.then(async () => { try { update(await request("tools/call", { name: "get_general_settings", arguments: {} }, 10000)); } catch { state.generalSettings = null; renderGeneral(); } }).catch(() => {});

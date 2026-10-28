@@ -133,6 +133,76 @@ export function assessVisibility(measurement) {
   return failures;
 }
 
+// Every non-Focus view must fit its panels inside the workspace on desktop
+// widths. A panel that runs past the workspace, or a heading clipped by its own
+// panel, is a cut-off page; long content scrolls inside the panel instead.
+export function assessPanels(view, { workspace, panels }) {
+  const failures = [];
+  const inside = (inner, outer) =>
+    inner.left >= outer.left - 0.5 &&
+    inner.top >= outer.top - 0.5 &&
+    inner.right <= outer.right + 0.5 &&
+    inner.bottom <= outer.bottom + 0.5;
+  if (!panels.length) failures.push(`${view}: no panels rendered`);
+  for (const panel of panels) {
+    // A panel inside a scrolling view is reachable by scrolling, not cut off.
+    if (!panel.scrolls && !inside(panel.box, workspace))
+      failures.push(`${view}: panel "${panel.title}" runs outside the workspace`);
+    if (panel.heading && !inside(panel.heading, panel.box))
+      failures.push(`${view}: heading "${panel.title}" is clipped by its panel`);
+    if (panel.box.bottom - panel.box.top < 48)
+      failures.push(
+        `${view}: panel "${panel.title}" is squeezed to ${Math.round(panel.box.bottom - panel.box.top)}px`,
+      );
+  }
+  return failures;
+}
+
+// Runs in the real browser and only reads geometry.
+export function measurePanels() {
+  const rectangle = (rect) => ({
+    left: rect.left,
+    top: rect.top,
+    right: rect.right,
+    bottom: rect.bottom,
+  });
+  const content = document.querySelector(".workspace > .panel-content");
+  const viewport = { left: 0, top: 0, right: innerWidth, bottom: innerHeight };
+  const bounds = content ? rectangle(content.getBoundingClientRect()) : viewport;
+  const workspace = {
+    left: Math.max(bounds.left, 0),
+    top: Math.max(bounds.top, 0),
+    right: Math.min(bounds.right, innerWidth),
+    bottom: Math.min(bounds.bottom, innerHeight),
+  };
+  const panels = [...document.querySelectorAll(".view.active .panel, .view.active .settings-card")]
+    .filter((panel) => !panel.closest("[hidden]") && getComputedStyle(panel).display !== "none")
+    .filter((panel) => !panel.parentElement.closest(".view.active .panel"))
+    .filter((panel) => panel.getClientRects().length > 0)
+    .map((panel) => {
+      const heading = panel.querySelector(".panel-header h2, .panel-header h3, h2, h3");
+      let scrolls = false;
+      for (
+        let node = panel.parentElement;
+        node && !node.classList.contains("workspace");
+        node = node.parentElement
+      ) {
+        if (
+          /^(auto|scroll)$/.test(getComputedStyle(node).overflowY) &&
+          node.scrollHeight > node.clientHeight + 0.5
+        )
+          scrolls = true;
+      }
+      return {
+        title: (heading?.textContent || panel.className).trim().slice(0, 60),
+        box: rectangle(panel.getBoundingClientRect()),
+        heading: heading ? rectangle(heading.getBoundingClientRect()) : null,
+        scrolls,
+      };
+    });
+  return { workspace, panels };
+}
+
 // Runs in the real browser. No production styles or element sizes are changed.
 export function measureElement(selector, { text = true, hitTest = true } = {}) {
   const element = document.querySelector(selector);
@@ -588,10 +658,45 @@ async function runScenario(cdp, html, fixtureName, viewport, outputDir) {
       if ((await evaluate("document.body.dataset.consoleView")) !== view)
         throw new Error(`Navigation to ${view} did not activate`);
       if (view === "board") {
-        await inspect(".brand-legal", { hitTest: false });
-        await inspect(".rivet", { text: false, hitTest: false });
+        // Every view now shares the Console 02 header: the kicker names the
+        // business, and each status chip and nav button must stay hit-testable.
+        await inspect(".brand-kicker", { hitTest: false });
+        for (const control of await evaluate(
+          `[...document.querySelectorAll(".top-actions > [id]")].map((node) => "#" + node.id)`,
+        ))
+          await inspect(control, { text: false });
+        for (const name of [
+          "focus",
+          "board",
+          "reminders",
+          "operations",
+          "livework",
+          "systems",
+          "voice",
+          "settings",
+        ])
+          await inspect(`[data-view="${name}"]`, { text: false });
         await screenshot("board");
       } else await inspectFocus();
+    }
+    if (viewport.width >= 1400) {
+      for (const view of [
+        "board",
+        "reminders",
+        "operations",
+        "livework",
+        "systems",
+        "voice",
+        "settings",
+      ]) {
+        await evaluate(`document.querySelector('[data-view="${view}"]').click()`);
+        await evaluate(
+          "new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))",
+        );
+        failures.push(...assessPanels(view, await evaluate(`(${measurePanels.toString()})()`)));
+        await screenshot(view);
+      }
+      await evaluate(`document.querySelector('[data-view="focus"]').click()`);
     }
     const overflowingRightChecks = rightColumnScrollChecks.filter(
       (check) => check.scrollHeight > check.clientHeight + 0.5,

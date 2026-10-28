@@ -69,6 +69,12 @@ export interface ToolActionService {
   }): Promise<ToolAction>;
   reject(input: { actionId: string; projectId: string; reason: string }): Promise<ToolAction>;
   /**
+   * Owner-wide, bounded count of `proposed` actions for the HUD presence read.
+   * Optional for the same reason as `revoke`; a service without it leaves the
+   * HUD approval count unavailable rather than zero.
+   */
+  countProposed?(input: { limit: number }): Promise<{ count: number; capped: boolean }>;
+  /**
    * Optional on the interface (rather than required, like the other methods)
    * so existing `ToolActionService` implementations/fakes elsewhere in the
    * codebase don't need updating before this capability has an HTTP route —
