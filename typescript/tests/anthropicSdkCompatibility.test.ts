@@ -39,7 +39,10 @@ describe("Anthropic SDK compatibility", { concurrency: false }, () => {
     assert.equal(await createAnthropicDecider(CONFIG)(REQUEST), "deny");
     assert.equal(calls.length, 1);
     assert.equal(calls[0]?.url, "https://api.anthropic.com/v1/messages");
-    assert.equal(calls[0]?.headers.get("x-api-key"), CONFIG.apiKey);
+    // @anthropic-ai/sdk v1 sends the API key as `Authorization: Bearer <key>`
+    // rather than the legacy `x-api-key` header (see client.apiKeyAuth()).
+    assert.equal(calls[0]?.headers.get("authorization"), `Bearer ${CONFIG.apiKey}`);
+    assert.equal(calls[0]?.headers.has("x-api-key"), false);
     assert.equal(calls[0]?.headers.has("traceparent"), false);
     assert.equal(calls[0]?.body.model, CONFIG.model);
     const output = calls[0]?.body.output_config as { format: { type: string } };
