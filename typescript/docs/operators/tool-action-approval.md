@@ -73,6 +73,20 @@ expired reusable action is now refused with the same `errorCode`s (`"not-authori
 as the single-use path above, and expiry is durably observed the same way. Neither block reason invokes the
 provider.
 
+A re-check alone still left a gap: it committed, then the effect ran, and a revoke or expiry could land in
+between. A successful `verifyExecutionEligibility` therefore also writes a short **execution lease** in the
+same transaction, keyed by a fresh ID per attempt (never the idempotency key, so two concurrent attempts never
+share a lease). The executor releases it with `releaseExecutionLease` once the provider has actually settled,
+whatever the outcome. A timed-out provider may ignore its abort signal and still act, so while it runs the
+executor renews the lease every 10s (`renewExecutionLease`); revoke stays blocked for as long as the provider
+runs. A lease only lapses once renewals stop, which means the process running the provider has stopped too. An action holds at most 32 live leases, with IDs of at most 128
+characters; beyond that the check fails closed. `revoke()` refuses while a live lease exists
+("execution in flight"). Convex serializes the two writes to the same document, so either the revoke lands first
+and the check reports `"not-approved"`, or the check lands first and the revoke waits for the lease. A lease
+lasts 35s (the executor's 30s maximum effect timeout plus a 5s margin) and ends on its own if the release is
+lost. A check is also refused as `"expired"` when a TTL approval would lapse before the lease ends, so an
+effect never runs past its approval.
+
 An ΩΣ contract or mission refusal from `claimSingleUseExecution`
 (`omega-mission-not-executable`, `omega-contract-not-authorized`,
 `omega-contract-authority-mismatch`, `omega-contract-expired`) is also not
@@ -95,9 +109,10 @@ consumed-conflict refusal applies only to single-use actions** — the only ones
 whose outcome can meaningfully race a revocation: it refuses to revoke a single-use action that has already
 produced a completed execution receipt — whichever terminal fact (execution completing, or revocation) is
 recorded first is authoritative; the loser gets a clear, non-destructive rejection, never a silent no-op. A
-**reusable** action has no such single-attempt invariant to protect: it may be revoked at any time after
-approval regardless of how many completed execution receipts already exist — revocation there only ever
-stops the _next_ attempt (see "Operator recovery" below). Neither `expired` nor `revoked` deletes the action
+**reusable** action has no such single-attempt invariant to protect: it may be revoked after approval
+regardless of how many completed execution receipts already exist, except while an execution lease is live.
+Then the revoke is refused with "execution in flight" and succeeds once that execution finishes (or, if its
+process died, 35s after the last renewal). Revocation there only ever stops the _next_ attempt (see "Operator recovery" below). Neither `expired` nor `revoked` deletes the action
 or any audit evidence; both are recorded exactly like `approved`/`rejected` today.
 
 ## Proposal requirements
