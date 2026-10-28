@@ -3,6 +3,7 @@ import test from "node:test";
 import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import {
+  assessPanels,
   assessVisibility,
   assessNoOverlap,
   fixtureFor,
@@ -359,4 +360,47 @@ test("wide Focus content above the bezel is not reported as covered", () => {
   const { result, sampled } = bezelMeasurement({ shellZ: 10 });
   assert.equal(assessVisibility(result).length, 0);
   assert.equal(sampled.length, 0);
+});
+
+test("assessPanels fails cut-off, clipped, and squeezed panels", () => {
+  const workspace = rect(0, 100, 1800, 1000);
+  const panel = (
+    title,
+    box,
+    heading = rect(box.left + 8, box.top + 8, box.left + 120, box.top + 24),
+  ) => ({ title, box, heading });
+  assert.deepEqual(
+    assessPanels("systems", { workspace, panels: [panel("Runtime", rect(10, 110, 600, 990))] }),
+    [],
+  );
+  assert.match(
+    assessPanels("systems", {
+      workspace,
+      panels: [panel("Approvals", rect(10, 900, 600, 1100))],
+    })[0],
+    /Approvals" runs outside/,
+  );
+  assert.match(
+    assessPanels("operations", {
+      workspace,
+      panels: [panel("Inbox", rect(10, 110, 600, 300), rect(18, 290, 120, 310))],
+    })[0],
+    /heading "Inbox" is clipped/,
+  );
+  assert.match(
+    assessPanels("operations", {
+      workspace,
+      panels: [panel("Timeline", rect(10, 110, 600, 112), null)],
+    })[0],
+    /squeezed to 2px/,
+  );
+  assert.match(assessPanels("voice", { workspace, panels: [] })[0], /no panels/);
+  // Settings scrolls its own view, so a card below the fold is reachable.
+  assert.deepEqual(
+    assessPanels("settings", {
+      workspace,
+      panels: [{ ...panel("Display", rect(10, 900, 600, 1300)), scrolls: true }],
+    }),
+    [],
+  );
 });

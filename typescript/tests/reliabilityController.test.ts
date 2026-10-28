@@ -7,6 +7,17 @@ import {
   ReliabilityController,
 } from "../src/reliability/reliabilityController.js";
 
+// A probe that settles only when the test says so. The timeout always fires
+// first, however loaded the event loop is; a timer racing the 10ms probe
+// timeout let both callbacks run in one tick under full-suite load.
+function heldProbe() {
+  let release!: (value: string) => void;
+  const settled = new Promise<string>((resolve) => {
+    release = resolve;
+  });
+  return { probe: () => settled, release };
+}
+
 describe("ReliabilityController", () => {
   it("opens after repeated probe failures and blocks until the cooldown expires", async () => {
     let now = 1_000;
@@ -83,9 +94,10 @@ describe("ReliabilityController", () => {
       probeTimeoutMs: 10,
     });
 
-    const slowProbe = () => new Promise<string>((resolve) => setTimeout(() => resolve("late"), 40));
+    const slow = heldProbe();
 
-    await assert.rejects(controller.run("persistence", slowProbe), ProbeTimeoutError);
+    await assert.rejects(controller.run("persistence", slow.probe), ProbeTimeoutError);
+    slow.release("late");
 
     const afterTimeout = controller.snapshot("persistence");
     assert.equal(afterTimeout.state, "open");
@@ -106,15 +118,15 @@ describe("ReliabilityController", () => {
       probeTimeoutMs: 10,
     });
 
-    // Resolves naturally, well after the 10ms probe timeout has already fired.
-    const slowProbe = () => new Promise<string>((resolve) => setTimeout(() => resolve("late"), 40));
+    const slow = heldProbe();
 
-    await assert.rejects(controller.run("persistence", slowProbe), ProbeTimeoutError);
+    await assert.rejects(controller.run("persistence", slow.probe), ProbeTimeoutError);
     assert.equal(controller.snapshot("persistence").state, "open");
 
-    // Wait past the slow probe's own natural resolution. It must not
-    // retroactively flip the breaker back to closed once it does settle.
-    await new Promise((resolve) => setTimeout(resolve, 60));
+    // Settle the probe only now, after its timeout. The late result must not
+    // retroactively flip the breaker back to closed.
+    slow.release("late");
+    await new Promise((resolve) => setImmediate(resolve));
     assert.equal(controller.snapshot("persistence").state, "open");
   });
 
