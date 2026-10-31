@@ -15,6 +15,17 @@ function harness() {
   return convexTest(schema, modules);
 }
 
+// convex-test (>= 0.0.63) only lets a handler's `Date.now()` follow vitest fake
+// timers when they are installed *before* the harness is created; timers
+// toggled after creation leave handlers on the real wall clock. These tests pin
+// approval/authority/claim timestamps to small synthetic values, so they must
+// establish the fake clock up front and then move it with `vi.setSystemTime`.
+// `afterEach` restores real timers.
+function harnessAtFakeNow(now = 10_000) {
+  vi.useFakeTimers({ now });
+  return harness();
+}
+
 beforeEach(() => {
   vi.stubEnv("JARVIS_SERVICE_TOKEN", SERVICE_TOKEN);
   vi.stubEnv("JARVIS_APPROVAL_TOKEN", APPROVAL_TOKEN);
@@ -94,24 +105,20 @@ async function stageAndApproveDestructiveAction(
     proposedBy: "agent",
   });
   // approve() no longer accepts a caller-supplied clock (security fix: it
-  // let a service-token-only caller forge past an expired approval).
-  // Freeze real time to the same small synthetic `now` this helper always
+  // let a service-token-only caller forge past an expired approval). Pin the
+  // ambient fake clock to the same small synthetic `now` this helper always
   // used, so its resulting approvalExpiresAt stays consistent with
-  // bindAndAuthorize's still-explicit `now`/`authorityExpiresAt` values.
-  // Real timers are restored before returning.
-  vi.useFakeTimers({ now });
-  try {
-    return await t.mutation(anyApi.toolActions.approve, {
-      serviceToken: SERVICE_TOKEN,
-      approvalToken: APPROVAL_TOKEN,
-      projectKey: PROJECT_KEY,
-      actionId,
-      expectedRevision: 1,
-      approvalTtlMs: 60_000,
-    });
-  } finally {
-    vi.useRealTimers();
-  }
+  // bindAndAuthorize's still-explicit `now`/`authorityExpiresAt` values. The
+  // caller established the fake-timer context via harnessAtFakeNow().
+  vi.setSystemTime(now);
+  return t.mutation(anyApi.toolActions.approve, {
+    serviceToken: SERVICE_TOKEN,
+    approvalToken: APPROVAL_TOKEN,
+    projectKey: PROJECT_KEY,
+    actionId,
+    expectedRevision: 1,
+    approvalTtlMs: 60_000,
+  });
 }
 
 async function bindAndAuthorize(
@@ -171,14 +178,11 @@ async function saveReceiptAndDrainScheduled(
   t: ReturnType<typeof harness>,
   args: ReturnType<typeof receiptArgs>,
 ) {
-  vi.useFakeTimers();
-  try {
-    const receipt = await t.mutation(anyApi.toolExecutionReceipts.save, args);
-    await t.finishAllScheduledFunctions(() => vi.runAllTimers());
-    return receipt;
-  } finally {
-    vi.useRealTimers();
-  }
+  // The fake-timer context is already established by harnessAtFakeNow(); drain
+  // the scheduled reconciliation against it.
+  const receipt = await t.mutation(anyApi.toolExecutionReceipts.save, args);
+  await t.finishAllScheduledFunctions(() => vi.runAllTimers());
+  return receipt;
 }
 
 describe("Omega mission creation", () => {
@@ -255,7 +259,7 @@ describe("Omega action contracts", () => {
   });
 
   it("clamps Omega authority to the underlying Jarvis approval expiry", async () => {
-    const t = harness();
+    const t = harnessAtFakeNow();
     await t.run((ctx) => seedProject(ctx));
     await createActiveMission(t);
     const approved = await stageAndApproveDestructiveAction(t);
@@ -268,7 +272,7 @@ describe("Omega action contracts", () => {
 
 describe("Omega atomic execution gate", () => {
   it("blocks a bound action while its mission is blocked without consuming it", async () => {
-    const t = harness();
+    const t = harnessAtFakeNow();
     await t.run((ctx) => seedProject(ctx));
     await createActiveMission(t);
     await stageAndApproveDestructiveAction(t);
@@ -279,18 +283,13 @@ describe("Omega atomic execution gate", () => {
       nextState: "blocked",
     });
 
-    vi.useFakeTimers({ now: 10_200 });
-    let claim;
-    try {
-      claim = await t.mutation(anyApi.toolActions.claimSingleUseExecution, {
-        serviceToken: SERVICE_TOKEN,
-        projectKey: PROJECT_KEY,
-        actionId: "action-1",
-        claimId: "claim-blocked",
-      });
-    } finally {
-      vi.useRealTimers();
-    }
+    vi.setSystemTime(10_200);
+    const claim = await t.mutation(anyApi.toolActions.claimSingleUseExecution, {
+      serviceToken: SERVICE_TOKEN,
+      projectKey: PROJECT_KEY,
+      actionId: "action-1",
+      claimId: "claim-blocked",
+    });
 
     expect(claim).toEqual({
       claimed: false,
@@ -309,24 +308,19 @@ describe("Omega atomic execution gate", () => {
   });
 
   it("atomically claims both Jarvis action and Omega contract when authorized", async () => {
-    const t = harness();
+    const t = harnessAtFakeNow();
     await t.run((ctx) => seedProject(ctx));
     await createActiveMission(t);
     await stageAndApproveDestructiveAction(t);
     await bindAndAuthorize(t);
 
-    vi.useFakeTimers({ now: 10_200 });
-    let claim;
-    try {
-      claim = await t.mutation(anyApi.toolActions.claimSingleUseExecution, {
-        serviceToken: SERVICE_TOKEN,
-        projectKey: PROJECT_KEY,
-        actionId: "action-1",
-        claimId: "claim-1",
-      });
-    } finally {
-      vi.useRealTimers();
-    }
+    vi.setSystemTime(10_200);
+    const claim = await t.mutation(anyApi.toolActions.claimSingleUseExecution, {
+      serviceToken: SERVICE_TOKEN,
+      projectKey: PROJECT_KEY,
+      actionId: "action-1",
+      claimId: "claim-1",
+    });
     expect(claim).toEqual({ claimed: true, claimId: "claim-1" });
 
     const contract = await t.query(anyApi.omegaActionContracts.getByToolAction, {
@@ -340,22 +334,18 @@ describe("Omega atomic execution gate", () => {
 
 describe("Omega receipt reconciliation", () => {
   it("turns a terminal receipt into durable mission evidence and reconciles exactly once", async () => {
-    const t = harness();
+    const t = harnessAtFakeNow();
     await t.run((ctx) => seedProject(ctx));
     await createActiveMission(t);
     await stageAndApproveDestructiveAction(t);
     await bindAndAuthorize(t);
-    vi.useFakeTimers({ now: 10_200 });
-    try {
-      await t.mutation(anyApi.toolActions.claimSingleUseExecution, {
-        serviceToken: SERVICE_TOKEN,
-        projectKey: PROJECT_KEY,
-        actionId: "action-1",
-        claimId: "claim-1",
-      });
-    } finally {
-      vi.useRealTimers();
-    }
+    vi.setSystemTime(10_200);
+    await t.mutation(anyApi.toolActions.claimSingleUseExecution, {
+      serviceToken: SERVICE_TOKEN,
+      projectKey: PROJECT_KEY,
+      actionId: "action-1",
+      claimId: "claim-1",
+    });
 
     const first = await saveReceiptAndDrainScheduled(t, receiptArgs());
     const second = await saveReceiptAndDrainScheduled(t, receiptArgs());
@@ -382,22 +372,18 @@ describe("Omega receipt reconciliation", () => {
   });
 
   it("keeps an indeterminate receipt unresolved instead of fabricating terminal evidence", async () => {
-    const t = harness();
+    const t = harnessAtFakeNow();
     await t.run((ctx) => seedProject(ctx));
     await createActiveMission(t, "mission-indeterminate");
     await stageAndApproveDestructiveAction(t, "action-indeterminate");
     await bindAndAuthorize(t, "mission-indeterminate", "action-indeterminate");
-    vi.useFakeTimers({ now: 10_200 });
-    try {
-      await t.mutation(anyApi.toolActions.claimSingleUseExecution, {
-        serviceToken: SERVICE_TOKEN,
-        projectKey: PROJECT_KEY,
-        actionId: "action-indeterminate",
-        claimId: "claim-indeterminate",
-      });
-    } finally {
-      vi.useRealTimers();
-    }
+    vi.setSystemTime(10_200);
+    await t.mutation(anyApi.toolActions.claimSingleUseExecution, {
+      serviceToken: SERVICE_TOKEN,
+      projectKey: PROJECT_KEY,
+      actionId: "action-indeterminate",
+      claimId: "claim-indeterminate",
+    });
     await saveReceiptAndDrainScheduled(t, receiptArgs("action-indeterminate", "indeterminate"));
 
     const contract = await t.query(anyApi.omegaActionContracts.getByToolAction, {
