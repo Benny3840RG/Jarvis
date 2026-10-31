@@ -136,7 +136,12 @@ projects HUD and brief tasks and reminders through the public HTTP shape, and
 restores a direct-create receipt only when it matches an entity key and
 fingerprint or a tombstone. Quote and receipt rows are stored under
 `jarvis-cli`. Full end-to-end recovery on realistic data stays NOT YET MET
-until the host repeats that restart step. `completeness`
+until the host repeats that restart step. `npm run commission:local-v1-recovery`
+(`runLocalV1RestartProof`) drives that restart step from environment config
+against the isolated loopback backend and writes a dated evidence file with the
+quote body sha256; it automates only the restart proof and lists capture,
+restore, reread, and the rollback assertions as unchecked operator steps. The
+driver clears no gate — evidence, not acceptance. `completeness`
 stays `partial`. `clear-local` checksums cover the core, memory, and
 business files that action quarantines. Full v4 recovery stays refused.
 Operator docs name `proveLocalV1Recovery` as that gate and state that classic
