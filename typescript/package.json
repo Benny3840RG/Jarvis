@@ -121,6 +121,7 @@
     },
     "@nestjs/platform-fastify": {
       "fastify": "$fastify"
-    }
+    },
+    "minimatch": "11.0.3"
   }
 }
