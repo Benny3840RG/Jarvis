@@ -13,6 +13,14 @@ const DELIVERY_RUNTIME_TOKEN = "tool-actions-delivery-runtime-token-0000000";
 const OWNER_ID = "jarvis-cli";
 const PROJECT_KEY = "project-1";
 
+// convex-test (>= 0.0.63) advances its simulated clock a little inside each
+// mutation, so a handler's `Date.now()` reads a few ms past the fake time set
+// with `vi.useFakeTimers`/`vi.setSystemTime`. Timestamp-ceiling assertions
+// allow this slack so they test the clamp, not the harness clock granularity.
+// It is orders of magnitude below the minute/hour ceilings it guards, so it
+// cannot mask a wrong ceiling.
+const SIMULATED_CLOCK_SLACK_MS = 50;
+
 function harness() {
   return convexTest(schema, modules);
 }
@@ -236,7 +244,12 @@ describe("approve() consent-lifecycle stamping", () => {
       });
 
       expect(approved.consumptionPolicy).toBe("single-use");
-      expect(approved.approvalExpiresAt).toBeLessThanOrEqual(now + 60 * 60 * 1000);
+      // Destructive proposals clamp to a 60-minute ceiling from the approval
+      // clock; allow the harness's simulated-clock slack (see above).
+      expect(approved.approvalExpiresAt).toBeGreaterThan(now);
+      expect(approved.approvalExpiresAt).toBeLessThanOrEqual(
+        now + 60 * 60 * 1000 + SIMULATED_CLOCK_SLACK_MS,
+      );
     } finally {
       vi.useRealTimers();
     }
@@ -259,7 +272,12 @@ describe("approve() consent-lifecycle stamping", () => {
       });
 
       expect(approved.approvalExpiresAt).toBeLessThan(Number.MAX_SAFE_INTEGER);
-      expect(approved.approvalExpiresAt).toBeLessThanOrEqual(now + 24 * 60 * 60 * 1000);
+      // A verbatim MAX_SAFE_INTEGER TTL is clamped to the 24h ceiling from the
+      // approval clock; allow the harness's simulated-clock slack (see above).
+      expect(approved.approvalExpiresAt).toBeGreaterThan(now);
+      expect(approved.approvalExpiresAt).toBeLessThanOrEqual(
+        now + 24 * 60 * 60 * 1000 + SIMULATED_CLOCK_SLACK_MS,
+      );
     } finally {
       vi.useRealTimers();
     }
@@ -1236,10 +1254,16 @@ describe("reusable execution leases close the revoke-after-check race", () => {
     try {
       const t = harness();
       await approveReusable(t);
-      expect(await verify(t, "exec-1")).toEqual({
-        eligible: true,
-        leaseExpiresAt: 10_000 + EXECUTION_LEASE_MS,
-      });
+      const lease = await verify(t, "exec-1");
+      expect(lease.eligible).toBe(true);
+      expect(lease.blockReason).toBeUndefined();
+      // The harness advances its clock per mutation, so the lease is stamped at
+      // a time in (10_000, Date.now()] rather than exactly 10_000.
+      const leaseExpiresAt = lease.leaseExpiresAt ?? Number.NaN;
+      expect(leaseExpiresAt).toBeGreaterThanOrEqual(10_000 + EXECUTION_LEASE_MS);
+      expect(leaseExpiresAt).toBeLessThanOrEqual(
+        10_000 + EXECUTION_LEASE_MS + SIMULATED_CLOCK_SLACK_MS,
+      );
 
       await expect(revoke(t)).rejects.toThrow(/execution in flight/);
       const stored = await t.query(api.toolActions.get, {
@@ -1271,9 +1295,14 @@ describe("reusable execution leases close the revoke-after-check race", () => {
     try {
       const t = harness();
       await approveReusable(t);
-      await verify(t, "exec-lost");
+      const lost = await verify(t, "exec-lost");
+      expect(lost.eligible).toBe(true);
 
-      vi.setSystemTime(10_000 + EXECUTION_LEASE_MS);
+      // Advance to the lease's own stamped expiry rather than a clock-pinned
+      // constant, so the abandoned lease is past its end regardless of the
+      // harness's per-mutation drift (liveExecutionLeases keeps leases with
+      // leaseExpiresAt > now, so now === expiry already frees it).
+      vi.setSystemTime(lost.leaseExpiresAt ?? Number.NaN);
       expect((await revoke(t)).state).toBe("revoked");
     } finally {
       vi.useRealTimers();
