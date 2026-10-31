@@ -43,6 +43,28 @@ test("comment-only Claude action uses the scoped workflow token without OIDC exc
   );
 });
 
+test("automatic Claude PR review cannot execute shell commands or write source", () => {
+  const workflow = fs.readFileSync(
+    new URL("../workflows/claude-code-review.yml", import.meta.url),
+    "utf8",
+  );
+  assert.match(workflow, /^  pull_request:$/m);
+  assert.doesNotMatch(workflow, /^  pull_request_target:$/m);
+  assert.match(workflow, /github_token: \$\{\{ github\.token \}\}/);
+  assert.doesNotMatch(workflow, /^\s+id-token:\s+write/m);
+  assert.doesNotMatch(workflow, /^\s+contents:\s+write/m);
+  assert.match(workflow, /persist-credentials: false/);
+  assert.match(workflow, /uses: actions\/checkout@[a-f0-9]{40}/);
+  assert.match(workflow, /uses: anthropics\/claude-code-action@[a-f0-9]{40}/);
+  assert.match(workflow, /--permission-mode dontAsk/);
+  assert.match(workflow, /--disallowedTools "Bash,Edit,Write,NotebookEdit"/);
+  assert.match(
+    workflow,
+    /--allowedTools "Read,Glob,Grep,mcp__github_inline_comment__create_inline_comment"/,
+  );
+  assert.doesNotMatch(workflow, /Bash\(/);
+});
+
 test("Temporal PASS proof is read-only, exact-head bound and supply-chain pinned", () => {
   const workflow = fs.readFileSync(
     new URL("../workflows/temporal-pass.yml", import.meta.url),
