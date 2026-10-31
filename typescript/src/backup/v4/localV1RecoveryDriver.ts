@@ -85,9 +85,7 @@ export type LocalV1RestartProofRecord = {
   liveDirectoryUnchanged: boolean;
 };
 
-export type RestartRunner = (
-  request: RestartedProcessRequest,
-) => Promise<RestartedProcessResult>;
+export type RestartRunner = (request: RestartedProcessRequest) => Promise<RestartedProcessResult>;
 
 export type LocalV1RestartProofDeps = {
   /** Defaults to the real `readRestartedProcess`. Injected in tests. */
