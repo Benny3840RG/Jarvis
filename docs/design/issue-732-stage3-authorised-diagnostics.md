@@ -1,13 +1,14 @@
 # #732 Stage 3 — authorised diagnostics: design & threat model (planning only)
 
-**Status: design approved by the owner (2026-11-04); scope narrowed to a TCP-only
-first slice. No code, no production configuration, and no action-family lifecycle
-change is made by this document.** It is the Stage 1 "discovery and design"
-deliverable for the _next_ stage, written now that Stage 2 has landed. The owner's
-decisions on the three design questions are recorded below. Building the Stage 3
-code still requires a _separate_ implementation approval and a dedicated PR (per
-#732's own gating); this revision exists so that review can run against the exact,
-decided scope before that approval.
+**Status: owner has approved the TCP-only scope, the reviewed-file allowlist model,
+the per-action approval model, and the bounds intent (2026-11-04); the design
+details are under active Codex review (verdict on `90eed9a6`: repair required —
+addressed in this revision). No code, no production configuration, and no
+action-family lifecycle change is made by this document.** It is the Stage 1
+"discovery and design" deliverable for the _next_ stage, written now that Stage 2
+has landed. Building the Stage 3 code still requires a _separate_ implementation
+approval and a dedicated PR (per #732's own gating); this revision exists so review
+can run against the exact, decided scope before that approval.
 
 ## Where #732 stands
 
@@ -40,9 +41,8 @@ every existing governance primitive rather than adding a new effect channel.
    _alone_. `dns-lookup` and `tls-inspect` are **deferred** to later slices, each
    its own design and approval; they are out of scope here. Rationale: `tcp-check`
    is the minimal external effect that still exercises the full governed boundary
-   (claim → receipt → reconciliation) and the SSRF mitigations, while sending and
-   reading zero application bytes and emitting only a status enum — the smallest
-   surface that proves the pattern.
+   (claim → receipt → reconciliation) and the SSRF mitigations while performing no
+   application-data reads or writes — the smallest surface that proves the pattern.
 2. **Allowlist — reviewed repository file, changed through reviewed PRs.** The
    allowlist lives in the repo and is owned/reviewed by the owner; it is changed
    only via a reviewed PR, never at runtime and never from a prompt or model
@@ -55,36 +55,50 @@ every existing governance primitive rather than adding a new effect channel.
    sound _because_ of decision 2; a runtime-mutable allowlist would have required
    one.)
 
-### Approved parameters
+### Two mandatory, independent gates
 
-- **Targets:** explicit **IP addresses only** to start. CIDR ranges are a later
-  addition under their own change; the first slice's schema rejects ranges.
-- **Ports:** each port is **explicitly approved per target** in the allowlist; a
-  target does not implicitly authorise any port. The authorised `(ip, port)` pair
-  is bound into the `exact_action_fingerprint`, so an approval authorises exactly
-  that port — never the host generally, and never an unlisted administrative port.
-- **Limits (fixed, not examples):** **one** connection attempt per action;
-  **5-second** timeout (tighter than the 30 s `MAX_TIMEOUT_MS` ceiling); **one**
-  active check per owner at a time; at most **ten** checks per owner per **rolling
-  60-second window**. The concurrency slot and the rate token are claimed by a
-  single **atomic reservation** taken _before_ the single-use claim is consumed, so
-  concurrent requests cannot pass a check-then-use (TOCTOU) race; the reservation
-  is released on completion, timeout, or cancellation.
-- **Results:** exactly one of `connected` / `refused` / `timed-out` / `error`. **No
-  banner grab, no application data read or sent.** Retries must **not** re-run a
-  completed check — a finished action's receipt is replayed, never a fresh effect.
+A connect is admitted **only when both** of these pass — neither alone is
+permission:
+
+1. **Forbidden-address denial** against the vendored special-use table (below).
+   Absence from the deny table is _necessary but not sufficient_.
+2. **Explicit `(ip, port)` allowlist match** in the reviewed file.
 
 ## Approved first slice — `security:tcp-check`
 
 A single TCP _connect_ to one allowlisted `ip:port`, reporting
 `connected` / `refused` / `timed-out` / `error`. **Not a port scanner:** one
 target, one port, one attempt per action. **No raw sockets beyond the single
-connect, no SYN scan, no shell, no user-supplied command or argument string, no
-bytes sent, no bytes read.**
+connect, no SYN scan, no shell, no user-supplied command or argument string, and no
+application-data reads or writes — TCP connection establishment itself exchanges
+protocol packets; nothing is read from or written to the established socket.**
 
 Anything broader — CIDR targets, DNS resolution, TLS/cert inspection, multi-port
 sweeps, ranges, UDP probing, banners, scripts — is explicitly **out of this slice**
 and would need its own design and approval.
+
+### Approved parameters
+
+- **Targets:** explicit **IP literals only** to start (IPv4 given as IPv4 literals;
+  IPv4-mapped/transition IPv6 forms rejected — see special-use policy). CIDR ranges
+  are a later addition under their own change; the first slice's schema rejects
+  ranges.
+- **Ports:** each port is **explicitly approved per target** in the allowlist; a
+  target does not implicitly authorise any port. The canonical `(ip, port)` and the
+  server-computed `allowlistDigest` are bound into the action args that feed the
+  `exact_action_fingerprint` (R3), so an approval authorises exactly that port
+  under exactly that policy — never the host generally, never an unlisted port.
+- **Timeout / attempt:** **one** connection attempt per action; **5-second**
+  timeout (tighter than the 30 s `MAX_TIMEOUT_MS` ceiling); `AbortSignal`
+  cancellation honoured.
+- **Rate & concurrency (R1):** at most **one** active check per owner, and at most
+  **ten** _started_ attempts per owner per rolling **60 s** window _(proposal:
+  window semantics)_ — see the admission-control subsection; the started-attempt
+  history is **never refunded** on any terminal outcome.
+- **Results:** a network result is exactly one of `connected` / `refused` /
+  `timed-out` / `error` (R5); a pre-execution **rejection** is a _separate_ typed
+  outcome, never reported as a network result. Retries must **not** re-run a
+  completed check — a finished action's receipt is replayed, never a fresh effect.
 
 ## Architecture — reuse, do not reinvent
 
@@ -106,45 +120,150 @@ through the full governed boundary:
   `exact_action_fingerprint`) → single-use consumption → immutable
   `toolExecutionReceipts` path. Receipts stay **digest-only and redacted**; no
   pasted or resolved value is echoed into a receipt, log, or answer beyond a
-  bounded, secret-redacted summary (here just the status enum and the allowlisted
-  `ip:port` already authorised).
-- **Bounds (owner-decided, fixed):** per-action timeout **5 s** (not the 30 s
-  `MAX_TIMEOUT_MS` ceiling); **1** in-flight check per owner; **≤10** checks per
-  owner per **rolling 60 s window**; **1** connect attempt. The concurrency slot
-  and rate token are taken by a single atomic reservation **before** the claim is
-  consumed (no TOCTOU race) and released on completion/timeout/cancellation.
-- **Config:** the **target allowlist** (explicit IP + explicitly approved ports) is
-  reviewed configuration, default-deny and empty until the owner populates it via a
-  reviewed PR; it is not a model- or prompt-supplied value and cannot be widened at
-  call time.
+  bounded, secret-redacted summary (the status enum and the allowlisted `ip:port`
+  already authorised).
+- **Config:** the **target allowlist** (explicit IP + explicitly approved ports)
+  plus the vendored special-use table are reviewed configuration, default-deny and
+  empty until the owner populates the allowlist via a reviewed PR; neither is a
+  model- or prompt-supplied value and neither can be widened at call time.
+
+### Admission control — active slot vs. durable rate history (R1)
+
+Two **separate** pieces of state per owner, because releasing the concurrency slot
+must not refund the rate budget (otherwise eleven fast sequential connects could
+each reacquire a refunded token and defeat the ten-per-minute cap):
+
+- **Active slot** (at most 1 per owner): released on any terminal state —
+  `completed`, `failed`, `timed-out`, `cancelled`, or lease-expired.
+- **Durable started-attempt history:** a record is written when an attempt moves to
+  `started`, and it counts toward the cap until it is 60 s old. It is **never
+  refunded** on completion, `error`, `timed-out`, or cancellation. Maximum **10**
+  started attempts per owner per rolling 60 s _(proposal: window semantics)_.
+- **Reservation is one atomic step:** in a single atomic compare-and-set (under the
+  JSON `.lock`; a single Convex mutation), check "no active slot AND history
+  count < 10", then take the slot and append a `reserved` history entry. Owner-wide
+  across all workers. This runs **before** the single-use claim is consumed.
+- **`reserved` → `started` only immediately before connect.** A reservation that
+  never reaches `started` (pre-effect rejection, policy change, claim failure,
+  crash before connect) is **cleaned up**: the slot is released and the `reserved`
+  entry removed. It consumes no budget.
+- **Crash recovery via lease** _(proposal: 5 s timeout + 10 s grace)_: a stale
+  `reserved`/`started` record is recovered when its lease expires; the slot is
+  released, but a `started` history entry **keeps counting** until it ages out.
+
+## Special-use address policy (R2)
+
+The CIDRs named anywhere in this document are **examples / a floor**, not the
+policy. The policy is a **reviewed static table vendored in the repo**, derived
+from the IANA IPv4 and IPv6 Special-Purpose Address Registries (RFC 6890 and its
+updates), recording the registry **snapshot date** _(proposal: table authority and
+snapshot process)_. The table — not prose — governs.
+
+- **Default deny:** an address is permitted only if it is **not** in the table
+  **and** matches the `(ip, port)` allowlist (the two mandatory gates). The
+  allowlist can never override the table.
+- **Translation/transition forms rejected in this slice:** `::ffff:0:0/96`
+  (IPv4-mapped), `::/96` (compat), `64:ff9b::/96` and `64:ff9b:1::/48` (NAT64),
+  `2002::/16` (6to4), `2001::/32` (Teredo), `2001:db8::/32` (documentation), and
+  other special-purpose allocations per the table. IPv4 targets must be supplied as
+  IPv4 literals.
+- **Parse rules:** zone identifiers (`%…`) rejected; brackets rejected; a
+  non-canonical textual form is **rejected, not rewritten**; the socket is opened to
+  the **exact canonical address that was checked**; there is no DNS resolution and
+  no fallback.
 
 ## Threat model
 
 **Trust boundaries.** Caller input (target IP, port) is untrusted and validated
-against the reviewed allowlist and strict schemas. The allowlist, adapter, and
-bounds are reviewed code/config. Only the existing owner/project and approval
-services grant authority; a `connected` result is a reported observation, never a
-safety conclusion.
+against the vendored special-use table, the reviewed allowlist, and strict schemas.
+The table, allowlist, adapter, and bounds are reviewed code/config. Only the
+existing owner/project and approval services grant authority; a `connected` result
+is a reported observation, never a safety conclusion.
 
 **Primary risks and mitigations.**
 
-| Risk                                                                                | Mitigation                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| ----------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **SSRF / internal pivot** (target an internal/metadata/loopback/link-local address) | **Canonicalize the address first** (reject ambiguous/non-canonical forms, map IPv4-mapped/compat IPv6 to their IPv4 form), then an **unconditional special-use denial that runs before the allowlist and cannot be overridden by it**: IPv4 `0.0.0.0/8`, `10/8`, `100.64.0.0/10`, `127.0.0.0/8`, `169.254.0.0/16` (incl. `169.254.169.254`), `172.16/12`, `192.0.0.0/24`, `192.0.2.0/24`, `192.168/16`, `198.18.0.0/15`, `198.51.100.0/24`, `203.0.113.0/24`, `224.0.0.0/4` (multicast), `240.0.0.0/4`, `255.255.255.255/32`; IPv6 `::/128`, `::1/128`, `fe80::/10` (link-local), `fc00::/7` (ULA), `ff00::/8` (multicast), plus IPv4-mapped/compat equivalents. Only an explicit, non-special-use allowlisted IP survives. |
-| **DNS rebinding**                                                                   | **Out of scope by construction:** the first slice accepts only explicit IP literals and performs **no name resolution**. Rebinding re-enters the threat model only with the deferred `dns-lookup` slice, which must resolve → validate every address against the full special-use set + allowlist → connect to the validated pinned address, never re-resolve.                                                                                                                                                                                                                                                                                                                                                              |
-| **Arbitrary execution / injection**                                                 | No shell, no command/argument strings; parameters are a validated canonical IP literal + an allowlisted integer port only; the adapter calls a library connect API, never a process.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| **Unintended-port / lateral reach** (authorised host, unlisted port)                | Ports are allowlisted **per target** and the `(ip, port)` pair is bound into the approval fingerprint; a host never implicitly authorises a port.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| **Scope creep into scanning**                                                       | One target, one port, one attempt per action; ranges/CIDR/sweeps rejected by schema; 1-in-flight + 10/60 s ceilings via atomic reservation.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| **Secret / PII leakage**                                                            | Digest-only receipts; status-enum-plus-authorised-`ip:port` summary only; no banner, no response bytes, nothing read from the socket.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| **Authorisation forged from a prompt**                                              | Authority only via the existing approval service and single-use claim; never inferred from prompt or model output; `assertNotPolicyEngineAuthority` enforced.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| **Replay / double-effect**                                                          | Reuse fingerprint-bound single-use consumption and receipt replay; a completed check is never re-run — its receipt is returned; reconciliation required for the external effect.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| Risk                                                                     | Mitigation                                                                                                                                                                                                                                                                                                                               |
+| ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **SSRF / internal pivot** (internal/metadata/loopback/link-local target) | Canonicalize first (reject non-canonical/ambiguous/zone-ID/bracketed forms; no rewrite); deny against the vendored special-use table **before and independent of** the allowlist; then require an explicit `(ip, port)` allowlist match. Both gates mandatory; connect only to the exact canonical address checked; no DNS, no fallback. |
+| **DNS rebinding**                                                        | **Out of scope by construction:** IP literals only, no name resolution. Re-enters only with the deferred `dns-lookup` slice (resolve → validate every address against table + allowlist → connect to the validated pinned address, never re-resolve).                                                                                    |
+| **Arbitrary execution / injection**                                      | No shell, no command/argument strings; parameters are a validated canonical IP literal + an allowlisted integer port only; the adapter calls a library connect API, never a process.                                                                                                                                                     |
+| **Unintended-port / lateral reach**                                      | Ports allowlisted **per target**; `(ip, port)` + `allowlistDigest` bound into the fingerprint; a host never implicitly authorises a port.                                                                                                                                                                                                |
+| **Rate-limit evasion by refund**                                         | Started-attempt history is durable and never refunded; the active slot is separate; atomic owner-wide reservation (R1).                                                                                                                                                                                                                  |
+| **Scope creep into scanning**                                            | One target, one port, one attempt per action; ranges/CIDR/sweeps rejected by schema; 1-in-flight + 10/60 s started-attempt ceiling.                                                                                                                                                                                                      |
+| **Stale-policy effect**                                                  | `allowlistDigest` (incl. table version) re-derived at staging, approval, and immediately before admission; mismatch ⇒ `policy_changed`, no socket (R3).                                                                                                                                                                                  |
+| **Uncertain / double effect**                                            | Durable `started` before connect; completed ⇒ receipt replay; `started`-without-result ⇒ `effect_uncertain`, reported blocked, **no reconnect, no invented success** (R4); single-use consumption + reconciliation.                                                                                                                      |
+| **Secret / PII leakage**                                                 | Digest-only receipts; status-enum + authorised `ip:port` only; no banner, no socket reads, no raw OS/errno text, no stack traces (R5).                                                                                                                                                                                                   |
+| **Authorisation forged from a prompt**                                   | Authority only via the existing approval service + single-use claim; `allowlistDigest` computed server-side, caller-supplied values ignored/rejected; `assertNotPolicyEngineAuthority` enforced.                                                                                                                                         |
+
+## Policy-identity binding (R3)
+
+Binding the canonical `(ip, port)` alone is insufficient — the _policy under which
+it was approved_ must also be bound, so a post-approval allowlist change cannot be
+exploited:
+
+- **Extend the existing action args** (which already feed `fingerprintToolAction` /
+  `fingerprintToolEffect`) with canonical `ip`, `port`, and `allowlistDigest`. This
+  is **not** a parallel approval mechanism. _(proposal: exact field names not yet
+  checked against the code.)_
+- **Trusted source:** `allowlistDigest` is computed **server-side** by the loader —
+  a SHA-256 over the canonical serialisation of the loaded allowlist file **and**
+  the vendored special-use table version. Callers cannot supply it; a caller-
+  supplied value is ignored or rejected.
+- **Re-derive at staging, at approval, and immediately before admission** (after the
+  reservation, before the claim is consumed, before any socket opens). The
+  admission check is decisive: if the digest differs or the `(ip, port)` entry has
+  been removed, return `policy_changed`, open no socket, clean up the reservation
+  (R1); a new stage + approval are required.
+
+## Uncertain-effect & recovery (R4)
+
+Completed-receipt replay is not enough: a crash after the socket opens but before
+the result is durably recorded must not be resolved by reconnecting.
+
+- **Durable state in the existing claim/receipt/reconciliation storage**, keyed by
+  the claim identity: `reserved → started → completed(outcome)`, or `uncertain`.
+  _(proposal: exact mapping onto the receipt schema not yet checked.)_
+- `started` is written **durably before** the socket opens.
+- **Completed** ⇒ return the stored bounded result; **do not connect.**
+- **`started` with no result, found on retry/restart** ⇒ mark `uncertain`, report
+  **blocked** with `effect_uncertain`; **do not reconnect**, do not invent
+  `connected` or any success. A TCP observation cannot be queried after the fact, so
+  reconciliation here means **recording that the effect is unknown**, not
+  re-probing. A new check needs a new stage + approval.
+- **Reservation recovery:** an `uncertain` attempt releases the active slot at lease
+  expiry; its `started` history entry **keeps counting** (R1).
+
+## Result & rejection contract (R5)
+
+- **Network results** (an effect actually started): `connected`, `refused`,
+  `timed-out`, `error`. One spelling used everywhere (`timed-out`). `error` carries
+  an optional bounded `reason` _(proposal)_: `unreachable`, `aborted`, `internal`.
+- **OS-error → enum mapping** _(proposal)_:
+
+  | Condition                      | Result                  |
+  | ------------------------------ | ----------------------- |
+  | connect success                | `connected`             |
+  | `ECONNREFUSED`                 | `refused`               |
+  | deadline reached               | `timed-out`             |
+  | `ENETUNREACH` / `EHOSTUNREACH` | `error` / `unreachable` |
+  | caller abort                   | `error` / `aborted`     |
+  | anything else                  | `error` / `internal`    |
+
+- Raw errno strings, OS error text, stack traces, and remote bytes are **never** put
+  in answers, logs, or receipts.
+- **Pre-execution rejections are a separate type**, never reported as a network
+  result and consuming **no** budget (except `effect_uncertain`, whose earlier
+  `started` entry still counts): `invalid_target`, `invalid_port`,
+  `forbidden_address`, `not_allowlisted`, `port_not_allowed`, `policy_changed`,
+  `not_approved`, `claim_consumed`, `rate_limited`, `concurrency_limited`,
+  `effect_uncertain`.
 
 ## Acceptance criteria mapping (#732)
 
-- _Existing approval/policy cannot be bypassed_ → T3 + GovernedExternalOperation claim; no new effect channel.
-- _Default deny; no wildcard targets or free-form shell_ → empty-by-default allowlist of explicit IP + approved ports, typed params, library-only adapter.
-- _Tests_ → out-of-scope/blocked target, full special-use rejection (IPv4 shared/benchmark/doc/multicast/broadcast; IPv6 link-local `fe80::/10`, multicast `ff00::/8`, unspecified, ULA; IPv4-mapped), canonicalization of non-canonical forms, CIDR/range/hostname rejection, per-target port enforcement + fingerprint binding, 5 s timeout, cancellation (`AbortSignal`), atomic 1-in-flight + 10/60 s reservation under concurrency, approval replay (completed check returns receipt, no second connect), receipt redaction, allowlist-empty default-deny.
-- _Audit logs/receipts redact_ → digest-only + status-enum summary; no banner/bytes.
+- _Existing approval/policy cannot be bypassed_ → T3 + GovernedExternalOperation claim; `allowlistDigest` bound + revalidated at admission; no new effect channel.
+- _Default deny; no wildcard targets or free-form shell_ → vendored special-use table (deny) **and** explicit `(ip, port)` allowlist (permit), both mandatory; typed params; library-only adapter.
+- _Tests_ → table-driven special-use coverage (one case per row, first/last address, neighbours just outside each range, a test that fails if a row is removed; canonicalisation + zone-ID/bracket rejection; translation/transition forms); CIDR/range/hostname rejection; per-target port + fingerprint/digest binding; 5 s timeout; cancellation (`AbortSignal`); **eleven sequential fast outcomes inside 60 s → the eleventh is `rate_limited`**; window roll-over resumes admission; simultaneous requests at both limits admit exactly one / exactly ten; unstarted reservation cleaned up and consumes nothing; **policy swap/removal after approval ⇒ no socket opens (`policy_changed`)**; forged caller digest not honoured; **crash after `started` ⇒ `uncertain`/blocked, no socket, slot recovered, history entry still counts**; cancellation mid-connect destroys socket, releases slot, keeps history; completed-result replay opens no socket; receipt redaction; allowlist-empty default-deny.
+- _Audit logs/receipts redact_ → digest-only + status-enum summary; no banner, no socket bytes, no raw OS/errno text.
 - _CI passes; operator setup/rollback/recovery documented_ → operator doc + registry updates in the Stage 3 PR.
 - _Development-only until owner authorises deployment_ → action family stays `planned`; no commissioning.
 
@@ -160,78 +279,97 @@ state target, with its own `TEST-*` / `EVD-*` ids. (`AM-017 dns-lookup` /
 tool-registry entry stays `planned` until a reviewed allowlist binding is deployed
 to the authorised dev target and its commissioning evidence gates pass.
 
-## Review response — advisory findings (jarvis-pr-maintenance)
+## Review response — Codex findings on `90eed9a6`
 
-The advisory maintenance review of the earlier three-diagnostic revisions raised
-findings now resolved or deferred as follows:
+Addressed in this revision (pending re-review); nothing claimed resolved until
+Codex re-reviews the new candidate. Earlier `jarvis-pr-maintenance` advisory
+findings are folded into these.
 
-- **SSRF deny-list incompleteness (medium ×2)** — _resolved._ The threat-model row
-  now canonicalizes first and denies the full IANA special-use set, including IPv6
-  link-local `fe80::/10`, multicast, and IPv4 shared `100.64.0.0/10`, before and
-  independent of the allowlist.
-- **Unspecified port policy (medium)** — _resolved._ Ports are allowlisted per
-  target and the `(ip, port)` pair is bound into the approval fingerprint.
-- **Rate/concurrency left as an example; TOCTOU (low)** — _resolved._ Fixed limits
-  (1 in-flight, 10 per rolling 60 s), claimed by a single atomic reservation before
-  the claim is consumed.
-- **Domain allowlist matching underspecified (high)** — _deferred, not dropped._
-  The first slice is IP-only with no name resolution, so domain matching does not
-  arise here. The deferred `dns-lookup` design **must** specify canonicalization,
-  exact-label vs. subdomain matching, trailing dots, and IDN handling before any
-  domain is accepted.
-- **TLS "no data sent" is impossible; cert-validity reporting (medium ×2)** —
-  _deferred, not dropped._ `tls-inspect` is out of this slice; its design must
-  clarify that a ClientHello/SNI is unavoidable (no _application_ payload, no
-  client cert) and define how expired/self-signed/untrusted certs are reported
-  without weakening verification.
-- **DNS output bounds — record count / field length / truncation (medium ×2)** —
-  _deferred, not dropped._ The `dns-lookup` design must set per-action output
-  bounds and truncation/redaction for large TXT/MX responses.
+- **R1 — rate history refunded with the concurrency slot (medium)** — addressed:
+  separate active slot vs. durable, never-refunded started-attempt history; atomic
+  owner-wide reservation; `reserved`/`started` lifecycle + lease recovery; tests
+  incl. eleven sequential outcomes.
+- **R2 — deny list claimed complete but is not (medium)** — addressed: the deny
+  CIDRs are a floor only; a **vendored IANA special-use table (dated)** governs;
+  translation/transition forms rejected; canonical-only parsing; table-driven
+  tests. "Full IANA set"/"resolved" claims removed.
+- **R3 — policy identity not bound (medium)** — addressed: server-computed
+  `allowlistDigest` (allowlist file + table version) added to the fingerprinted
+  action args and revalidated at staging/approval/admission; `policy_changed` on
+  mismatch.
+- **R4 — uncertain attempt & reservation recovery (medium)** — addressed: durable
+  `reserved → started → completed|uncertain`; `started` before connect; no reconnect
+  and no invented success on `uncertain`; slot recovered via lease, history retained.
+- **R5 — result/error contract & wording (medium)** — addressed: "no bytes" reworded
+  to "no application-data reads/writes; establishment exchanges protocol packets";
+  fixed network-result enum + optional bounded `reason`; OS-error mapping; typed
+  pre-execution rejection list distinct from network results; no raw OS text in
+  receipts.
+- **Deferred-slice findings (not dropped):** domain-matching canonicalisation
+  (`dns-lookup`), DNS output bounds (`dns-lookup`), TLS ClientHello/SNI + cert-
+  validity reporting (`tls-inspect`) remain hard requirements on those designs.
 
 ## Implementation checklist (Stage 3 `tcp-check`)
 
-Each item below is required in the implementation PR; review (Codex, then owner)
-runs against this exact list. "Done" means implemented **and** covered by a test.
+Each item is required in the implementation PR; review (Codex, then owner) runs
+against this exact list. "Done" means implemented **and** covered by a test.
 
 - [ ] Allowlist: reviewed repo file, schema-validated at load, default-deny, empty
       by default; entries are explicit IP literals each with an explicit set of
       approved integer ports; fail-closed on empty/invalid/missing.
-- [ ] Schema: accept a single IP literal + single port; **reject** hostnames, CIDR,
-      ranges, port lists/wildcards, and anything not on the allowlist.
-- [ ] SSRF guard: **canonicalize first**, then reject the complete special-use set
-      (IPv4 `0/8`, `10/8`, `100.64/10`, `127/8`, `169.254/16`, `172.16/12`,
-      `192.0.0/24`, `192.0.2/24`, `192.168/16`, `198.18/15`, `198.51.100/24`,
-      `203.0.113/24`, `224/4`, `240/4`, `255.255.255.255`; IPv6 `::/128`, `::1`,
-      `fe80::/10`, `fc00::/7`, `ff00::/8`; IPv4-mapped/compat) **before and
-      independent of** the allowlist (belt-and-braces).
-- [ ] Effect: exactly one TCP connect attempt; **no** bytes written or read; socket
-      closed immediately on connect result.
-- [ ] Bounds: 5 s per-action timeout; `AbortSignal` cancellation honoured; 1
-      in-flight check per owner; ≤10 per rolling 60 s window; concurrency slot +
-      rate token taken by a single **atomic reservation before** the single-use
-      claim, released on completion/timeout/cancellation (no TOCTOU race).
+- [ ] Special-use table: vendored, dated, IANA-derived; **deny runs before and
+      independent of** the allowlist; both gates mandatory (absence from the table
+      is not permission); translation/transition forms rejected; table-driven tests
+      incl. a test that fails if a row is removed.
+- [ ] Schema & parsing: single canonical IP literal + single port; reject hostnames,
+      CIDR, ranges, port lists/wildcards, zone IDs, brackets, non-canonical forms
+      (reject, never rewrite); socket opens only to the exact canonical address
+      checked; no DNS, no fallback.
+- [ ] Admission control (R1): separate active slot (released on any terminal state)
+      and durable started-attempt history (never refunded, counts 60 s); single
+      atomic owner-wide reservation before the claim; `reserved`→`started` only just
+      before connect; unstarted-reservation cleanup; lease recovery _(proposal: 5 s + 10 s)_.
+- [ ] Policy binding (R3): server-computed `allowlistDigest` (allowlist + table
+      version) in the fingerprinted args; re-derived at staging/approval/admission;
+      `policy_changed` + no socket on mismatch/removal; caller-supplied digest
+      ignored.
+- [ ] Effect: exactly one TCP connect attempt; no application-data reads/writes;
+      socket closed immediately on result.
+- [ ] Uncertain-effect (R4): durable `started` before connect; completed ⇒ replay,
+      no connect; `started`-without-result ⇒ `effect_uncertain`/blocked, no
+      reconnect, no invented success; slot recovered, history retained.
+- [ ] Result/rejection contract (R5): network enum `connected`/`refused`/
+      `timed-out`/`error`(+`reason`); OS-error mapping; typed pre-execution rejection
+      list distinct from network results, consuming no budget; no raw OS/errno/stack
+      text anywhere.
 - [ ] Governance: `minimumAuthority: "T3"`; `GovernedExternalOperation` +
       `externalProvider`/`externalProviderFor`; `assertNotPolicyEngineAuthority`;
-      stage → approve (`exact_action_fingerprint`, binding `(ip, port)`) →
-      single-use → receipt → reconciliation.
-- [ ] Result: one of `connected` / `refused` / `timed-out` / `error`; digest-only
-      redacted receipt (status + authorised `ip:port` only).
-- [ ] Idempotency: a completed action's retry **replays the receipt**, never a
-      second connect.
+      stage → approve (`exact_action_fingerprint`) → single-use → receipt →
+      reconciliation.
+- [ ] Receipts: digest-only, redacted (status + authorised `ip:port` only).
 - [ ] Registry: `AM-016` + `TOOL-SECURITY-TCP-CHECK` + `TEST-*`/`EVD-*`, all
       `planned`; no commissioning.
-- [ ] Tests (per acceptance mapping above): allowlist default-deny, full special-use
-      rejection (v4/v6 incl. `fe80::/10`, `ff00::/8`, `100.64/10`, mapped),
-      canonicalization, CIDR/range/hostname rejection, per-target port + fingerprint
-      binding, timeout, cancellation, atomic concurrency + rate reservation under
-      load, approval replay, receipt redaction.
+- [ ] Tests: per the acceptance mapping — special-use table coverage, canonical/
+      zone-ID/bracket rejection, CIDR/range/hostname rejection, per-target port +
+      digest binding, timeout, cancellation, eleven-sequential + window roll-over +
+      simultaneous reservation, unstarted cleanup, policy swap after approval, forged
+      digest, crash-after-`started`, cancellation mid-connect, completed replay,
+      receipt redaction, allowlist-empty default-deny.
 - [ ] Docs: operator setup/rollback/recovery; evidence doc; OpenAPI (if surfaced);
       all five required `main` checks green on the draft PR.
 
+## Owner policy decision flagged
+
+With no exception mechanism, private/ULA targets (the owner's own LAN) **cannot** be
+diagnosed, because the special-use table denies them before the allowlist. The
+owner-decided default-deny stays; any exception mechanism (e.g. an explicitly
+owner-carved LAN range) needs its own separate design and approval and is **not**
+part of this slice.
+
 ## Gates
 
-1. **Owner go/no-go on design + first-slice scope — DONE (2026-11-04).** Scope,
-   allowlist model, approval model, and bounds are decided (above).
+1. **Owner go/no-go on scope + allowlist/approval model + bounds intent — DONE
+   (2026-11-04).**
 2. **Review of this exact revision** (Codex) against the resolved scope and the
    implementation checklist, before any implementation.
 3. **Separate implementation approval** from the owner, then a dedicated
