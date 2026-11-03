@@ -10087,6 +10087,7 @@
         }
       },
       "SecurityEducation": {
+        "description": "Offline security education through the existing governed ToolAction execute route. security:interpret accepts port-states excerpts or file-mode: one regular-file/directory symbolic mode token (for example -rwxr-x---), optionally surrounded by spaces/tabs. file-mode-octal accepts exactly three or four octal digits with explicit kind file or directory; the leading special-bit digit defaults to zero for three-digit modes. umask accepts three octal permission digits or four with a leading zero, and explains the illustrative 0666 file and 0777 directory creation requests; actual requested modes and default ACLs may differ. creation-mode accepts explicit kind file or directory, requestedMode and output (the umask), each exactly three octal digits or four with leading zero; it calculates requested permission bits AND NOT mask bits, without a default ACL. Special bits are unsupported for creation calculations. File modes explain owner/group/other and special bits, not effective access. Full listings, paths, control characters and arbitrary text are unsupported and minimised before proposal storage. No filesystem, shell, network or model calls.",
         "type": "object",
         "additionalProperties": false,
         "required": ["version", "supported", "summary", "limitations"],

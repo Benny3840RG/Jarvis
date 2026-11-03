@@ -1,5 +1,26 @@
 # Jarvis TypeScript Roadmap
 
+## Offline file-permission education (#777)
+
+The existing `security:interpret` ToolAction now accepts `file-mode` alongside
+`port-states`; `file-mode-octal` adds three/four-digit numeric interpretation
+with an explicitly supplied file/directory kind and canonical four-digit storage.
+`umask` explains illustrative file/directory creation masks, including the
+requested-mode and default-ACL caveats, without changing any permissions. It explains regular-file/directory owner, group and other bits,
+setuid, setgid and sticky semantics without filesystem, shell, network or model
+calls. Strict parsing and proposal minimisation keep names, paths and full
+listings out of storage. Existing approval, receipt digest/replay and transient
+HTTP answers are reused; existing port-state output remains unchanged.
+
+The creation-mode format additionally calculates a supplied application request
+against a supplied umask, with explicit object kind and nine-bit inputs. Both
+tokens canonicalise before staging. Default ACLs and inherited special bits
+remain outside the calculation; existing umask answers remain unchanged.
+
+Next: exact-head CI and independent review, then owner landing and any separately
+authorised deployment. Stage 3 diagnostics and recovery commissioning remain
+separate work; no live capability activation is claimed here.
+
 ## Maintenance sweep (2026-10-21)
 
 Mission #745 repairs the observed Chromium profile-removal race with bounded

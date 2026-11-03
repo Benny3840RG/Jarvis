@@ -97,7 +97,8 @@ jobs:
   review:
     needs: prepare
     if: needs.prepare.outputs.selected == 'true' && needs.prepare.outputs.prompt-ready == 'true'
-    runs-on: ubuntu-latest
+    # Match the verified socket-isolation platform; qualify newer Ubuntu first.
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
       contents: read
