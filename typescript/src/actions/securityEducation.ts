@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import {
+  creationModeSummary,
   canonicalFileMode,
   fileModeSummary,
   canonicalOctalMode,
@@ -45,6 +46,14 @@ const explainSchema = z
   })
   .strict();
 const interpretSchema = z.discriminatedUnion("format", [
+  z
+    .object({
+      format: z.literal("creation-mode"),
+      kind: z.enum(["file", "directory"]),
+      requestedMode: z.string().min(1).max(8192),
+      output: z.string().min(1).max(8192),
+    })
+    .strict(),
   z.object({ format: z.literal("umask"), output: z.string().min(1).max(8192) }).strict(),
   z.object({ format: z.literal("port-states"), output: z.string().min(1).max(8192) }).strict(),
   z.object({ format: z.literal("file-mode"), output: z.string().min(1).max(8192) }).strict(),
@@ -95,6 +104,14 @@ export function prepareSecurityArguments(
   if (operation === "explain") return explainSchema.parse(args);
   if (operation !== "interpret") throw new Error("Unsupported security education operation.");
   const parsed = interpretSchema.parse(args);
+  if (parsed.format === "creation-mode") {
+    return {
+      format: parsed.format,
+      kind: parsed.kind,
+      requestedMode: canonicalUmask(parsed.requestedMode) ?? "[unsupported]",
+      output: canonicalUmask(parsed.output) ?? "[unsupported]",
+    };
+  }
   if (parsed.format === "umask") {
     return { format: parsed.format, output: canonicalUmask(parsed.output) ?? "[unsupported]" };
   }
@@ -129,6 +146,17 @@ export function securityEducation(
   if (operation !== "interpret") throw new Error("Unsupported security education operation.");
   const parsed = interpretSchema.parse(args);
   const { format, output } = parsed;
+  if (parsed.format === "creation-mode") {
+    const summary = creationModeSummary(output, parsed.requestedMode, parsed.kind);
+    return {
+      version: 1,
+      supported: summary !== null,
+      summary:
+        summary ??
+        "Unsupported creation-mode input. Supply a file or directory kind and separate requested-mode and mask tokens, each three octal digits or four with a leading zero. Special bits, commands, paths and other text are unsupported. No conclusion can be drawn from this input.",
+      limitations: LIMITATIONS,
+    };
+  }
   if (format === "umask") {
     const summary = umaskSummary(output);
     return {

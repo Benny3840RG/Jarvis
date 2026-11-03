@@ -12,6 +12,11 @@ calls. Strict parsing and proposal minimisation keep names, paths and full
 listings out of storage. Existing approval, receipt digest/replay and transient
 HTTP answers are reused; existing port-state output remains unchanged.
 
+The creation-mode format additionally calculates a supplied application request
+against a supplied umask, with explicit object kind and nine-bit inputs. Both
+tokens canonicalise before staging. Default ACLs and inherited special bits
+remain outside the calculation; existing umask answers remain unchanged.
+
 Next: exact-head CI and independent review, then owner landing and any separately
 authorised deployment. Stage 3 diagnostics and recovery commissioning remain
 separate work; no live capability activation is claimed here.

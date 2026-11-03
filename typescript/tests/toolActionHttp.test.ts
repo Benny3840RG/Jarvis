@@ -693,6 +693,39 @@ describe("Tool action approval HTTP boundary", () => {
 });
 
 describe("security education HTTP result", () => {
+  it("returns a creation-mode calculation through the authenticated existing route", async () => {
+    const securityAction = {
+      ...action("approved"),
+      tool: "security",
+      operation: "interpret",
+      arguments: { format: "creation-mode", kind: "file", requestedMode: "0660", output: "0027" },
+    };
+    const app = await makeApp(
+      successfulService({
+        async get() {
+          return securityAction;
+        },
+      }),
+      new ToolExecutionService(createSecurityEducationTools()),
+    );
+    const path = "/api/v1/projects/project-1/tool-actions/action-1/execute";
+    const denied = await app.inject({
+      method: "POST",
+      url: path,
+      payload: { idempotencyKey: "mode" },
+    });
+    assert.equal(denied.statusCode, 401);
+    const result = await app.inject({
+      method: "POST",
+      url: path,
+      headers: authHeaders(),
+      payload: { idempotencyKey: "mode" },
+    });
+    assert.equal(result.statusCode, 200);
+    assert.equal(result.json().status, "succeeded");
+    assert.match(result.json().education.summary, /yields 0640/);
+  });
+
   it("returns file-mode education through the authenticated existing route", async () => {
     const securityAction = {
       ...action("approved"),

@@ -101,3 +101,30 @@ export function umaskSummary(output: string): string | null {
     octalFileModeSummary(directory, "directory")!,
   ].join(" ");
 }
+
+/** Nine-bit creation calculation only; special bits and default ACLs are out of scope. */
+export function creationModeSummary(
+  output: string,
+  requestedMode: string,
+  kind: "file" | "directory",
+): string | null {
+  const mask = canonicalUmask(output);
+  const requested = canonicalUmask(requestedMode);
+  if (mask === null || requested === null) return null;
+  const result = (Number.parseInt(requested, 8) & ~Number.parseInt(mask, 8))
+    .toString(8)
+    .padStart(4, "0");
+  return [
+    "Without a default ACL, the supplied " +
+      requested +
+      " " +
+      kind +
+      " creation request with mask " +
+      mask +
+      " yields " +
+      result +
+      ".",
+    "This calculation only removes requested permission bits; it does not grant unrequested bits. A parent default ACL changes creation permission handling, and other system controls can affect the result. Special-bit creation and inherited setgid are outside this calculation. Existing permissions are unchanged. No file is created and no process mask is changed.",
+    octalFileModeSummary(result, kind)!,
+  ].join(" ");
+}

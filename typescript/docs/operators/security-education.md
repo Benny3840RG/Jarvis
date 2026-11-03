@@ -99,3 +99,22 @@ path/traversal, rate, timeout, cancellation and authority proof before activatio
 Rollback is an owner-approved return to the previous application revision; do not rewrite
 stored actions or receipts. Unregistered security operations then fail closed. Revoke pending
 approvals through the existing consent lifecycle if required. Nothing was deployed by this PR.
+
+## Supplied creation request
+
+Use the same governed interpret operation with:
+
+    {"format":"creation-mode","kind":"file","requestedMode":"0660","output":"0027"}
+
+Here output is the supplied umask, not a command result. Without a parent
+default ACL, this request yields 0640: owner read/write, group read, others
+none. Use kind directory for directory permission meanings. Both numeric
+tokens accept three digits or four with a leading zero and ASCII space/tab
+padding; proposals store four digits. Special bits, paths and commands are
+unsupported. Missing kind or requestedMode is invalid.
+
+Unlike the illustrative umask format, creation-mode uses the requested mode
+you provide. A 0600 request with mask 0000 remains 0600; masks never grant bits.
+This only calculates ordinary permission bits. Parent default ACLs, inherited
+setgid and other system controls are outside the calculation. Jarvis neither
+creates a file nor reads or changes your process mask or existing permissions.

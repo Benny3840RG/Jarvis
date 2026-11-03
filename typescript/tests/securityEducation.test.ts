@@ -502,3 +502,107 @@ test("umask minimisation refuses special bits and pasted commands", () => {
   }
   assert.throws(() => prepareSecurityArguments("interpret", { ...canonical, kind: "file" }));
 });
+
+test("creation modes apply a supplied mask without granting unrequested bits", () => {
+  for (const [requestedMode, output, kind, expected] of [
+    ["660", "027", "file", "0640"],
+    ["600", "000", "file", "0600"],
+    ["666", "111", "file", "0666"],
+    ["700", "077", "directory", "0700"],
+    ["777", "777", "directory", "0000"],
+    ["000", "000", "file", "0000"],
+    ["751", "022", "file", "0751"],
+  ]) {
+    const result = securityEducation("interpret", {
+      format: "creation-mode",
+      requestedMode,
+      output,
+      kind,
+    });
+    assert.equal(result.supported, true);
+    assert.ok(result.summary.includes("yields " + expected), result.summary);
+    assert.match(result.summary, /Without a default ACL/);
+    assert.match(result.summary, /Existing permissions are unchanged/);
+    assert.ok(result.summary.length < 2000);
+  }
+  const directory = securityEducation("interpret", {
+    format: "creation-mode",
+    kind: "directory",
+    requestedMode: "750",
+    output: "027",
+  });
+  assert.match(directory.summary, /Owner: list entries, modify entries, traverse/);
+});
+
+test("creation mode proposals canonicalise both tokens and discard malformed text", () => {
+  const base = { format: "creation-mode", kind: "file", requestedMode: "0660", output: "0027" };
+  assert.deepEqual(
+    prepareSecurityArguments("interpret", {
+      ...base,
+      requestedMode: " \t660 ",
+      output: " 027\t",
+    }),
+    base,
+  );
+  assert.deepEqual(prepareSecurityArguments("interpret", base), base);
+  for (const field of ["requestedMode", "output"]) {
+    for (const value of [
+      "4660",
+      "888",
+      "66",
+      "00660",
+      "0o660",
+      "660\n",
+      "660\r",
+      "660\0",
+      "\u00a0660",
+      "660 SECRET.txt",
+      "chmod 660 SECRET.txt",
+    ]) {
+      const args = { ...base, [field]: value };
+      const prepared = prepareSecurityArguments("interpret", args);
+      assert.equal(prepared[field], "[unsupported]");
+      assert.deepEqual(prepareSecurityArguments("interpret", prepared), prepared);
+      const result = securityEducation("interpret", prepared);
+      assert.equal(result.supported, false);
+      assert.doesNotMatch(JSON.stringify([prepared, result]), /SECRET|chmod/);
+    }
+    assert.throws(() =>
+      prepareSecurityArguments("interpret", { ...base, [field]: "x".repeat(8193) }),
+    );
+  }
+  for (const args of [
+    { ...base, kind: undefined },
+    { ...base, kind: "symlink" },
+    { ...base, requestedMode: undefined },
+    { ...base, requestedMode: 660 },
+    { ...base, command: "id" },
+  ])
+    assert.throws(() => prepareSecurityArguments("interpret", args));
+});
+
+test("creation calculations retain approval gates and bind replay to the requested mode", async () => {
+  const value: ToolAction = {
+    ...action,
+    operation: "interpret",
+    arguments: { format: "creation-mode", kind: "file", requestedMode: "0660", output: "0027" },
+  };
+  const store = new InMemoryToolExecutionReceiptStore();
+  const service = new ToolExecutionService(createSecurityEducationTools(), store);
+  assert.equal((await run(service, { ...value, state: "proposed" })).education, undefined);
+  assert.equal((await run(service, value, "T0")).status, "blocked");
+  assert.equal((await run(service, value, "T1", true)).education, undefined);
+  const first = await run(service, value);
+  assert.equal(first.status, "succeeded");
+  assert.match(first.education?.summary ?? "", /yields 0640/);
+  assert.deepEqual(
+    await run(new ToolExecutionService(createSecurityEducationTools(), store), value),
+    first,
+  );
+  const changed = await run(service, {
+    ...value,
+    arguments: { ...value.arguments, requestedMode: "0600" },
+  });
+  assert.equal(changed.errorCode, "fingerprint-mismatch");
+  assert.equal(changed.education, undefined);
+});

@@ -24,3 +24,10 @@ No persistence schema or new operation is needed. No new execution/approval path
 Verify via failure-first parser and hostile-input cases, real authenticated HTTP
 execution, digest replay and Convex proposal minimisation tests, followed by the
 maintained full check. Review and owner merge/deployment remain separate gates.
+
+The creation-mode follow-on adds an explicit requestedMode and object kind to a
+separate strict format. output supplies the mask; both tokens are nine-bit
+octal values canonicalised before staging. It computes requested AND NOT mask
+and reuses the permission explanation. Keeping a separate format preserves
+existing umask answers and receipt digests. It rejects special-bit creation
+instead of guessing inheritance, and states the default-ACL/system caveats.

@@ -1540,6 +1540,52 @@ describe("regression: a caller-supplied clock can no longer skew execution-gate 
 });
 
 describe("security education proposal minimisation", () => {
+  it("canonicalises creation inputs before proposal replay and rejects missing kind", async () => {
+    const t = harness();
+    const first = await stageAndReturn(t, {
+      tool: "security",
+      operation: "interpret",
+      arguments: {
+        format: "creation-mode",
+        kind: "directory",
+        requestedMode: " 770 ",
+        output: " 027 ",
+      },
+    });
+    expect(first.arguments).toEqual({
+      format: "creation-mode",
+      kind: "directory",
+      requestedMode: "0770",
+      output: "0027",
+    });
+    const replay = await t.mutation(
+      api.toolActions.stage,
+      stageArgs({
+        tool: "security",
+        operation: "interpret",
+        arguments: {
+          format: "creation-mode",
+          kind: "directory",
+          requestedMode: "0770",
+          output: "0027",
+        },
+      }),
+    );
+    expect(replay._id).toBe(first._id);
+    await expect(
+      t.mutation(
+        api.toolActions.stage,
+        stageArgs({
+          actionId: "missing-kind",
+          tool: "security",
+          operation: "interpret",
+          arguments: { format: "creation-mode", requestedMode: "0770", output: "0027" },
+        }),
+      ),
+    ).rejects.toThrow();
+    expect(await t.run((ctx) => ctx.db.query("toolActions").collect())).toHaveLength(1);
+  });
+
   it("canonicalises numeric modes before proposal replay and rejects missing kind", async () => {
     const t = harness();
     const first = await stageAndReturn(t, {
