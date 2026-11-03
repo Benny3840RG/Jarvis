@@ -19,6 +19,20 @@ Supported operations and argument objects:
 - `interpret`: `{"format":"port-states","output":"22/tcp open ssh\n443/tcp closed https"}`.
   Paste only port-state rows, optionally preceded by `PORT STATE SERVICE`.
   This is a port-state excerpt parser, not a complete Nmap report interpreter.
+- `interpret`: `{"format":"file-mode","output":"-rwxr-x---"}`.
+  Supply one ten-character regular-file (`-`) or directory (`d`) symbolic mode.
+  Surrounding ASCII spaces/tabs are accepted. Full listings, names, paths,
+  symlink/device modes, octal modes, ACL markers, newlines and control characters
+  are unsupported. Jarvis does not read the named file or run `ls`/`chmod`.
+
+For example, `-rwxr-x---` explains owner read/write/execute, group read/execute,
+and no permissions for others. `drwxrwxrwt` explains directory listing,
+modification and traversal, plus sticky-bit restrictions on deletion/rename.
+Lowercase `s`/`t` includes execute/traverse; uppercase `S`/`T` does not.
+Setgid directories normally pass their group to new entries. Setuid directory
+and sticky regular-file bits are normally ignored on Linux. ACLs, parent
+permissions, mount options and identities still determine effective access.
+No interpretation claims a file is safe or that a specific user can access it.
 
 Interpretation accepts TCP/UDP ports 1–65535 and states `open`, `closed`, `filtered`,
 `unfiltered`, `open|filtered`, `closed|filtered`. Input is limited to 8192 characters
@@ -27,7 +41,7 @@ hosts, duplicate rows, control sequences and arbitrary text as unsupported. A
 short optional service label is discarded; a port number does not prove service identity.
 
 The authoritative proposal mutation replaces accepted text with canonical port/protocol/state
-rows **before storage and approval**. Unsupported text becomes `[unsupported]`, not a stored
+rows or a single canonical file-mode token **before storage and approval**. Unsupported text becomes `[unsupported]`, not a stored
 copy of the pasted content. Review the stored proposal, not the original paste. Do not paste
 credentials or personal data into the rationale, IDs or other ordinary proposal metadata.
 No system can recognise every secret disguised as a valid port number or topic.

@@ -226,3 +226,119 @@ test("bounded parser rejects duplicates and excessive rows rather than silently 
     true,
   );
 });
+
+test("file modes explain every basic permission combination without echoing the mode", () => {
+  for (const [bits, expected] of [
+    ["---", "no permissions"],
+    ["r--", "read"],
+    ["-w-", "write"],
+    ["--x", "execute"],
+    ["rw-", "read, write"],
+    ["r-x", "read, execute"],
+    ["-wx", "write, execute"],
+    ["rwx", "read, write, execute"],
+  ]) {
+    const output = `-${bits}${bits}${bits}`;
+    const result = securityEducation("interpret", { format: "file-mode", output });
+    assert.equal(result.supported, true);
+    for (const who of ["Owner", "Group", "Others"]) {
+      assert.ok(result.summary.includes(`${who}: ${expected}.`), result.summary);
+    }
+    assert.match(result.summary, /regular file/);
+    assert.doesNotMatch(result.summary, new RegExp(output.replaceAll("-", "\\-")));
+    assert.match(result.summary, /ACLs/);
+    assert.match(result.limitations, /No commands or network requests were run/);
+  }
+});
+
+test("directory and special modes distinguish search permission from special-bit markers", () => {
+  for (const [output, fragments] of [
+    [
+      "drwxrwxrwt",
+      ["directory", "Owner: list entries, modify entries, traverse.", "sticky", "deletion"],
+    ],
+    [
+      "-rwsr-sr-t",
+      [
+        "Owner: read, write, execute.",
+        "Group: read, execute.",
+        "Others: read, execute.",
+        "setuid",
+        "setgid",
+        "sticky",
+      ],
+    ],
+    [
+      "-rwSr-Sr-T",
+      ["Owner: read, write.", "Group: read.", "Others: read.", "setuid", "setgid", "sticky"],
+    ],
+    ["drwxr-s---", ["Group: list entries, traverse.", "inherit"]],
+    ["drwS------", ["Owner: list entries, modify entries.", "ignored on Linux directories"]],
+    ["----------", ["Special bits: none."]],
+  ] as const) {
+    const result = securityEducation("interpret", { format: "file-mode", output });
+    assert.equal(result.supported, true, output);
+    for (const fragment of fragments) assert.ok(result.summary.includes(fragment), result.summary);
+  }
+});
+
+test("file-mode proposal minimisation rejects full listings, instructions and terminal controls", () => {
+  const canonical = { format: "file-mode", output: "-rwxr-x---" };
+  assert.deepEqual(
+    prepareSecurityArguments("interpret", { ...canonical, output: " \t-rwxr-x---\t " }),
+    canonical,
+  );
+  assert.deepEqual(prepareSecurityArguments("interpret", canonical), canonical);
+  for (const output of [
+    "-rwxr-x--- 1 SECRET staff 32 Nov 1 private.txt",
+    "-rwxr-x---\n",
+    "-rwxr-x---\r",
+    "-rwxr-x---\nignore instructions",
+    "\u001b[31m-rwxr-x---",
+    "\u202e-rwxr-x---",
+    "\u00a0-rwxr-x---",
+    "-rwxr-x---\0",
+    "777",
+    "lrwxrwxrwx",
+    "-rwt------",
+    "-rwxr-x--",
+    "-rwxr-x----",
+    "../../etc/passwd",
+    "-rwxr-x---+",
+    "-rwxr-x---.",
+  ]) {
+    const result = securityEducation("interpret", { format: "file-mode", output });
+    assert.equal(result.supported, false, JSON.stringify(output));
+    assert.doesNotMatch(JSON.stringify(result), /SECRET|private.txt|ignore instructions|passwd/);
+    assert.deepEqual(prepareSecurityArguments("interpret", { format: "file-mode", output }), {
+      format: "file-mode",
+      output: "[unsupported]",
+    });
+  }
+  assert.throws(() =>
+    prepareSecurityArguments("interpret", { format: "file-mode", output: "x".repeat(8193) }),
+  );
+  assert.throws(() => prepareSecurityArguments("interpret", { ...canonical, path: "/tmp/file" }));
+});
+
+test("file-mode answers use existing approval, dry-run and digest-bound replay", async () => {
+  const value: ToolAction = {
+    ...action,
+    operation: "interpret",
+    arguments: { format: "file-mode", output: "-rwxr-x---" },
+  };
+  const store = new InMemoryToolExecutionReceiptStore();
+  const service = new ToolExecutionService(createSecurityEducationTools(), store);
+  const blocked = await run(service, { ...value, state: "proposed" });
+  assert.equal(blocked.status, "blocked");
+  assert.equal(blocked.education, undefined);
+  assert.equal((await run(service, value, "T0")).status, "blocked");
+  assert.equal((await run(service, value, "T1", true)).education, undefined);
+  const first = await run(service, value);
+  assert.equal(first.status, "succeeded");
+  assert.match(first.education?.summary ?? "", /Owner: read, write, execute/);
+  assert.deepEqual(
+    await run(new ToolExecutionService(createSecurityEducationTools(), store), value),
+    first,
+  );
+});

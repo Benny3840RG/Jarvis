@@ -10087,6 +10087,7 @@
         }
       },
       "SecurityEducation": {
+        "description": "Offline security education through the existing governed ToolAction execute route. security:interpret accepts port-states excerpts or file-mode: one regular-file/directory symbolic mode token (for example -rwxr-x---), optionally surrounded by spaces/tabs. File modes explain owner/group/other and special bits, not effective access. Full listings, paths, control characters and arbitrary text are unsupported and minimised before proposal storage. No filesystem, shell, network or model calls.",
         "type": "object",
         "additionalProperties": false,
         "required": ["version", "supported", "summary", "limitations"],

@@ -1540,6 +1540,40 @@ describe("regression: a caller-supplied clock can no longer skew execution-gate 
 });
 
 describe("security education proposal minimisation", () => {
+  it("canonicalises file modes before storage and replays equivalent proposals", async () => {
+    const t = harness();
+    const first = await stageAndReturn(t, {
+      tool: "security",
+      operation: "interpret",
+      arguments: { format: "file-mode", output: " \t-rwxr-x--- " },
+    });
+    expect(first.arguments).toEqual({ format: "file-mode", output: "-rwxr-x---" });
+    const replay = await t.mutation(
+      api.toolActions.stage,
+      stageArgs({
+        tool: "security",
+        operation: "interpret",
+        arguments: { format: "file-mode", output: "-rwxr-x---" },
+      }),
+    );
+    expect(replay._id).toBe(first._id);
+  });
+  it("does not persist filenames or owners from full permission listings", async () => {
+    const t = harness();
+    const row = await stageAndReturn(t, {
+      tool: "security",
+      operation: "interpret",
+      arguments: { format: "file-mode", output: "-rwxr-x--- 1 SECRET staff private.txt" },
+    });
+    expect(row.arguments).toEqual({ format: "file-mode", output: "[unsupported]" });
+    const records = await t.run(async (ctx) => ({
+      actions: await ctx.db.query("toolActions").collect(),
+      audit: await ctx.db.query("auditEvents").collect(),
+    }));
+    expect(JSON.stringify(records)).not.toContain("SECRET");
+    expect(JSON.stringify(records)).not.toContain("private.txt");
+  });
+
   it("drops pasted service labels before storage and audit; equivalent minimised retries replay", async () => {
     const t = harness();
     const first = await stageAndReturn(t, {

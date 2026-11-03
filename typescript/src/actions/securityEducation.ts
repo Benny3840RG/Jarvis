@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { canonicalFileMode, fileModeSummary } from "./fileModeEducation.js";
 import type { ToolExecutionDefinition } from "./toolExecution.js";
 
 const LESSONS = {
@@ -37,7 +38,7 @@ const explainSchema = z
   })
   .strict();
 const interpretSchema = z
-  .object({ format: z.literal("port-states"), output: z.string().min(1).max(8192) })
+  .object({ format: z.enum(["port-states", "file-mode"]), output: z.string().min(1).max(8192) })
   .strict();
 
 // Deliberately a narrow grammar, not a command parser or a general Nmap report parser.
@@ -78,6 +79,9 @@ export function prepareSecurityArguments(
   if (operation === "explain") return explainSchema.parse(args);
   if (operation !== "interpret") throw new Error("Unsupported security education operation.");
   const parsed = interpretSchema.parse(args);
+  if (parsed.format === "file-mode") {
+    return { format: parsed.format, output: canonicalFileMode(parsed.output) ?? "[unsupported]" };
+  }
   const rows = portRows(parsed.output);
   return {
     format: parsed.format,
@@ -97,7 +101,18 @@ export function securityEducation(
     return { version: 1, supported: true, summary: LESSONS[topic], limitations: LIMITATIONS };
   }
   if (operation !== "interpret") throw new Error("Unsupported security education operation.");
-  const { output } = interpretSchema.parse(args);
+  const { format, output } = interpretSchema.parse(args);
+  if (format === "file-mode") {
+    const summary = fileModeSummary(output);
+    return {
+      version: 1,
+      supported: summary !== null,
+      summary:
+        summary ??
+        "Unsupported file-mode text. Supply one ten-character regular-file or directory symbolic mode, such as -rwxr-x---, without names, paths, ACL markers or other listing fields. No conclusion can be drawn from this input.",
+      limitations: LIMITATIONS,
+    };
+  }
   const rows = portRows(output);
   if (!rows) return { ...UNKNOWN };
   const count = (state: string) => rows.filter((row) => row.state === state).length;
