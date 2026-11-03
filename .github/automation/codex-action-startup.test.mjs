@@ -22,6 +22,19 @@ test("every Codex worker workflow has a startup-path regression", () => {
   assert.deepEqual(found.sort(), [...workflows].sort());
 });
 
+test("socket validation and Codex workers share the verified Ubuntu release", () => {
+  for (const [workflow, job] of [
+    ["typescript.yml", "automation-policy"],
+    ["jarvis-autobuild.yml", "build"],
+    ["jarvis-pr-maintenance.yml", "review"],
+  ]) {
+    const source = read(`.github/workflows/${workflow}`);
+    const block = source.split(`\n  ${job}:\n`)[1]?.split(/\n  [a-z][a-z-]*:\n/)[0];
+    assert.ok(block, `${workflow}: ${job} must exist`);
+    assert.match(block, /^    runs-on: ubuntu-24\.04$/m, `${workflow}: ${job}`);
+  }
+});
+
 function startup(source) {
   const block = source.match(
     /      - name: (?:Prepare isolated review directory and worker socket isolation|Preserve service sockets during worker isolation)\n([\s\S]*?)(?=\n      - name:)/,
