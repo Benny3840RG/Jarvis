@@ -1,6 +1,13 @@
 import { z } from "zod";
 
-import { canonicalFileMode, fileModeSummary } from "./fileModeEducation.js";
+import {
+  canonicalFileMode,
+  fileModeSummary,
+  canonicalOctalMode,
+  canonicalUmask,
+  umaskSummary,
+  octalFileModeSummary,
+} from "./fileModeEducation.js";
 import type { ToolExecutionDefinition } from "./toolExecution.js";
 
 const LESSONS = {
@@ -37,9 +44,18 @@ const explainSchema = z
     topic: z.enum(Object.keys(LESSONS) as [keyof typeof LESSONS, ...(keyof typeof LESSONS)[]]),
   })
   .strict();
-const interpretSchema = z
-  .object({ format: z.enum(["port-states", "file-mode"]), output: z.string().min(1).max(8192) })
-  .strict();
+const interpretSchema = z.discriminatedUnion("format", [
+  z.object({ format: z.literal("umask"), output: z.string().min(1).max(8192) }).strict(),
+  z.object({ format: z.literal("port-states"), output: z.string().min(1).max(8192) }).strict(),
+  z.object({ format: z.literal("file-mode"), output: z.string().min(1).max(8192) }).strict(),
+  z
+    .object({
+      format: z.literal("file-mode-octal"),
+      kind: z.enum(["file", "directory"]),
+      output: z.string().min(1).max(8192),
+    })
+    .strict(),
+]);
 
 // Deliberately a narrow grammar, not a command parser or a general Nmap report parser.
 // Full-line matching prevents pasted instructions and metadata from becoming observations.
@@ -79,8 +95,18 @@ export function prepareSecurityArguments(
   if (operation === "explain") return explainSchema.parse(args);
   if (operation !== "interpret") throw new Error("Unsupported security education operation.");
   const parsed = interpretSchema.parse(args);
+  if (parsed.format === "umask") {
+    return { format: parsed.format, output: canonicalUmask(parsed.output) ?? "[unsupported]" };
+  }
   if (parsed.format === "file-mode") {
     return { format: parsed.format, output: canonicalFileMode(parsed.output) ?? "[unsupported]" };
+  }
+  if (parsed.format === "file-mode-octal") {
+    return {
+      format: parsed.format,
+      kind: parsed.kind,
+      output: canonicalOctalMode(parsed.output) ?? "[unsupported]",
+    };
   }
   const rows = portRows(parsed.output);
   return {
@@ -101,7 +127,30 @@ export function securityEducation(
     return { version: 1, supported: true, summary: LESSONS[topic], limitations: LIMITATIONS };
   }
   if (operation !== "interpret") throw new Error("Unsupported security education operation.");
-  const { format, output } = interpretSchema.parse(args);
+  const parsed = interpretSchema.parse(args);
+  const { format, output } = parsed;
+  if (format === "umask") {
+    const summary = umaskSummary(output);
+    return {
+      version: 1,
+      supported: summary !== null,
+      summary:
+        summary ??
+        "Unsupported umask text. Supply three octal digits (0-7), optionally preceded by zero, without commands, filenames or other text. No conclusion can be drawn from this input.",
+      limitations: LIMITATIONS,
+    };
+  }
+  if (parsed.format === "file-mode-octal") {
+    const summary = octalFileModeSummary(output, parsed.kind);
+    return {
+      version: 1,
+      supported: summary !== null,
+      summary:
+        summary ??
+        "Unsupported numeric mode. Supply exactly three or four octal digits (0-7) and an explicit file or directory kind. No conclusion can be drawn from this input.",
+      limitations: LIMITATIONS,
+    };
+  }
   if (format === "file-mode") {
     const summary = fileModeSummary(output);
     return {

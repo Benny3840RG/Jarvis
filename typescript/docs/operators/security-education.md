@@ -58,6 +58,33 @@ changes the answer, an old receipt remains digest-only; stage and approve a fres
 There is no new database field or backup version. JSON-only runtime remains unsupported
 for governed ToolActions, as before. No standalone MCP tool, voice route or HUD control is added.
 
+## Numeric modes
+
+Use `interpret` with `{"format":"file-mode-octal","kind":"file","output":"750"}`
+for owner read/write/execute, group read/execute and no permissions for others.
+Use `kind: "directory"` for directory semantics; the kind is required because
+numeric permissions do not identify the object type. `1777` on a directory
+explains sticky-bit restrictions, and `2750` explains group inheritance.
+
+Accepts exactly three or four digits from 0–7 with optional ASCII spaces/tabs.
+Three digits imply no special bits; canonical storage pads them to four digits.
+No sign, `0o` prefix, command, filename, newline or guessed type is accepted.
+This is educational interpretation, not a chmod operation or advice to change
+permissions. The symbolic `file-mode` format continues to reject numeric input.
+
+## Creation masks
+
+Use `interpret` with `{"format":"umask","output":"022"}` to explain what
+an illustrative `0666` file request and `0777` directory request become:
+`0644` and `0755`. A mask removes bits; it cannot add execution permission to a
+file request. Actual application requests and parent default ACLs can change
+the result, so this is not a claim about a real file or your current process.
+Existing permissions are unchanged. Jarvis does not set the process umask.
+
+Accepts exactly three octal digits or four with leading zero; horizontal ASCII
+padding is allowed. Canonical storage uses four digits. Special-bit masks,
+commands, filenames, signs, prefixes and newlines are unsupported.
+
 ## Limits and recovery
 
 This slice cannot execute commands, read files, resolve names, scan networks, load URLs,

@@ -53,3 +53,51 @@ export function fileModeSummary(output: string): string | null {
     "Mode bits alone do not establish effective access. ACLs, parent directories, mount options, identities and other system controls can change the result.",
   ].join(" ");
 }
+
+/** Octal modes omit object type, so callers must supply it separately. */
+export function canonicalOctalMode(output: string): string | null {
+  const match = /^[ \t]*([0-7]{3,4})[ \t]*$/.exec(output);
+  return match !== null && match[0] === output ? match[1]!.padStart(4, "0") : null;
+}
+
+export function octalFileModeSummary(output: string, kind: "file" | "directory"): string | null {
+  const octal = canonicalOctalMode(output);
+  if (octal === null) return null;
+  const special = Number(octal[0]);
+  const groups = [1, 2, 3].map((index) => {
+    const bits = Number(octal[index]);
+    const execute = (bits & 1) !== 0;
+    const specialBit = [4, 2, 1][index - 1]!;
+    const marker = index === 3 ? "t" : "s";
+    const final =
+      (special & specialBit) !== 0
+        ? execute
+          ? marker
+          : marker.toUpperCase()
+        : execute
+          ? "x"
+          : "-";
+    return `${(bits & 4) !== 0 ? "r" : "-"}${(bits & 2) !== 0 ? "w" : "-"}${final}`;
+  });
+  return fileModeSummary(`${kind === "directory" ? "d" : "-"}${groups.join("")}`);
+}
+
+export function canonicalUmask(output: string): string | null {
+  const octal = canonicalOctalMode(output);
+  return octal !== null && octal[0] === "0" ? octal : null;
+}
+
+/** Illustrative creation requests only; no process mask or file is changed. */
+export function umaskSummary(output: string): string | null {
+  const canonical = canonicalUmask(output);
+  if (canonical === null) return null;
+  const mask = Number.parseInt(canonical, 8);
+  const file = (0o666 & ~mask).toString(8).padStart(4, "0");
+  const directory = (0o777 & ~mask).toString(8).padStart(4, "0");
+  return [
+    `Without a default ACL, a 0666 file request yields ${file}; a 0777 directory request yields ${directory}.`,
+    "These are illustrative requested modes, not verified defaults. Applications may request different permissions; a parent default ACL changes how creation permissions are determined. A mask removes bits; it never grants execute permission absent from the creation request. Existing permissions are unchanged.",
+    octalFileModeSummary(file, "file")!,
+    octalFileModeSummary(directory, "directory")!,
+  ].join(" ");
+}

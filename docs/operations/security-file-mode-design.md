@@ -9,7 +9,12 @@ existing T1 ToolAction lifecycle. Accept only a regular-file or directory mode
 and horizontal ASCII padding; minimise to the canonical token before durable
 staging. Invalid excerpts become the existing unsupported marker. Fixed text
 explains access classes and special bits without echoing raw input or asserting
-effective access. Full listings and octal input are deliberately unsupported.
+effective access. Full listings remain unsupported. Numeric modes use a separate `file-mode-octal`
+format with mandatory file/directory kind; three/four octal digits canonicalise
+to four digits, then reuse the symbolic interpreter. No object type is inferred.
+The `umask` format accepts only nine permission mask bits and illustrates
+0666-file/0777-directory creation requests, with default-ACL caveats. It does
+not inspect or set process masks and cannot change existing permissions.
 
 A separate command, LLM interpreter or live filesystem reader would duplicate
 existing paths or add unnecessary cost/access. The selected design extends the

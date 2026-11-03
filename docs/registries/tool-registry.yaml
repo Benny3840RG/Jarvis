@@ -79,7 +79,7 @@ tools:
   - id: TOOL-SECURITY-INTERPRET
     lifecycle_status: planned
     implemented: true
-    description: Education-only security:interpret binding for port-state excerpts and regular-file/directory mode bits. Local deterministic results through existing approval and execution gates; no shell, network or model calls. Not commissioned or deployed.
+    description: Education-only security:interpret binding for port-state excerpts and symbolic/numeric regular-file/directory mode bits and creation masks. Local deterministic results through existing approval and execution gates; no shell, network or model calls. Not commissioned or deployed.
     implementation: typescript/src/actions/securityEducation.ts
     allowlist: typescript/src/actions/toolExecutionFactory.ts
     bound_by: [AM-015]

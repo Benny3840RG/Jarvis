@@ -1540,6 +1540,41 @@ describe("regression: a caller-supplied clock can no longer skew execution-gate 
 });
 
 describe("security education proposal minimisation", () => {
+  it("canonicalises numeric modes before proposal replay and rejects missing kind", async () => {
+    const t = harness();
+    const first = await stageAndReturn(t, {
+      tool: "security",
+      operation: "interpret",
+      arguments: { format: "file-mode-octal", kind: "directory", output: " 750 " },
+    });
+    expect(first.arguments).toEqual({
+      format: "file-mode-octal",
+      kind: "directory",
+      output: "0750",
+    });
+    const replay = await t.mutation(
+      api.toolActions.stage,
+      stageArgs({
+        tool: "security",
+        operation: "interpret",
+        arguments: { format: "file-mode-octal", kind: "directory", output: "0750" },
+      }),
+    );
+    expect(replay._id).toBe(first._id);
+    await expect(
+      t.mutation(
+        api.toolActions.stage,
+        stageArgs({
+          actionId: "missing-kind",
+          tool: "security",
+          operation: "interpret",
+          arguments: { format: "file-mode-octal", output: "750" },
+        }),
+      ),
+    ).rejects.toThrow();
+    expect(await t.run((ctx) => ctx.db.query("toolActions").collect())).toHaveLength(1);
+  });
+
   it("canonicalises file modes before storage and replays equivalent proposals", async () => {
     const t = harness();
     const first = await stageAndReturn(t, {

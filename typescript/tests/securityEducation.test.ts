@@ -342,3 +342,163 @@ test("file-mode answers use existing approval, dry-run and digest-bound replay",
     first,
   );
 });
+
+test("numeric modes explain common permissions with an explicit object kind", () => {
+  for (const [output, kind, fragments] of [
+    [
+      "750",
+      "file",
+      [
+        "regular file",
+        "Owner: read, write, execute.",
+        "Group: read, execute.",
+        "Others: no permissions.",
+      ],
+    ],
+    ["644", "file", ["Owner: read, write.", "Group: read.", "Others: read."]],
+    [
+      "000",
+      "directory",
+      ["directory", "Owner: no permissions.", "Group: no permissions.", "Others: no permissions."],
+    ],
+    ["777", "directory", ["Owner: list entries, modify entries, traverse."]],
+    ["1777", "directory", ["sticky", "deletion"]],
+    ["4755", "file", ["setuid", "Owner: read, write, execute."]],
+    ["2640", "file", ["setgid", "Group: read."]],
+    ["2750", "directory", ["inherit", "Group: list entries, traverse."]],
+    [
+      "7000",
+      "file",
+      [
+        "Owner: no permissions.",
+        "Group: no permissions.",
+        "Others: no permissions.",
+        "setuid",
+        "setgid",
+        "sticky",
+      ],
+    ],
+  ] as const) {
+    const result = securityEducation("interpret", { format: "file-mode-octal", kind, output });
+    assert.equal(result.supported, true, output);
+    for (const fragment of fragments) assert.ok(result.summary.includes(fragment), result.summary);
+    assert.match(result.summary, /Mode bits alone do not establish effective access/);
+  }
+});
+
+test("numeric mode minimisation normalises only complete three/four-digit tokens", () => {
+  const expected = { format: "file-mode-octal", kind: "file", output: "0750" };
+  for (const output of ["750", "0750", " \t750\t "]) {
+    const args = prepareSecurityArguments("interpret", {
+      format: "file-mode-octal",
+      kind: "file",
+      output,
+    });
+    assert.deepEqual(args, expected);
+    assert.deepEqual(prepareSecurityArguments("interpret", args), expected);
+  }
+  for (const output of [
+    "888",
+    "-750",
+    "+750",
+    "0o750",
+    "00750",
+    "75",
+    "750\n",
+    "750\r",
+    "750 private.txt",
+    "chmod 750 private.txt",
+    "\u00a0750",
+    "750\0",
+    "7e2",
+    "\u001b[31m750",
+    "[unsupported]",
+  ]) {
+    const args = { format: "file-mode-octal", kind: "file", output };
+    assert.equal(securityEducation("interpret", args).supported, false, JSON.stringify(output));
+    assert.deepEqual(prepareSecurityArguments("interpret", args), {
+      ...args,
+      output: "[unsupported]",
+    });
+    assert.doesNotMatch(JSON.stringify(securityEducation("interpret", args)), /private.txt|chmod/);
+  }
+  for (const args of [
+    { format: "file-mode-octal", output: "750" },
+    { format: "file-mode-octal", kind: "symlink", output: "750" },
+    { format: "file-mode-octal", kind: "file", output: 750 },
+    { format: "file-mode-octal", kind: "file", output: "750", command: "id" },
+  ])
+    assert.throws(() => prepareSecurityArguments("interpret", args));
+});
+
+test("numeric modes reuse existing governed execution and receipt replay", async () => {
+  const value: ToolAction = {
+    ...action,
+    operation: "interpret",
+    arguments: {
+      format: "file-mode-octal",
+      kind: "directory",
+      output: "1777",
+    },
+  };
+  const store = new InMemoryToolExecutionReceiptStore();
+  const service = new ToolExecutionService(createSecurityEducationTools(), store);
+  assert.equal((await run(service, { ...value, state: "proposed" })).education, undefined);
+  assert.equal((await run(service, value, "T0")).status, "blocked");
+  assert.equal((await run(service, value, "T1", true)).education, undefined);
+  const first = await run(service, value);
+  assert.equal(first.status, "succeeded");
+  assert.match(first.education?.summary ?? "", /sticky/);
+  assert.deepEqual(
+    await run(new ToolExecutionService(createSecurityEducationTools(), store), value),
+    first,
+  );
+});
+
+test("umask explains illustrative file and directory creation modes rather than actual access", () => {
+  for (const [output, file, directory] of [
+    ["022", "0644", "0755"],
+    ["077", "0600", "0700"],
+    ["002", "0664", "0775"],
+    ["000", "0666", "0777"],
+    ["777", "0000", "0000"],
+    ["0077", "0600", "0700"],
+  ]) {
+    const result = securityEducation("interpret", { format: "umask", output });
+    assert.equal(result.supported, true);
+    assert.ok(result.summary.includes(`0666 file request yields ${file}`), result.summary);
+    assert.ok(
+      result.summary.includes(`0777 directory request yields ${directory}`),
+      result.summary,
+    );
+    assert.match(result.summary, /default ACL/);
+    assert.match(result.summary, /Existing permissions are unchanged/);
+    assert.ok(result.summary.length <= 2000);
+  }
+});
+
+test("umask minimisation refuses special bits and pasted commands", () => {
+  const canonical = { format: "umask", output: "0022" };
+  assert.deepEqual(
+    prepareSecurityArguments("interpret", { format: "umask", output: " \t022 " }),
+    canonical,
+  );
+  assert.deepEqual(prepareSecurityArguments("interpret", canonical), canonical);
+  for (const output of [
+    "1022",
+    "7777",
+    "22",
+    "888",
+    "umask 022",
+    "022\n",
+    "022 private.txt",
+    "0o022",
+  ]) {
+    assert.equal(securityEducation("interpret", { format: "umask", output }).supported, false);
+    assert.deepEqual(prepareSecurityArguments("interpret", { format: "umask", output }), {
+      format: "umask",
+      output: "[unsupported]",
+    });
+  }
+  assert.throws(() => prepareSecurityArguments("interpret", { ...canonical, kind: "file" }));
+});

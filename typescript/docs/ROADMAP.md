@@ -3,7 +3,10 @@
 ## Offline file-permission education (#777)
 
 The existing `security:interpret` ToolAction now accepts `file-mode` alongside
-`port-states`. It explains regular-file/directory owner, group and other bits,
+`port-states`; `file-mode-octal` adds three/four-digit numeric interpretation
+with an explicitly supplied file/directory kind and canonical four-digit storage.
+`umask` explains illustrative file/directory creation masks, including the
+requested-mode and default-ACL caveats, without changing any permissions. It explains regular-file/directory owner, group and other bits,
 setuid, setgid and sticky semantics without filesystem, shell, network or model
 calls. Strict parsing and proposal minimisation keep names, paths and full
 listings out of storage. Existing approval, receipt digest/replay and transient
