@@ -87,7 +87,7 @@
     "@types/node": "^24.19.2",
     "ajv": "^8.20.0",
     "concurrently": "10.0.6",
-    "convex-test": "0.0.62",
+    "convex-test": "0.0.66",
     "eslint": "^10.13.0",
     "fast-check": "4.10.2",
     "globals": "^17.13.0",
