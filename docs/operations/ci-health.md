@@ -42,6 +42,15 @@ npm run check
 
 ### Automation policy (`automation-policy`)
 
+The socket-isolation fixture and both Codex worker jobs are pinned to
+`ubuntu-24.04`. On 2026-11-03, run `41572152990` passed the unchanged fixture
+on Ubuntu 24.04, while both attempts of `41586040442` failed its post-ACL
+access check on Ubuntu 26.04. All used Node 24.22.1. This identifies a runner
+compatibility boundary, not the precise OS-level cause. Keep validation and
+workers on the same verified release; qualify a newer release with the full
+root/unprivileged socket suite before changing all three pins together. Never
+skip the fixture or alter its denial assertions to accommodate a runner update.
+
 Run locally from the repository root:
 
 ```bash
