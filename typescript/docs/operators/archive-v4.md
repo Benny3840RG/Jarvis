@@ -256,7 +256,15 @@ restore, field fidelity, quote sha256 equality, and tombstoned replay refusal,
 and the restart step failed because the child was not given the delivery
 token. The harness now passes that token. Full end-to-end recovery on
 realistic data stays **NOT YET MET** until the host repeats that restart
-step. This gate does not write the live data
+step. `npm run commission:local-v1-recovery` drives that restart step: it reads
+`JARVIS_LV1_ISOLATED_CONVEX_URL` (a loopback backend, refused if it is the
+configured `CONVEX_URL` or a cloud host), `JARVIS_DELIVERY_RUNTIME_TOKEN`, the
+restored `JARVIS_LV1_JSON_DIR`, and the representative ids, runs the proof, and
+writes a dated evidence file (default `~/lv1-01/restart-proof-<sha>.md`) with
+the quote body sha256. It automates only the restart proof; capture, restore,
+reread, and the Convex-function rollback assertions stay operator steps, listed
+unchecked in that file. The driver clears no gate — it is evidence, not
+acceptance. This gate does not write the live data
 directory and it does not construct a client from the configured `CONVEX_URL`.
 `completeness` stays `partial`. `assertRecoverable` still throws. This is not
 a recovery.
