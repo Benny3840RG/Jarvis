@@ -167,8 +167,11 @@ each reacquire a refunded token and defeat the ten-per-minute cap):
     self-cleaning) is **not** a blind release; it is governed by the crash-recovery
     rule below, which keys off the record's durable phase.
 - **Crash recovery — the slot is held until termination is *proven*, never reclaimed
-  on a timer** _(proposal: ≤ 4 s connect deadline, strictly shorter than the 5 s
-  lease; 10 s grace)_: a recovering party cannot observe or cancel another worker's
+  on a timer** _(proposal: the reported **connect deadline is 5 s** (§Approved
+  parameters); the reservation **lease is strictly longer**, e.g. 15 s, + 10 s grace,
+  so a live attempt's lease never expires mid-connect — the deadline and the lease are
+  distinct, and only the 5 s connect deadline is ever reported as `timed-out`)_: a
+  recovering party cannot observe or cancel another worker's
   socket, and a worker suspended (SIGSTOP / pathological GC pause) past lease+grace
   has a **frozen** deadline timer, so a hard local deadline **cannot** be relied on to
   bound a suspended executor's effect. The design therefore does **not** reclaim the
@@ -205,48 +208,70 @@ each reacquire a refunded token and defeat the ten-per-minute cap):
   held** — recovery's `started → uncertain` write supersedes the token, so a resumed
   straggler can neither record `started` nor commit a late `completed` (no invented or
   post-recovery success).
-- **Enforcement is out-of-band — the effect is emitted through a supervised egress
-  mediator, not a direct worker `connect()`.** Any check a worker runs in its **own**
-  userspace *before* `connect()` — freshness, the 5 s deadline, even digest/epoch —
-  can be defeated by a suspension between the check and the syscall, so an in-worker
-  check can never be the enforcement point of record. The worker therefore does **not**
-  open the socket. It presents a short-lived **effect capability** — bound to the
-  pinned `(ip, port)`, `allowlistDigest`, epoch, the snapshot's **freshness deadline**,
-  and the reservation's fence token — to the **supervised egress mediator**, which
-  performs the **authoritative final check at the instant of connect** (target ∈
-  allowlist under the *currently active* policy, table within its freshness bound,
-  capability unexpired, fence token active) and only then opens the socket and enforces
-  the 5 s deadline on the socket **it owns**. The in-worker fenced check (R3) stays as
-  a cheap early-reject, not the guarantee.
-- **Why suspension can no longer defeat a check.** A worker suspended after the fenced
-  `reserved → started` step holds no socket; on resume its capability has expired
-  (freshness/lease elapsed) and the mediator refuses, so it can never cause a connect
-  under an expired table, a superseded policy, or past the deadline. And because the
-  mediator **owns the socket**, socket termination is **directly observed** by the
-  mediator — the earlier "cannot inspect another worker's socket" problem does not
-  arise for the effect itself; the slot is released on the mediator's own
-  socket-closed signal. (The mediator is the trusted enforcement boundary, like a
-  governed egress proxy; its robustness is the commissioning bar, below.)
-- **Fail-closed, and a prerequisite for commissioning.** The supervised egress
-  mediator is the enforcement point of record: it performs the final connect-time
-  check, owns and deadline-bounds the socket, and signals its closure. Absent such a
-  mediator **no effect may be emitted at all** — the capability has nowhere
-  enforceable to go — and after any `uncertain` the owner's slot stays held until the
-  mediator signals closure; the owner can run no new check until then. For a
+- **Enforcement is at the egress policy in force, applied by the kernel/proxy — not a
+  userspace check-then-syscall.** Making the final check atomic with the connect is
+  impossible for **any userspace actor** — a worker *or* a userspace mediator can be
+  suspended between its check and the syscall, so no userspace branch can be the
+  enforcement point of record. The design therefore requires the effect to leave only
+  through a **kernel- or proxy-enforced egress policy** (the "supervised egress
+  mediator"): the worker does **not** open a socket to an arbitrary address; it
+  presents a short-lived **effect capability** — bound to the pinned `(ip, port)`,
+  `allowlistDigest`, epoch, the snapshot's **freshness deadline**, and the fence token
+  — and the egress layer admits the connection **iff, at the instant the connection is
+  attempted**, the destination is in the active-policy allowlist, under a fresh table,
+  within an unexpired capability. The gate is applied by the kernel/proxy per
+  connection, independent of any userspace timeline; the in-worker fenced check (R3)
+  is a cheap early-reject, not the guarantee.
+- **Freshness and target removal are control-plane teardowns, not inline userspace
+  checks.** When the table goes stale (freshness bound passed) or a reviewed change
+  removes a target, the control plane **tears down / narrows the egress policy**, after
+  which the kernel/proxy refuses subsequent connects to the affected destination. The
+  guarantee is therefore precisely: *no connection is admitted except under the egress
+  policy in force at that instant.* The residual is **not** userspace atomicity but the
+  **bounded control-plane teardown latency** — the brief window between a narrowing
+  decision and the egress policy being updated — which is a stated, bounded property
+  and is itself **fail-closed** (if teardown cannot be confirmed, the policy is set to
+  deny). A worker suspended after the fenced `reserved → started` step holds no socket;
+  on resume it must still pass the egress gate, whose policy may by then deny it.
+- **Open item — the concrete kernel/proxy mechanism is an implementation + commissioning
+  prerequisite.** Stage-1 specifies the **required property** (per-connection
+  kernel/proxy enforcement; control-plane teardown on staleness or target removal;
+  bounded, fail-closed residual), **not** the mechanism. The concrete enforcer — e.g.
+  an egress firewall / eBPF policy, or a dedicated enforcing proxy whose running config
+  is the compiled policy and which owns the socket — is selected and specified in the
+  implementation PR. Stage-1 makes **no** claim of a userspace-atomic guarantee; until
+  the enforcer exists and is commissioned, no effect may be emitted (see Gates).
+- **`uncertain` has a durable exit — it is never terminal.** The enforcer owns the
+  socket, so it produces exactly one durable signal per capability: **socket-closed**
+  (the connection ran and ended) or **never-admitted** (the egress gate refused — stale
+  capability, policy teardown, or the connection was never attempted). Either signal
+  transitions the attempt `uncertain → resolved` (a terminal, durable state), which
+  **releases the slot** *and* **clears the policy-narrowing block** for that target.
+  So an `uncertain` attempt cannot permanently wedge the slot or block a target-removing
+  activation — resolution is bounded by the capability's own lifetime (lease + the
+  enforcer's socket-teardown), after which the enforcer's signal is guaranteed to have
+  arrived or the capability to have expired `never-admitted`. The started-attempt
+  history entry still counts regardless.
+- **Fail-closed, and a prerequisite for commissioning.** Absent the kernel/proxy
+  enforcer **no effect may be emitted at all** — the capability has nowhere enforceable
+  to go. After any `uncertain` the owner's slot stays held only until the enforcer's
+  `resolved` signal (above); the owner can run no new check until then. For a
   1-active/owner, 10-per-60 s diagnostic this is an acceptable **liveness** cost and is
   strictly preferable to relaxing the concurrency, freshness, or policy limits. The
-  enforceable **supervised egress mediator** is therefore a **commissioning
-  prerequisite**, not an implementation detail (see Gates).
+  enforceable egress mechanism is therefore a **commissioning prerequisite**, not an
+  implementation detail (see Gates).
 - **Adversarial recovery cases (required tests):** (a) suspension *before* connect —
   the stale-token worker cannot record `started`, so it never connects; (b) suspension
-  *after* the fenced `reserved → started` but before the mediator connects — on resume
-  the capability has expired, the mediator refuses, so no socket opens (and, if the
-  table freshness bound passed in the interval, the mediator refuses even with matching
-  digest/epoch); (c) suspension *with an open socket* — the slot stays held as
-  `uncertain` until the mediator signals that socket closed; no new attempt is
-  admitted; the straggler's eventual result write is fenced out; (d) *repeated*
-  recoveries — each leaves the slot held, so stragglers cannot accumulate into multiple
-  concurrent executors.
+  *after* the fenced `reserved → started` but before the egress connect — on resume the
+  capability has expired or the egress policy has narrowed, so the **egress gate**
+  refuses and no connection is admitted (and if the table freshness bound passed in the
+  interval it refuses even with matching digest/epoch); (c) suspension *with an open
+  socket* — the slot stays held as `uncertain` until the enforcer's socket-closed
+  signal resolves it; no new attempt is admitted; the straggler's result write is
+  fenced out; (d) *repeated* recoveries — each leaves the slot held, so stragglers
+  cannot accumulate into multiple concurrent connections; (e) a permanently-gone worker
+  — the capability's lifetime elapses, the enforcer emits `never-admitted`, the attempt
+  resolves, the slot releases and the target-removal block clears (no permanent wedge).
 
 ## Special-use address policy (R2)
 
@@ -274,12 +299,14 @@ what establishes the table is the reviewed one.
 table's snapshot is older than a reviewed freshness bound, or fails the anchor check
 above, **all** allowlist use is blocked (deny-all). Crucially, freshness is **not**
 only a load-time gate: a reservation pins the snapshot's **freshness deadline**, the
-in-worker fenced pre-connect check (R3) re-evaluates it as an early reject, and — the
-**authoritative** check — the **supervised egress mediator re-evaluates freshness at
-the instant of connect** on the socket it owns (R1). A worker that pauses right after
-the fenced check and resumes **after** the freshness bound therefore still opens no
-socket: its capability is expired and the mediator refuses, even though its digest and
-epoch are unchanged. A newly allocated special-use range can thus never be reached
+in-worker fenced pre-connect check (R3) re-evaluates it as an early reject, and —
+**authoritatively** — a stale table triggers a **control-plane teardown** of the
+kernel/proxy egress policy (R1), after which the egress gate admits no connection to
+the affected range. A worker that pauses right after the fenced check and resumes
+**after** the freshness bound therefore still opens no socket: its capability has
+expired and the egress policy has narrowed, so the gate refuses, even though its digest
+and epoch are unchanged (bounded only by the control-plane teardown latency, which is
+itself fail-closed). A newly allocated special-use range can thus never be reached
 merely because it is absent from an out-of-date table, nor by a worker that paused
 across the freshness boundary between the check and the syscall.
 
@@ -345,10 +372,10 @@ exploited:
   immutable in-memory snapshot (allowlist + table) and records the epoch it was taken
   from **and the snapshot's freshness deadline** (R2). `allowlistDigest`, the epoch,
   and freshness are re-derived/re-read at staging, at approval, in the **same atomic
-  fenced step** that flips `reserved → started` (a cheap early reject), and — the
-  **authoritative** check — again at the **supervised egress mediator** at the instant
-  of connect (R1), since only a check the suspendable worker cannot bypass is
-  enforceable. If at the fenced step the live digest
+  fenced step** that flips `reserved → started` (a cheap early reject), and —
+  **authoritatively** — are enforced by the **kernel/proxy egress policy in force**
+  when the connection is attempted (R1), since only a gate no userspace actor can
+  bypass is enforceable. If at the fenced step the live digest
   differs from the approved one, the live epoch is newer than the pinned one, the
   `(ip, port)` entry is absent from the current policy, **or the pinned snapshot has
   passed its freshness deadline** (so a reservation that paused across the staleness
@@ -435,7 +462,7 @@ the result is durably recorded must not be resolved by reconnecting.
 
 - _Existing approval/policy cannot be bypassed_ → T3 + GovernedExternalOperation claim; `allowlistDigest` bound + revalidated at admission; no new effect channel.
 - _Default deny; no wildcard targets or free-form shell_ → vendored special-use table (deny) **and** explicit `(ip, port)` allowlist (permit), both mandatory; typed params; library-only adapter.
-- _Tests_ → table-driven special-use coverage (one case per row, first/last address, neighbours just outside each range, a test that fails if a row is removed; canonicalisation + zone-ID/bracket rejection; translation/transition forms); CIDR/range/hostname rejection; per-target port + fingerprint/digest binding; 5 s timeout; cancellation (`AbortSignal`); **eleven sequential fast outcomes inside 60 s → the eleventh is `rate_limited`**; window roll-over resumes admission; simultaneous requests at both limits admit exactly one / exactly ten; unstarted reservation cleaned up and consumes nothing; **policy swap/removal observed at/before the fenced pre-connect check ⇒ no socket opens (`policy_changed`); a digest-change test asserts any table-row edit changes `allowlistDigest`**; a **target-narrowing activation stays staged while an effect pinned to that target is admitted or `uncertain`, then activates** (paused-worker + target-removal timeline: a worker paused before a removal, resumed after, connects only under the then-active snapshot — never the removed target); forged caller digest not honoured; **a table whose contents are edited together with its declared digest fails the trusted-anchor check (deny-all); a reservation that pauses past the freshness deadline is refused at the fenced pre-connect check (`policy_changed`) despite unchanged digest/epoch; a worker suspended **after** the fenced check and resumed past the freshness/lease bound presents an expired capability and the mediator opens no socket (deadline and freshness are enforced by the mediator at connect, not a worker-local timer)**; **crash after `started` ⇒ `uncertain`/blocked, no socket; the slot stays held until a supervised termination proof, so no second executor is admitted; a straggler resuming after recovery cannot commit a late `completed` (result-commit fence)**; a stale `reserved` (never-`started`) recovery releases via fenced cleanup and a resumed stale-token worker cannot then `start`/connect; adversarial recovery cases — suspension *before* connect (never connects), suspension *with an open socket* (slot held, no new admission), *repeated* recoveries (stragglers never accumulate into concurrent executors); cancellation mid-connect destroys socket, releases slot, keeps history; completed-result replay opens no socket; receipt redaction; allowlist-empty default-deny.
+- _Tests_ → table-driven special-use coverage (one case per row, first/last address, neighbours just outside each range, a test that fails if a row is removed; canonicalisation + zone-ID/bracket rejection; translation/transition forms); CIDR/range/hostname rejection; per-target port + fingerprint/digest binding; 5 s timeout; cancellation (`AbortSignal`); **eleven sequential fast outcomes inside 60 s → the eleventh is `rate_limited`**; window roll-over resumes admission; simultaneous requests at both limits admit exactly one / exactly ten; unstarted reservation cleaned up and consumes nothing; **policy swap/removal observed at/before the fenced pre-connect check ⇒ no socket opens (`policy_changed`); a digest-change test asserts any table-row edit changes `allowlistDigest`**; a **target-narrowing activation stays staged while an effect pinned to that target is admitted or `uncertain`, then activates** (paused-worker + target-removal timeline: a worker paused before a removal, resumed after, connects only under the then-active snapshot — never the removed target); forged caller digest not honoured; **a table whose contents are edited together with its declared digest fails the trusted-anchor check (deny-all); a reservation that pauses past the freshness deadline is refused at the fenced pre-connect check (`policy_changed`) despite unchanged digest/epoch; a worker suspended **after** the fenced check and resumed past the freshness/lease bound is refused by the **kernel/proxy egress gate** (expired capability and/or a narrowed policy) and opens no socket — the 5 s deadline and freshness are enforced at the egress layer, not by a worker-local timer**; **crash after `started` ⇒ `uncertain`/blocked, no socket; the slot stays held until the enforcer's durable signal, so no second connection is admitted; a straggler resuming cannot commit a late `completed` (result-commit fence); an `uncertain` attempt resolves on the enforcer's `socket-closed`/`never-admitted` signal, releasing the slot and clearing the target-removal block (no permanent wedge)**; a stale `reserved` (never-`started`) recovery releases via fenced cleanup and a resumed stale-token worker cannot then `start`/connect; adversarial recovery cases — suspension *before* connect (never connects), suspension *with an open socket* (slot held, no new admission), *repeated* recoveries (stragglers never accumulate into concurrent executors); cancellation mid-connect destroys socket, releases slot, keeps history; completed-result replay opens no socket; receipt redaction; allowlist-empty default-deny.
 - _Audit logs/receipts redact_ → digest-only + status-enum summary; no banner, no socket bytes, no raw OS/errno text.
 - _CI passes; operator setup/rollback/recovery documented_ → operator doc + registry updates in the Stage 3 PR.
 - _Development-only until owner authorises deployment_ → action family stays `planned`; no commissioning.
@@ -506,22 +533,27 @@ against this exact list. "Done" means implemented **and** covered by a test.
       terminal state whose executor is known stopped — **never** on lease/timer alone)
       and durable started-attempt history (never refunded, counts 60 s); single
       atomic owner-wide reservation before the claim; `reserved`→`started` (fence
-      token re-verified in the same atomic step) only just before connect; per-attempt
-      connect deadline strictly < lease _(proposal: ≤ 4 s deadline < 5 s lease; 10 s
-      grace)_; recovery keyed on durable phase — a stale `reserved` (no `started`)
+      token re-verified in the same atomic step) only just before connect; the
+      reported **connect deadline is 5 s** and the reservation **lease is strictly
+      longer** _(proposal: 15 s lease + 10 s grace)_ so a live attempt never expires
+      mid-connect — distinct values, only the 5 s is reported as `timed-out`; recovery
+      keyed on durable phase — a stale `reserved` (no `started`)
       releases via **fenced cleanup** (token superseded, so a resumed worker cannot
       `start`/connect; sound because connect is gated behind the durable `started`
       write), while a stale `started` becomes `uncertain` and **holds** the slot until
       the supervisor (below) proves termination — no reuse on a timer.
-- [ ] Supervised egress mediator (R1/R3) — enforcement point of record: the worker
-      does **not** open the socket; it presents a short-lived capability (bound to
-      `(ip, port)`, `allowlistDigest`, epoch, freshness deadline, fence token) to the
-      mediator, which runs the **final connect-time check** (target ∈ active-policy
-      allowlist, table fresh, capability unexpired, token active), owns and
-      deadline-bounds the socket, and signals its closure (the termination proof). A
-      suspend between any in-worker check and the syscall cannot bypass it. Absent the
-      mediator, **no effect may be emitted** (fail closed). Commissioning prerequisite;
-      covered by the adversarial recovery tests.
+- [ ] Kernel/proxy-enforced egress (R1/R3) — enforcement point of record (**open
+      item: concrete mechanism chosen in the implementation PR**): the worker does
+      **not** open a socket to an arbitrary address; a short-lived capability (bound to
+      `(ip, port)`, `allowlistDigest`, epoch, freshness deadline, fence token) is
+      admitted **iff the kernel/proxy egress policy in force** at the attempt allows it
+      (target ∈ active-policy allowlist, fresh table, unexpired capability). Freshness
+      and target removal are **control-plane teardowns**; the residual is bounded,
+      fail-closed teardown latency, **not** userspace atomicity. The enforcer owns and
+      deadline-bounds the socket and emits a durable `socket-closed`/`never-admitted`
+      signal that resolves `uncertain` (releasing the slot and clearing the
+      target-removal block). Absent the enforcer, **no effect may be emitted** (fail
+      closed). Commissioning prerequisite; covered by the adversarial recovery tests.
 - [ ] Policy binding + activation ordering (R3): server-computed `allowlistDigest`
       (allowlist + **full special-use table contents**, not a version string) in the
       fingerprinted args; re-derived at staging/approval and in the fenced
@@ -587,12 +619,23 @@ part of this slice.
    other open work.
 4. **Draft PR only** — no merge, no commissioning, no deployment, and no allowlist
    population on a real target without explicit, separate owner authorisation.
-5. **Supervised egress mediator is a commissioning prerequisite** — the strict
-   one-active-check, freshness, deadline, and policy-activation guarantees (R1/R2/R3)
-   are enforceable only because the effect is emitted through a mediator the
-   suspendable worker cannot bypass: it runs the final connect-time check, owns and
-   deadline-bounds the socket, and signals its closure (the termination proof). Until
-   this mediator exists **no effect may be emitted** — the capability fails closed —
-   and commissioning must not proceed. The concurrency, freshness, and policy-change
+5. **Kernel/proxy-enforced egress is a commissioning prerequisite (OPEN ITEM).** The
+   strict one-active-check, freshness, deadline, and policy-activation guarantees
+   (R1/R2/R3) are enforceable only at a gate **no userspace actor can bypass** — the
+   kernel/proxy egress policy in force when the connection is attempted — because no
+   userspace check (worker *or* mediator) can be atomic with the syscall. Stage-1
+   specifies this **required property**, not the mechanism; the concrete enforcer
+   (egress firewall / eBPF policy / dedicated enforcing proxy) is chosen and specified
+   in the implementation PR. Until it exists **no effect may be emitted** — fail closed
+   — and commissioning must not proceed. The concurrency, freshness, and policy-change
    limits are preserved strictly — **not** relaxed; any future relaxation is a
    separate, explicit owner decision.
+
+### Stage-1 convergence note
+
+This design is **complete for Stage-1 planning**. The one deliberately-deferred piece
+is the **concrete kernel/proxy egress mechanism** (item above), recorded as an open
+item for the implementation PR rather than specified here — Stage-1 fixes the required
+property and the fail-closed behaviour, which is the appropriate altitude for a
+discovery/design deliverable. No implementation, target checks, allowlist population,
+merge, or deployment is in scope.
