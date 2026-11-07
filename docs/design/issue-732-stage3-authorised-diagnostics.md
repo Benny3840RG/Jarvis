@@ -149,23 +149,39 @@ each reacquire a refunded token and defeat the ten-per-minute cap):
   JSON `.lock`; a single Convex mutation), check "no active slot AND history
   count < 10", then take the slot and append a `reserved` history entry. Owner-wide
   across all workers. This runs **before** the single-use claim is consumed.
-- **`reserved` → `started` only immediately before connect.** A reservation that
-  never reaches `started` (pre-effect rejection, policy change, claim failure,
-  crash before connect) is **cleaned up**: the slot is released and the `reserved`
-  entry removed. It consumes no budget.
+- **`reserved` → `started` only immediately before connect; `started` is written
+  durably *before* the socket opens.** Two distinct, non-conflicting release paths:
+  - **Self-cleanup (live worker):** a worker that hits a *synchronous* pre-effect
+    rejection (`policy_changed`, claim failure, schema reject) before flipping to
+    `started` releases **its own** reservation at once and removes the `reserved`
+    entry — it is alive and has provably opened no socket. Consumes no budget.
+  - **Recovery of a *stale* reservation** (the worker crashed or was suspended without
+    self-cleaning) is **not** a blind release; it is governed by the crash-recovery
+    rule below, which keys off the record's durable phase.
 - **Crash recovery — the slot is held until termination is *proven*, never reclaimed
   on a timer** _(proposal: ≤ 4 s connect deadline, strictly shorter than the 5 s
   lease; 10 s grace)_: a recovering party cannot observe or cancel another worker's
   socket, and a worker suspended (SIGSTOP / pathological GC pause) past lease+grace
   has a **frozen** deadline timer, so a hard local deadline **cannot** be relied on to
   bound a suspended executor's effect. The design therefore does **not** reclaim the
-  owner-wide slot by lease expiry or by any storage-only fence. Instead, a stale
-  `reserved`/`started` record whose lease expires becomes durable **`uncertain`** and
-  **keeps holding the active slot**. The slot is released — and only then may a new
-  attempt be admitted — when an **effect-executor supervisor** records a durable
-  **termination proof**: the prior executor process is gone **and** its sockets are
-  closed. Lease expiry and fencing storage writes are **necessary but not
-  sufficient**; they gate storage writes, not the OS effect.
+  owner-wide slot by lease expiry or by any storage-only fence. A stale record found
+  by recovery is resolved by its **durable phase**, which is the single rule that
+  governs every unobservable crash:
+  - **stale `reserved` (no durable `started`):** the socket **provably never opened**
+    (`started` precedes connect). Recovery performs a **fenced cleanup** — a write that
+    supersedes the reservation's fence token and releases the slot — sound *only*
+    because a resumed worker bearing the superseded token can neither write `started`
+    nor connect. This is the one path that releases without a supervisor, and it is
+    valid precisely because connect is gated behind the durable `started` write.
+  - **stale `started` (socket may have opened):** becomes durable **`uncertain`** and
+    **keeps holding the active slot**. The slot is released — and only then may a new
+    attempt be admitted — when an **effect-executor supervisor** records a durable
+    **termination proof**: the prior executor process is gone **and** its sockets are
+    closed.
+
+  Lease expiry and fencing storage writes are **necessary but not sufficient** in the
+  `started` case; they gate storage writes, not the OS effect — only the supervisor
+  does.
 - **Why this keeps at-most-one-active-check literally true.** Because the slot is not
   reused until the prior executor is proven terminated, no second executor is ever
   admitted for an owner while the first may still connect. A worker that resumes from
@@ -203,11 +219,30 @@ policy. The policy is a **reviewed static table vendored in the repo**, derived
 from the IANA IPv4 and IPv6 Special-Purpose Address Registries (RFC 6890 and its
 updates), recording the registry **snapshot date** _(proposal: table authority and
 snapshot process)_. The table is **content-addressed** (its digest is part of
-`allowlistDigest`, R3) and governs — not prose. **Fail-closed on staleness:** if the
-table's snapshot is older than a reviewed freshness bound, or fails its integrity
-check, **all** allowlist use is blocked (deny-all) until a refreshed, reviewed table
-is deployed — so a newly allocated special-use range can never be reached merely
-because it is absent from an out-of-date table.
+`allowlistDigest`, R3) and governs — not prose.
+
+**Integrity against an independently trusted anchor (not self-consistency).** Hashing
+the loaded table and folding that hash into `allowlistDigest` proves only that the
+table matches *its own* declared digest — it cannot detect a table edited **together
+with** its declared digest. Integrity is therefore checked against an **independently
+trusted expected digest** that does not travel with the table: a reviewed constant
+committed in code **separate from** the table file (so changing the table requires a
+matching, separately-reviewed change to the anchor in the same PR — git review and
+history are the trust root), optionally strengthened later by a detached signature or
+release anchor. At load the loader recomputes the table digest and **fails closed**
+(deny-all) unless it equals the trusted anchor. `allowlistDigest` still binds the
+table contents for policy-identity (R3), but the anchor — not `allowlistDigest` — is
+what establishes the table is the reviewed one.
+
+**Fail-closed on staleness, re-checked at admission (not only at load).** If the
+table's snapshot is older than a reviewed freshness bound, or fails the anchor check
+above, **all** allowlist use is blocked (deny-all). Crucially, freshness is **not**
+only a load-time gate: a reservation pins the snapshot's **freshness deadline**, and
+the decisive fenced pre-connect check (R3) re-evaluates it, so a paused reservation
+that resumes **after** the freshness bound is refused (`policy_changed`, no socket)
+even though its digest and epoch are unchanged. A newly allocated special-use range
+can thus never be reached merely because it is absent from an out-of-date table, nor
+by a worker that paused across the freshness boundary.
 
 - **Default deny:** an address is permitted only if it is **not** in the table
   **and** matches the `(ip, port)` allowlist (the two mandatory gates). The
@@ -245,7 +280,7 @@ is a reported observation, never a safety conclusion.
 | **Unintended-port / lateral reach**                                      | Ports allowlisted **per target**; `(ip, port)` + `allowlistDigest` bound into the fingerprint; a host never implicitly authorises a port.                                                                                                                                                                                                |
 | **Rate-limit evasion by refund**                                         | Started-attempt history is durable and never refunded; the active slot is separate; atomic owner-wide reservation (R1).                                                                                                                                                                                                                  |
 | **Scope creep into scanning**                                            | One target, one port, one attempt per action; ranges/CIDR/sweeps rejected by schema; 1-in-flight + 10/60 s started-attempt ceiling.                                                                                                                                                                                                      |
-| **Stale-policy effect**                                                  | Immutable, content-addressed policy snapshot (`allowlistDigest` over allowlist **contents** + full special-use table **contents**) pinned at reservation under a monotonic policy epoch; the final digest+epoch check is fenced into the `reserved→started` flip; a target-narrowing change is **staged** and activates only through the owner-wide barrier once no effect pinned to the target is admitted or `uncertain`, so an executor only connects under then-active policy and a connect never reaches a newly-denied target (R3).                                        |
+| **Stale-policy effect**                                                  | Immutable, content-addressed policy snapshot (`allowlistDigest` over allowlist **contents** + full special-use table **contents**) pinned at reservation under a monotonic policy epoch; the final digest+epoch check is fenced into the `reserved→started` flip; a target-narrowing change is **staged** and activates only through the owner-wide barrier once no effect pinned to the target is admitted or `uncertain`, so an executor only connects under then-active policy and a connect never reaches a newly-denied target; the fenced check also re-evaluates the pinned snapshot's **freshness deadline** (a reservation paused past the staleness bound is refused); table integrity is verified against an **independently trusted anchor**, not self-consistency, failing closed (R2/R3).                                        |
 | **Uncertain / double effect**                                            | Durable `started` before connect; completed ⇒ receipt replay; `started`-without-result ⇒ `effect_uncertain`, reported blocked, **no reconnect, no invented success** (R4); an `uncertain` attempt **holds** the owner-wide slot (never reclaimed by lease/timer) until an effect-executor supervisor proves executor+socket termination, so no second executor is ever admitted — one-active-check holds by count, the residual is only timing (R1); terminal-result commit is fenced on the active token and recovery's `→ uncertain` write supersedes it, so a resumed straggler cannot commit a late `completed` (R1/R4); single-use consumption + reconciliation.                                                                                                                      |
 | **Secret / PII leakage**                                                 | Digest-only receipts; status-enum + authorised `ip:port` only; no banner, no socket reads, no raw OS/errno text, no stack traces (R5).                                                                                                                                                                                                   |
 | **Authorisation forged from a prompt**                                   | Authority only via the existing approval service + single-use claim; `allowlistDigest` computed server-side, caller-supplied values ignored/rejected; `assertNotPolicyEngineAuthority` enforced.                                                                                                                                         |
@@ -269,13 +304,16 @@ exploited:
   epoch.** Each reviewed policy deploy publishes a durable, monotonically increasing
   **policy epoch** alongside its content digest. At reservation the loader pins an
   immutable in-memory snapshot (allowlist + table) and records the epoch it was taken
-  from. `allowlistDigest` and the epoch are re-derived/re-read at staging, at
-  approval, and — the decisive check — in the **same atomic fenced step** that flips
-  `reserved → started`, immediately before the connect syscall. If at that final step
-  the live digest differs from the approved one, the live epoch is newer than the
-  pinned one, or the `(ip, port)` entry is absent from the current policy, the
-  transition is refused: return `policy_changed`, open no socket, clean up the
-  reservation (R1); a new stage + approval are required.
+  from **and the snapshot's freshness deadline** (R2). `allowlistDigest`, the epoch,
+  and freshness are re-derived/re-read at staging, at approval, and — the decisive
+  check — in the **same atomic fenced step** that flips `reserved → started`,
+  immediately before the connect syscall. If at that final step the live digest
+  differs from the approved one, the live epoch is newer than the pinned one, the
+  `(ip, port)` entry is absent from the current policy, **or the pinned snapshot has
+  passed its freshness deadline** (so a reservation that paused across the staleness
+  bound cannot resume and connect on an expired table), the transition is refused:
+  return `policy_changed`, open no socket, clean up the reservation (R1); a new stage
+  + approval are required.
 - **Policy activation is serialized with effect admission — a staged→active barrier.**
   A userspace epoch read cannot be made atomic with the kernel's `connect()`, so
   atomicity is not asserted at the syscall; it is enforced at **activation ordering**
@@ -355,7 +393,7 @@ the result is durably recorded must not be resolved by reconnecting.
 
 - _Existing approval/policy cannot be bypassed_ → T3 + GovernedExternalOperation claim; `allowlistDigest` bound + revalidated at admission; no new effect channel.
 - _Default deny; no wildcard targets or free-form shell_ → vendored special-use table (deny) **and** explicit `(ip, port)` allowlist (permit), both mandatory; typed params; library-only adapter.
-- _Tests_ → table-driven special-use coverage (one case per row, first/last address, neighbours just outside each range, a test that fails if a row is removed; canonicalisation + zone-ID/bracket rejection; translation/transition forms); CIDR/range/hostname rejection; per-target port + fingerprint/digest binding; 5 s timeout; cancellation (`AbortSignal`); **eleven sequential fast outcomes inside 60 s → the eleventh is `rate_limited`**; window roll-over resumes admission; simultaneous requests at both limits admit exactly one / exactly ten; unstarted reservation cleaned up and consumes nothing; **policy swap/removal observed at/before the fenced pre-connect check ⇒ no socket opens (`policy_changed`); a digest-change test asserts any table-row edit changes `allowlistDigest`**; a **target-narrowing activation stays staged while an effect pinned to that target is admitted or `uncertain`, then activates** (paused-worker + target-removal timeline: a worker paused before a removal, resumed after, connects only under the then-active snapshot — never the removed target); forged caller digest not honoured; **crash after `started` ⇒ `uncertain`/blocked, no socket; the slot stays held until a supervised termination proof, so no second executor is admitted; a straggler resuming after recovery cannot commit a late `completed` (result-commit fence)**; adversarial recovery cases — suspension *before* connect (never connects), suspension *with an open socket* (slot held, no new admission), *repeated* recoveries (stragglers never accumulate into concurrent executors); cancellation mid-connect destroys socket, releases slot, keeps history; cancellation mid-connect destroys socket, releases slot, keeps history; completed-result replay opens no socket; receipt redaction; allowlist-empty default-deny.
+- _Tests_ → table-driven special-use coverage (one case per row, first/last address, neighbours just outside each range, a test that fails if a row is removed; canonicalisation + zone-ID/bracket rejection; translation/transition forms); CIDR/range/hostname rejection; per-target port + fingerprint/digest binding; 5 s timeout; cancellation (`AbortSignal`); **eleven sequential fast outcomes inside 60 s → the eleventh is `rate_limited`**; window roll-over resumes admission; simultaneous requests at both limits admit exactly one / exactly ten; unstarted reservation cleaned up and consumes nothing; **policy swap/removal observed at/before the fenced pre-connect check ⇒ no socket opens (`policy_changed`); a digest-change test asserts any table-row edit changes `allowlistDigest`**; a **target-narrowing activation stays staged while an effect pinned to that target is admitted or `uncertain`, then activates** (paused-worker + target-removal timeline: a worker paused before a removal, resumed after, connects only under the then-active snapshot — never the removed target); forged caller digest not honoured; **a table whose contents are edited together with its declared digest fails the trusted-anchor check (deny-all); a reservation that pauses past the freshness deadline is refused at the fenced pre-connect check (`policy_changed`) despite unchanged digest/epoch**; **crash after `started` ⇒ `uncertain`/blocked, no socket; the slot stays held until a supervised termination proof, so no second executor is admitted; a straggler resuming after recovery cannot commit a late `completed` (result-commit fence)**; a stale `reserved` (never-`started`) recovery releases via fenced cleanup and a resumed stale-token worker cannot then `start`/connect; adversarial recovery cases — suspension *before* connect (never connects), suspension *with an open socket* (slot held, no new admission), *repeated* recoveries (stragglers never accumulate into concurrent executors); cancellation mid-connect destroys socket, releases slot, keeps history; completed-result replay opens no socket; receipt redaction; allowlist-empty default-deny.
 - _Audit logs/receipts redact_ → digest-only + status-enum summary; no banner, no socket bytes, no raw OS/errno text.
 - _CI passes; operator setup/rollback/recovery documented_ → operator doc + registry updates in the Stage 3 PR.
 - _Development-only until owner authorises deployment_ → action family stays `planned`; no commissioning.
@@ -414,7 +452,10 @@ against this exact list. "Done" means implemented **and** covered by a test.
 - [ ] Special-use table: vendored, dated, IANA-derived; **deny runs before and
       independent of** the allowlist; both gates mandatory (absence from the table
       is not permission); translation/transition forms rejected; table-driven tests
-      incl. a test that fails if a row is removed.
+      incl. a test that fails if a row is removed. **Integrity against an
+      independently trusted anchor** (a reviewed expected-digest constant committed
+      separately from the table, not shipped with it); load fails closed (deny-all) on
+      anchor mismatch or when the snapshot is past its reviewed **freshness bound**.
 - [ ] Schema & parsing: single canonical IP literal + single port; reject hostnames,
       CIDR, ranges, port lists/wildcards, zone IDs, brackets, non-canonical forms
       (reject, never rewrite); socket opens only to the exact canonical address
@@ -425,8 +466,11 @@ against this exact list. "Done" means implemented **and** covered by a test.
       atomic owner-wide reservation before the claim; `reserved`→`started` (fence
       token re-verified in the same atomic step) only just before connect; per-attempt
       connect deadline strictly < lease _(proposal: ≤ 4 s deadline < 5 s lease; 10 s
-      grace)_; unstarted-reservation cleanup; an `uncertain` attempt **holds** the slot
-      until the supervisor (below) proves termination — no reuse on a timer.
+      grace)_; recovery keyed on durable phase — a stale `reserved` (no `started`)
+      releases via **fenced cleanup** (token superseded, so a resumed worker cannot
+      `start`/connect; sound because connect is gated behind the durable `started`
+      write), while a stale `started` becomes `uncertain` and **holds** the slot until
+      the supervisor (below) proves termination — no reuse on a timer.
 - [ ] Effect-executor supervisor (R1/R3): an enforceable supervisor that proves a
       prior executor process **and** its sockets are terminated before the slot is
       released and before a target-narrowing policy change activates. Commissioning
@@ -435,9 +479,12 @@ against this exact list. "Done" means implemented **and** covered by a test.
 - [ ] Policy binding + activation ordering (R3): server-computed `allowlistDigest`
       (allowlist + **full special-use table contents**, not a version string) in the
       fingerprinted args; re-derived at staging/approval and in the fenced
-      `reserved→started` step under a monotonic policy epoch; `policy_changed` + no
-      socket on digest/epoch mismatch observed at/before that check; caller-supplied
-      digest ignored; a test asserts any table-row edit changes the digest. A
+      `reserved→started` step under a monotonic policy epoch; the fenced check also
+      re-evaluates the pinned snapshot's **freshness deadline**, so a reservation
+      paused past the staleness bound is refused despite unchanged digest/epoch;
+      `policy_changed` + no socket on digest/epoch/freshness mismatch observed
+      at/before that check; caller-supplied digest ignored; a test asserts any
+      table-row edit changes the digest. A
       target-narrowing deploy is **staged** and activates only through the owner-wide
       barrier once no effect pinned to the target is admitted or `uncertain`, so an
       executor only connects under then-active policy (never a newly-denied target).
