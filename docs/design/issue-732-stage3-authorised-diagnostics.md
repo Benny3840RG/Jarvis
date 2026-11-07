@@ -150,14 +150,29 @@ each reacquire a refunded token and defeat the ten-per-minute cap):
   never reaches `started` (pre-effect rejection, policy change, claim failure,
   crash before connect) is **cleaned up**: the slot is released and the `reserved`
   entry removed. It consumes no budget.
-- **Crash recovery via fenced lease** _(proposal: 5 s timeout + 10 s grace)_: a
-  stale `reserved`/`started` record is recovered when its lease expires. Recovery is
-  **fenced**: each reservation carries a monotonic fencing token, and the active
-  slot is released **only** once the prior effect is proven terminated (its socket
-  closed/destroyed) or fenced out — any write/connect from a resurrected delayed
-  worker bearing a stale token is rejected. This preserves the one-active-check
-  guarantee even if a hung worker resumes after its slot was reclaimed. A `started`
-  history entry still **keeps counting** until it ages out.
+- **Crash recovery via fenced lease — termination bounded, not inspected**
+  _(proposal: 5 s connect deadline < 5 s lease + 10 s grace)_: a recovering party
+  cannot observe another worker's socket, so termination is **bounded by
+  construction**, not proven by inspection. Every attempt binds its connect to a
+  hard local deadline with immediate socket `destroy`, **strictly shorter** than the
+  lease; and no stale `reserved`/`started` record is recovered until lease **+
+  grace** has elapsed — so a live worker's effect has necessarily ended before its
+  slot can be reclaimed. Recovery is **fenced**: each reservation carries a monotonic
+  fencing token; the `reserved → started` write is the fence checkpoint, and the
+  worker re-verifies it still holds the token in the **same atomic step** immediately
+  before connect. A resurrected delayed worker bearing a stale token can therefore
+  neither record `started` nor proceed to connect. A `started` history entry still
+  **keeps counting** until it ages out.
+- **The suspend residual, stated honestly.** The one case the fence cannot cover is a
+  worker frozen (SIGSTOP / pathological GC pause) in the irreducible gap between the
+  fenced pre-connect recheck and the `connect()` syscall, resuming only after
+  lease+grace. The slot is **not** silently reused as if free: an expired `started`
+  with no durable result becomes durable **`uncertain`** (R4), and because the
+  target was gated by the still-pinned policy snapshot the worst case is a single
+  extra connect to an **already-allowlisted** target — recorded as uncertain and
+  reconciled, never an unauthorised target and never a silent success. The design
+  does **not** claim it can cancel an in-flight OS connect; it claims a reclaimed
+  slot can only ever have been held by a terminated or target-safe attempt.
 
 ## Special-use address policy (R2)
 
@@ -208,8 +223,8 @@ is a reported observation, never a safety conclusion.
 | **Unintended-port / lateral reach**                                      | Ports allowlisted **per target**; `(ip, port)` + `allowlistDigest` bound into the fingerprint; a host never implicitly authorises a port.                                                                                                                                                                                                |
 | **Rate-limit evasion by refund**                                         | Started-attempt history is durable and never refunded; the active slot is separate; atomic owner-wide reservation (R1).                                                                                                                                                                                                                  |
 | **Scope creep into scanning**                                            | One target, one port, one attempt per action; ranges/CIDR/sweeps rejected by schema; 1-in-flight + 10/60 s started-attempt ceiling.                                                                                                                                                                                                      |
-| **Stale-policy effect**                                                  | Immutable, content-addressed policy snapshot (`allowlistDigest` over allowlist **contents** + full special-use table **contents**) pinned at reservation and held through connect under the reservation fence; any policy change ⇒ `policy_changed`, no socket — no check-to-connect window (R3).                                        |
-| **Uncertain / double effect**                                            | Durable `started` before connect; completed ⇒ receipt replay; `started`-without-result ⇒ `effect_uncertain`, reported blocked, **no reconnect, no invented success** (R4); single-use consumption + reconciliation.                                                                                                                      |
+| **Stale-policy effect**                                                  | Immutable, content-addressed policy snapshot (`allowlistDigest` over allowlist **contents** + full special-use table **contents**) pinned at reservation under a monotonic policy epoch; the final digest+epoch check is fenced into the `reserved→started` flip, so a swap observed at/before it ⇒ `policy_changed`, no socket; the irreducible post-check residual can only re-probe an already-authorised target, never a newly denied one (R3).                                        |
+| **Uncertain / double effect**                                            | Durable `started` before connect; completed ⇒ receipt replay; `started`-without-result ⇒ `effect_uncertain`, reported blocked, **no reconnect, no invented success** (R4); per-attempt deadline < lease+grace so a slot is reclaimed only after a live attempt has terminated (R1); single-use consumption + reconciliation.                                                                                                                      |
 | **Secret / PII leakage**                                                 | Digest-only receipts; status-enum + authorised `ip:port` only; no banner, no socket reads, no raw OS/errno text, no stack traces (R5).                                                                                                                                                                                                   |
 | **Authorisation forged from a prompt**                                   | Authority only via the existing approval service + single-use claim; `allowlistDigest` computed server-side, caller-supplied values ignored/rejected; `assertNotPolicyEngineAuthority` enforced.                                                                                                                                         |
 
@@ -228,18 +243,29 @@ exploited:
   loaded allowlist file **and the full contents of the vendored special-use table**
   (the table contents, not merely a version string, so any table edit changes the
   digest). Callers cannot supply it; a caller-supplied value is ignored or rejected.
-- **Immutable policy snapshot pinned through connect.** At reservation the loader
-  pins an immutable in-memory policy snapshot (allowlist + table) identified by that
-  content digest; the reservation, the admission check, and the socket connect all
-  run against **that same pinned snapshot** under the reservation's fence (R1), with
-  **no window** between the final check and socket creation in which a reviewed
-  redeploy could swap the policy. `allowlistDigest` is re-derived at staging, at
-  approval, and at admission; if the live digest differs from the approved one, or
-  the `(ip, port)` entry is absent from the pinned snapshot, return `policy_changed`,
-  open no socket, clean up the reservation (R1); a new stage + approval are required.
-  A redeploy mid-flight therefore cannot cause a removed target to be contacted — the
-  in-flight action either completes against its pinned, still-matching snapshot or
-  fails closed.
+- **Immutable policy snapshot pinned through connect, under a monotonic policy
+  epoch.** Each reviewed policy deploy publishes a durable, monotonically increasing
+  **policy epoch** alongside its content digest. At reservation the loader pins an
+  immutable in-memory snapshot (allowlist + table) and records the epoch it was taken
+  from. `allowlistDigest` and the epoch are re-derived/re-read at staging, at
+  approval, and — the decisive check — in the **same atomic fenced step** that flips
+  `reserved → started`, immediately before the connect syscall. If at that final step
+  the live digest differs from the approved one, the live epoch is newer than the
+  pinned one, or the `(ip, port)` entry is absent from the current policy, the
+  transition is refused: return `policy_changed`, open no socket, clean up the
+  reservation (R1); a new stage + approval are required.
+- **In-flight semantics — the bounded residual, stated honestly.** A userspace epoch
+  read cannot be made atomic with the kernel's `connect()`, so the design does
+  **not** claim a zero-width window. The guarantee is instead: any policy
+  swap/removal observed **at or before** the final fenced pre-connect check yields
+  `policy_changed` and no socket; a swap landing in the irreducible gap **after** that
+  check and **before** the syscall may permit **one** connect against the
+  just-superseded snapshot. That residual is safe by construction — the pinned
+  snapshot still gated the target, so the worst case is a single probe to a target
+  that was allowlisted and un-denied moments earlier, **never** a newly denied or
+  un-allowlisted one — and it is recorded, not hidden, reconciling through the normal
+  `started → completed|uncertain` path (R4). The window cannot admit an unauthorised
+  target.
 
 ## Uncertain-effect & recovery (R4)
 
@@ -256,8 +282,10 @@ the result is durably recorded must not be resolved by reconnecting.
   `connected` or any success. A TCP observation cannot be queried after the fact, so
   reconciliation here means **recording that the effect is unknown**, not
   re-probing. A new check needs a new stage + approval.
-- **Reservation recovery:** an `uncertain` attempt releases the active slot at lease
-  expiry; its `started` history entry **keeps counting** (R1).
+- **Reservation recovery:** an `uncertain` attempt releases the active slot only at
+  lease **+ grace** expiry — by which time any live attempt's bounded connect
+  deadline has elapsed, so reclaiming the slot cannot overlap a still-running connect
+  (R1); its `started` history entry **keeps counting** (R1).
 
 ## Result & rejection contract (R5)
 
@@ -288,7 +316,7 @@ the result is durably recorded must not be resolved by reconnecting.
 
 - _Existing approval/policy cannot be bypassed_ → T3 + GovernedExternalOperation claim; `allowlistDigest` bound + revalidated at admission; no new effect channel.
 - _Default deny; no wildcard targets or free-form shell_ → vendored special-use table (deny) **and** explicit `(ip, port)` allowlist (permit), both mandatory; typed params; library-only adapter.
-- _Tests_ → table-driven special-use coverage (one case per row, first/last address, neighbours just outside each range, a test that fails if a row is removed; canonicalisation + zone-ID/bracket rejection; translation/transition forms); CIDR/range/hostname rejection; per-target port + fingerprint/digest binding; 5 s timeout; cancellation (`AbortSignal`); **eleven sequential fast outcomes inside 60 s → the eleventh is `rate_limited`**; window roll-over resumes admission; simultaneous requests at both limits admit exactly one / exactly ten; unstarted reservation cleaned up and consumes nothing; **policy swap/removal after approval ⇒ no socket opens (`policy_changed`)**; forged caller digest not honoured; **crash after `started` ⇒ `uncertain`/blocked, no socket, slot recovered, history entry still counts**; cancellation mid-connect destroys socket, releases slot, keeps history; completed-result replay opens no socket; receipt redaction; allowlist-empty default-deny.
+- _Tests_ → table-driven special-use coverage (one case per row, first/last address, neighbours just outside each range, a test that fails if a row is removed; canonicalisation + zone-ID/bracket rejection; translation/transition forms); CIDR/range/hostname rejection; per-target port + fingerprint/digest binding; 5 s timeout; cancellation (`AbortSignal`); **eleven sequential fast outcomes inside 60 s → the eleventh is `rate_limited`**; window roll-over resumes admission; simultaneous requests at both limits admit exactly one / exactly ten; unstarted reservation cleaned up and consumes nothing; **policy swap/removal observed at/before the fenced pre-connect check ⇒ no socket opens (`policy_changed`); a digest-change test asserts any table-row edit changes `allowlistDigest`; the post-check residual can reach only an already-authorised target**; forged caller digest not honoured; **crash after `started` ⇒ `uncertain`/blocked, no socket, slot recovered, history entry still counts**; cancellation mid-connect destroys socket, releases slot, keeps history; completed-result replay opens no socket; receipt redaction; allowlist-empty default-deny.
 - _Audit logs/receipts redact_ → digest-only + status-enum summary; no banner, no socket bytes, no raw OS/errno text.
 - _CI passes; operator setup/rollback/recovery documented_ → operator doc + registry updates in the Stage 3 PR.
 - _Development-only until owner authorises deployment_ → action family stays `planned`; no commissioning.
@@ -320,9 +348,10 @@ findings are folded into these.
   translation/transition forms rejected; canonical-only parsing; table-driven
   tests. "Full IANA set"/"resolved" claims removed.
 - **R3 — policy identity not bound (medium)** — addressed: server-computed
-  `allowlistDigest` (allowlist file + table version) added to the fingerprinted
-  action args and revalidated at staging/approval/admission; `policy_changed` on
-  mismatch.
+  `allowlistDigest` (allowlist file + **full special-use table contents**, not a
+  version string) added to the fingerprinted action args and revalidated at
+  staging/approval/admission under a monotonic policy epoch; `policy_changed` on
+  digest or epoch mismatch; a test asserts any table-row edit changes the digest.
 - **R4 — uncertain attempt & reservation recovery (medium)** — addressed: durable
   `reserved → started → completed|uncertain`; `started` before connect; no reconnect
   and no invented success on `uncertain`; slot recovered via lease, history retained.
@@ -353,12 +382,17 @@ against this exact list. "Done" means implemented **and** covered by a test.
       checked; no DNS, no fallback.
 - [ ] Admission control (R1): separate active slot (released on any terminal state)
       and durable started-attempt history (never refunded, counts 60 s); single
-      atomic owner-wide reservation before the claim; `reserved`→`started` only just
-      before connect; unstarted-reservation cleanup; lease recovery _(proposal: 5 s + 10 s)_.
-- [ ] Policy binding (R3): server-computed `allowlistDigest` (allowlist + table
-      version) in the fingerprinted args; re-derived at staging/approval/admission;
-      `policy_changed` + no socket on mismatch/removal; caller-supplied digest
-      ignored.
+      atomic owner-wide reservation before the claim; `reserved`→`started` (fence
+      token re-verified in the same atomic step) only just before connect;
+      per-attempt connect deadline strictly < lease; unstarted-reservation cleanup;
+      slot reclaimed only after lease **+ grace** _(proposal: 5 s deadline < 5 s lease
+      + 10 s grace)_.
+- [ ] Policy binding (R3): server-computed `allowlistDigest` (allowlist + **full
+      special-use table contents**, not a version string) in the fingerprinted args;
+      re-derived at staging/approval and in the fenced `reserved→started` step under a
+      monotonic policy epoch; `policy_changed` + no socket on digest/epoch
+      mismatch/removal observed at/before that check; caller-supplied digest ignored;
+      a test asserts any table-row edit changes the digest.
 - [ ] Effect: exactly one TCP connect attempt; no application-data reads/writes;
       socket closed immediately on result.
 - [ ] Uncertain-effect (R4): durable `started` before connect; completed ⇒ replay,
