@@ -136,8 +136,11 @@ Two **separate** pieces of state per owner, because releasing the concurrency sl
 must not refund the rate budget (otherwise eleven fast sequential connects could
 each reacquire a refunded token and defeat the ten-per-minute cap):
 
-- **Active slot** (at most 1 per owner): released on any terminal state —
-  `completed`, `failed`, `timed-out`, `cancelled`, or lease-expired.
+- **Active slot** (at most 1 per owner): released on a **recorded** terminal state
+  whose effect executor is known to have stopped — `completed`, `failed`,
+  `timed-out`, `cancelled`. It is **not** released by lease expiry alone, and an
+  `uncertain` outcome **holds** the slot (see crash recovery below): releasing on a
+  mere timer would let a new attempt overlap an executor that may still connect.
 - **Durable started-attempt history:** a record is written when an attempt moves to
   `started`, and it counts toward the cap until it is 60 s old. It is **never
   refunded** on completion, `error`, `timed-out`, or cancellation. Maximum **10**
@@ -150,41 +153,48 @@ each reacquire a refunded token and defeat the ten-per-minute cap):
   never reaches `started` (pre-effect rejection, policy change, claim failure,
   crash before connect) is **cleaned up**: the slot is released and the `reserved`
   entry removed. It consumes no budget.
-- **Crash recovery via fenced lease — termination bounded, not inspected**
-  _(proposal: 5 s connect deadline < 5 s lease + 10 s grace)_: a recovering party
-  cannot observe another worker's socket, so termination is **bounded by
-  construction**, not proven by inspection. Every attempt binds its connect to a
-  hard local deadline with immediate socket `destroy`, **strictly shorter** than the
-  lease; and no stale `reserved`/`started` record is recovered until lease **+
-  grace** has elapsed — so a live worker's effect has necessarily ended before its
-  slot can be reclaimed. Recovery is **fenced**: each reservation carries a monotonic
-  fencing token; the `reserved → started` write is the fence checkpoint, and the
-  worker re-verifies it still holds the token in the **same atomic step** immediately
-  before connect. A resurrected delayed worker bearing a stale token can therefore
-  neither record `started` nor proceed to connect. A `started` history entry still
-  **keeps counting** until it ages out.
-- **The suspend residual — the one scoped exception to one-active-check.** The fence
-  cannot cover a worker frozen (SIGSTOP / pathological GC pause) in the irreducible
-  gap between the fenced pre-connect recheck and the `connect()` syscall that resumes
-  only after lease+grace, once the slot may already have been reclaimed by a new
-  attempt. No party can cancel that worker's pending syscall, so this is the **sole,
-  bounded exception** to at-most-one-active-check: for the span of one hard connect
-  deadline there may be **two** in-flight connects — the new attempt's and the
-  resumed straggler's. The exception does not weaken what the invariant protects:
-  - **Target-safe:** the straggler can only connect to *its own* still-pinned,
-    already-authorised `(ip, port)` — never a newly denied or un-allowlisted target.
-  - **Self-terminating:** its hard connect deadline (< lease) forces the socket
-    closed, so the overlap lasts at most one deadline and cannot accumulate.
-  - **No late or invented result (result-commit fence):** committing a terminal
-    result is conditional on still holding the active fence token. Recovery's
-    `started → uncertain` transition is itself a fenced write that supersedes the
-    token, so a resumed straggler's later `completed` write is **rejected** — the
-    attempt stays `uncertain` and no success is recorded after recovery.
-
-  The design therefore does **not** claim it can cancel an in-flight OS connect, nor
-  that exactly one connect is always in flight; it claims the only way to exceed one
-  is this bounded, target-safe, self-terminating straggler that can never commit a
-  result.
+- **Crash recovery — the slot is held until termination is *proven*, never reclaimed
+  on a timer** _(proposal: ≤ 4 s connect deadline, strictly shorter than the 5 s
+  lease; 10 s grace)_: a recovering party cannot observe or cancel another worker's
+  socket, and a worker suspended (SIGSTOP / pathological GC pause) past lease+grace
+  has a **frozen** deadline timer, so a hard local deadline **cannot** be relied on to
+  bound a suspended executor's effect. The design therefore does **not** reclaim the
+  owner-wide slot by lease expiry or by any storage-only fence. Instead, a stale
+  `reserved`/`started` record whose lease expires becomes durable **`uncertain`** and
+  **keeps holding the active slot**. The slot is released — and only then may a new
+  attempt be admitted — when an **effect-executor supervisor** records a durable
+  **termination proof**: the prior executor process is gone **and** its sockets are
+  closed. Lease expiry and fencing storage writes are **necessary but not
+  sufficient**; they gate storage writes, not the OS effect.
+- **Why this keeps at-most-one-active-check literally true.** Because the slot is not
+  reused until the prior executor is proven terminated, no second executor is ever
+  admitted for an owner while the first may still connect. A worker that resumes from
+  suspension is **the same single executor**, connecting late — not a second one — so
+  there is never more than one admitted executor per owner. The residual is purely
+  one of **timing** (one executor may connect later than expected), never of **count**
+  (there is never a second concurrent connect, and stragglers cannot accumulate).
+- **Fencing covers the storage path; the supervisor covers the OS path.** Each
+  reservation carries a monotonic fencing token; `reserved → started` is the fence
+  checkpoint, re-verified in the same atomic step just before connect, and **terminal
+  results are committed only while the token is still held** — recovery's
+  `started → uncertain` write supersedes the token, so a resumed straggler can neither
+  record `started` nor commit a late `completed` (no invented or post-recovery
+  success). But fencing alone cannot stop a frozen executor's pending `connect()`
+  syscall, which is exactly why the slot stays held for the supervisor rather than
+  reclaimed by the fence.
+- **Fail-closed, and a prerequisite for commissioning.** Absent an enforceable
+  supervisor that can prove executor+socket termination, the owner's slot simply stays
+  held after an `uncertain` outcome: the owner can run no new check until recovery.
+  For a 1-active/owner, 10-per-60 s diagnostic this is an acceptable **liveness**
+  cost, and it is strictly preferable to relaxing the concurrency limit. The enforceable
+  external-effect supervisor is therefore a **commissioning prerequisite**, not an
+  implementation detail (see Gates).
+- **Adversarial recovery cases (required tests):** (a) suspension *before* connect —
+  the stale-token worker cannot record `started`, so it never connects; (b) suspension
+  *with an open socket* — the slot stays held as `uncertain`; no new attempt is
+  admitted; the straggler's eventual result write is fenced out; (c) *repeated*
+  recoveries — each leaves the slot held, so stragglers cannot accumulate into
+  multiple concurrent executors.
 
 ## Special-use address policy (R2)
 
@@ -235,8 +245,8 @@ is a reported observation, never a safety conclusion.
 | **Unintended-port / lateral reach**                                      | Ports allowlisted **per target**; `(ip, port)` + `allowlistDigest` bound into the fingerprint; a host never implicitly authorises a port.                                                                                                                                                                                                |
 | **Rate-limit evasion by refund**                                         | Started-attempt history is durable and never refunded; the active slot is separate; atomic owner-wide reservation (R1).                                                                                                                                                                                                                  |
 | **Scope creep into scanning**                                            | One target, one port, one attempt per action; ranges/CIDR/sweeps rejected by schema; 1-in-flight + 10/60 s started-attempt ceiling.                                                                                                                                                                                                      |
-| **Stale-policy effect**                                                  | Immutable, content-addressed policy snapshot (`allowlistDigest` over allowlist **contents** + full special-use table **contents**) pinned at reservation under a monotonic policy epoch; the final digest+epoch check is fenced into the `reserved→started` flip, so a swap observed at/before it ⇒ `policy_changed`, no socket; the irreducible post-check residual can only re-probe an already-authorised target, never a newly denied one (R3).                                        |
-| **Uncertain / double effect**                                            | Durable `started` before connect; completed ⇒ receipt replay; `started`-without-result ⇒ `effect_uncertain`, reported blocked, **no reconnect, no invented success** (R4); per-attempt deadline < lease+grace so a slot is reclaimed only after a live attempt has terminated (R1); terminal-result commit is fenced on the active token and recovery's `→ uncertain` write supersedes it, so a resumed straggler cannot commit a late `completed` (R1/R4); single-use consumption + reconciliation.                                                                                                                      |
+| **Stale-policy effect**                                                  | Immutable, content-addressed policy snapshot (`allowlistDigest` over allowlist **contents** + full special-use table **contents**) pinned at reservation under a monotonic policy epoch; the final digest+epoch check is fenced into the `reserved→started` flip; a target-narrowing change is **staged** and activates only through the owner-wide barrier once no effect pinned to the target is admitted or `uncertain`, so an executor only connects under then-active policy and a connect never reaches a newly-denied target (R3).                                        |
+| **Uncertain / double effect**                                            | Durable `started` before connect; completed ⇒ receipt replay; `started`-without-result ⇒ `effect_uncertain`, reported blocked, **no reconnect, no invented success** (R4); an `uncertain` attempt **holds** the owner-wide slot (never reclaimed by lease/timer) until an effect-executor supervisor proves executor+socket termination, so no second executor is ever admitted — one-active-check holds by count, the residual is only timing (R1); terminal-result commit is fenced on the active token and recovery's `→ uncertain` write supersedes it, so a resumed straggler cannot commit a late `completed` (R1/R4); single-use consumption + reconciliation.                                                                                                                      |
 | **Secret / PII leakage**                                                 | Digest-only receipts; status-enum + authorised `ip:port` only; no banner, no socket reads, no raw OS/errno text, no stack traces (R5).                                                                                                                                                                                                   |
 | **Authorisation forged from a prompt**                                   | Authority only via the existing approval service + single-use claim; `allowlistDigest` computed server-side, caller-supplied values ignored/rejected; `assertNotPolicyEngineAuthority` enforced.                                                                                                                                         |
 
@@ -266,18 +276,29 @@ exploited:
   pinned one, or the `(ip, port)` entry is absent from the current policy, the
   transition is refused: return `policy_changed`, open no socket, clean up the
   reservation (R1); a new stage + approval are required.
-- **In-flight semantics — the bounded residual, stated honestly.** A userspace epoch
-  read cannot be made atomic with the kernel's `connect()`, so the design does
-  **not** claim a zero-width window. The guarantee is instead: any policy
-  swap/removal observed **at or before** the final fenced pre-connect check yields
-  `policy_changed` and no socket; a swap landing in the irreducible gap **after** that
-  check and **before** the syscall may permit **one** connect against the
-  just-superseded snapshot. That residual is safe by construction — the pinned
-  snapshot still gated the target, so the worst case is a single probe to a target
-  that was allowlisted and un-denied moments earlier, **never** a newly denied or
-  un-allowlisted one — and it is recorded, not hidden, reconciling through the normal
-  `started → completed|uncertain` path (R4). The window cannot admit an unauthorised
-  target.
+- **Policy activation is serialized with effect admission — a staged→active barrier.**
+  A userspace epoch read cannot be made atomic with the kernel's `connect()`, so
+  atomicity is not asserted at the syscall; it is enforced at **activation ordering**
+  instead. A reviewed policy deploy is first **staged**, and **activates** (bumps the
+  epoch that admission checks see) only through the same owner-wide barrier that
+  governs admission, under this rule: **a policy change that removes or narrows a
+  target does not activate while any effect pinned to the affected target is admitted
+  or `uncertain`.** Such effects run to a recorded terminal state — or, for
+  `uncertain`, until the supervisor proves executor+socket termination (R1) — under
+  the **last-activated** snapshot *before* the narrowing activates. Conversely, once a
+  change activates, the fenced `reserved → started` check sees the newer epoch and
+  refuses admission (`policy_changed`, no socket).
+- **Why a connect can never reach a newly-denied target.** An executor only ever
+  connects under the snapshot that was *active* when it was admitted, and a
+  target-removing change cannot activate while an executor pinned to that target may
+  still connect. So there is no "pinned-but-superseded" connect to a now-denied
+  target: either the effect connected while its target was still active policy, or the
+  change activated first and no socket opened. A suspended straggler is covered by the
+  same barrier — its removal stays *staged* (not active) until the supervisor proves
+  the straggler terminated, so the straggler can only ever have connected under
+  still-active policy. The cost is **liveness**: a narrowing activation (and any new
+  check it gates) can be delayed until supervised termination — a documented property,
+  not a silent residual.
 
 ## Uncertain-effect & recovery (R4)
 
@@ -294,10 +315,16 @@ the result is durably recorded must not be resolved by reconnecting.
   `connected` or any success. A TCP observation cannot be queried after the fact, so
   reconciliation here means **recording that the effect is unknown**, not
   re-probing. A new check needs a new stage + approval.
-- **Reservation recovery:** an `uncertain` attempt releases the active slot only at
-  lease **+ grace** expiry — by which time any live attempt's bounded connect
-  deadline has elapsed, so reclaiming the slot cannot overlap a still-running connect
-  (R1); its `started` history entry **keeps counting** (R1).
+- **Reservation recovery:** an `uncertain` attempt **holds** the active slot — it is
+  **not** released by lease/grace expiry or by any storage fence, because neither can
+  stop a suspended executor's pending `connect()`. The slot is released, and a new
+  attempt admitted, only when the effect-executor supervisor records a durable
+  termination proof (executor process gone **and** sockets closed). The terminal-result
+  commit is fenced on the active token, and the `started → uncertain` write supersedes
+  it, so a straggler cannot commit a late `completed` after recovery (R1). The
+  `started` history entry **keeps counting** throughout (R1). Absent a supervisor the
+  slot stays held (fail-closed liveness), which is why the supervisor is a
+  commissioning prerequisite (see Gates).
 
 ## Result & rejection contract (R5)
 
@@ -328,7 +355,7 @@ the result is durably recorded must not be resolved by reconnecting.
 
 - _Existing approval/policy cannot be bypassed_ → T3 + GovernedExternalOperation claim; `allowlistDigest` bound + revalidated at admission; no new effect channel.
 - _Default deny; no wildcard targets or free-form shell_ → vendored special-use table (deny) **and** explicit `(ip, port)` allowlist (permit), both mandatory; typed params; library-only adapter.
-- _Tests_ → table-driven special-use coverage (one case per row, first/last address, neighbours just outside each range, a test that fails if a row is removed; canonicalisation + zone-ID/bracket rejection; translation/transition forms); CIDR/range/hostname rejection; per-target port + fingerprint/digest binding; 5 s timeout; cancellation (`AbortSignal`); **eleven sequential fast outcomes inside 60 s → the eleventh is `rate_limited`**; window roll-over resumes admission; simultaneous requests at both limits admit exactly one / exactly ten; unstarted reservation cleaned up and consumes nothing; **policy swap/removal observed at/before the fenced pre-connect check ⇒ no socket opens (`policy_changed`); a digest-change test asserts any table-row edit changes `allowlistDigest`; the post-check residual can reach only an already-authorised target**; forged caller digest not honoured; **crash after `started` ⇒ `uncertain`/blocked, no socket, slot recovered, history entry still counts; a straggler resuming after recovery cannot commit a late `completed` (result-commit fence) and reaches only its own already-authorised target**; cancellation mid-connect destroys socket, releases slot, keeps history; completed-result replay opens no socket; receipt redaction; allowlist-empty default-deny.
+- _Tests_ → table-driven special-use coverage (one case per row, first/last address, neighbours just outside each range, a test that fails if a row is removed; canonicalisation + zone-ID/bracket rejection; translation/transition forms); CIDR/range/hostname rejection; per-target port + fingerprint/digest binding; 5 s timeout; cancellation (`AbortSignal`); **eleven sequential fast outcomes inside 60 s → the eleventh is `rate_limited`**; window roll-over resumes admission; simultaneous requests at both limits admit exactly one / exactly ten; unstarted reservation cleaned up and consumes nothing; **policy swap/removal observed at/before the fenced pre-connect check ⇒ no socket opens (`policy_changed`); a digest-change test asserts any table-row edit changes `allowlistDigest`**; a **target-narrowing activation stays staged while an effect pinned to that target is admitted or `uncertain`, then activates** (paused-worker + target-removal timeline: a worker paused before a removal, resumed after, connects only under the then-active snapshot — never the removed target); forged caller digest not honoured; **crash after `started` ⇒ `uncertain`/blocked, no socket; the slot stays held until a supervised termination proof, so no second executor is admitted; a straggler resuming after recovery cannot commit a late `completed` (result-commit fence)**; adversarial recovery cases — suspension *before* connect (never connects), suspension *with an open socket* (slot held, no new admission), *repeated* recoveries (stragglers never accumulate into concurrent executors); cancellation mid-connect destroys socket, releases slot, keeps history; cancellation mid-connect destroys socket, releases slot, keeps history; completed-result replay opens no socket; receipt redaction; allowlist-empty default-deny.
 - _Audit logs/receipts redact_ → digest-only + status-enum summary; no banner, no socket bytes, no raw OS/errno text.
 - _CI passes; operator setup/rollback/recovery documented_ → operator doc + registry updates in the Stage 3 PR.
 - _Development-only until owner authorises deployment_ → action family stays `planned`; no commissioning.
@@ -392,26 +419,36 @@ against this exact list. "Done" means implemented **and** covered by a test.
       CIDR, ranges, port lists/wildcards, zone IDs, brackets, non-canonical forms
       (reject, never rewrite); socket opens only to the exact canonical address
       checked; no DNS, no fallback.
-- [ ] Admission control (R1): separate active slot (released on any terminal state)
+- [ ] Admission control (R1): separate active slot (released only on a recorded
+      terminal state whose executor is known stopped — **never** on lease/timer alone)
       and durable started-attempt history (never refunded, counts 60 s); single
       atomic owner-wide reservation before the claim; `reserved`→`started` (fence
-      token re-verified in the same atomic step) only just before connect;
-      per-attempt connect deadline strictly < lease; unstarted-reservation cleanup;
-      slot reclaimed only after lease **+ grace** _(proposal: 5 s deadline < 5 s lease
-      + 10 s grace)_.
-- [ ] Policy binding (R3): server-computed `allowlistDigest` (allowlist + **full
-      special-use table contents**, not a version string) in the fingerprinted args;
-      re-derived at staging/approval and in the fenced `reserved→started` step under a
-      monotonic policy epoch; `policy_changed` + no socket on digest/epoch
-      mismatch/removal observed at/before that check; caller-supplied digest ignored;
-      a test asserts any table-row edit changes the digest.
+      token re-verified in the same atomic step) only just before connect; per-attempt
+      connect deadline strictly < lease _(proposal: ≤ 4 s deadline < 5 s lease; 10 s
+      grace)_; unstarted-reservation cleanup; an `uncertain` attempt **holds** the slot
+      until the supervisor (below) proves termination — no reuse on a timer.
+- [ ] Effect-executor supervisor (R1/R3): an enforceable supervisor that proves a
+      prior executor process **and** its sockets are terminated before the slot is
+      released and before a target-narrowing policy change activates. Commissioning
+      prerequisite; absent it, the owner fails closed (slot held). Covered by the
+      adversarial recovery tests.
+- [ ] Policy binding + activation ordering (R3): server-computed `allowlistDigest`
+      (allowlist + **full special-use table contents**, not a version string) in the
+      fingerprinted args; re-derived at staging/approval and in the fenced
+      `reserved→started` step under a monotonic policy epoch; `policy_changed` + no
+      socket on digest/epoch mismatch observed at/before that check; caller-supplied
+      digest ignored; a test asserts any table-row edit changes the digest. A
+      target-narrowing deploy is **staged** and activates only through the owner-wide
+      barrier once no effect pinned to the target is admitted or `uncertain`, so an
+      executor only connects under then-active policy (never a newly-denied target).
 - [ ] Effect: exactly one TCP connect attempt; no application-data reads/writes;
       socket closed immediately on result.
 - [ ] Uncertain-effect (R4): durable `started` before connect; completed ⇒ replay,
       no connect; `started`-without-result ⇒ `effect_uncertain`/blocked, no
-      reconnect, no invented success; slot recovered, history retained;
-      terminal-result commit fenced on the active token so a straggler's late
-      `completed` write after recovery marked the attempt `uncertain` is rejected.
+      reconnect, no invented success; slot **held** until supervised termination
+      (not reclaimed on a timer), history retained; terminal-result commit fenced on
+      the active token so a straggler's late `completed` write after recovery marked
+      the attempt `uncertain` is rejected.
 - [ ] Result/rejection contract (R5): network enum `connected`/`refused`/
       `timed-out`/`error`(+`reason`); OS-error mapping; typed pre-execution rejection
       list distinct from network results, consuming no budget; no raw OS/errno/stack
@@ -426,9 +463,12 @@ against this exact list. "Done" means implemented **and** covered by a test.
 - [ ] Tests: per the acceptance mapping — special-use table coverage, canonical/
       zone-ID/bracket rejection, CIDR/range/hostname rejection, per-target port +
       digest binding, timeout, cancellation, eleven-sequential + window roll-over +
-      simultaneous reservation, unstarted cleanup, policy swap after approval, forged
-      digest, crash-after-`started`, cancellation mid-connect, completed replay,
-      receipt redaction, allowlist-empty default-deny.
+      simultaneous reservation, unstarted cleanup, policy swap after approval,
+      staged→active target-narrowing with a paused-worker + target-removal timeline,
+      forged digest, crash-after-`started`, the adversarial recovery cases (suspension
+      before connect, suspension with an open socket, repeated recoveries → slot held,
+      no second executor), supervised-termination slot release, cancellation
+      mid-connect, completed replay, receipt redaction, allowlist-empty default-deny.
 - [ ] Docs: operator setup/rollback/recovery; evidence doc; OpenAPI (if surfaced);
       all five required `main` checks green on the draft PR.
 
@@ -451,3 +491,10 @@ part of this slice.
    other open work.
 4. **Draft PR only** — no merge, no commissioning, no deployment, and no allowlist
    population on a real target without explicit, separate owner authorisation.
+5. **Effect-executor supervisor is a commissioning prerequisite** — the strict
+   one-active-check and policy-activation ordering (R1/R3) depend on an enforceable
+   supervisor that proves executor+socket termination before slot reuse or a
+   target-narrowing activation. Until it exists the capability fails closed (owner
+   slot held after any `uncertain`); commissioning must not proceed without it. The
+   concurrency and policy-change limits are preserved strictly — **not** relaxed; any
+   future relaxation is a separate, explicit owner decision.
