@@ -78,7 +78,7 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
-    "@convex-dev/eslint-plugin": "^4.0.0",
+    "@convex-dev/eslint-plugin": "^5.0.1",
     "@edge-runtime/vm": "5.0.0",
     "@eslint/js": "^10.0.1",
     "@opentelemetry/api": "^1.10.0",
