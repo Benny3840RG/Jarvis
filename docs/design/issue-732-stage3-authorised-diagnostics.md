@@ -2,8 +2,11 @@
 
 **Status: owner has approved the TCP-only scope, the reviewed-file allowlist model,
 the per-action approval model, and the bounds intent (2026-11-04); the design
-details are under active Codex review (verdict on `90eed9a6`: repair required —
-addressed in this revision). No code, no production configuration, and no
+details are under active review. Codex verdict on `90eed9a6` (repair required) was
+addressed in `cd548120`; the advisory maintenance review then raised a second round
+on `cd548120` (atomic policy binding, content-addressed table, fenced lease recovery,
+canonical IP grammar), all addressed in this revision. No code, no production
+configuration, and no
 action-family lifecycle change is made by this document.** It is the Stage 1
 "discovery and design" deliverable for the _next_ stage, written now that Stage 2
 has landed. Building the Stage 3 code still requires a _separate_ implementation
@@ -147,9 +150,14 @@ each reacquire a refunded token and defeat the ten-per-minute cap):
   never reaches `started` (pre-effect rejection, policy change, claim failure,
   crash before connect) is **cleaned up**: the slot is released and the `reserved`
   entry removed. It consumes no budget.
-- **Crash recovery via lease** _(proposal: 5 s timeout + 10 s grace)_: a stale
-  `reserved`/`started` record is recovered when its lease expires; the slot is
-  released, but a `started` history entry **keeps counting** until it ages out.
+- **Crash recovery via fenced lease** _(proposal: 5 s timeout + 10 s grace)_: a
+  stale `reserved`/`started` record is recovered when its lease expires. Recovery is
+  **fenced**: each reservation carries a monotonic fencing token, and the active
+  slot is released **only** once the prior effect is proven terminated (its socket
+  closed/destroyed) or fenced out — any write/connect from a resurrected delayed
+  worker bearing a stale token is rejected. This preserves the one-active-check
+  guarantee even if a hung worker resumes after its slot was reclaimed. A `started`
+  history entry still **keeps counting** until it ages out.
 
 ## Special-use address policy (R2)
 
@@ -157,7 +165,12 @@ The CIDRs named anywhere in this document are **examples / a floor**, not the
 policy. The policy is a **reviewed static table vendored in the repo**, derived
 from the IANA IPv4 and IPv6 Special-Purpose Address Registries (RFC 6890 and its
 updates), recording the registry **snapshot date** _(proposal: table authority and
-snapshot process)_. The table — not prose — governs.
+snapshot process)_. The table is **content-addressed** (its digest is part of
+`allowlistDigest`, R3) and governs — not prose. **Fail-closed on staleness:** if the
+table's snapshot is older than a reviewed freshness bound, or fails its integrity
+check, **all** allowlist use is blocked (deny-all) until a refreshed, reviewed table
+is deployed — so a newly allocated special-use range can never be reached merely
+because it is absent from an out-of-date table.
 
 - **Default deny:** an address is permitted only if it is **not** in the table
   **and** matches the `(ip, port)` allowlist (the two mandatory gates). The
@@ -167,10 +180,15 @@ snapshot process)_. The table — not prose — governs.
   `2002::/16` (6to4), `2001::/32` (Teredo), `2001:db8::/32` (documentation), and
   other special-purpose allocations per the table. IPv4 targets must be supplied as
   IPv4 literals.
-- **Parse rules:** zone identifiers (`%…`) rejected; brackets rejected; a
-  non-canonical textual form is **rejected, not rewritten**; the socket is opened to
-  the **exact canonical address that was checked**; there is no DNS resolution and
-  no fallback.
+- **Parse rules & normative canonical grammar:** exactly one accepted textual form
+  per address — IPv6 per **RFC 5952** (lowercase, maximal `::` compression, no
+  leading zeros), IPv4 as dotted-quad with **no leading zeros** and no octal/hex/
+  integer spellings; embedded/compat/mapped IPv6 forms and any non-minimal spelling
+  are **rejected, not rewritten**; zone identifiers (`%…`) and brackets rejected. The
+  **same canonical byte form** is used identically in validation, the deny/allowlist
+  checks, the fingerprint, and the socket target — the socket is opened only to the
+  exact canonical address that was checked; there is no DNS resolution and no
+  fallback.
 
 ## Threat model
 
@@ -190,7 +208,7 @@ is a reported observation, never a safety conclusion.
 | **Unintended-port / lateral reach**                                      | Ports allowlisted **per target**; `(ip, port)` + `allowlistDigest` bound into the fingerprint; a host never implicitly authorises a port.                                                                                                                                                                                                |
 | **Rate-limit evasion by refund**                                         | Started-attempt history is durable and never refunded; the active slot is separate; atomic owner-wide reservation (R1).                                                                                                                                                                                                                  |
 | **Scope creep into scanning**                                            | One target, one port, one attempt per action; ranges/CIDR/sweeps rejected by schema; 1-in-flight + 10/60 s started-attempt ceiling.                                                                                                                                                                                                      |
-| **Stale-policy effect**                                                  | `allowlistDigest` (incl. table version) re-derived at staging, approval, and immediately before admission; mismatch ⇒ `policy_changed`, no socket (R3).                                                                                                                                                                                  |
+| **Stale-policy effect**                                                  | Immutable, content-addressed policy snapshot (`allowlistDigest` over allowlist **contents** + full special-use table **contents**) pinned at reservation and held through connect under the reservation fence; any policy change ⇒ `policy_changed`, no socket — no check-to-connect window (R3).                                        |
 | **Uncertain / double effect**                                            | Durable `started` before connect; completed ⇒ receipt replay; `started`-without-result ⇒ `effect_uncertain`, reported blocked, **no reconnect, no invented success** (R4); single-use consumption + reconciliation.                                                                                                                      |
 | **Secret / PII leakage**                                                 | Digest-only receipts; status-enum + authorised `ip:port` only; no banner, no socket reads, no raw OS/errno text, no stack traces (R5).                                                                                                                                                                                                   |
 | **Authorisation forged from a prompt**                                   | Authority only via the existing approval service + single-use claim; `allowlistDigest` computed server-side, caller-supplied values ignored/rejected; `assertNotPolicyEngineAuthority` enforced.                                                                                                                                         |
@@ -205,15 +223,23 @@ exploited:
   `fingerprintToolEffect`) with canonical `ip`, `port`, and `allowlistDigest`. This
   is **not** a parallel approval mechanism. _(proposal: exact field names not yet
   checked against the code.)_
-- **Trusted source:** `allowlistDigest` is computed **server-side** by the loader —
-  a SHA-256 over the canonical serialisation of the loaded allowlist file **and**
-  the vendored special-use table version. Callers cannot supply it; a caller-
-  supplied value is ignored or rejected.
-- **Re-derive at staging, at approval, and immediately before admission** (after the
-  reservation, before the claim is consumed, before any socket opens). The
-  admission check is decisive: if the digest differs or the `(ip, port)` entry has
-  been removed, return `policy_changed`, open no socket, clean up the reservation
-  (R1); a new stage + approval are required.
+- **Trusted source (content-addressed):** `allowlistDigest` is computed
+  **server-side** by the loader — a SHA-256 over the canonical serialisation of the
+  loaded allowlist file **and the full contents of the vendored special-use table**
+  (the table contents, not merely a version string, so any table edit changes the
+  digest). Callers cannot supply it; a caller-supplied value is ignored or rejected.
+- **Immutable policy snapshot pinned through connect.** At reservation the loader
+  pins an immutable in-memory policy snapshot (allowlist + table) identified by that
+  content digest; the reservation, the admission check, and the socket connect all
+  run against **that same pinned snapshot** under the reservation's fence (R1), with
+  **no window** between the final check and socket creation in which a reviewed
+  redeploy could swap the policy. `allowlistDigest` is re-derived at staging, at
+  approval, and at admission; if the live digest differs from the approved one, or
+  the `(ip, port)` entry is absent from the pinned snapshot, return `policy_changed`,
+  open no socket, clean up the reservation (R1); a new stage + approval are required.
+  A redeploy mid-flight therefore cannot cause a removed target to be contacted — the
+  in-flight action either completes against its pinned, still-matching snapshot or
+  fails closed.
 
 ## Uncertain-effect & recovery (R4)
 
