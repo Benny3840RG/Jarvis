@@ -163,16 +163,28 @@ each reacquire a refunded token and defeat the ten-per-minute cap):
   before connect. A resurrected delayed worker bearing a stale token can therefore
   neither record `started` nor proceed to connect. A `started` history entry still
   **keeps counting** until it ages out.
-- **The suspend residual, stated honestly.** The one case the fence cannot cover is a
-  worker frozen (SIGSTOP / pathological GC pause) in the irreducible gap between the
-  fenced pre-connect recheck and the `connect()` syscall, resuming only after
-  lease+grace. The slot is **not** silently reused as if free: an expired `started`
-  with no durable result becomes durable **`uncertain`** (R4), and because the
-  target was gated by the still-pinned policy snapshot the worst case is a single
-  extra connect to an **already-allowlisted** target — recorded as uncertain and
-  reconciled, never an unauthorised target and never a silent success. The design
-  does **not** claim it can cancel an in-flight OS connect; it claims a reclaimed
-  slot can only ever have been held by a terminated or target-safe attempt.
+- **The suspend residual — the one scoped exception to one-active-check.** The fence
+  cannot cover a worker frozen (SIGSTOP / pathological GC pause) in the irreducible
+  gap between the fenced pre-connect recheck and the `connect()` syscall that resumes
+  only after lease+grace, once the slot may already have been reclaimed by a new
+  attempt. No party can cancel that worker's pending syscall, so this is the **sole,
+  bounded exception** to at-most-one-active-check: for the span of one hard connect
+  deadline there may be **two** in-flight connects — the new attempt's and the
+  resumed straggler's. The exception does not weaken what the invariant protects:
+  - **Target-safe:** the straggler can only connect to *its own* still-pinned,
+    already-authorised `(ip, port)` — never a newly denied or un-allowlisted target.
+  - **Self-terminating:** its hard connect deadline (< lease) forces the socket
+    closed, so the overlap lasts at most one deadline and cannot accumulate.
+  - **No late or invented result (result-commit fence):** committing a terminal
+    result is conditional on still holding the active fence token. Recovery's
+    `started → uncertain` transition is itself a fenced write that supersedes the
+    token, so a resumed straggler's later `completed` write is **rejected** — the
+    attempt stays `uncertain` and no success is recorded after recovery.
+
+  The design therefore does **not** claim it can cancel an in-flight OS connect, nor
+  that exactly one connect is always in flight; it claims the only way to exceed one
+  is this bounded, target-safe, self-terminating straggler that can never commit a
+  result.
 
 ## Special-use address policy (R2)
 
@@ -224,7 +236,7 @@ is a reported observation, never a safety conclusion.
 | **Rate-limit evasion by refund**                                         | Started-attempt history is durable and never refunded; the active slot is separate; atomic owner-wide reservation (R1).                                                                                                                                                                                                                  |
 | **Scope creep into scanning**                                            | One target, one port, one attempt per action; ranges/CIDR/sweeps rejected by schema; 1-in-flight + 10/60 s started-attempt ceiling.                                                                                                                                                                                                      |
 | **Stale-policy effect**                                                  | Immutable, content-addressed policy snapshot (`allowlistDigest` over allowlist **contents** + full special-use table **contents**) pinned at reservation under a monotonic policy epoch; the final digest+epoch check is fenced into the `reserved→started` flip, so a swap observed at/before it ⇒ `policy_changed`, no socket; the irreducible post-check residual can only re-probe an already-authorised target, never a newly denied one (R3).                                        |
-| **Uncertain / double effect**                                            | Durable `started` before connect; completed ⇒ receipt replay; `started`-without-result ⇒ `effect_uncertain`, reported blocked, **no reconnect, no invented success** (R4); per-attempt deadline < lease+grace so a slot is reclaimed only after a live attempt has terminated (R1); single-use consumption + reconciliation.                                                                                                                      |
+| **Uncertain / double effect**                                            | Durable `started` before connect; completed ⇒ receipt replay; `started`-without-result ⇒ `effect_uncertain`, reported blocked, **no reconnect, no invented success** (R4); per-attempt deadline < lease+grace so a slot is reclaimed only after a live attempt has terminated (R1); terminal-result commit is fenced on the active token and recovery's `→ uncertain` write supersedes it, so a resumed straggler cannot commit a late `completed` (R1/R4); single-use consumption + reconciliation.                                                                                                                      |
 | **Secret / PII leakage**                                                 | Digest-only receipts; status-enum + authorised `ip:port` only; no banner, no socket reads, no raw OS/errno text, no stack traces (R5).                                                                                                                                                                                                   |
 | **Authorisation forged from a prompt**                                   | Authority only via the existing approval service + single-use claim; `allowlistDigest` computed server-side, caller-supplied values ignored/rejected; `assertNotPolicyEngineAuthority` enforced.                                                                                                                                         |
 
@@ -316,7 +328,7 @@ the result is durably recorded must not be resolved by reconnecting.
 
 - _Existing approval/policy cannot be bypassed_ → T3 + GovernedExternalOperation claim; `allowlistDigest` bound + revalidated at admission; no new effect channel.
 - _Default deny; no wildcard targets or free-form shell_ → vendored special-use table (deny) **and** explicit `(ip, port)` allowlist (permit), both mandatory; typed params; library-only adapter.
-- _Tests_ → table-driven special-use coverage (one case per row, first/last address, neighbours just outside each range, a test that fails if a row is removed; canonicalisation + zone-ID/bracket rejection; translation/transition forms); CIDR/range/hostname rejection; per-target port + fingerprint/digest binding; 5 s timeout; cancellation (`AbortSignal`); **eleven sequential fast outcomes inside 60 s → the eleventh is `rate_limited`**; window roll-over resumes admission; simultaneous requests at both limits admit exactly one / exactly ten; unstarted reservation cleaned up and consumes nothing; **policy swap/removal observed at/before the fenced pre-connect check ⇒ no socket opens (`policy_changed`); a digest-change test asserts any table-row edit changes `allowlistDigest`; the post-check residual can reach only an already-authorised target**; forged caller digest not honoured; **crash after `started` ⇒ `uncertain`/blocked, no socket, slot recovered, history entry still counts**; cancellation mid-connect destroys socket, releases slot, keeps history; completed-result replay opens no socket; receipt redaction; allowlist-empty default-deny.
+- _Tests_ → table-driven special-use coverage (one case per row, first/last address, neighbours just outside each range, a test that fails if a row is removed; canonicalisation + zone-ID/bracket rejection; translation/transition forms); CIDR/range/hostname rejection; per-target port + fingerprint/digest binding; 5 s timeout; cancellation (`AbortSignal`); **eleven sequential fast outcomes inside 60 s → the eleventh is `rate_limited`**; window roll-over resumes admission; simultaneous requests at both limits admit exactly one / exactly ten; unstarted reservation cleaned up and consumes nothing; **policy swap/removal observed at/before the fenced pre-connect check ⇒ no socket opens (`policy_changed`); a digest-change test asserts any table-row edit changes `allowlistDigest`; the post-check residual can reach only an already-authorised target**; forged caller digest not honoured; **crash after `started` ⇒ `uncertain`/blocked, no socket, slot recovered, history entry still counts; a straggler resuming after recovery cannot commit a late `completed` (result-commit fence) and reaches only its own already-authorised target**; cancellation mid-connect destroys socket, releases slot, keeps history; completed-result replay opens no socket; receipt redaction; allowlist-empty default-deny.
 - _Audit logs/receipts redact_ → digest-only + status-enum summary; no banner, no socket bytes, no raw OS/errno text.
 - _CI passes; operator setup/rollback/recovery documented_ → operator doc + registry updates in the Stage 3 PR.
 - _Development-only until owner authorises deployment_ → action family stays `planned`; no commissioning.
@@ -397,7 +409,9 @@ against this exact list. "Done" means implemented **and** covered by a test.
       socket closed immediately on result.
 - [ ] Uncertain-effect (R4): durable `started` before connect; completed ⇒ replay,
       no connect; `started`-without-result ⇒ `effect_uncertain`/blocked, no
-      reconnect, no invented success; slot recovered, history retained.
+      reconnect, no invented success; slot recovered, history retained;
+      terminal-result commit fenced on the active token so a straggler's late
+      `completed` write after recovery marked the attempt `uncertain` is rejected.
 - [ ] Result/rejection contract (R5): network enum `connected`/`refused`/
       `timed-out`/`error`(+`reason`); OS-error mapping; typed pre-execution rejection
       list distinct from network results, consuming no budget; no raw OS/errno/stack
