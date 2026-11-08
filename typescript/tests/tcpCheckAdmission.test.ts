@@ -7,7 +7,9 @@ import {
   DEFAULT_RATE_CONFIG,
   emptyAdmissionState,
   isSlotFree,
+  markUncertain,
   recover,
+  releaseReservation,
   reserve,
   resolve,
   start,
@@ -17,6 +19,61 @@ import {
 } from "../src/security/tcpCheck/index.js";
 
 const EPOCH = 1;
+
+describe("releaseReservation / markUncertain (attempt-scoped cleanup, Codex #2/#4)", () => {
+  function reservedState(attemptId: string): { state: AdmissionState; fenceToken: number } {
+    const r = reserve(emptyAdmissionState(), { attemptId, nowMs: 0, policyEpoch: EPOCH });
+    assert.ok(r.outcome.ok);
+    if (!r.outcome.ok) throw new Error("unreachable");
+    return { state: r.state, fenceToken: r.outcome.fenceToken };
+  }
+
+  it("releaseReservation frees only this attempt's reserved slot", () => {
+    const { state, fenceToken } = reservedState("A");
+    // Wrong id or fence → not-held, slot untouched.
+    assert.equal(releaseReservation(state, { attemptId: "B", fenceToken }).outcome.ok, false);
+    assert.equal(
+      releaseReservation(state, { attemptId: "A", fenceToken: fenceToken + 1 }).outcome.ok,
+      false,
+    );
+    assert.notEqual(state.active, null);
+    // Correct id+fence → released.
+    const ok = releaseReservation(state, { attemptId: "A", fenceToken });
+    assert.equal(ok.outcome.ok, true);
+    assert.equal(ok.state.active, null);
+  });
+
+  it("releaseReservation will not release a started slot (phase-mismatch)", () => {
+    const { state, fenceToken } = reservedState("A");
+    const started = start(state, { attemptId: "A", fenceToken, nowMs: 0 }).state;
+    const r = releaseReservation(started, { attemptId: "A", fenceToken });
+    assert.equal(r.outcome.ok, false);
+    if (!r.outcome.ok) assert.equal(r.outcome.reason, "phase-mismatch");
+  });
+
+  it("a stale A cannot release a later B's slot", () => {
+    const { state: aReserved, fenceToken: fenceA } = reservedState("A");
+    // A becomes stale via recovery (slot released, fence bumped), then B reserves.
+    const afterRecover = recover(aReserved).state;
+    const bReserved = reserve(afterRecover, { attemptId: "B", nowMs: 1, policyEpoch: EPOCH });
+    assert.ok(bReserved.outcome.ok);
+    // A's late cleanup must not touch B.
+    const r = releaseReservation(bReserved.state, { attemptId: "A", fenceToken: fenceA });
+    assert.equal(r.outcome.ok, false);
+    assert.equal(r.state.active?.attemptId, "B");
+  });
+
+  it("markUncertain moves only this attempt's started slot to uncertain", () => {
+    const { state, fenceToken } = reservedState("A");
+    const started = start(state, { attemptId: "A", fenceToken, nowMs: 0 }).state;
+    assert.equal(markUncertain(started, { attemptId: "B", fenceToken }).outcome.ok, false);
+    const ok = markUncertain(started, { attemptId: "A", fenceToken });
+    assert.equal(ok.outcome.ok, true);
+    assert.equal(admissionStatus(ok.state), "blocked");
+    // A later resolve releases it.
+    assert.equal(resolve(ok.state, { attemptId: "A", signal: "socket-closed" }).outcome.ok, true);
+  });
+});
 
 /** Reserve + start a fresh attempt, asserting each step succeeds. */
 function admit(

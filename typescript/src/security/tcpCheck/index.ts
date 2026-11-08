@@ -71,6 +71,10 @@ export {
   complete,
   recover,
   resolve,
+  releaseReservation,
+  markUncertain,
+  type ScopedCleanupOutcome,
+  type ScopedCleanupReason,
 } from "./admission.js";
 export { type PolicyView } from "./policy.js";
 export { type GateRejection, type GateResult, type GateInput, evaluatePolicyGate } from "./gate.js";

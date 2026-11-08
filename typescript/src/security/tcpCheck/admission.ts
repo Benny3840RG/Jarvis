@@ -321,6 +321,67 @@ export function recover(state: AdmissionState): Transition<RecoverOutcome> {
   return { state, outcome: { kind: "already-uncertain" } };
 }
 
+// --- attempt-scoped cleanup ---------------------------------------------
+
+export type ScopedCleanupReason = "not-held" | "phase-mismatch";
+
+export type ScopedCleanupOutcome =
+  { readonly ok: true } | { readonly ok: false; readonly reason: ScopedCleanupReason };
+
+function heldBy(state: AdmissionState, attemptId: string, fenceToken: number): boolean {
+  const active = state.active;
+  return active !== null && active.attemptId === attemptId && active.fenceToken === fenceToken;
+}
+
+/**
+ * Release the owner-wide slot **only if** it is still this attempt's `reserved`
+ * reservation (matching id and fence). A caller's self-cleanup therefore cannot
+ * release a slot that now belongs to a different attempt (Codex #2).
+ */
+export function releaseReservation(
+  state: AdmissionState,
+  input: { readonly attemptId: string; readonly fenceToken: number },
+): Transition<ScopedCleanupOutcome> {
+  if (!heldBy(state, input.attemptId, input.fenceToken)) {
+    return { state, outcome: { ok: false, reason: "not-held" } };
+  }
+  if (state.active!.phase !== "reserved") {
+    return { state, outcome: { ok: false, reason: "phase-mismatch" } };
+  }
+  return {
+    state: { ...state, active: null, fenceCounter: state.fenceCounter + 1 },
+    outcome: { ok: true },
+  };
+}
+
+/**
+ * Move the owner-wide slot `started → uncertain` **only if** it is still this
+ * attempt's `started` slot. Used when the effect is uncertain, so a later
+ * enforcer signal can {@link resolve} it; it never disturbs another attempt
+ * (Codex #4).
+ */
+export function markUncertain(
+  state: AdmissionState,
+  input: { readonly attemptId: string; readonly fenceToken: number },
+): Transition<ScopedCleanupOutcome> {
+  if (!heldBy(state, input.attemptId, input.fenceToken)) {
+    return { state, outcome: { ok: false, reason: "not-held" } };
+  }
+  const active = state.active!;
+  if (active.phase !== "started") {
+    return { state, outcome: { ok: false, reason: "phase-mismatch" } };
+  }
+  const fenceToken = state.fenceCounter + 1;
+  return {
+    state: {
+      ...state,
+      active: { ...active, phase: "uncertain", fenceToken },
+      fenceCounter: fenceToken,
+    },
+    outcome: { ok: true },
+  };
+}
+
 // --- resolve -------------------------------------------------------------
 
 export type ResolveSignal = "socket-closed" | "never-admitted";

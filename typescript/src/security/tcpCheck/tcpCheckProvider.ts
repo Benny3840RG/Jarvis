@@ -21,17 +21,20 @@
 import {
   complete,
   emptyAdmissionState,
-  recover,
+  markUncertain,
+  releaseReservation,
   reserve,
+  resolve,
   start,
   type AdmissionState,
   type RateConfig,
+  type ResolveSignal,
   type Transition,
 } from "./admission.js";
 import { parseCanonicalAddress } from "./address.js";
 import { isAllowlisted } from "./allowlist.js";
 import { computeAllowlistDigest } from "./allowlistDigest.js";
-import type { EgressClaim } from "./egressClaim.js";
+import { computeClaimKey, type EgressClaim } from "./egressClaim.js";
 import {
   BrokerEnforcer,
   type AdmissionSignal,
@@ -188,6 +191,13 @@ export interface TcpCheckProvider {
     attempt: TcpCheckPreparedAttempt,
     signal?: AbortSignal,
   ): Promise<TcpCheckReceiptSummary>;
+  /**
+   * Apply the enforcer's durable closure signal (`socket-closed` /
+   * `never-admitted`) to an attempt previously left `uncertain`, releasing its
+   * own slot. Returns whether the attempt was resolved. Never infers closure
+   * from elapsed time (Codex #4).
+   */
+  resolveUncertain(owner: string, attemptId: string, signal: ResolveSignal): Promise<boolean>;
 }
 
 /** Deterministic pre-effect target gate (anchor, canonical, special-use, allowlist, freshness). */
@@ -270,6 +280,8 @@ export function createTcpCheckProvider(deps: TcpCheckProviderDeps): TcpCheckProv
 
     async sendPrepared(attempt, signal): Promise<TcpCheckReceiptSummary> {
       const { claim, owner, attemptId } = attempt;
+      const fenceToken = claim.fenceToken;
+      const claimKey = computeClaimKey(claim);
 
       const summary = (
         outcome: EnforcerOutcome,
@@ -284,26 +296,36 @@ export function createTcpCheckProvider(deps: TcpCheckProviderDeps): TcpCheckProv
         ...(storedOutcome ? { storedOutcome } : {}),
       });
 
+      // Attempt-scoped self-cleanup: release only if the slot is still THIS
+      // attempt's reservation, so a stale delivery never disturbs a later
+      // attempt's slot (Codex #2).
+      const selfCleanReservation = (): Promise<unknown> =>
+        deps.admission.transition(owner, (state) =>
+          releaseReservation(state, { attemptId, fenceToken }),
+        );
+
       // Flip reserved -> started (charging budget) only after the fenced
       // pre-connect gate passes; otherwise self-clean the reservation with no
-      // budget (Codex #9). The authoritative re-check still runs in the mediator.
-      const fenceLive = await deps.fence.isActive(claim.fenceToken, attemptId);
+      // budget (Codex #9). The fence is keyed on the claim key — the same identity
+      // the broker uses (Codex #1).
+      const fenceLive = await deps.fence.isActive(fenceToken, claimKey);
       if (!fenceLive) {
-        await deps.admission.transition(owner, (state) => recover(state));
+        await selfCleanReservation();
         return summary("fence_superseded", "never-admitted");
       }
       const gate = evaluatePolicyGate({ claim, policy: deps.policy(), nowMs: deps.clock() });
       if (!gate.ok) {
-        await deps.admission.transition(owner, (state) => recover(state));
+        await selfCleanReservation();
         return summary(gate.reason, "never-admitted");
       }
 
       const started = await deps.admission.transition(owner, (state) =>
-        start(state, { attemptId, fenceToken: claim.fenceToken, nowMs: deps.clock() }),
+        start(state, { attemptId, fenceToken, nowMs: deps.clock() }),
       );
       if (!started.ok) {
-        // Lost the race to another transition; refuse without an effect.
-        await deps.admission.transition(owner, (state) => recover(state));
+        // Our reservation is gone (a concurrent recovery) — do not touch whatever
+        // attempt now holds the slot; refuse only our own delivery.
+        await selfCleanReservation();
         return summary("fence_superseded", "never-admitted");
       }
 
@@ -316,16 +338,31 @@ export function createTcpCheckProvider(deps: TcpCheckProviderDeps): TcpCheckProv
       });
       const result = await enforcer.authorizeAndConnect(claim, signal);
 
-      // Release the owner-wide slot on any terminal outcome except an uncertain
-      // effect, which holds it with no time-based exit (Codex #3). `complete` is
-      // fence-conditional, so it only releases a slot this attempt still holds.
-      if (result.outcome !== "effect_uncertain") {
+      if (result.outcome === "effect_uncertain") {
+        // Hold the slot, but move it started -> uncertain so a later enforcer
+        // signal can resolve it (Codex #4). Attempt/fence-conditional.
         await deps.admission.transition(owner, (state) =>
-          complete(state, { attemptId, fenceToken: claim.fenceToken }),
+          markUncertain(state, { attemptId, fenceToken }),
+        );
+      } else {
+        // Release the slot. `complete` is attempt+fence-conditional, so it only
+        // releases a slot this attempt still holds (Codex #2/#3).
+        await deps.admission.transition(owner, (state) =>
+          complete(state, { attemptId, fenceToken }),
         );
       }
 
       return summary(result.outcome, result.admissionSignal, result.storedOutcome);
+    },
+
+    async resolveUncertain(owner, attemptId, signal): Promise<boolean> {
+      // Apply the enforcer's durable closure signal to an attempt held uncertain.
+      // Releases only its own slot (resolve is attempt-conditional); never infers
+      // closure from elapsed time (Codex #4).
+      const outcome = await deps.admission.transition(owner, (state) =>
+        resolve(state, { attemptId, signal }),
+      );
+      return outcome.ok;
     },
   };
 }
