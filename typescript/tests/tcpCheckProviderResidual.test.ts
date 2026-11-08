@@ -592,12 +592,13 @@ describe("Codex round 4 residual #2 — completed replay returns the stored outc
 describe("Codex follow-up — duplicate start-fail preserves tombstone, completion-race applies real signal", () => {
   it("a duplicate reaching start-fail while the original is uncertain does NOT delete the binding", async () => {
     const admission = createInMemoryAdmissionStore();
+    let rejection: "start" | "fence" | "policy" = "start";
     const provider = createTcpCheckProvider({
-      policy: makePolicy,
+      policy: () => ({ ...makePolicy(), policyEpoch: rejection === "policy" ? 2 : 1 }),
       admission,
       ledger: inMemoryLedgerPort(),
       clock: () => NOW,
-      fence: { isActive: () => true },
+      fence: { isActive: () => rejection !== "fence" },
       connector: { connect: () => Promise.reject(new Error("crash")) }, // -> effect_uncertain
     });
     const attempt = await provider.prepare({ ip: "8.8.8.8", port: 443 }, identity("fp-dupU"));
@@ -607,9 +608,13 @@ describe("Codex follow-up — duplicate start-fail preserves tombstone, completi
 
     // A duplicate delivery of the SAME attempt reaches start-fail (slot uncertain,
     // not reserved). It must refuse WITHOUT deleting the original's binding.
-    const dup = await provider.sendPrepared(attempt);
-    assert.equal(dup.status, "fence_superseded");
-    assert.equal(admission.snapshot("owner-1").active?.phase, "uncertain"); // original untouched
+    for (const path of ["start", "fence", "policy"] as const) {
+      rejection = path;
+      const dup = await provider.sendPrepared(attempt);
+      assert.equal(dup.status, path === "policy" ? "policy_changed" : "fence_superseded");
+      assert.equal(dup.admissionSignal, null, `${path} rejection must not certify quiescence`);
+      assert.equal(admission.snapshot("owner-1").active?.phase, "uncertain");
+    }
 
     // The binding survived: resolving the original then replaying returns `replayed`,
     // not `not_authorized` (which is what an erased tombstone would yield).

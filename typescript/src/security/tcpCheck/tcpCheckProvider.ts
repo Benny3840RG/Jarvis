@@ -461,13 +461,13 @@ export function createTcpCheckProvider(deps: TcpCheckProviderDeps): TcpCheckProv
       if (!fenceLive) {
         const released = await selfCleanReservation();
         if (released.ok) await bindings.remove(attemptId);
-        return summary("fence_superseded", "never-admitted");
+        return summary("fence_superseded", released.ok ? "never-admitted" : null);
       }
       const gate = evaluatePolicyGate({ claim, policy: deps.policy(), nowMs: deps.clock() });
       if (!gate.ok) {
         const released = await selfCleanReservation();
         if (released.ok) await bindings.remove(attemptId);
-        return summary(gate.reason, "never-admitted");
+        return summary(gate.reason, released.ok ? "never-admitted" : null);
       }
 
       const started = await deps.admission.transition(owner, (state) =>
@@ -481,7 +481,7 @@ export function createTcpCheckProvider(deps: TcpCheckProviderDeps): TcpCheckProv
         // retired record and its replay tombstone untouched (Codex follow-up).
         const released = await selfCleanReservation();
         if (released.ok) await bindings.remove(attemptId);
-        return summary("fence_superseded", "never-admitted");
+        return summary("fence_superseded", released.ok ? "never-admitted" : null);
       }
 
       // From here the attempt is `started`. Any failure — including a thrown
