@@ -114,7 +114,11 @@ function settledForm(outcome: ConnectOutcome | "cancelled"): SettledOutcome {
 export class BrokerEnforcer implements EgressEnforcer {
   constructor(private readonly deps: BrokerDependencies) {}
 
-  async authorizeAndConnect(claim: EgressClaim, signal?: AbortSignal): Promise<EnforcerResult> {
+  async authorizeAndConnect(input: EgressClaim, signal?: AbortSignal): Promise<EnforcerResult> {
+    // Own the value checked below: callers may retain mutable claim/target
+    // objects while the ledger and fence ports await. The key, gate and socket
+    // must all use this same immutable snapshot.
+    const claim = Object.freeze({ ...input, target: Object.freeze({ ...input.target }) });
     // 1. Well-formedness (fail-closed; a malformed claim is never-admitted).
     if (validateEgressClaim(claim) !== "ok") {
       return NEVER_ADMITTED("not_authorized");

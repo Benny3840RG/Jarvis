@@ -301,7 +301,11 @@ export function createTcpCheckProvider(deps: TcpCheckProviderDeps): TcpCheckProv
     },
 
     async sendPrepared(attempt, signal): Promise<TcpCheckReceiptSummary> {
-      const { claim, owner, attemptId } = attempt;
+      const { owner, attemptId } = attempt;
+      // A structurally identical copy need not be frozen like prepare's return
+      // value. Capture it once before authenticating: later caller mutations
+      // across the fence/ledger awaits must not change the bound effect.
+      const claim = freezeClaim(attempt.claim);
       const fenceToken = claim.fenceToken;
       const claimKey = computeClaimKey(claim);
 

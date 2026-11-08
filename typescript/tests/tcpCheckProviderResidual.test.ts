@@ -26,6 +26,67 @@ const ALLOWLIST = { entries: [{ ip: "8.8.8.8", ports: [443] }] } as const;
 const APPROVED = computeAllowlistDigest(ALLOWLIST);
 const NOW = Date.parse("2026-11-20T00:00:00Z");
 
+describe("prepared claim snapshot across asynchronous fences", () => {
+  for (const pausedFence of [1, 2]) {
+    it(`keeps the approved target when a mutable copy changes during fence ${pausedFence}`, async () => {
+      const allowlist = { entries: [{ ip: "8.8.8.8", ports: [443, 8443] }] } as const;
+      let resume!: () => void;
+      let reached!: () => void;
+      const paused = new Promise<void>((resolve) => {
+        reached = resolve;
+      });
+      const barrier = new Promise<void>((resolve) => {
+        resume = resolve;
+      });
+      let fences = 0;
+      const ports: number[] = [];
+      const ledger = inMemoryLedgerPort();
+      const provider = createTcpCheckProvider({
+        policy: () => ({ ...makePolicy(), allowlist }),
+        admission: createInMemoryAdmissionStore(),
+        ledger,
+        clock: () => NOW,
+        fence: {
+          async isActive() {
+            fences += 1;
+            if (fences === pausedFence) {
+              reached();
+              await barrier;
+            }
+            return true;
+          },
+        },
+        connector: {
+          async connect(target): Promise<ConnectOutcome> {
+            ports.push(target.port);
+            return "connected";
+          },
+        },
+      });
+      const prepared = await provider.prepare(
+        { ip: "8.8.8.8", port: 443 },
+        {
+          ...identity("fp-mutable-copy"),
+          approvedAllowlistDigest: computeAllowlistDigest(allowlist),
+        },
+      );
+      const supplied = {
+        ...prepared,
+        claim: { ...prepared.claim, target: { ...prepared.claim.target } },
+      };
+      const result = provider.sendPrepared(supplied);
+      await paused;
+      supplied.claim.target.port = 8443;
+      resume();
+      const receipt = await result;
+      assert.equal(receipt.status, "connected");
+      assert.deepEqual(ports, [443], "only the bound target may reach the connector");
+      assert.equal(receipt.target, "8.8.8.8:443");
+      assert.equal(statusOf(ledger.ledger, computeClaimKey(prepared.claim))?.phase, "settled");
+    });
+  }
+});
+
 function makePolicy(): PolicyView {
   return {
     allowlist: ALLOWLIST,

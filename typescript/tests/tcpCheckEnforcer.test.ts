@@ -60,6 +60,36 @@ describe("validateEgressClaim", () => {
 });
 
 describe("computeClaimKey", () => {
+  it("keeps the ledger key and socket target bound while a mutable claim changes across await", async () => {
+    const allowlist = { entries: [{ ip: "8.8.8.8", ports: [443, 8443] }] } as const;
+    const target = { ip: "8.8.8.8", port: 443 };
+    const claim = makeClaim({ target, approvedAllowlistDigest: computeAllowlistDigest(allowlist) });
+    const ledger = inMemoryLedgerPort();
+    const key = computeClaimKey(claim);
+    const ports: number[] = [];
+    const enforcer = new BrokerEnforcer({
+      policy: () => makePolicy({ allowlist }),
+      ledger,
+      clock: () => NOW,
+      fence: {
+        async isActive() {
+          target.port = 8443;
+          return true;
+        },
+      },
+      connector: {
+        async connect(actual): Promise<ConnectOutcome> {
+          ports.push(actual.port);
+          return "connected";
+        },
+      },
+    });
+    const result = await enforcer.authorizeAndConnect(claim);
+    assert.equal(result.outcome, "connected");
+    assert.deepEqual(ports, [443]);
+    assert.equal(statusOf(ledger.ledger, key)?.outcome, "connected");
+  });
+
   it("is stable across fence/epoch/digest, but binds owner/action/target", () => {
     const base = computeClaimKey(makeClaim());
     assert.equal(
