@@ -1,10 +1,14 @@
-// Public surface of the Stage 3 `security:tcp-check` core (Phases 1–3). These
+// Public surface of the Stage 3 `security:tcp-check` core (Phases 1–4). These
 // modules perform no network effect and import no `node:net`: Phase 1 is the
-// pure policy core, Phase 2 the pure admission state machine, and Phase 3 the
+// pure policy core, Phase 2 the pure admission state machine, Phase 3 the
 // supervised egress mediator (enforcer) + single-use ledger behind injected
-// ports — the concrete socket connector and kernel/proxy egress gate are
-// commissioning prerequisites supplied later (see issue #779). Governed wiring
-// and the real socket effect land in Phases 4–5. Nothing here opens a socket.
+// ports, and Phase 4 the governed wiring (the T3 tool definition and the egress
+// provider). The concrete socket connector and kernel/proxy egress gate are
+// commissioning prerequisites supplied later; the provider defaults to a
+// fail-closed not-commissioned connector and is not registered into the live
+// tool-execution service, so the capability stays `planned` (see issue #779).
+// The full adversarial acceptance suite lands in Phase 5. Nothing here opens a
+// socket.
 
 export { parseCanonicalAddress, type CanonicalAddress } from "./address.js";
 export {
@@ -103,3 +107,27 @@ export {
   type BrokerDependencies,
   BrokerEnforcer,
 } from "./enforcer.js";
+export {
+  type AdmissionStore,
+  type TcpCheckProviderDeps,
+  type TcpCheckInput,
+  type TcpCheckIdentity,
+  type TcpCheckPreparedAttempt,
+  type TcpCheckReceiptSummary,
+  type TcpCheckProvider,
+  TCP_CHECK_PROVIDER_NAME,
+  DEFAULT_CONNECT_DEADLINE_MS,
+  DEFAULT_CAPABILITY_LEASE_MS,
+  TcpCheckRefused,
+  TcpCheckNotCommissionedError,
+  notCommissionedConnector,
+  createTcpCheckProvider,
+  createTcpCheckProviderFromEnv,
+} from "./tcpCheckProvider.js";
+export {
+  type TcpCheckArguments,
+  SECURITY_TOOL,
+  TCP_CHECK_OPERATION,
+  tcpCheckArgumentsSchema,
+  createTcpCheckToolDefinition,
+} from "./tcpCheckTool.js";
