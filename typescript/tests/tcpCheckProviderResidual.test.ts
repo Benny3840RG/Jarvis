@@ -121,6 +121,49 @@ function identity(fingerprint: string, owner = "owner-1") {
 }
 
 describe("Codex #1 — fence identity is the claim key, not the attemptId", () => {
+  it("pre-send release cannot clear a started or later reservation or a forged identity", async () => {
+    const admission = createInMemoryAdmissionStore();
+    let settle!: (outcome: ConnectOutcome) => void;
+    let reached!: () => void;
+    const pending = new Promise<ConnectOutcome>((resolve) => {
+      settle = resolve;
+    });
+    const connected = new Promise<void>((resolve) => {
+      reached = resolve;
+    });
+    const provider = createTcpCheckProvider({
+      policy: makePolicy,
+      admission,
+      ledger: inMemoryLedgerPort(),
+      clock: () => NOW,
+      fence: { isActive: () => true },
+      connector: {
+        connect() {
+          reached();
+          return pending;
+        },
+      },
+    });
+    const first = await provider.prepare({ ip: "8.8.8.8", port: 443 }, identity("fp-release"));
+    assert.equal(await provider.releasePrepared({ ...first, owner: "other-owner" }), false);
+    assert.equal(
+      await provider.releasePrepared({ ...first, claim: { ...first.claim, deadlineMs: 1 } }),
+      false,
+    );
+    assert.equal(admission.snapshot("owner-1").active?.phase, "reserved");
+    const running = provider.sendPrepared(first);
+    await connected;
+    assert.equal(await provider.releasePrepared(first), false);
+    assert.equal(admission.snapshot("owner-1").active?.phase, "started");
+    settle("connected");
+    await running;
+    const later = await provider.prepare({ ip: "8.8.8.8", port: 443 }, identity("fp-later"));
+    assert.equal(await provider.releasePrepared(first), false);
+    assert.equal(admission.snapshot("owner-1").active?.attemptId, later.attemptId);
+    assert.equal(await provider.releasePrepared(later), true);
+    assert.equal(admission.snapshot("owner-1").active, null);
+  });
+
   it("a key-checking fence admits a valid prepared attempt and rejects a wrong key", async () => {
     const admission = createInMemoryAdmissionStore();
     const ledger = inMemoryLedgerPort();

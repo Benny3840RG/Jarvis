@@ -222,6 +222,47 @@ describe("tool execute — owner resolution (Codex #5) and signal propagation (C
     } as never;
   }
 
+  it("releases only the unstarted reservation when provider-attempt registration fails", async () => {
+    const admission = createInMemoryAdmissionStore();
+    let connects = 0;
+    const provider = createTcpCheckProvider(
+      providerDeps({
+        admission,
+        connector: {
+          async connect(): Promise<ConnectOutcome> {
+            connects += 1;
+            return "connected";
+          },
+        },
+      }),
+    );
+    const def = createTcpCheckToolDefinition(
+      provider,
+      makePolicy,
+      () => "owner-1",
+      () => APPROVED,
+      () => NOW,
+    );
+    const failure = new Error("attempt registration unavailable");
+    await assert.rejects(
+      def.execute(
+        { ip: "8.8.8.8", port: 443 },
+        new AbortController().signal,
+        fakeContext({
+          registerProviderAttempt: async () => {
+            throw failure;
+          },
+        }),
+      ),
+      (error) => error === failure,
+    );
+    assert.equal(connects, 0);
+    assert.equal(admission.snapshot("owner-1").active, null);
+    assert.equal(admission.snapshot("owner-1").startedHistory.length, 0);
+    await def.execute({ ip: "8.8.8.8", port: 443 }, new AbortController().signal, fakeContext());
+    assert.equal(connects, 1, "a fresh registered attempt can proceed");
+  });
+
   it("keys admission on the resolved owner, not the project id", async () => {
     const admission = createInMemoryAdmissionStore();
     const deps = providerDeps({

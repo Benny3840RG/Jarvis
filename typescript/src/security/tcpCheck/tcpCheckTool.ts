@@ -142,11 +142,18 @@ export function createTcpCheckToolDefinition(
       );
 
       // Record the attempt identity before the effect crosses the boundary.
-      await context.registerProviderAttempt({
-        provider: provider.name,
-        providerRequestId: attempt.providerRequestId,
-        providerCorrelationId: attempt.providerCorrelationId,
-      });
+      try {
+        await context.registerProviderAttempt({
+          provider: provider.name,
+          providerRequestId: attempt.providerRequestId,
+          providerCorrelationId: attempt.providerCorrelationId,
+        });
+      } catch (error) {
+        // sendPrepared has not run: release only this authentic reservation,
+        // never a started/uncertain attempt or a later owner's reservation.
+        await provider.releasePrepared(attempt);
+        throw error;
+      }
 
       return provider.sendPrepared(attempt, signal);
     },

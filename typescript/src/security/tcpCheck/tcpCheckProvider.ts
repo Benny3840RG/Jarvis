@@ -191,6 +191,8 @@ export interface TcpCheckReceiptSummary {
 export interface TcpCheckProvider {
   readonly name: string;
   prepare(input: TcpCheckInput, identity: TcpCheckIdentity): Promise<TcpCheckPreparedAttempt>;
+  /** Release an authentic, still-reserved attempt before any effect starts. */
+  releasePrepared(attempt: TcpCheckPreparedAttempt): Promise<boolean>;
   sendPrepared(
     attempt: TcpCheckPreparedAttempt,
     signal?: AbortSignal,
@@ -298,6 +300,19 @@ export function createTcpCheckProvider(deps: TcpCheckProviderDeps): TcpCheckProv
         providerRequestId: attemptId,
         providerCorrelationId: identity.correlationId,
       });
+    },
+
+    async releasePrepared(attempt): Promise<boolean> {
+      const { owner, attemptId } = attempt;
+      const claim = freezeClaim(attempt.claim);
+      if (owner !== claim.owner || claimBindings.get(attemptId) !== computeClaimBinding(claim)) {
+        return false;
+      }
+      const outcome = await deps.admission.transition(owner, (state) =>
+        releaseReservation(state, { attemptId, fenceToken: claim.fenceToken }),
+      );
+      if (outcome.ok) claimBindings.delete(attemptId);
+      return outcome.ok;
     },
 
     async sendPrepared(attempt, signal): Promise<TcpCheckReceiptSummary> {
