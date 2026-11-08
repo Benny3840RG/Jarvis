@@ -227,16 +227,49 @@ describe("BrokerEnforcer — Codex #2 (post-await gate), #3 (ledger before gate)
     assert.equal(h.connectCalls, 0);
   });
 
-  it("#7: an already-aborted signal opens no socket and is cancelled (never-admitted)", async () => {
+  it("#7: an already-aborted signal opens no socket and records a terminal cancelled", async () => {
     const h = harness({});
     const controller = new AbortController();
     controller.abort();
     const r = await h.enforcer.authorizeAndConnect(makeClaim(), controller.signal);
     assert.equal(r.outcome, "cancelled");
-    assert.equal(r.admissionSignal, "never-admitted");
+    assert.equal(r.admissionSignal, "socket-closed");
     assert.equal(h.connectCalls, 0);
-    // nothing consumed
-    assert.equal(statusOf(h.ledgerPort.ledger, computeClaimKey(makeClaim())), null);
+    // consumed and settled cancelled, so a redelivery replays rather than reconnects
+    assert.equal(statusOf(h.ledgerPort.ledger, computeClaimKey(makeClaim()))?.outcome, "cancelled");
+  });
+
+  it("#2-residual: a fence superseded DURING the ledger await is caught before connect", async () => {
+    // The fence goes inactive during the ledger.begin await; because the fence is
+    // checked after that await (right before connect), it is caught.
+    let fenceActive = true;
+    const ledgerPort = inMemoryLedgerPort();
+    const slowBegin: typeof ledgerPort = {
+      ledger: ledgerPort.ledger,
+      begin(claimKey: string, nowMs: number) {
+        fenceActive = false; // superseded while we were consuming
+        return ledgerPort.begin(claimKey, nowMs);
+      },
+      finalize: ledgerPort.finalize,
+    };
+    const h = harness({ ledgerPort: slowBegin, fenceActive: () => fenceActive });
+    const r = await h.enforcer.authorizeAndConnect(makeClaim());
+    assert.equal(r.outcome, "fence_superseded");
+    assert.equal(h.connectCalls, 0);
+  });
+
+  it("#3-residual: an aborted/superseded IN-FLIGHT duplicate returns uncertain, never frees the slot", async () => {
+    const ledgerPort = inMemoryLedgerPort();
+    ledgerPort.begin(computeClaimKey(makeClaim()), NOW); // original in flight (consuming)
+    // The duplicate is both aborted AND fence-superseded, yet because the ledger
+    // is consulted first, it returns effect_uncertain (not cancelled/never-admitted).
+    const h = harness({ ledgerPort, fenceActive: false });
+    const controller = new AbortController();
+    controller.abort();
+    const r = await h.enforcer.authorizeAndConnect(makeClaim(), controller.signal);
+    assert.equal(r.outcome, "effect_uncertain");
+    assert.equal(r.admissionSignal, null);
+    assert.equal(h.connectCalls, 0);
   });
 
   it("maps each connector outcome through and always signals socket-closed", async () => {

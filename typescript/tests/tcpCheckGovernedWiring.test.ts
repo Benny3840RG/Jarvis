@@ -62,10 +62,13 @@ function providerDeps(overrides: Partial<TcpCheckProviderDeps> = {}): TcpCheckPr
   };
 }
 
+const APPROVED = computeAllowlistDigest(ALLOWLIST);
+
 const IDENTITY = {
   owner: "owner-1",
   project: "proj-1",
   actionFingerprint: "fp-1",
+  approvedAllowlistDigest: APPROVED,
   correlationId: "c",
 };
 
@@ -90,6 +93,7 @@ describe("tool definition — T3 + preflight gate", () => {
     createTcpCheckProvider(providerDeps()),
     () => makePolicy(),
     (action) => action.projectId,
+    () => APPROVED,
     () => NOW,
   );
 
@@ -233,7 +237,8 @@ describe("tool execute — owner resolution (Codex #5) and signal propagation (C
     const def = createTcpCheckToolDefinition(
       provider,
       () => makePolicy(),
-      () => "authenticated-owner", // distinct from projectId
+      () => "authenticated-owner",
+      () => APPROVED,
       () => NOW,
     );
     await def.execute({ ip: "8.8.8.8", port: 443 }, new AbortController().signal, fakeContext());
@@ -256,6 +261,7 @@ describe("tool execute — owner resolution (Codex #5) and signal propagation (C
       createTcpCheckProvider(deps),
       () => makePolicy(),
       (action) => action.projectId,
+      () => APPROVED,
       () => NOW,
     );
     const controller = new AbortController();

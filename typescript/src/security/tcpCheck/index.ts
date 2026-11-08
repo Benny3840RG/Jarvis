@@ -130,6 +130,7 @@ export {
 export {
   type TcpCheckArguments,
   type OwnerResolver,
+  type ApprovedDigestResolver,
   SECURITY_TOOL,
   TCP_CHECK_OPERATION,
   tcpCheckArgumentsSchema,

@@ -83,6 +83,15 @@ function assertTargetAdmissible(
 export type OwnerResolver = (action: ToolAction) => string;
 
 /**
+ * Resolve the `allowlistDigest` that was captured when this action was
+ * staged/approved. Supplying it from the approval record — rather than
+ * recomputing from the current policy at prepare — is what lets a policy change
+ * between approval and prepare be detected (Codex #4). A deployment reads it from
+ * the approved ToolAction's immutable staging fingerprint.
+ */
+export type ApprovedDigestResolver = (action: ToolAction) => string;
+
+/**
  * Build the `security:tcp-check` tool definition. `externalProvider` names the
  * egress-mediator provider, `minimumAuthority` is T3 (external/destructive
  * class), and the effect is emitted only through the provider.
@@ -91,6 +100,7 @@ export function createTcpCheckToolDefinition(
   provider: TcpCheckProvider,
   policy: () => PolicyView,
   resolveOwner: OwnerResolver,
+  resolveApprovedDigest: ApprovedDigestResolver,
   clock: () => number = () => Date.now(),
 ): ToolExecutionDefinition {
   return {
@@ -118,6 +128,8 @@ export function createTcpCheckToolDefinition(
           // fingerprint omits the actionId, so include it to distinguish a true
           // duplicate delivery from a newly approved observation (Codex #5).
           actionFingerprint: `${context.effectFingerprint}:${context.action.actionId}`,
+          // The digest approved at staging, carried through unchanged (Codex #4).
+          approvedAllowlistDigest: resolveApprovedDigest(context.action),
           correlationId: context.correlationId,
         },
       );

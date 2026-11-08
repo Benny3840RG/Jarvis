@@ -32,6 +32,7 @@ import {
 
 const NOW = Date.parse("2026-11-20T00:00:00Z");
 const ALLOWLIST: Allowlist = { entries: [{ ip: "8.8.8.8", ports: [443] }] };
+const APPROVED = computeAllowlistDigest(ALLOWLIST);
 
 function makePolicy(overrides: Partial<PolicyView> = {}): PolicyView {
   return {
@@ -121,7 +122,13 @@ function makeWorld(opts: { deadlineMs?: number; leaseMs?: number } = {}): World 
     async run(ip, port, fingerprint) {
       const attempt = await provider.prepare(
         { ip, port },
-        { owner: "owner-1", project: "proj-1", actionFingerprint: fingerprint, correlationId: "c" },
+        {
+          owner: "owner-1",
+          project: "proj-1",
+          actionFingerprint: fingerprint,
+          correlationId: "c",
+          approvedAllowlistDigest: APPROVED,
+        },
       );
       return provider.sendPrepared(attempt);
     },
@@ -190,7 +197,13 @@ describe("acceptance — effect outcomes and single-use", () => {
     });
     const attempt = await provider.prepare(
       { ip: "8.8.8.8", port: 443 },
-      { owner: "owner-1", project: "proj-1", actionFingerprint: "fp-nc", correlationId: "c" },
+      {
+        owner: "owner-1",
+        project: "proj-1",
+        actionFingerprint: "fp-nc",
+        correlationId: "c",
+        approvedAllowlistDigest: APPROVED,
+      },
     );
     const r = await provider.sendPrepared(attempt);
     assert.equal(r.status, "effect_uncertain");
@@ -205,11 +218,23 @@ describe("acceptance — Codex #1 atomic admission under concurrency", () => {
     const results = await Promise.allSettled([
       w.provider.prepare(
         { ip: "8.8.8.8", port: 443 },
-        { owner: "owner-1", project: "proj-1", actionFingerprint: "fp-a", correlationId: "c" },
+        {
+          owner: "owner-1",
+          project: "proj-1",
+          actionFingerprint: "fp-a",
+          correlationId: "c",
+          approvedAllowlistDigest: APPROVED,
+        },
       ),
       w.provider.prepare(
         { ip: "8.8.8.8", port: 443 },
-        { owner: "owner-1", project: "proj-1", actionFingerprint: "fp-b", correlationId: "c" },
+        {
+          owner: "owner-1",
+          project: "proj-1",
+          actionFingerprint: "fp-b",
+          correlationId: "c",
+          approvedAllowlistDigest: APPROVED,
+        },
       ),
     ]);
     const fulfilled = results.filter((r) => r.status === "fulfilled");
@@ -248,7 +273,13 @@ describe("acceptance — policy freshness, narrowing, and expiry at the gate", (
     const w = makeWorld();
     const attempt = await w.provider.prepare(
       { ip: "8.8.8.8", port: 443 },
-      { owner: "owner-1", project: "proj-1", actionFingerprint: "fp", correlationId: "c" },
+      {
+        owner: "owner-1",
+        project: "proj-1",
+        actionFingerprint: "fp",
+        correlationId: "c",
+        approvedAllowlistDigest: APPROVED,
+      },
     );
     w.setPolicy(makePolicy({ allowlist: { entries: [{ ip: "1.1.1.1", ports: [443] }] } }));
     const r = await w.provider.sendPrepared(attempt);
@@ -265,7 +296,13 @@ describe("acceptance — policy freshness, narrowing, and expiry at the gate", (
     const w = makeWorld({ leaseMs: 400 * day });
     const attempt = await w.provider.prepare(
       { ip: "8.8.8.8", port: 443 },
-      { owner: "owner-1", project: "proj-1", actionFingerprint: "fp", correlationId: "c" },
+      {
+        owner: "owner-1",
+        project: "proj-1",
+        actionFingerprint: "fp",
+        correlationId: "c",
+        approvedAllowlistDigest: APPROVED,
+      },
     );
     w.setNow(NOW + 200 * day);
     assert.equal((await w.provider.sendPrepared(attempt)).status, "policy_changed");
@@ -276,7 +313,13 @@ describe("acceptance — policy freshness, narrowing, and expiry at the gate", (
     const w = makeWorld({ leaseMs: 15_000 });
     const attempt = await w.provider.prepare(
       { ip: "8.8.8.8", port: 443 },
-      { owner: "owner-1", project: "proj-1", actionFingerprint: "fp", correlationId: "c" },
+      {
+        owner: "owner-1",
+        project: "proj-1",
+        actionFingerprint: "fp",
+        correlationId: "c",
+        approvedAllowlistDigest: APPROVED,
+      },
     );
     w.setNow(NOW + 20_000);
     assert.equal((await w.provider.sendPrepared(attempt)).status, "expired");
@@ -287,7 +330,13 @@ describe("acceptance — policy freshness, narrowing, and expiry at the gate", (
     const w = makeWorld();
     const attempt = await w.provider.prepare(
       { ip: "8.8.8.8", port: 443 },
-      { owner: "owner-1", project: "proj-1", actionFingerprint: "fp", correlationId: "c" },
+      {
+        owner: "owner-1",
+        project: "proj-1",
+        actionFingerprint: "fp",
+        correlationId: "c",
+        approvedAllowlistDigest: APPROVED,
+      },
     );
     w.setPolicy(makePolicy({ policyEpoch: 2 }));
     assert.equal((await w.provider.sendPrepared(attempt)).status, "policy_changed");
@@ -298,7 +347,13 @@ describe("acceptance — policy freshness, narrowing, and expiry at the gate", (
     const w = makeWorld();
     const attempt = await w.provider.prepare(
       { ip: "8.8.8.8", port: 443 },
-      { owner: "owner-1", project: "proj-1", actionFingerprint: "fp", correlationId: "c" },
+      {
+        owner: "owner-1",
+        project: "proj-1",
+        actionFingerprint: "fp",
+        correlationId: "c",
+        approvedAllowlistDigest: APPROVED,
+      },
     );
     w.setFenceActive(false);
     assert.equal((await w.provider.sendPrepared(attempt)).status, "fence_superseded");
@@ -311,7 +366,13 @@ describe("acceptance — Codex #8 receipt binding and default-deny", () => {
     const w = makeWorld();
     const attempt = await w.provider.prepare(
       { ip: "8.8.8.8", port: 443 },
-      { owner: "owner-1", project: "proj-1", actionFingerprint: "fp", correlationId: "c" },
+      {
+        owner: "owner-1",
+        project: "proj-1",
+        actionFingerprint: "fp",
+        correlationId: "c",
+        approvedAllowlistDigest: APPROVED,
+      },
     );
     const approved = attempt.claim.approvedAllowlistDigest;
     // Change the active policy's digest-bearing content AFTER prepare: the gate
@@ -324,6 +385,28 @@ describe("acceptance — Codex #8 receipt binding and default-deny", () => {
       approved,
       computeAllowlistDigest({ entries: [{ ip: "8.8.8.8", ports: [443, 53] }] }),
     );
+  });
+
+  it("#4: a policy change between approval and prepare is refused at prepare (staging drift)", async () => {
+    const w = makeWorld();
+    // Active policy drifts to a different digest AFTER the action was approved.
+    w.setPolicy(makePolicy({ allowlist: { entries: [{ ip: "8.8.8.8", ports: [443, 53] }] } }));
+    // The identity carries the digest approved BEFORE the drift (policy A).
+    await assert.rejects(
+      w.provider.prepare(
+        { ip: "8.8.8.8", port: 443 },
+        {
+          owner: "owner-1",
+          project: "proj-1",
+          actionFingerprint: "fp",
+          approvedAllowlistDigest: APPROVED,
+          correlationId: "c",
+        },
+      ),
+      /drifted since .*approved/,
+    );
+    assert.equal(w.connectCalls(), 0);
+    assert.equal(w.admission.snapshot("owner-1").active, null);
   });
 
   it("an empty allowlist is default-deny: every target is refused before reserving", async () => {

@@ -121,19 +121,13 @@ export class BrokerEnforcer implements EgressEnforcer {
     }
     const claimKey = computeClaimKey(claim);
 
-    // 2. Abort before anything is consumed.
-    if (isAborted(signal)) {
-      return NEVER_ADMITTED("cancelled");
-    }
-
-    // 3. Fence liveness (await).
-    if (!(await this.deps.fence.isActive(claim.fenceToken, claimKey))) {
-      return NEVER_ADMITTED("fence_superseded");
-    }
-
-    // 4. Single-use consumption BEFORE the gate, so a duplicate of an in-flight
-    //    or settled claim returns uncertain/replayed rather than a gate rejection
-    //    that could free a still-pending slot (Codex #3).
+    // 2. Single-use consumption is the FIRST authority check (Codex #2/#3): every
+    //    rejection path — abort, fence, policy gate — is reached only after the
+    //    ledger is consulted, so a duplicate delivery of an in-flight claim always
+    //    returns `effect_uncertain` (and a settled one `replayed`), never a
+    //    rejection that could free a still-pending slot. A fresh begin reserves
+    //    the single use; any terminal below records it so a later delivery
+    //    returns the stored status rather than another connect.
     const begin = await this.deps.ledger.begin(claimKey, this.deps.clock());
     if (begin.kind === "invalid-input") {
       return NEVER_ADMITTED("not_authorized");
@@ -149,10 +143,23 @@ export class BrokerEnforcer implements EgressEnforcer {
       return { outcome: "effect_uncertain", admissionSignal: null };
     }
 
-    // 5. Deterministic gate evaluated from a clock+policy read AFTER the awaits,
-    //    immediately before connect (Codex #2). A rejection here has already
-    //    consumed the single use, so it is recorded as a terminal refusal — a
-    //    later delivery returns the stored status, never another connect.
+    // 3. Abort after consumption: no socket was opened, so record `cancelled`.
+    if (isAborted(signal)) {
+      await this.deps.ledger.finalize(claimKey, "cancelled", this.deps.clock());
+      return { outcome: "cancelled", admissionSignal: "socket-closed" };
+    }
+
+    // 4. Fence liveness, checked AFTER the ledger await and immediately before the
+    //    gate/connect (Codex #2) — so a fence superseded during the begin await is
+    //    caught here. (True fence-to-syscall atomicity is the kernel/proxy
+    //    enforcer's contract at commissioning; see the design cap and #779.)
+    if (!(await this.deps.fence.isActive(claim.fenceToken, claimKey))) {
+      await this.deps.ledger.finalize(claimKey, "refused", this.deps.clock());
+      return NEVER_ADMITTED("fence_superseded");
+    }
+
+    // 5. Deterministic gate from a clock+policy read AFTER the awaits, right
+    //    before connect (Codex #2).
     const gate = evaluatePolicyGate({
       claim,
       policy: this.deps.policy(),
@@ -163,8 +170,7 @@ export class BrokerEnforcer implements EgressEnforcer {
       return NEVER_ADMITTED(gate.reason);
     }
 
-    // 6. Abort immediately before the socket (Codex #7). No socket was opened, so
-    //    record a terminal `cancelled` and release the slot.
+    // 6. Final abort check immediately before the socket.
     if (isAborted(signal)) {
       await this.deps.ledger.finalize(claimKey, "cancelled", this.deps.clock());
       return { outcome: "cancelled", admissionSignal: "socket-closed" };

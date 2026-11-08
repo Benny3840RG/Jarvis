@@ -152,6 +152,12 @@ export interface TcpCheckIdentity {
   readonly project: string;
   /** exact_action_fingerprint: binds the approval to exactly this action. */
   readonly actionFingerprint: string;
+  /**
+   * The `allowlistDigest` captured when this action was staged/approved, NOT
+   * recomputed at prepare. Supplying it from the approval record is what lets a
+   * policy change *between approval and prepare* be detected (Codex #4).
+   */
+  readonly approvedAllowlistDigest: string;
   readonly correlationId: string;
 }
 
@@ -217,6 +223,12 @@ export function createTcpCheckProvider(deps: TcpCheckProviderDeps): TcpCheckProv
         throw new TcpCheckRefused("target is not permitted by the active policy");
       }
 
+      // Staging-to-prepare drift (Codex #4): the digest approved at staging must
+      // still match the active policy at prepare, otherwise the approval is stale.
+      if (computeAllowlistDigest(policy.allowlist) !== identity.approvedAllowlistDigest) {
+        throw new TcpCheckRefused("active policy has drifted since this action was approved");
+      }
+
       const owner = identity.owner;
       sequence += 1;
       const attemptId = `${identity.actionFingerprint}:${nowMs}:${sequence}`;
@@ -241,7 +253,8 @@ export function createTcpCheckProvider(deps: TcpCheckProviderDeps): TcpCheckProv
         target: { ip: input.ip, port: input.port },
         fenceToken: reserved.fenceToken,
         policyEpoch: policy.policyEpoch,
-        approvedAllowlistDigest: computeAllowlistDigest(policy.allowlist),
+        // The approved (staged) digest, carried through from the approval record.
+        approvedAllowlistDigest: identity.approvedAllowlistDigest,
         deadlineMs,
         expiresAtMs: nowMs + leaseMs,
       };
