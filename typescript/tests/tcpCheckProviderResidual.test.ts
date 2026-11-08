@@ -456,6 +456,26 @@ describe("Codex round 4 — claim integrity (#1) and thrown-dependency lifecycle
 });
 
 describe("Codex round 4 residual #2 — completed replay returns the stored outcome", () => {
+  it("a rejected pre-start fence check does not strand its reservation", async () => {
+    const h = connectingProviderDeps();
+    const provider = createTcpCheckProvider({
+      ...h.deps,
+      fence: {
+        isActive: async () => {
+          throw new Error("fence unavailable");
+        },
+      },
+    });
+    const attempt = await provider.prepare(
+      { ip: "8.8.8.8", port: 443 },
+      identity("fp-fence-error"),
+    );
+    await assert.rejects(provider.sendPrepared(attempt), /fence unavailable/);
+    assert.equal(h.admission.snapshot("owner-1").active, null);
+    assert.equal(h.admission.snapshot("owner-1").startedHistory.length, 0);
+    assert.equal(h.connects(), 0);
+  });
+
   it("a failed binding write releases its reservation and spends no start budget", async () => {
     const admission = createInMemoryAdmissionStore();
     const failure = new Error("binding store unavailable");

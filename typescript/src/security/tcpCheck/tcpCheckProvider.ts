@@ -431,7 +431,7 @@ export function createTcpCheckProvider(deps: TcpCheckProviderDeps): TcpCheckProv
       // Attempt-scoped self-cleanup: release only if the slot is still THIS
       // attempt's reservation, so a stale delivery never disturbs a later
       // attempt's slot (Codex #2).
-      const selfCleanReservation = (): Promise<unknown> =>
+      const selfCleanReservation = () =>
         deps.admission.transition(owner, (state) =>
           releaseReservation(state, { attemptId, fenceToken }),
         );
@@ -447,7 +447,17 @@ export function createTcpCheckProvider(deps: TcpCheckProviderDeps): TcpCheckProv
       // A rejection removes the binding (nothing crossed the egress boundary), so
       // a later delivery of the same attempt fails closed as `not_authorized`
       // rather than replaying — only a completed effect replays (round 4 #2).
-      const fenceLive = await deps.fence.isActive(fenceToken, claimKey);
+      let fenceLive: boolean;
+      try {
+        fenceLive = await deps.fence.isActive(fenceToken, claimKey);
+      } catch (error) {
+        // A failed liveness read authorises no effect. Only an actually released
+        // reservation permits deleting its binding; a duplicate must leave the
+        // original started/uncertain attempt and its replay record untouched.
+        const released = await selfCleanReservation();
+        if (released.ok) await bindings.remove(attemptId);
+        throw error;
+      }
       if (!fenceLive) {
         await selfCleanReservation();
         await bindings.remove(attemptId);
