@@ -14,6 +14,7 @@ Generated from `docs/traceability/action-family-registry.yaml`. This view is non
 | AM-005 | Complete task | active | business, home, workshop, shared | tasks | internal_mutation | mutate | never | false | false |
 | AM-014 | Explain a cybersecurity concept | planned | shared | security | read_only | read | always | false | false |
 | AM-015 | Interpret supplied port-state rows | planned | shared | security | read_only | read | always | false | false |
+| AM-016 | Diagnose TCP endpoint reachability | planned | shared | security | external_execute_with_reconciliation | execute | always | true | true |
 
 ## Workflows
 

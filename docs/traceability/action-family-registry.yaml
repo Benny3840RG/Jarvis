@@ -701,6 +701,69 @@ action_families:
           min_length: 1
           max_length: 8192
 
+  - id: AM-016
+    name: Diagnose TCP endpoint reachability
+    lifecycle_status: planned
+    owner: shared_domain
+    version: 1
+    classification:
+      verb: check
+      object: network_reachability
+      domains: [shared]
+      capability: security
+    policy_overlay: external_execute_with_reconciliation
+    approval:
+      mode: always
+      binding: exact_action_fingerprint
+      fingerprint_fields:
+        - action_family_id
+        - owner_id
+        - target_ip
+        - target_port
+    sensitivity:
+      mode: fixed
+      value: private
+    execution:
+      external_side_effects:
+        mode: true
+      offline_support: false
+    idempotency:
+      enabled: true
+      key_strategy: normalized_payload_hash
+      scope: owner_and_action_family
+      replay_policy: return_original_result
+      collision_policy: reject_and_log
+    bindings:
+      executor_id: TOOL-SECURITY-TCP-CHECK
+      state_target_id: STORE-TOOL-EXECUTION-RECEIPTS
+      tool_contract_version: "1"
+    reconciliation:
+      required: true
+      strategy: provider_status_then_internal_record
+      indeterminate_state: Indeterminate
+      success_state: Reconciled
+      retry_policy: no_blind_retry
+      correlation_field: correlation_id
+      provider_reference_required: true
+    traceability:
+      requirements:
+        primary: [R-044, R-055, R-095, R-141]
+        supporting: [R-039, R-045, R-046, R-047, R-048, R-049, R-050, R-060, R-063, R-066, R-082, R-096, R-097, R-098, R-142, R-143]
+      test_ids:
+        - TEST-AM-016-CORE-001
+        - TEST-AM-016-ADMISSION-001
+        - TEST-AM-016-MEDIATOR-001
+        - TEST-AM-016-WIRING-001
+      evidence_ids:
+        - EVD-AM-016-001
+    parameters:
+      - name: ip
+        type: string
+        required: true
+      - name: port
+        type: integer
+        required: true
+
 workflows:
   - id: WF-QUOTE-001
     name: Finalize and send quote
