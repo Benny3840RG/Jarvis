@@ -111,9 +111,17 @@ describe("tool definition — T3 + preflight gate", () => {
       { ip: "127.0.0.1", port: 443 }, // special-use
       { ip: "9.9.9.9", port: 443 }, // not allowlisted
       { ip: "8.8.8.8", port: 80 }, // port not allowlisted
+      { ip: " 8.8.8.8 ", port: 443 }, // whitespace-padded: rejected, not trimmed
+      { ip: "8.8.8.8\n", port: 443 }, // trailing newline: rejected
     ]) {
       await assert.rejects(def.preflight!(bad, new AbortController().signal));
     }
+  });
+
+  it("does not trim a whitespace-padded ip into a canonical one (reject, never rewrite)", () => {
+    // The schema must preserve the padding so canonical validation can reject it.
+    const parsed = tcpCheckArgumentsSchema.parse({ ip: " 8.8.8.8 ", port: 443 });
+    assert.equal(parsed.ip, " 8.8.8.8 ");
   });
 
   it("preflight rejects a stale snapshot", async () => {

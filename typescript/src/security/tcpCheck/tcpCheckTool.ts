@@ -25,10 +25,17 @@ import type { TcpCheckProvider } from "./tcpCheckProvider.js";
 export const SECURITY_TOOL = "security";
 export const TCP_CHECK_OPERATION = "tcp-check";
 
-/** Strict argument schema: a canonical IP literal and an integer port 1–65535. */
+/**
+ * Strict argument schema: a canonical IP literal and an integer port 1–65535.
+ * The `ip` field is deliberately NOT trimmed — trimming would rewrite a
+ * whitespace-padded input (e.g. `" 8.8.8.8 "`) into a canonical one and accept
+ * it, violating the design's "reject, never rewrite" rule. The untrimmed value
+ * is handed to `parseCanonicalAddress`, which rejects any surrounding
+ * whitespace as non-canonical.
+ */
 export const tcpCheckArgumentsSchema = z
   .object({
-    ip: z.string().trim().min(1).max(45),
+    ip: z.string().min(1).max(45),
     port: z.number().int().min(MIN_PORT).max(MAX_PORT),
   })
   .strict();
