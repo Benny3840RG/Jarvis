@@ -133,6 +133,45 @@ export function createInMemoryAdmissionStore(): AdmissionStore & {
   };
 }
 
+/**
+ * A durable record authenticating one prepared attempt. `binding` is the trusted
+ * hash over the claim's authoritative fields; `retired` marks a reached terminal
+ * (a tombstone), with `storedOutcome` set when the effect actually completed so a
+ * legitimate completed replay returns the recorded result rather than being
+ * treated as a fabricated request (Codex round 4 residual #2).
+ */
+export interface ClaimBindingRecord {
+  readonly binding: string;
+  readonly retired: boolean;
+  readonly storedOutcome?: SettledOutcome;
+}
+
+/**
+ * Durable store for claim bindings, written atomically with the reservation. A
+ * recreated provider backed by the same store (and the same ledger) can
+ * authenticate a persisted attempt and replay its recorded outcome; a fresh
+ * store fails closed. The production implementation is a Convex table; the
+ * in-memory reference below is the test default.
+ */
+export interface ClaimBindingStore {
+  get(attemptId: string): Promise<ClaimBindingRecord | null> | ClaimBindingRecord | null;
+  put(attemptId: string, record: ClaimBindingRecord): Promise<void> | void;
+  remove(attemptId: string): Promise<void> | void;
+}
+
+export function createInMemoryClaimBindingStore(): ClaimBindingStore {
+  const records = new Map<string, ClaimBindingRecord>();
+  return {
+    get: (attemptId) => records.get(attemptId) ?? null,
+    put: (attemptId, record) => {
+      records.set(attemptId, record);
+    },
+    remove: (attemptId) => {
+      records.delete(attemptId);
+    },
+  };
+}
+
 export interface TcpCheckProviderDeps {
   /** The compiled active policy, read fresh at prepare and at connect. */
   readonly policy: () => PolicyView;
@@ -145,6 +184,8 @@ export interface TcpCheckProviderDeps {
   readonly rateConfig?: RateConfig;
   readonly deadlineMs?: number;
   readonly leaseMs?: number;
+  /** Durable authenticator for prepared attempts; defaults to an in-memory store. */
+  readonly bindingStore?: ClaimBindingStore;
 }
 
 export interface TcpCheckInput {
@@ -235,8 +276,28 @@ export function createTcpCheckProvider(deps: TcpCheckProviderDeps): TcpCheckProv
   const deadlineMs = deps.deadlineMs ?? DEFAULT_CONNECT_DEADLINE_MS;
   const leaseMs = deps.leaseMs ?? DEFAULT_CAPABILITY_LEASE_MS;
   let sequence = 0;
-  // attemptId -> trusted binding over the prepared claim's authoritative fields.
-  const claimBindings = new Map<string, string>();
+  const bindings = deps.bindingStore ?? createInMemoryClaimBindingStore();
+
+  // The SettledOutcome a completed effect records for replay, or undefined when
+  // nothing crossed the egress boundary (a gate/fence rejection or an abort with
+  // no socket). `replayed` carries the original stored outcome through.
+  const settledOutcomeOf = (result: {
+    outcome: EnforcerOutcome;
+    storedOutcome?: SettledOutcome;
+  }): SettledOutcome | undefined => {
+    switch (result.outcome) {
+      case "connected":
+      case "refused":
+      case "timed-out":
+      case "error":
+      case "cancelled":
+        return result.outcome;
+      case "replayed":
+        return result.storedOutcome;
+      default:
+        return undefined;
+    }
+  };
 
   return {
     name: TCP_CHECK_PROVIDER_NAME,
@@ -287,11 +348,10 @@ export function createTcpCheckProvider(deps: TcpCheckProviderDeps): TcpCheckProv
         expiresAtMs: nowMs + leaseMs,
       });
 
-      // Bind the prepared attempt to its reservation. The binding covers every
-      // authoritative field, so a claim later mutated in place (blocked by the
-      // freeze) OR replaced with a fabricated copy is rejected at sendPrepared
-      // (Codex round 4 #1).
-      claimBindings.set(attemptId, computeClaimBinding(claim));
+      // Persist the attempt's trusted binding. It covers every authoritative
+      // field, so a claim later mutated in place (blocked by the freeze) OR
+      // replaced with a fabricated copy is rejected at sendPrepared (round 4 #1).
+      await bindings.put(attemptId, { binding: computeClaimBinding(claim), retired: false });
 
       return Object.freeze({
         claim,
@@ -305,13 +365,19 @@ export function createTcpCheckProvider(deps: TcpCheckProviderDeps): TcpCheckProv
     async releasePrepared(attempt): Promise<boolean> {
       const { owner, attemptId } = attempt;
       const claim = freezeClaim(attempt.claim);
-      if (owner !== claim.owner || claimBindings.get(attemptId) !== computeClaimBinding(claim)) {
+      const record = await bindings.get(attemptId);
+      if (
+        record === null ||
+        record.retired ||
+        owner !== claim.owner ||
+        record.binding !== computeClaimBinding(claim)
+      ) {
         return false;
       }
       const outcome = await deps.admission.transition(owner, (state) =>
         releaseReservation(state, { attemptId, fenceToken: claim.fenceToken }),
       );
-      if (outcome.ok) claimBindings.delete(attemptId);
+      if (outcome.ok) await bindings.remove(attemptId);
       return outcome.ok;
     },
 
@@ -337,12 +403,19 @@ export function createTcpCheckProvider(deps: TcpCheckProviderDeps): TcpCheckProv
         ...(storedOutcome ? { storedOutcome } : {}),
       });
 
-      // Authenticate the prepared attempt against its trusted reservation binding
-      // before anything else. A mutated or fabricated/substituted claim (e.g. a
-      // different target port) does not match and is refused (Codex round 4 #1).
-      const expectedBinding = claimBindings.get(attemptId);
-      if (expectedBinding === undefined || expectedBinding !== computeClaimBinding(claim)) {
+      // Authenticate the prepared attempt against its durable reservation binding
+      // before anything else. A mutated or fabricated/substituted claim (different
+      // target port, wrong owner, absent record) is refused (round 4 #1).
+      const expectedBinding = computeClaimBinding(claim);
+      const record = await bindings.get(attemptId);
+      if (record === null || record.binding !== expectedBinding || owner !== claim.owner) {
         return summary("not_authorized", "never-admitted");
+      }
+      // A retired (completed) attempt replays its recorded outcome WITHOUT running
+      // the fence, gate, start or connect — honouring the completed-replay
+      // contract while keeping permanent single-use retirement (round 4 #2).
+      if (record.retired) {
+        return summary("replayed", null, record.storedOutcome);
       }
 
       // Attempt-scoped self-cleanup: release only if the slot is still THIS
@@ -361,16 +434,19 @@ export function createTcpCheckProvider(deps: TcpCheckProviderDeps): TcpCheckProv
       // pre-connect gate passes; otherwise self-clean the reservation with no
       // budget (Codex #9). The fence is keyed on the claim key — the same identity
       // the broker uses (Codex #1).
+      // A rejection removes the binding (nothing crossed the egress boundary), so
+      // a later delivery of the same attempt fails closed as `not_authorized`
+      // rather than replaying — only a completed effect replays (round 4 #2).
       const fenceLive = await deps.fence.isActive(fenceToken, claimKey);
       if (!fenceLive) {
         await selfCleanReservation();
-        claimBindings.delete(attemptId);
+        await bindings.remove(attemptId);
         return summary("fence_superseded", "never-admitted");
       }
       const gate = evaluatePolicyGate({ claim, policy: deps.policy(), nowMs: deps.clock() });
       if (!gate.ok) {
         await selfCleanReservation();
-        claimBindings.delete(attemptId);
+        await bindings.remove(attemptId);
         return summary(gate.reason, "never-admitted");
       }
 
@@ -381,7 +457,7 @@ export function createTcpCheckProvider(deps: TcpCheckProviderDeps): TcpCheckProv
         // Our reservation is gone (a concurrent recovery) — do not touch whatever
         // attempt now holds the slot; refuse only our own delivery.
         await selfCleanReservation();
-        claimBindings.delete(attemptId);
+        await bindings.remove(attemptId);
         return summary("fence_superseded", "never-admitted");
       }
 
@@ -406,7 +482,8 @@ export function createTcpCheckProvider(deps: TcpCheckProviderDeps): TcpCheckProv
 
       if (result.outcome === "effect_uncertain") {
         // Hold the slot, but move it started -> uncertain so a later enforcer
-        // signal can resolve it (Codex #4). Attempt/fence-conditional.
+        // signal can resolve it (Codex #4). The binding stays non-retired so a
+        // retry/replay re-enters the uncertain path rather than fabricating.
         await markOwnUncertain();
       } else {
         // Release the slot. `complete` is attempt+fence-conditional, so it only
@@ -414,7 +491,19 @@ export function createTcpCheckProvider(deps: TcpCheckProviderDeps): TcpCheckProv
         await deps.admission.transition(owner, (state) =>
           complete(state, { attemptId, fenceToken }),
         );
-        claimBindings.delete(attemptId);
+        const settled = settledOutcomeOf(result);
+        if (settled !== undefined) {
+          // Completed effect: retire as a tombstone carrying the recorded outcome
+          // so a legitimate completed replay returns it (round 4 #2).
+          await bindings.put(attemptId, {
+            binding: expectedBinding,
+            retired: true,
+            storedOutcome: settled,
+          });
+        } else {
+          // A never-admitted race: nothing crossed; fail closed on any replay.
+          await bindings.remove(attemptId);
+        }
       }
 
       return summary(result.outcome, result.admissionSignal, result.storedOutcome);
@@ -427,7 +516,13 @@ export function createTcpCheckProvider(deps: TcpCheckProviderDeps): TcpCheckProv
       const outcome = await deps.admission.transition(owner, (state) =>
         resolve(state, { attemptId, signal }),
       );
-      if (outcome.ok) claimBindings.delete(attemptId);
+      if (outcome.ok) {
+        // Retire the binding as a tombstone. The network effect was never
+        // recorded (it was uncertain), so a replay reports `replayed` with no
+        // stored outcome rather than re-attempting.
+        const record = await bindings.get(attemptId);
+        await bindings.put(attemptId, { binding: record?.binding ?? "", retired: true });
+      }
       return outcome.ok;
     },
   };

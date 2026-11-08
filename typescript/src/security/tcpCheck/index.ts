@@ -115,6 +115,9 @@ export {
 } from "./enforcer.js";
 export {
   type AdmissionStore,
+  type ClaimBindingRecord,
+  type ClaimBindingStore,
+  createInMemoryClaimBindingStore,
   type TcpCheckProviderDeps,
   type TcpCheckInput,
   type TcpCheckIdentity,

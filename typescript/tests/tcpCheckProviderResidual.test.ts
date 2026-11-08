@@ -11,6 +11,7 @@ import {
   computeClaimKey,
   createInMemoryAdmissionStore,
   createTcpCheckProvider,
+  createInMemoryClaimBindingStore,
   emptyLedger,
   finalizeConsume,
   statusOf,
@@ -451,5 +452,88 @@ describe("Codex round 4 — claim integrity (#1) and thrown-dependency lifecycle
     );
     assert.equal(resolved, true);
     assert.equal(admission.snapshot("owner-1").active, null);
+  });
+});
+
+describe("Codex round 4 residual #2 — completed replay returns the stored outcome", () => {
+  function connectingProviderDeps(bindingStore = createInMemoryClaimBindingStore()) {
+    const admission = createInMemoryAdmissionStore();
+    const ledger = inMemoryLedgerPort();
+    const state = { connects: 0 };
+    const deps: TcpCheckProviderDeps = {
+      policy: makePolicy,
+      admission,
+      ledger,
+      bindingStore,
+      clock: () => NOW,
+      fence: { isActive: () => true },
+      connector: {
+        async connect(): Promise<ConnectOutcome> {
+          state.connects += 1;
+          return "connected";
+        },
+      },
+    };
+    return { deps, admission, ledger, bindingStore, connects: () => state.connects };
+  }
+
+  it("a completed duplicate replays `connected` with its stored outcome and never reconnects", async () => {
+    const h = connectingProviderDeps();
+    const provider = createTcpCheckProvider(h.deps);
+    const attempt = await provider.prepare({ ip: "8.8.8.8", port: 443 }, identity("fp-done"));
+    const first = await provider.sendPrepared(attempt);
+    assert.equal(first.status, "connected");
+
+    const replay = await provider.sendPrepared(attempt);
+    assert.equal(replay.status, "replayed");
+    assert.equal(replay.storedOutcome, "connected");
+    assert.equal(h.connects(), 1, "one connect total");
+    assert.equal(h.admission.snapshot("owner-1").active, null);
+  });
+
+  it("a lost first response (dropped) still replays on retry with one connect", async () => {
+    const h = connectingProviderDeps();
+    const provider = createTcpCheckProvider(h.deps);
+    const attempt = await provider.prepare({ ip: "8.8.8.8", port: 443 }, identity("fp-lost"));
+    await provider.sendPrepared(attempt); // response "lost" (ignored)
+    const retry = await provider.sendPrepared(attempt);
+    assert.equal(retry.status, "replayed");
+    assert.equal(retry.storedOutcome, "connected");
+    assert.equal(h.connects(), 1);
+  });
+
+  it("a recreated provider with the same ledger + binding store replays; a fresh store fails closed", async () => {
+    const store = createInMemoryClaimBindingStore();
+    const h = connectingProviderDeps(store);
+    const provider1 = createTcpCheckProvider(h.deps);
+    const attempt = await provider1.prepare({ ip: "8.8.8.8", port: 443 }, identity("fp-recreate"));
+    assert.equal((await provider1.sendPrepared(attempt)).status, "connected");
+
+    // A new provider instance sharing the same admission, ledger and binding store.
+    const provider2 = createTcpCheckProvider({ ...h.deps });
+    const replay = await provider2.sendPrepared(attempt);
+    assert.equal(replay.status, "replayed");
+    assert.equal(replay.storedOutcome, "connected");
+
+    // A provider with a FRESH binding store cannot authenticate the attempt.
+    const provider3 = createTcpCheckProvider({
+      ...h.deps,
+      admission: createInMemoryAdmissionStore(),
+      bindingStore: createInMemoryClaimBindingStore(),
+    });
+    const refused = await provider3.sendPrepared(attempt);
+    assert.equal(refused.status, "not_authorized");
+    assert.equal(h.connects(), 1, "no reconnect across any replay path");
+  });
+
+  it("a rejected (never-admitted) attempt fails closed on replay, not replayed", async () => {
+    const h = connectingProviderDeps();
+    // Fence refuses -> never-admitted, binding removed.
+    const deps = { ...h.deps, fence: { isActive: () => false } };
+    const provider = createTcpCheckProvider(deps);
+    const attempt = await provider.prepare({ ip: "8.8.8.8", port: 443 }, identity("fp-rej"));
+    assert.equal((await provider.sendPrepared(attempt)).status, "fence_superseded");
+    // A replay of a rejected attempt is not_authorized (fail-closed), not replayed.
+    assert.equal((await provider.sendPrepared(attempt)).status, "not_authorized");
   });
 });
