@@ -18,6 +18,8 @@
 // which fails closed. `createTcpCheckProviderFromEnv` returns `null`, so this
 // provider is never spliced into the live tool-execution service.
 
+import { randomUUID } from "node:crypto";
+
 import {
   complete,
   emptyAdmissionState,
@@ -275,7 +277,6 @@ export function createTcpCheckProvider(deps: TcpCheckProviderDeps): TcpCheckProv
   const connector = deps.connector ?? notCommissionedConnector;
   const deadlineMs = deps.deadlineMs ?? DEFAULT_CONNECT_DEADLINE_MS;
   const leaseMs = deps.leaseMs ?? DEFAULT_CAPABILITY_LEASE_MS;
-  let sequence = 0;
   const bindings = deps.bindingStore ?? createInMemoryClaimBindingStore();
 
   // The SettledOutcome a completed effect records for replay, or undefined when
@@ -319,8 +320,9 @@ export function createTcpCheckProvider(deps: TcpCheckProviderDeps): TcpCheckProv
       }
 
       const owner = identity.owner;
-      sequence += 1;
-      const attemptId = `${identity.actionFingerprint}:${nowMs}:${sequence}`;
+      // The binding store can be shared across owners and provider instances.
+      // A process-local counter and clock tick cannot identify a reservation.
+      const attemptId = randomUUID();
 
       // Atomic reservation (no budget yet — budget is charged at `started`).
       const reserved = await deps.admission.transition(owner, (state) =>

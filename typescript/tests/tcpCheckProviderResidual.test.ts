@@ -457,6 +457,20 @@ describe("Codex round 4 — claim integrity (#1) and thrown-dependency lifecycle
 });
 
 describe("Codex round 4 residual #2 — completed replay returns the stored outcome", () => {
+  it("two provider instances at the same tick do not overwrite each other's binding", async () => {
+    const h = connectingProviderDeps();
+    const first = createTcpCheckProvider(h.deps);
+    const second = createTcpCheckProvider(h.deps);
+    const input = { ip: "8.8.8.8", port: 443 };
+    const a = await first.prepare(input, identity("same-fingerprint", "owner-a"));
+    const b = await second.prepare(input, identity("same-fingerprint", "owner-b"));
+    assert.notEqual(a.attemptId, b.attemptId);
+    assert.equal((await first.sendPrepared(a)).status, "connected");
+    assert.equal((await second.sendPrepared(b)).status, "connected");
+    assert.equal(h.admission.snapshot("owner-a").active, null);
+    assert.equal(h.admission.snapshot("owner-b").active, null);
+  });
+
   it("a rejected pre-start fence check does not strand its reservation", async () => {
     const h = connectingProviderDeps();
     const provider = createTcpCheckProvider({
