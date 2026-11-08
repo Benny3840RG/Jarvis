@@ -128,7 +128,15 @@ export class BrokerEnforcer implements EgressEnforcer {
     //    rejection that could free a still-pending slot. A fresh begin reserves
     //    the single use; any terminal below records it so a later delivery
     //    returns the stored status rather than another connect.
-    const begin = await this.deps.ledger.begin(claimKey, this.deps.clock());
+    let begin: BeginResult;
+    try {
+      begin = await this.deps.ledger.begin(claimKey, this.deps.clock());
+    } catch {
+      // A thrown ledger dependency leaves the single-use state unknown: fail
+      // closed to an uncertain effect (no socket, slot held), never propagate the
+      // raw error or admit (Codex round 4 #2).
+      return { outcome: "effect_uncertain", admissionSignal: null };
+    }
     if (begin.kind === "invalid-input") {
       return NEVER_ADMITTED("not_authorized");
     }

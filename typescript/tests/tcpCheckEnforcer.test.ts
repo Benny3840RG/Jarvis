@@ -41,7 +41,6 @@ function makeClaim(overrides: Partial<EgressClaim> = {}): EgressClaim {
 function makePolicy(overrides: Partial<PolicyView> = {}): PolicyView {
   return {
     allowlist: ALLOWLIST,
-    snapshotDate: "2026-11-09T00:00:00Z",
     maxAgeMs: 90 * 24 * 60 * 60 * 1000,
     policyEpoch: 3,
     ...overrides,

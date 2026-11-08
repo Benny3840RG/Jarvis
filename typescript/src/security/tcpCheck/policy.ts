@@ -7,9 +7,12 @@ import type { Allowlist } from "./allowlist.js";
 
 export interface PolicyView {
   readonly allowlist: Allowlist;
-  /** ISO-8601 snapshot date of the vendored special-use table. */
-  readonly snapshotDate: string;
-  /** Reviewed freshness bound in ms. */
+  /**
+   * Reviewed freshness bound in ms. The snapshot DATE is NOT carried here — it is
+   * read from the anchor-verified special-use table (`SPECIAL_USE_TABLE_SNAPSHOT_DATE`),
+   * so a caller cannot substitute a fresher date than the actual table (Codex
+   * round 4 #3).
+   */
   readonly maxAgeMs: number;
   /** Monotonic policy epoch, advanced on any activation. */
   readonly policyEpoch: number;

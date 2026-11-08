@@ -34,7 +34,7 @@ import {
 import { parseCanonicalAddress } from "./address.js";
 import { isAllowlisted } from "./allowlist.js";
 import { computeAllowlistDigest } from "./allowlistDigest.js";
-import { computeClaimKey, type EgressClaim } from "./egressClaim.js";
+import { computeClaimBinding, computeClaimKey, type EgressClaim } from "./egressClaim.js";
 import {
   BrokerEnforcer,
   type AdmissionSignal,
@@ -47,7 +47,11 @@ import { evaluatePolicyGate } from "./gate.js";
 import { evaluateFreshness } from "./freshness.js";
 import type { PolicyView } from "./policy.js";
 import type { SettledOutcome } from "./singleUseLedger.js";
-import { isSpecialUse, verifySpecialUseTable } from "./specialUseTable.js";
+import {
+  isSpecialUse,
+  SPECIAL_USE_TABLE_SNAPSHOT_DATE,
+  verifySpecialUseTable,
+} from "./specialUseTable.js";
 
 export const TCP_CHECK_PROVIDER_NAME = "security-tcp-check-egress-mediator-v1";
 
@@ -210,8 +214,18 @@ function targetAdmissible(policy: PolicyView, input: TcpCheckInput, nowMs: numbe
   const address = parseCanonicalAddress(input.ip);
   if (address === null || isSpecialUse(address)) return false;
   if (!isAllowlisted(policy.allowlist, input.ip, input.port)) return false;
-  return evaluateFreshness({ snapshotDate: policy.snapshotDate, nowMs, maxAgeMs: policy.maxAgeMs })
-    .fresh;
+  // Freshness uses the anchor-verified table snapshot date, identical to the
+  // authoritative gate (Codex round 4 #3).
+  return evaluateFreshness({
+    snapshotDate: SPECIAL_USE_TABLE_SNAPSHOT_DATE,
+    nowMs,
+    maxAgeMs: policy.maxAgeMs,
+  }).fresh;
+}
+
+/** Deep-freeze a prepared claim so its fields cannot be mutated in place. */
+function freezeClaim(claim: EgressClaim): EgressClaim {
+  return Object.freeze({ ...claim, target: Object.freeze({ ...claim.target }) });
 }
 
 export function createTcpCheckProvider(deps: TcpCheckProviderDeps): TcpCheckProvider {
@@ -219,6 +233,8 @@ export function createTcpCheckProvider(deps: TcpCheckProviderDeps): TcpCheckProv
   const deadlineMs = deps.deadlineMs ?? DEFAULT_CONNECT_DEADLINE_MS;
   const leaseMs = deps.leaseMs ?? DEFAULT_CAPABILITY_LEASE_MS;
   let sequence = 0;
+  // attemptId -> trusted binding over the prepared claim's authoritative fields.
+  const claimBindings = new Map<string, string>();
 
   return {
     name: TCP_CHECK_PROVIDER_NAME,
@@ -256,7 +272,7 @@ export function createTcpCheckProvider(deps: TcpCheckProviderDeps): TcpCheckProv
         throw new TcpCheckRefused(`admission refused: ${reserved.reason}`);
       }
 
-      const claim: EgressClaim = {
+      const claim: EgressClaim = freezeClaim({
         owner,
         project: identity.project,
         actionFingerprint: identity.actionFingerprint,
@@ -267,15 +283,21 @@ export function createTcpCheckProvider(deps: TcpCheckProviderDeps): TcpCheckProv
         approvedAllowlistDigest: identity.approvedAllowlistDigest,
         deadlineMs,
         expiresAtMs: nowMs + leaseMs,
-      };
+      });
 
-      return {
+      // Bind the prepared attempt to its reservation. The binding covers every
+      // authoritative field, so a claim later mutated in place (blocked by the
+      // freeze) OR replaced with a fabricated copy is rejected at sendPrepared
+      // (Codex round 4 #1).
+      claimBindings.set(attemptId, computeClaimBinding(claim));
+
+      return Object.freeze({
         claim,
         attemptId,
         owner,
         providerRequestId: attemptId,
         providerCorrelationId: identity.correlationId,
-      };
+      });
     },
 
     async sendPrepared(attempt, signal): Promise<TcpCheckReceiptSummary> {
@@ -296,12 +318,24 @@ export function createTcpCheckProvider(deps: TcpCheckProviderDeps): TcpCheckProv
         ...(storedOutcome ? { storedOutcome } : {}),
       });
 
+      // Authenticate the prepared attempt against its trusted reservation binding
+      // before anything else. A mutated or fabricated/substituted claim (e.g. a
+      // different target port) does not match and is refused (Codex round 4 #1).
+      const expectedBinding = claimBindings.get(attemptId);
+      if (expectedBinding === undefined || expectedBinding !== computeClaimBinding(claim)) {
+        return summary("not_authorized", "never-admitted");
+      }
+
       // Attempt-scoped self-cleanup: release only if the slot is still THIS
       // attempt's reservation, so a stale delivery never disturbs a later
       // attempt's slot (Codex #2).
       const selfCleanReservation = (): Promise<unknown> =>
         deps.admission.transition(owner, (state) =>
           releaseReservation(state, { attemptId, fenceToken }),
+        );
+      const markOwnUncertain = (): Promise<unknown> =>
+        deps.admission.transition(owner, (state) =>
+          markUncertain(state, { attemptId, fenceToken }),
         );
 
       // Flip reserved -> started (charging budget) only after the fenced
@@ -311,11 +345,13 @@ export function createTcpCheckProvider(deps: TcpCheckProviderDeps): TcpCheckProv
       const fenceLive = await deps.fence.isActive(fenceToken, claimKey);
       if (!fenceLive) {
         await selfCleanReservation();
+        claimBindings.delete(attemptId);
         return summary("fence_superseded", "never-admitted");
       }
       const gate = evaluatePolicyGate({ claim, policy: deps.policy(), nowMs: deps.clock() });
       if (!gate.ok) {
         await selfCleanReservation();
+        claimBindings.delete(attemptId);
         return summary(gate.reason, "never-admitted");
       }
 
@@ -326,30 +362,40 @@ export function createTcpCheckProvider(deps: TcpCheckProviderDeps): TcpCheckProv
         // Our reservation is gone (a concurrent recovery) — do not touch whatever
         // attempt now holds the slot; refuse only our own delivery.
         await selfCleanReservation();
+        claimBindings.delete(attemptId);
         return summary("fence_superseded", "never-admitted");
       }
 
-      const enforcer = new BrokerEnforcer({
-        policy: deps.policy,
-        fence: deps.fence,
-        ledger: deps.ledger,
-        connector,
-        clock: deps.clock,
-      });
-      const result = await enforcer.authorizeAndConnect(claim, signal);
+      // From here the attempt is `started`. Any failure — including a thrown
+      // dependency (e.g. ledger.begin) inside the enforcer — must leave the slot
+      // held as `uncertain`, not stuck `started`, and must not leak a raw error
+      // (Codex round 4 #2).
+      let result;
+      try {
+        const enforcer = new BrokerEnforcer({
+          policy: deps.policy,
+          fence: deps.fence,
+          ledger: deps.ledger,
+          connector,
+          clock: deps.clock,
+        });
+        result = await enforcer.authorizeAndConnect(claim, signal);
+      } catch {
+        await markOwnUncertain();
+        return summary("effect_uncertain", null);
+      }
 
       if (result.outcome === "effect_uncertain") {
         // Hold the slot, but move it started -> uncertain so a later enforcer
         // signal can resolve it (Codex #4). Attempt/fence-conditional.
-        await deps.admission.transition(owner, (state) =>
-          markUncertain(state, { attemptId, fenceToken }),
-        );
+        await markOwnUncertain();
       } else {
         // Release the slot. `complete` is attempt+fence-conditional, so it only
         // releases a slot this attempt still holds (Codex #2/#3).
         await deps.admission.transition(owner, (state) =>
           complete(state, { attemptId, fenceToken }),
         );
+        claimBindings.delete(attemptId);
       }
 
       return summary(result.outcome, result.admissionSignal, result.storedOutcome);
@@ -362,6 +408,7 @@ export function createTcpCheckProvider(deps: TcpCheckProviderDeps): TcpCheckProv
       const outcome = await deps.admission.transition(owner, (state) =>
         resolve(state, { attemptId, signal }),
       );
+      if (outcome.ok) claimBindings.delete(attemptId);
       return outcome.ok;
     },
   };

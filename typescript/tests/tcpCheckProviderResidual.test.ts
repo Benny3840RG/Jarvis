@@ -29,7 +29,6 @@ const NOW = Date.parse("2026-11-20T00:00:00Z");
 function makePolicy(): PolicyView {
   return {
     allowlist: ALLOWLIST,
-    snapshotDate: "2026-11-09T00:00:00Z",
     maxAgeMs: 90 * 24 * 60 * 60 * 1000,
     policyEpoch: 1,
   };
@@ -239,5 +238,114 @@ describe("Codex #3/#4 — provider-path duplicate and uncertain lifecycle", () =
       false,
     );
     assert.equal(admission.snapshot("owner-1").active?.phase, "uncertain");
+  });
+});
+
+describe("Codex round 4 — claim integrity (#1) and thrown-dependency lifecycle (#2)", () => {
+  const TWO_PORT_ALLOWLIST = { entries: [{ ip: "8.8.8.8", ports: [443, 8443] }] } as const;
+  const twoPortPolicy = (): PolicyView => ({
+    allowlist: TWO_PORT_ALLOWLIST,
+    maxAgeMs: 90 * 24 * 60 * 60 * 1000,
+    policyEpoch: 1,
+  });
+
+  it("#1: the prepared claim is frozen — an in-place target mutation throws", async () => {
+    const provider = createTcpCheckProvider({
+      policy: twoPortPolicy,
+      admission: createInMemoryAdmissionStore(),
+      ledger: inMemoryLedgerPort(),
+      clock: () => NOW,
+      fence: { isActive: () => true },
+      connector: {
+        async connect(): Promise<ConnectOutcome> {
+          return "connected";
+        },
+      },
+    });
+    const attempt = await provider.prepare(
+      { ip: "8.8.8.8", port: 443 },
+      {
+        ...identity("fp-mut"),
+        approvedAllowlistDigest: computeAllowlistDigest(TWO_PORT_ALLOWLIST),
+      },
+    );
+    assert.throws(() => {
+      (attempt.claim.target as { port: number }).port = 8443;
+    });
+  });
+
+  it("#1: a fabricated/substituted claim (different port, also allowlisted) is refused", async () => {
+    let connects = 0;
+    let connectedPort = -1;
+    const provider = createTcpCheckProvider({
+      policy: twoPortPolicy,
+      admission: createInMemoryAdmissionStore(),
+      ledger: inMemoryLedgerPort(),
+      clock: () => NOW,
+      fence: { isActive: () => true },
+      connector: {
+        async connect(target): Promise<ConnectOutcome> {
+          connects += 1;
+          connectedPort = target.port;
+          return "connected";
+        },
+      },
+    });
+    const attempt = await provider.prepare(
+      { ip: "8.8.8.8", port: 443 },
+      {
+        ...identity("fp-sub"),
+        approvedAllowlistDigest: computeAllowlistDigest(TWO_PORT_ALLOWLIST),
+      },
+    );
+    // A new attempt object carrying a claim with port 8443 (which IS allowlisted),
+    // same attemptId — must be rejected by the reservation binding, not admitted.
+    const forged = {
+      ...attempt,
+      claim: { ...attempt.claim, target: { ip: "8.8.8.8", port: 8443 } },
+    };
+    const r = await provider.sendPrepared(forged);
+    assert.equal(r.status, "not_authorized");
+    assert.equal(r.admissionSignal, "never-admitted");
+    assert.equal(connects, 0, "no socket opened for a forged claim");
+    assert.equal(connectedPort, -1);
+  });
+
+  it("#2: a thrown ledger.begin leaves the slot uncertain (not started) and is resolvable", async () => {
+    const admission = createInMemoryAdmissionStore();
+    let connects = 0;
+    const provider = createTcpCheckProvider({
+      policy: makePolicy,
+      admission,
+      ledger: {
+        begin() {
+          throw new Error("ledger backend unavailable");
+        },
+        finalize() {},
+      },
+      clock: () => NOW,
+      fence: { isActive: () => true },
+      connector: {
+        async connect(): Promise<ConnectOutcome> {
+          connects += 1;
+          return "connected";
+        },
+      },
+    });
+    const attempt = await provider.prepare({ ip: "8.8.8.8", port: 443 }, identity("fp-throw"));
+    const r = await provider.sendPrepared(attempt);
+    assert.equal(r.status, "effect_uncertain"); // no raw error leaked
+    assert.equal(r.admissionSignal, null);
+    assert.equal(connects, 0, "the connector was never reached");
+    // The slot is held as uncertain, NOT left started.
+    assert.equal(admission.snapshot("owner-1").active?.phase, "uncertain");
+    // It is recoverable via a genuine durable enforcer signal.
+    const resolved = await provider.resolveUncertain(
+      "owner-1",
+      attempt.attemptId,
+      "never-admitted",
+    );
+    assert.equal(resolved, true);
+    assert.equal(admission.snapshot("owner-1").active, null);
   });
 });

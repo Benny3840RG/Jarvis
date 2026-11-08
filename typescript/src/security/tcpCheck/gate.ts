@@ -17,7 +17,11 @@ import { computeAllowlistDigest } from "./allowlistDigest.js";
 import type { EgressClaim } from "./egressClaim.js";
 import type { PolicyView } from "./policy.js";
 import { evaluateFreshness } from "./freshness.js";
-import { isSpecialUse, verifySpecialUseTable } from "./specialUseTable.js";
+import {
+  isSpecialUse,
+  SPECIAL_USE_TABLE_SNAPSHOT_DATE,
+  verifySpecialUseTable,
+} from "./specialUseTable.js";
 
 export type GateRejection = "expired" | "policy_changed" | "not_authorized";
 
@@ -63,9 +67,14 @@ export function evaluatePolicyGate(input: GateInput): GateResult {
     // A valid target the active policy no longer admits is a control-plane change.
     return { ok: false, reason: "policy_changed" };
   }
+  // Freshness is bound to the anchor-verified table's own snapshot date, never a
+  // caller-supplied value (Codex round 4 #3).
   if (
-    !evaluateFreshness({ snapshotDate: policy.snapshotDate, nowMs, maxAgeMs: policy.maxAgeMs })
-      .fresh
+    !evaluateFreshness({
+      snapshotDate: SPECIAL_USE_TABLE_SNAPSHOT_DATE,
+      nowMs,
+      maxAgeMs: policy.maxAgeMs,
+    }).fresh
   ) {
     return { ok: false, reason: "policy_changed" };
   }

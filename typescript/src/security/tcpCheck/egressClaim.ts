@@ -123,3 +123,27 @@ export function computeClaimKey(claim: EgressClaim): string {
     }),
   );
 }
+
+/**
+ * A binding over **every** authoritative field of a prepared claim. The provider
+ * stores this at reservation and re-checks it before the effect, so a claim
+ * whose fields were mutated in place *or* replaced with a fabricated copy
+ * (e.g. a different target port) is rejected — freezing the returned object
+ * alone does not authenticate a substituted copy (Codex round 4 #1).
+ */
+export function computeClaimBinding(claim: EgressClaim): string {
+  return sha256Hex(
+    canonicalJson({
+      owner: claim.owner,
+      project: claim.project,
+      actionFingerprint: claim.actionFingerprint,
+      ip: claim.target.ip,
+      port: claim.target.port,
+      fenceToken: claim.fenceToken,
+      policyEpoch: claim.policyEpoch,
+      approvedAllowlistDigest: claim.approvedAllowlistDigest,
+      deadlineMs: claim.deadlineMs,
+      expiresAtMs: claim.expiresAtMs,
+    }),
+  );
+}

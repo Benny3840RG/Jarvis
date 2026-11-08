@@ -19,7 +19,9 @@ import {
   startsInWindow,
   createInMemoryAdmissionStore,
   createTcpCheckProvider,
+  parseSnapshotMs,
   RATE_WINDOW_MS,
+  SPECIAL_USE_TABLE_SNAPSHOT_DATE,
   type AdmissionState,
   type AdmissionStore,
   type Allowlist,
@@ -37,7 +39,6 @@ const APPROVED = computeAllowlistDigest(ALLOWLIST);
 function makePolicy(overrides: Partial<PolicyView> = {}): PolicyView {
   return {
     allowlist: ALLOWLIST,
-    snapshotDate: "2026-11-09T00:00:00Z",
     maxAgeMs: 90 * 24 * 60 * 60 * 1000,
     policyEpoch: 1,
     ...overrides,
@@ -470,5 +471,34 @@ describe("acceptance — crash recovery (never a second executor, never an inven
     const recovered = recover(reserved.state);
     assert.equal(recovered.outcome.kind, "released-stale-reservation");
     assert.equal(startsInWindow(recovered.state, NOW, RATE_WINDOW_MS), 0);
+  });
+});
+
+describe("acceptance — Codex round 4 #3/#4: freshness is bound to the trusted table date", () => {
+  const day = 24 * 60 * 60 * 1000;
+  const tableMs = parseSnapshotMs(SPECIAL_USE_TABLE_SNAPSHOT_DATE);
+  if (tableMs === null) throw new Error("table snapshot date must parse");
+
+  it("a caller cannot substitute a fresher snapshot: PolicyView carries no snapshotDate", () => {
+    // Structural guarantee — the freshness source is the anchor-verified table.
+    const p = makePolicy();
+    assert.equal("snapshotDate" in p, false);
+  });
+
+  it("is fresh just after the table date, future before it, and stale past the bound", async () => {
+    // Fresh: clock one day after the committed table snapshot.
+    const fresh = makeWorld();
+    fresh.setNow(tableMs + day);
+    assert.equal((await fresh.run("8.8.8.8", 443, "fp-fresh")).status, "connected");
+
+    // Future snapshot: clock one day BEFORE the table date -> refused at prepare.
+    const future = makeWorld();
+    future.setNow(tableMs - day);
+    await assert.rejects(future.run("8.8.8.8", 443, "fp-future"), /not permitted/);
+
+    // Expired: clock past the 90-day freshness bound -> refused at prepare.
+    const expired = makeWorld();
+    expired.setNow(tableMs + 100 * day);
+    await assert.rejects(expired.run("8.8.8.8", 443, "fp-expired"), /not permitted/);
   });
 });

@@ -20,7 +20,11 @@ import { parseCanonicalAddress } from "./address.js";
 import { isAllowlisted, MAX_PORT, MIN_PORT } from "./allowlist.js";
 import type { PolicyView } from "./policy.js";
 import { evaluateFreshness } from "./freshness.js";
-import { isSpecialUse, verifySpecialUseTable } from "./specialUseTable.js";
+import {
+  isSpecialUse,
+  SPECIAL_USE_TABLE_SNAPSHOT_DATE,
+  verifySpecialUseTable,
+} from "./specialUseTable.js";
 import type { TcpCheckProvider } from "./tcpCheckProvider.js";
 
 export const SECURITY_TOOL = "security";
@@ -67,8 +71,11 @@ function assertTargetAdmissible(
     throw new ToolExecutionPreconditionError("target is not in the active allowlist");
   }
   if (
-    !evaluateFreshness({ snapshotDate: policy.snapshotDate, nowMs, maxAgeMs: policy.maxAgeMs })
-      .fresh
+    !evaluateFreshness({
+      snapshotDate: SPECIAL_USE_TABLE_SNAPSHOT_DATE,
+      nowMs,
+      maxAgeMs: policy.maxAgeMs,
+    }).fresh
   ) {
     throw new ToolExecutionPreconditionError("special-use table snapshot is not fresh");
   }
