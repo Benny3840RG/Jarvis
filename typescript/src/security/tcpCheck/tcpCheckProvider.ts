@@ -351,7 +351,17 @@ export function createTcpCheckProvider(deps: TcpCheckProviderDeps): TcpCheckProv
       // Persist the attempt's trusted binding. It covers every authoritative
       // field, so a claim later mutated in place (blocked by the freeze) OR
       // replaced with a fabricated copy is rejected at sendPrepared (round 4 #1).
-      await bindings.put(attemptId, { binding: computeClaimBinding(claim), retired: false });
+      try {
+        await bindings.put(attemptId, { binding: computeClaimBinding(claim), retired: false });
+      } catch (error) {
+        // prepare has not returned and no send can have started this attempt.
+        // A failed (or ambiguously committed) binding write must not strand its
+        // reservation. The fence bump also prevents any old claim from starting.
+        await deps.admission.transition(owner, (state) =>
+          releaseReservation(state, { attemptId, fenceToken: reserved.fenceToken }),
+        );
+        throw error;
+      }
 
       return Object.freeze({
         claim,

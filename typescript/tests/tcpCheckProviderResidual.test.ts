@@ -456,6 +456,36 @@ describe("Codex round 4 — claim integrity (#1) and thrown-dependency lifecycle
 });
 
 describe("Codex round 4 residual #2 — completed replay returns the stored outcome", () => {
+  it("a failed binding write releases its reservation and spends no start budget", async () => {
+    const admission = createInMemoryAdmissionStore();
+    const failure = new Error("binding store unavailable");
+    const store = createInMemoryClaimBindingStore();
+    let fail = true;
+    const provider = createTcpCheckProvider({
+      policy: makePolicy,
+      admission,
+      ledger: inMemoryLedgerPort(),
+      clock: () => NOW,
+      fence: { isActive: () => true },
+      bindingStore: {
+        ...store,
+        put(id, record) {
+          if (fail) throw failure;
+          return store.put(id, record);
+        },
+      },
+    });
+    await assert.rejects(
+      provider.prepare({ ip: "8.8.8.8", port: 443 }, identity("fp-write")),
+      (error) => error === failure,
+    );
+    assert.equal(admission.snapshot("owner-1").active, null);
+    assert.equal(admission.snapshot("owner-1").startedHistory.length, 0);
+    fail = false;
+    const next = await provider.prepare({ ip: "8.8.8.8", port: 443 }, identity("fp-next"));
+    assert.equal(await provider.releasePrepared(next), true);
+  });
+
   function connectingProviderDeps(bindingStore = createInMemoryClaimBindingStore()) {
     const admission = createInMemoryAdmissionStore();
     const ledger = inMemoryLedgerPort();
