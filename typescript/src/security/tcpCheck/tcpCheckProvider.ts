@@ -214,10 +214,17 @@ export function createTcpCheckProvider(deps: TcpCheckProviderDeps): TcpCheckProv
       });
       const result = await enforcer.authorizeAndConnect(attempt.claim);
 
-      // A terminal admission signal (socket-closed or never-admitted) releases
-      // the owner-wide slot; `null` (an uncertain effect) leaves it held, with
-      // no time-based exit, until a durable enforcer signal resolves it later.
-      if (result.admissionSignal !== null) {
+      // `effect_uncertain` is the SOLE held case: a socket may be in flight and
+      // no durable outcome was recorded, so the slot stays held with no
+      // time-based exit until a later enforcer signal resolves it. Every other
+      // outcome is terminal and will not connect — a completed/failed/
+      // timed-out/cancelled run (socket-closed), a never-admitted gate rejection,
+      // or a settled/replayed duplicate that opens no socket — so the slot is
+      // released now. (A settled replay carries a `null` signal but must still
+      // release this attempt's slot, otherwise a duplicate delivery would wedge
+      // the owner-wide slot forever.)
+      const holdSlot = result.outcome === "effect_uncertain";
+      if (!holdSlot) {
         const state = (await deps.admission.get(attempt.owner)) ?? emptyAdmissionState();
         const released = complete(state, {
           attemptId: attempt.attemptId,
