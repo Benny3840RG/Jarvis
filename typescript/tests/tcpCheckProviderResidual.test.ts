@@ -10,6 +10,7 @@ import {
   computeAllowlistDigest,
   computeClaimKey,
   createInMemoryAdmissionStore,
+  recover,
   createTcpCheckProvider,
   createInMemoryClaimBindingStore,
   emptyLedger,
@@ -585,5 +586,71 @@ describe("Codex round 4 residual #2 — completed replay returns the stored outc
     assert.equal((await provider.sendPrepared(attempt)).status, "fence_superseded");
     // A replay of a rejected attempt is not_authorized (fail-closed), not replayed.
     assert.equal((await provider.sendPrepared(attempt)).status, "not_authorized");
+  });
+});
+
+describe("Codex follow-up — duplicate start-fail preserves tombstone, completion-race applies real signal", () => {
+  it("a duplicate reaching start-fail while the original is uncertain does NOT delete the binding", async () => {
+    const admission = createInMemoryAdmissionStore();
+    const provider = createTcpCheckProvider({
+      policy: makePolicy,
+      admission,
+      ledger: inMemoryLedgerPort(),
+      clock: () => NOW,
+      fence: { isActive: () => true },
+      connector: { connect: () => Promise.reject(new Error("crash")) }, // -> effect_uncertain
+    });
+    const attempt = await provider.prepare({ ip: "8.8.8.8", port: 443 }, identity("fp-dupU"));
+    // Drive the original to uncertain.
+    assert.equal((await provider.sendPrepared(attempt)).status, "effect_uncertain");
+    assert.equal(admission.snapshot("owner-1").active?.phase, "uncertain");
+
+    // A duplicate delivery of the SAME attempt reaches start-fail (slot uncertain,
+    // not reserved). It must refuse WITHOUT deleting the original's binding.
+    const dup = await provider.sendPrepared(attempt);
+    assert.equal(dup.status, "fence_superseded");
+    assert.equal(admission.snapshot("owner-1").active?.phase, "uncertain"); // original untouched
+
+    // The binding survived: resolving the original then replaying returns `replayed`,
+    // not `not_authorized` (which is what an erased tombstone would yield).
+    assert.equal(
+      await provider.resolveUncertain("owner-1", attempt.attemptId, "socket-closed"),
+      true,
+    );
+    assert.equal((await provider.sendPrepared(attempt)).status, "replayed");
+  });
+
+  it("a completion race (recovery -> uncertain during connect) applies the real signal and releases", async () => {
+    const admission = createInMemoryAdmissionStore();
+    let connects = 0;
+    const provider = createTcpCheckProvider({
+      policy: makePolicy,
+      admission,
+      ledger: inMemoryLedgerPort(),
+      clock: () => NOW,
+      fence: { isActive: () => true },
+      connector: {
+        async connect(): Promise<ConnectOutcome> {
+          connects += 1;
+          // A concurrent recovery moves this started attempt -> uncertain while
+          // the socket is "in flight", so the later complete() will not apply.
+          await admission.transition("owner-1", (s) => recover(s));
+          return "connected";
+        },
+      },
+    });
+    const attempt = await provider.prepare({ ip: "8.8.8.8", port: 443 }, identity("fp-race"));
+    const r = await provider.sendPrepared(attempt);
+    assert.equal(r.status, "connected");
+    assert.equal(connects, 1);
+    // The genuine socket-closed signal resolved the uncertain slot: it is free,
+    // not stranded as uncertain.
+    assert.equal(admission.snapshot("owner-1").active, null);
+    // A new attempt is admissible, and the completed attempt replays its outcome.
+    const next = await provider.prepare({ ip: "8.8.8.8", port: 443 }, identity("fp-race2"));
+    assert.equal(next.claim.target.ip, "8.8.8.8");
+    const replay = await provider.sendPrepared(attempt);
+    assert.equal(replay.status, "replayed");
+    assert.equal(replay.storedOutcome, "connected");
   });
 });

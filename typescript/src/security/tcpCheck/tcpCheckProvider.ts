@@ -459,14 +459,14 @@ export function createTcpCheckProvider(deps: TcpCheckProviderDeps): TcpCheckProv
         throw error;
       }
       if (!fenceLive) {
-        await selfCleanReservation();
-        await bindings.remove(attemptId);
+        const released = await selfCleanReservation();
+        if (released.ok) await bindings.remove(attemptId);
         return summary("fence_superseded", "never-admitted");
       }
       const gate = evaluatePolicyGate({ claim, policy: deps.policy(), nowMs: deps.clock() });
       if (!gate.ok) {
-        await selfCleanReservation();
-        await bindings.remove(attemptId);
+        const released = await selfCleanReservation();
+        if (released.ok) await bindings.remove(attemptId);
         return summary(gate.reason, "never-admitted");
       }
 
@@ -474,10 +474,13 @@ export function createTcpCheckProvider(deps: TcpCheckProviderDeps): TcpCheckProv
         start(state, { attemptId, fenceToken, nowMs: deps.clock() }),
       );
       if (!started.ok) {
-        // Our reservation is gone (a concurrent recovery) — do not touch whatever
-        // attempt now holds the slot; refuse only our own delivery.
-        await selfCleanReservation();
-        await bindings.remove(attemptId);
+        // Our reservation is gone (a concurrent recovery), e.g. a duplicate
+        // delivery reaching here after the original started/became uncertain.
+        // Remove the binding ONLY if this invocation actually owned and released a
+        // still-reserved attempt; otherwise leave the original's started/uncertain/
+        // retired record and its replay tombstone untouched (Codex follow-up).
+        const released = await selfCleanReservation();
+        if (released.ok) await bindings.remove(attemptId);
         return summary("fence_superseded", "never-admitted");
       }
 
@@ -508,22 +511,43 @@ export function createTcpCheckProvider(deps: TcpCheckProviderDeps): TcpCheckProv
       } else {
         // Release the slot. `complete` is attempt+fence-conditional, so it only
         // releases a slot this attempt still holds (Codex #2/#3).
-        await deps.admission.transition(owner, (state) =>
+        const completed = await deps.admission.transition(owner, (state) =>
           complete(state, { attemptId, fenceToken }),
         );
-        const settled = settledOutcomeOf(result);
-        if (settled !== undefined) {
-          // Completed effect: retire as a tombstone carrying the recorded outcome
-          // so a legitimate completed replay returns it (round 4 #2).
-          await bindings.put(attemptId, {
-            binding: expectedBinding,
-            retired: true,
-            storedOutcome: settled,
-          });
-        } else {
-          // A never-admitted race: nothing crossed; fail closed on any replay.
-          await bindings.remove(attemptId);
+        let released = completed.ok;
+        if (
+          !released &&
+          (result.admissionSignal === "socket-closed" ||
+            result.admissionSignal === "never-admitted")
+        ) {
+          // A concurrent recovery moved this attempt `started -> uncertain`, so
+          // `complete` did not apply. Resolve the uncertain slot with the ACTUAL
+          // returned signal (not an inferred one), carrying the genuine closure
+          // evidence through (Codex follow-up).
+          const resolved = await deps.admission.transition(owner, (state) =>
+            resolve(state, { attemptId, signal: result.admissionSignal as ResolveSignal }),
+          );
+          released = resolved.ok;
         }
+        if (released) {
+          const settled = settledOutcomeOf(result);
+          if (settled !== undefined) {
+            // Completed effect: retire as a tombstone carrying the recorded
+            // outcome so a legitimate completed replay returns it (round 4 #2).
+            await bindings.put(attemptId, {
+              binding: expectedBinding,
+              retired: true,
+              storedOutcome: settled,
+            });
+          } else {
+            // A never-admitted race: nothing crossed; fail closed on any replay.
+            await bindings.remove(attemptId);
+          }
+        }
+        // If still not released (complete failed and there was no applicable
+        // signal, e.g. a `replayed` result with a null signal): keep the slot
+        // uncertain and the binding non-retired, so a later enforcer signal
+        // resolves it via resolveUncertain — never retire an unreleased slot.
       }
 
       return summary(result.outcome, result.admissionSignal, result.storedOutcome);
