@@ -15,8 +15,14 @@
 // Retirement is permanent: a settled key is never reopened, and a consuming key
 // resolves only when its true outcome is finalized (or stays uncertain).
 
-/** Terminal outcome of a consumed single-use claim. */
-export type SettledOutcome = "completed" | "failed" | "timed-out" | "cancelled";
+/**
+ * Terminal outcome of a consumed single-use claim. The network observations use
+ * the agreed `connected` / `refused` / `timed-out` / `error` distinction (a
+ * refused connection is not the same as a transport error), plus `cancelled`
+ * for an aborted attempt. A recorded terminal is distinct from an unknown
+ * effect, which is never settled (it stays `consuming`).
+ */
+export type SettledOutcome = "connected" | "refused" | "timed-out" | "error" | "cancelled";
 
 export type LedgerPhase = "consuming" | "settled";
 
@@ -34,9 +40,10 @@ export interface SingleUseLedger {
 }
 
 const SETTLED_OUTCOMES: ReadonlySet<string> = new Set([
-  "completed",
-  "failed",
+  "connected",
+  "refused",
   "timed-out",
+  "error",
   "cancelled",
 ]);
 

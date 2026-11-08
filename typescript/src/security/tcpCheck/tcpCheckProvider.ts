@@ -1,31 +1,36 @@
 // Governed external provider for `security:tcp-check` (design: Architecture /
 // "the adapter … emits through the supervised egress mediator"; #779 Phase 4).
-// This adapter is the only code that drives the effect: it reserves the
-// owner-wide admission slot (Phase 2), writes the durable `started` record
-// before any socket, then emits through the Phase 3 `BrokerEnforcer`, and maps
-// the enforcer's admission signal back onto the slot. It emits **digest-only,
-// redacted** results — the status enum plus the already-authorised `ip:port`
-// and the server-computed `allowlistDigest`, never a pasted or resolved value.
+// This adapter is the only code that drives the effect. Changes from the review:
+//
+//   * Admission transitions go through a transactional, per-owner store
+//     (`AdmissionStore.transition`) so concurrent prepares cannot both win or
+//     lose a history write (Codex #1).
+//   * The deterministic pre-effect gate runs BEFORE reservation, and the durable
+//     `started` write (which charges the never-refunded rate budget) happens only
+//     after the pre-connect gate passes — a rejected attempt consumes no budget
+//     (Codex #9).
+//   * The receipt is derived from the immutable claim (target + approved digest),
+//     never from a post-effect policy read or a separate input (Codex #8).
+//   * The owner-wide slot is released only on genuine closure; an uncertain
+//     effect holds it (Codex #3).
 //
 // Commissioning posture: the default connector is {@link notCommissionedConnector},
-// which fails closed — the capability is `planned`, not commissioned, so no real
-// socket is ever opened. A real connector (and the kernel/proxy egress gate
-// behind it) is supplied only under separate owner approval, together with a
-// populated allowlist. {@link createTcpCheckProviderFromEnv} returns `null` so
-// this provider is never spliced into the live tool-execution service.
+// which fails closed. `createTcpCheckProviderFromEnv` returns `null`, so this
+// provider is never spliced into the live tool-execution service.
 
-import type { Allowlist } from "./allowlist.js";
-import { isAllowlisted } from "./allowlist.js";
-import { computeAllowlistDigest } from "./allowlistDigest.js";
 import {
-  emptyAdmissionState,
   complete,
+  emptyAdmissionState,
+  recover,
   reserve,
   start,
   type AdmissionState,
   type RateConfig,
+  type Transition,
 } from "./admission.js";
 import { parseCanonicalAddress } from "./address.js";
+import { isAllowlisted } from "./allowlist.js";
+import { computeAllowlistDigest } from "./allowlistDigest.js";
 import type { EgressClaim } from "./egressClaim.js";
 import {
   BrokerEnforcer,
@@ -34,9 +39,12 @@ import {
   type EnforcerOutcome,
   type FenceChecker,
   type LedgerPort,
-  type PolicyView,
 } from "./enforcer.js";
-import { isSpecialUse } from "./specialUseTable.js";
+import { evaluatePolicyGate } from "./gate.js";
+import { evaluateFreshness } from "./freshness.js";
+import type { PolicyView } from "./policy.js";
+import type { SettledOutcome } from "./singleUseLedger.js";
+import { isSpecialUse, verifySpecialUseTable } from "./specialUseTable.js";
 
 export const TCP_CHECK_PROVIDER_NAME = "security-tcp-check-egress-mediator-v1";
 
@@ -70,10 +78,52 @@ export const notCommissionedConnector: Connector = {
   },
 };
 
-/** Durable per-owner admission state store (Convex in production; injected here). */
+/**
+ * Durable per-owner admission store. `transition` applies a pure reducer to the
+ * owner's state inside a single atomic critical section and returns its outcome,
+ * so interleaved callers cannot lose an update (Codex #1). The production
+ * implementation is a Convex mutation with a compare-and-set; the in-memory
+ * reference below uses a per-owner async mutex.
+ */
 export interface AdmissionStore {
-  get(owner: string): Promise<AdmissionState> | AdmissionState;
-  put(owner: string, state: AdmissionState): Promise<void> | void;
+  transition<O>(owner: string, reducer: (state: AdmissionState) => Transition<O>): Promise<O>;
+}
+
+/** In-memory reference store with a per-owner mutex (serialises transitions). */
+export function createInMemoryAdmissionStore(): AdmissionStore & {
+  snapshot(owner: string): AdmissionState;
+} {
+  const states = new Map<string, AdmissionState>();
+  const tails = new Map<string, Promise<unknown>>();
+
+  return {
+    snapshot(owner: string): AdmissionState {
+      return states.get(owner) ?? emptyAdmissionState();
+    },
+    async transition<O>(
+      owner: string,
+      reducer: (state: AdmissionState) => Transition<O>,
+    ): Promise<O> {
+      const previous = tails.get(owner) ?? Promise.resolve();
+      let release!: () => void;
+      const barrier = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      tails.set(
+        owner,
+        previous.then(() => barrier),
+      );
+      await previous;
+      try {
+        const state = states.get(owner) ?? emptyAdmissionState();
+        const { state: next, outcome } = reducer(state);
+        states.set(owner, next);
+        return outcome;
+      } finally {
+        release();
+      }
+    },
+  };
 }
 
 export interface TcpCheckProviderDeps {
@@ -97,6 +147,7 @@ export interface TcpCheckInput {
 
 /** The identity the governed boundary supplies for the attempt. */
 export interface TcpCheckIdentity {
+  /** The authenticated owner — the owner-wide admission/rate bucket key. */
   readonly owner: string;
   readonly project: string;
   /** exact_action_fingerprint: binds the approval to exactly this action. */
@@ -115,10 +166,13 @@ export interface TcpCheckPreparedAttempt {
 /** Digest-only, redacted result summary. No pasted/resolved values. */
 export interface TcpCheckReceiptSummary {
   readonly status: EnforcerOutcome;
-  /** The already-authorised target; safe to echo (it was reviewed into the allowlist). */
+  /** The already-authorised target, derived from the immutable claim. */
   readonly target: string;
+  /** The approved policy digest pinned in the claim (not a post-effect read). */
   readonly allowlistDigest: string;
   readonly admissionSignal: AdmissionSignal;
+  /** Present on a replayed duplicate: the originally recorded outcome. */
+  readonly storedOutcome?: SettledOutcome;
 }
 
 export interface TcpCheckProvider {
@@ -126,29 +180,29 @@ export interface TcpCheckProvider {
   prepare(input: TcpCheckInput, identity: TcpCheckIdentity): Promise<TcpCheckPreparedAttempt>;
   sendPrepared(
     attempt: TcpCheckPreparedAttempt,
-    input: TcpCheckInput,
+    signal?: AbortSignal,
   ): Promise<TcpCheckReceiptSummary>;
 }
 
-function targetPermitted(allowlist: Allowlist, input: TcpCheckInput): boolean {
+/** Deterministic pre-effect target gate (anchor, canonical, special-use, allowlist, freshness). */
+function targetAdmissible(policy: PolicyView, input: TcpCheckInput, nowMs: number): boolean {
+  try {
+    verifySpecialUseTable();
+  } catch {
+    return false;
+  }
   const address = parseCanonicalAddress(input.ip);
-  return (
-    address !== null && !isSpecialUse(address) && isAllowlisted(allowlist, input.ip, input.port)
-  );
+  if (address === null || isSpecialUse(address)) return false;
+  if (!isAllowlisted(policy.allowlist, input.ip, input.port)) return false;
+  return evaluateFreshness({ snapshotDate: policy.snapshotDate, nowMs, maxAgeMs: policy.maxAgeMs })
+    .fresh;
 }
 
-/**
- * The reference governed provider. It composes the already-tested admission
- * state machine and egress mediator; the orchestration here is the wiring, not
- * new policy. `prepare` reserves the slot and writes the durable `started`
- * record (per the design, `started` is written before the socket opens);
- * `sendPrepared` emits through the enforcer and releases the slot on a terminal
- * admission signal, or leaves it held when the effect is uncertain.
- */
 export function createTcpCheckProvider(deps: TcpCheckProviderDeps): TcpCheckProvider {
   const connector = deps.connector ?? notCommissionedConnector;
   const deadlineMs = deps.deadlineMs ?? DEFAULT_CONNECT_DEADLINE_MS;
   const leaseMs = deps.leaseMs ?? DEFAULT_CAPABILITY_LEASE_MS;
+  let sequence = 0;
 
   return {
     name: TCP_CHECK_PROVIDER_NAME,
@@ -157,40 +211,37 @@ export function createTcpCheckProvider(deps: TcpCheckProviderDeps): TcpCheckProv
       const policy = deps.policy();
       const nowMs = deps.clock();
 
-      // Defence in depth: the same deterministic gate the tool preflight runs.
-      if (!targetPermitted(policy.allowlist, input)) {
+      // Deterministic pre-effect gate BEFORE reservation (Codex #9): a target the
+      // active policy does not admit never reserves and never charges budget.
+      if (!targetAdmissible(policy, input, nowMs)) {
         throw new TcpCheckRefused("target is not permitted by the active policy");
       }
 
       const owner = identity.owner;
-      const attemptId = `${identity.actionFingerprint}:${nowMs}`;
-      const current = (await deps.admission.get(owner)) ?? emptyAdmissionState();
+      sequence += 1;
+      const attemptId = `${identity.actionFingerprint}:${nowMs}:${sequence}`;
 
-      const reserved = reserve(current, {
-        attemptId,
-        nowMs,
-        policyEpoch: policy.policyEpoch,
-        ...(deps.rateConfig ? { config: deps.rateConfig } : {}),
-      });
-      if (!reserved.outcome.ok) {
-        throw new TcpCheckRefused(`admission refused: ${reserved.outcome.reason}`);
+      // Atomic reservation (no budget yet — budget is charged at `started`).
+      const reserved = await deps.admission.transition(owner, (state) =>
+        reserve(state, {
+          attemptId,
+          nowMs,
+          policyEpoch: policy.policyEpoch,
+          ...(deps.rateConfig ? { config: deps.rateConfig } : {}),
+        }),
+      );
+      if (!reserved.ok) {
+        throw new TcpCheckRefused(`admission refused: ${reserved.reason}`);
       }
-      const fenceToken = reserved.outcome.fenceToken;
-
-      // `started` is written durably before any socket opens.
-      const started = start(reserved.state, { attemptId, fenceToken, nowMs });
-      if (!started.outcome.ok) {
-        throw new TcpCheckRefused(`admission start failed: ${started.outcome.reason}`);
-      }
-      await deps.admission.put(owner, started.state);
 
       const claim: EgressClaim = {
         owner,
         project: identity.project,
         actionFingerprint: identity.actionFingerprint,
         target: { ip: input.ip, port: input.port },
-        fenceToken,
+        fenceToken: reserved.fenceToken,
         policyEpoch: policy.policyEpoch,
+        approvedAllowlistDigest: computeAllowlistDigest(policy.allowlist),
         deadlineMs,
         expiresAtMs: nowMs + leaseMs,
       };
@@ -204,7 +255,45 @@ export function createTcpCheckProvider(deps: TcpCheckProviderDeps): TcpCheckProv
       };
     },
 
-    async sendPrepared(attempt, input): Promise<TcpCheckReceiptSummary> {
+    async sendPrepared(attempt, signal): Promise<TcpCheckReceiptSummary> {
+      const { claim, owner, attemptId } = attempt;
+
+      const summary = (
+        outcome: EnforcerOutcome,
+        admissionSignal: AdmissionSignal,
+        storedOutcome?: SettledOutcome,
+      ): TcpCheckReceiptSummary => ({
+        status: outcome,
+        // Derived from the immutable claim, never a post-effect policy read (Codex #8).
+        target: `${claim.target.ip}:${claim.target.port}`,
+        allowlistDigest: claim.approvedAllowlistDigest,
+        admissionSignal,
+        ...(storedOutcome ? { storedOutcome } : {}),
+      });
+
+      // Flip reserved -> started (charging budget) only after the fenced
+      // pre-connect gate passes; otherwise self-clean the reservation with no
+      // budget (Codex #9). The authoritative re-check still runs in the mediator.
+      const fenceLive = await deps.fence.isActive(claim.fenceToken, attemptId);
+      if (!fenceLive) {
+        await deps.admission.transition(owner, (state) => recover(state));
+        return summary("fence_superseded", "never-admitted");
+      }
+      const gate = evaluatePolicyGate({ claim, policy: deps.policy(), nowMs: deps.clock() });
+      if (!gate.ok) {
+        await deps.admission.transition(owner, (state) => recover(state));
+        return summary(gate.reason, "never-admitted");
+      }
+
+      const started = await deps.admission.transition(owner, (state) =>
+        start(state, { attemptId, fenceToken: claim.fenceToken, nowMs: deps.clock() }),
+      );
+      if (!started.ok) {
+        // Lost the race to another transition; refuse without an effect.
+        await deps.admission.transition(owner, (state) => recover(state));
+        return summary("fence_superseded", "never-admitted");
+      }
+
       const enforcer = new BrokerEnforcer({
         policy: deps.policy,
         fence: deps.fence,
@@ -212,44 +301,26 @@ export function createTcpCheckProvider(deps: TcpCheckProviderDeps): TcpCheckProv
         connector,
         clock: deps.clock,
       });
-      const result = await enforcer.authorizeAndConnect(attempt.claim);
+      const result = await enforcer.authorizeAndConnect(claim, signal);
 
-      // `effect_uncertain` is the SOLE held case: a socket may be in flight and
-      // no durable outcome was recorded, so the slot stays held with no
-      // time-based exit until a later enforcer signal resolves it. Every other
-      // outcome is terminal and will not connect — a completed/failed/
-      // timed-out/cancelled run (socket-closed), a never-admitted gate rejection,
-      // or a settled/replayed duplicate that opens no socket — so the slot is
-      // released now. (A settled replay carries a `null` signal but must still
-      // release this attempt's slot, otherwise a duplicate delivery would wedge
-      // the owner-wide slot forever.)
-      const holdSlot = result.outcome === "effect_uncertain";
-      if (!holdSlot) {
-        const state = (await deps.admission.get(attempt.owner)) ?? emptyAdmissionState();
-        const released = complete(state, {
-          attemptId: attempt.attemptId,
-          fenceToken: attempt.claim.fenceToken,
-        });
-        if (released.outcome.ok) {
-          await deps.admission.put(attempt.owner, released.state);
-        }
+      // Release the owner-wide slot on any terminal outcome except an uncertain
+      // effect, which holds it with no time-based exit (Codex #3). `complete` is
+      // fence-conditional, so it only releases a slot this attempt still holds.
+      if (result.outcome !== "effect_uncertain") {
+        await deps.admission.transition(owner, (state) =>
+          complete(state, { attemptId, fenceToken: claim.fenceToken }),
+        );
       }
 
-      return {
-        status: result.outcome,
-        target: `${input.ip}:${input.port}`,
-        allowlistDigest: computeAllowlistDigest(deps.policy().allowlist),
-        admissionSignal: result.admissionSignal,
-      };
+      return summary(result.outcome, result.admissionSignal, result.storedOutcome);
     },
   };
 }
 
 /**
  * Production wiring. Returns `null`: the capability is `planned`, so no provider
- * is registered and no real socket can be opened. Commissioning (a real
- * connector + kernel/proxy egress gate + a populated, reviewed allowlist)
- * requires separate owner approval per the design's Gates and #779.
+ * is registered and no real socket can be opened. Commissioning requires
+ * separate owner approval per the design's Gates and #779.
  */
 export function createTcpCheckProviderFromEnv(): TcpCheckProvider | null {
   return null;

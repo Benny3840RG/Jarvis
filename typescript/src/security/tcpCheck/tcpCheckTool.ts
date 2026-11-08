@@ -9,6 +9,7 @@
 
 import { z } from "zod";
 
+import type { ToolAction } from "../../actions/toolActions.js";
 import {
   ToolExecutionPreconditionError,
   type ToolExecutionContext,
@@ -17,7 +18,7 @@ import {
 
 import { parseCanonicalAddress } from "./address.js";
 import { isAllowlisted, MAX_PORT, MIN_PORT } from "./allowlist.js";
-import type { PolicyView } from "./enforcer.js";
+import type { PolicyView } from "./policy.js";
 import { evaluateFreshness } from "./freshness.js";
 import { isSpecialUse, verifySpecialUseTable } from "./specialUseTable.js";
 import type { TcpCheckProvider } from "./tcpCheckProvider.js";
@@ -74,6 +75,14 @@ function assertTargetAdmissible(
 }
 
 /**
+ * Resolve the authenticated owner for an action. The owner-wide admission/rate
+ * bucket must key on the real owner, NOT the project id (Codex #5), so this is
+ * an explicit dependency with no silent `projectId` default. A deployment wires
+ * it to its identity source.
+ */
+export type OwnerResolver = (action: ToolAction) => string;
+
+/**
  * Build the `security:tcp-check` tool definition. `externalProvider` names the
  * egress-mediator provider, `minimumAuthority` is T3 (external/destructive
  * class), and the effect is emitted only through the provider.
@@ -81,6 +90,7 @@ function assertTargetAdmissible(
 export function createTcpCheckToolDefinition(
   provider: TcpCheckProvider,
   policy: () => PolicyView,
+  resolveOwner: OwnerResolver,
   clock: () => number = () => Date.now(),
 ): ToolExecutionDefinition {
   return {
@@ -93,19 +103,21 @@ export function createTcpCheckToolDefinition(
       const parsed = tcpCheckArgumentsSchema.parse(argumentsValue);
       assertTargetAdmissible(parsed, policy(), clock());
     },
-    async execute(argumentsValue, _signal, context: ToolExecutionContext): Promise<unknown> {
+    async execute(argumentsValue, signal, context: ToolExecutionContext): Promise<unknown> {
       const parsed = tcpCheckArgumentsSchema.parse(argumentsValue);
       // Re-run the deterministic gate immediately before the effect.
       assertTargetAdmissible(parsed, policy(), clock());
 
+      const owner = resolveOwner(context.action);
       const attempt = await provider.prepare(
         { ip: parsed.ip, port: parsed.port },
         {
-          // Owner is the project owner; the admission slot is owner-wide.
-          owner: context.action.projectId,
+          owner,
           project: context.action.projectId,
-          // exact_action_fingerprint: binds the approval to exactly this action.
-          actionFingerprint: context.effectFingerprint,
+          // exact_action_fingerprint, bound to this exact action: the effect
+          // fingerprint omits the actionId, so include it to distinguish a true
+          // duplicate delivery from a newly approved observation (Codex #5).
+          actionFingerprint: `${context.effectFingerprint}:${context.action.actionId}`,
           correlationId: context.correlationId,
         },
       );
@@ -117,7 +129,7 @@ export function createTcpCheckToolDefinition(
         providerCorrelationId: attempt.providerCorrelationId,
       });
 
-      return provider.sendPrepared(attempt, { ip: parsed.ip, port: parsed.port });
+      return provider.sendPrepared(attempt, signal);
     },
   };
 }

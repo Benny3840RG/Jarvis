@@ -13,10 +13,19 @@
 /** A validated address in its single canonical form. */
 export interface CanonicalAddress {
   readonly version: 4 | 6;
-  /** 4 bytes for IPv4, 16 for IPv6. */
-  readonly bytes: Uint8Array;
+  /**
+   * 4 bytes for IPv4, 16 for IPv6. A **frozen** array, so classification cannot
+   * later be made to diverge from {@link CanonicalAddress.canonical} by mutating
+   * the parsed value in place (an internal integrity requirement).
+   */
+  readonly bytes: readonly number[];
   /** The canonical textual form; always equal to the accepted input. */
   readonly canonical: string;
+}
+
+/** Build a frozen address value whose bytes array cannot be mutated. */
+function freezeAddress(version: 4 | 6, bytes: number[], canonical: string): CanonicalAddress {
+  return Object.freeze({ version, bytes: Object.freeze(bytes), canonical });
 }
 
 const IPV4_OCTET = /^(?:0|[1-9][0-9]{0,2})$/;
@@ -25,7 +34,7 @@ const IPV6_GROUP = /^[0-9a-f]{1,4}$/;
 function parseIpv4(input: string): CanonicalAddress | null {
   const parts = input.split(".");
   if (parts.length !== 4) return null;
-  const bytes = new Uint8Array(4);
+  const bytes: number[] = [0, 0, 0, 0];
   for (let index = 0; index < 4; index += 1) {
     const part = parts[index]!;
     if (!IPV4_OCTET.test(part)) return null;
@@ -36,7 +45,7 @@ function parseIpv4(input: string): CanonicalAddress | null {
   // Canonicalisation here is implicit (the octet grammar forbids leading zeros),
   // but we still compare to be explicit that the input is the canonical form.
   const canonical = `${bytes[0]}.${bytes[1]}.${bytes[2]}.${bytes[3]}`;
-  return canonical === input ? { version: 4, bytes, canonical } : null;
+  return canonical === input ? freezeAddress(4, bytes, canonical) : null;
 }
 
 function hextetsFromStrings(groups: readonly string[]): number[] | null {
@@ -106,12 +115,12 @@ function parseIpv6(input: string): CanonicalAddress | null {
   if (hextets === null) return null;
   const canonical = canonicalIpv6(hextets);
   if (canonical !== input) return null;
-  const bytes = new Uint8Array(16);
+  const bytes: number[] = new Array(16).fill(0);
   for (let index = 0; index < 8; index += 1) {
     bytes[index * 2] = (hextets[index]! >>> 8) & 0xff;
     bytes[index * 2 + 1] = hextets[index]! & 0xff;
   }
-  return { version: 6, bytes, canonical };
+  return freezeAddress(6, bytes, canonical);
 }
 
 /**

@@ -72,6 +72,9 @@ export {
   recover,
   resolve,
 } from "./admission.js";
+export { type PolicyView } from "./policy.js";
+export { type GateRejection, type GateResult, type GateInput, evaluatePolicyGate } from "./gate.js";
+export { parseSnapshotMs } from "./freshness.js";
 export {
   type EgressTarget,
   type EgressClaim,
@@ -97,7 +100,6 @@ export {
 export {
   type ConnectOutcome,
   type Connector,
-  type PolicyView,
   type FenceChecker,
   type LedgerPort,
   type EnforcerOutcome,
@@ -121,11 +123,13 @@ export {
   TcpCheckRefused,
   TcpCheckNotCommissionedError,
   notCommissionedConnector,
+  createInMemoryAdmissionStore,
   createTcpCheckProvider,
   createTcpCheckProviderFromEnv,
 } from "./tcpCheckProvider.js";
 export {
   type TcpCheckArguments,
+  type OwnerResolver,
   SECURITY_TOOL,
   TCP_CHECK_OPERATION,
   tcpCheckArgumentsSchema,

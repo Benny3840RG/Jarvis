@@ -10,5 +10,7 @@
 //   node --import tsx -e "import('./src/security/tcpCheck/specialUseTable.js') \
 //     .then(m => console.log(m.computeSpecialUseTableDigest()))"
 // and paste the value below.
+// Refreshed 2026-11-09 for the table revision adding IPv4 multicast (224.0.0.0/4)
+// and the deprecated IPv4-compatible IPv6 range (::/96), and the snapshot-date bump.
 export const TRUSTED_SPECIAL_USE_TABLE_DIGEST =
-  "aaea5a29f9d50c7d9e1c07d0bbd94573a7549c8e0fa4ed636127a606ff5e6226";
+  "028373f63eb8da270676b21d3a7277fc21dded9ccc22b028eebee67c32b7e7c5";

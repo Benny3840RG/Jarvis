@@ -8,49 +8,45 @@
 //
 // This module imports **no** `node:net` and ships **no** concrete network
 // connector: the socket is an injected {@link Connector} port, and a real
-// connector plus the kernel/proxy egress gate are commissioning prerequisites
-// (the design's open item for obligation 1). Nothing here can open a real
-// socket. The ordering is fixed and fail-closed:
+// connector plus the kernel/proxy egress gate are commissioning prerequisites.
+// Nothing here can open a real socket.
 //
-//   validate claim → fence active? → not expired? → policy epoch matches? →
-//   target still allowed + fresh? → **then** single-use consume → **then** connect.
+// Ordering (fail-closed), revised for the review findings:
+//   abort? -> fence (await) -> single-use begin (await) -> re-read clock+policy
+//   and run the deterministic gate SYNCHRONOUSLY -> abort? -> connect.
 //
-// Single-use is consumed only after the pre-connect gate passes and before the
-// socket, so a rejected or replayed claim never reaches the connector. Every
-// outcome carries the admission signal the slot owner applies: `never-admitted`
-// and `socket-closed` release the held slot; `null` (an uncertain effect) keeps
-// it held, with no time-based exit (obligation 4).
+//   * The single-use ledger is consulted **before** the gate (Codex #3), so a
+//     duplicate delivery of an in-flight claim returns `effect_uncertain` and a
+//     settled one returns `replayed` — a gate rejection can never free a slot
+//     whose effect is still pending.
+//   * The time-sensitive gate (expiry / freshness / epoch / digest) is evaluated
+//     from a clock and policy read **after** the awaits (Codex #2), so a pause
+//     during the fence or ledger await cannot let a stale claim reach connect.
+//   * The abort signal is honoured before consumption and again immediately
+//     before connect (Codex #7).
 
-import { parseCanonicalAddress } from "./address.js";
-import { isAllowlisted, type Allowlist } from "./allowlist.js";
 import {
   computeClaimKey,
   validateEgressClaim,
   type EgressClaim,
   type EgressTarget,
 } from "./egressClaim.js";
-import { evaluateFreshness } from "./freshness.js";
+import { evaluatePolicyGate, type GateRejection } from "./gate.js";
+import type { PolicyView } from "./policy.js";
 import { type BeginResult, type SettledOutcome } from "./singleUseLedger.js";
-import { isSpecialUse } from "./specialUseTable.js";
+
+export type { PolicyView } from "./policy.js";
 
 /** The outcome the connector reports once a socket has run and been torn down. */
-export type ConnectOutcome = "completed" | "failed" | "timed-out" | "cancelled";
+export type ConnectOutcome = "connected" | "refused" | "timed-out" | "error";
 
 /**
- * The injected socket port. The mediator owns the socket and the deadline; a
- * real implementation (and the kernel/proxy egress gate behind it) is a
- * commissioning prerequisite and is never part of this module.
+ * The injected socket port. The mediator owns the socket, the deadline, and
+ * cancellation; a real implementation (and the kernel/proxy egress gate behind
+ * it) is a commissioning prerequisite and is never part of this module.
  */
 export interface Connector {
-  connect(target: EgressTarget, deadlineMs: number): Promise<ConnectOutcome>;
-}
-
-/** The compiled active policy the mediator enforces at connect time. */
-export interface PolicyView {
-  readonly allowlist: Allowlist;
-  readonly snapshotDate: string;
-  readonly maxAgeMs: number;
-  readonly policyEpoch: number;
+  connect(target: EgressTarget, deadlineMs: number, signal?: AbortSignal): Promise<ConnectOutcome>;
 }
 
 /** Live check that the attempt's fence token has not been superseded. */
@@ -65,11 +61,10 @@ export interface LedgerPort {
 }
 
 export type EnforcerOutcome =
-  | ConnectOutcome // the socket ran: completed / failed / timed-out / cancelled
-  | "policy_changed" // target removed/narrowed, epoch moved, or table stale
-  | "expired" // capability lifetime elapsed
+  | ConnectOutcome // the socket ran: connected / refused / timed-out / error
+  | "cancelled" // the attempt was aborted before/at the boundary
+  | GateRejection // expired / policy_changed / not_authorized
   | "fence_superseded" // the attempt's token is no longer active
-  | "not_authorized" // malformed/special-use/not-allowlisted target (fail-closed)
   | "replayed" // a settled claim replayed; stored outcome returned, no socket
   | "effect_uncertain"; // consuming replay or connector crash; no new socket
 
@@ -84,7 +79,7 @@ export interface EnforcerResult {
 
 /** The enforcement-point port: a worker presents a claim, nothing more. */
 export interface EgressEnforcer {
-  authorizeAndConnect(claim: EgressClaim): Promise<EnforcerResult>;
+  authorizeAndConnect(claim: EgressClaim, signal?: AbortSignal): Promise<EnforcerResult>;
 }
 
 export interface BrokerDependencies {
@@ -102,6 +97,16 @@ const NEVER_ADMITTED = (outcome: EnforcerOutcome): EnforcerResult => ({
   admissionSignal: "never-admitted",
 });
 
+/** Read the live abort state (a function, so control flow is not narrowed away). */
+function isAborted(signal?: AbortSignal): boolean {
+  return signal?.aborted === true;
+}
+
+/** Map a terminal connect/cancel outcome to the single-use ledger's settled form. */
+function settledForm(outcome: ConnectOutcome | "cancelled"): SettledOutcome {
+  return outcome;
+}
+
 /**
  * The Decision-0 reference enforcer. Pure composition over injected ports; it
  * never touches the network itself.
@@ -109,53 +114,31 @@ const NEVER_ADMITTED = (outcome: EnforcerOutcome): EnforcerResult => ({
 export class BrokerEnforcer implements EgressEnforcer {
   constructor(private readonly deps: BrokerDependencies) {}
 
-  async authorizeAndConnect(claim: EgressClaim): Promise<EnforcerResult> {
+  async authorizeAndConnect(claim: EgressClaim, signal?: AbortSignal): Promise<EnforcerResult> {
     // 1. Well-formedness (fail-closed; a malformed claim is never-admitted).
     if (validateEgressClaim(claim) !== "ok") {
       return NEVER_ADMITTED("not_authorized");
     }
-
     const claimKey = computeClaimKey(claim);
-    const nowMs = this.deps.clock();
-    const policy = this.deps.policy();
 
-    // 2. Fenced pre-connect gate — authoritative, at the egress boundary.
+    // 2. Abort before anything is consumed.
+    if (isAborted(signal)) {
+      return NEVER_ADMITTED("cancelled");
+    }
+
+    // 3. Fence liveness (await).
     if (!(await this.deps.fence.isActive(claim.fenceToken, claimKey))) {
       return NEVER_ADMITTED("fence_superseded");
     }
-    if (nowMs > claim.expiresAtMs) {
-      return NEVER_ADMITTED("expired");
-    }
-    if (policy.policyEpoch !== claim.policyEpoch) {
-      return NEVER_ADMITTED("policy_changed");
-    }
-    const address = parseCanonicalAddress(claim.target.ip);
-    if (address === null || isSpecialUse(address)) {
-      return NEVER_ADMITTED("not_authorized");
-    }
-    if (!isAllowlisted(policy.allowlist, claim.target.ip, claim.target.port)) {
-      // A validly-formed target that the active policy no longer allows is a
-      // control-plane narrowing/removal, not a malformed input.
-      return NEVER_ADMITTED("policy_changed");
-    }
-    if (
-      !evaluateFreshness({
-        snapshotDate: policy.snapshotDate,
-        nowMs,
-        maxAgeMs: policy.maxAgeMs,
-      }).fresh
-    ) {
-      return NEVER_ADMITTED("policy_changed");
-    }
 
-    // 3. Single-use consumption — after the gate, before the socket.
-    const begin = await this.deps.ledger.begin(claimKey, nowMs);
+    // 4. Single-use consumption BEFORE the gate, so a duplicate of an in-flight
+    //    or settled claim returns uncertain/replayed rather than a gate rejection
+    //    that could free a still-pending slot (Codex #3).
+    const begin = await this.deps.ledger.begin(claimKey, this.deps.clock());
     if (begin.kind === "invalid-input") {
       return NEVER_ADMITTED("not_authorized");
     }
     if (begin.kind === "replay-settled") {
-      // Duplicate delivery of a finished claim: return the stored status, open
-      // nothing, and emit no new signal (the original attempt already resolved).
       return {
         outcome: "replayed",
         admissionSignal: null,
@@ -163,22 +146,41 @@ export class BrokerEnforcer implements EgressEnforcer {
       };
     }
     if (begin.kind === "replay-consuming") {
-      // A socket may have been opened and never recorded: uncertain, not a
-      // reconnect. No signal — the slot stays held (obligation 4).
       return { outcome: "effect_uncertain", admissionSignal: null };
     }
 
-    // 4. Fresh: the mediator owns the socket and the deadline.
+    // 5. Deterministic gate evaluated from a clock+policy read AFTER the awaits,
+    //    immediately before connect (Codex #2). A rejection here has already
+    //    consumed the single use, so it is recorded as a terminal refusal — a
+    //    later delivery returns the stored status, never another connect.
+    const gate = evaluatePolicyGate({
+      claim,
+      policy: this.deps.policy(),
+      nowMs: this.deps.clock(),
+    });
+    if (!gate.ok) {
+      await this.deps.ledger.finalize(claimKey, "refused", this.deps.clock());
+      return NEVER_ADMITTED(gate.reason);
+    }
+
+    // 6. Abort immediately before the socket (Codex #7). No socket was opened, so
+    //    record a terminal `cancelled` and release the slot.
+    if (isAborted(signal)) {
+      await this.deps.ledger.finalize(claimKey, "cancelled", this.deps.clock());
+      return { outcome: "cancelled", admissionSignal: "socket-closed" };
+    }
+
+    // 7. The mediator owns the socket and the deadline.
     let result: ConnectOutcome;
     try {
-      result = await this.deps.connector.connect(claim.target, claim.deadlineMs);
+      result = await this.deps.connector.connect(claim.target, claim.deadlineMs, signal);
     } catch {
       // Crash/unknown between begin and a recorded result: leave the entry
       // `consuming` so any replay returns `effect_uncertain`; no signal, slot
       // stays held until a durable outcome arrives.
       return { outcome: "effect_uncertain", admissionSignal: null };
     }
-    await this.deps.ledger.finalize(claimKey, result, this.deps.clock());
+    await this.deps.ledger.finalize(claimKey, settledForm(result), this.deps.clock());
     return { outcome: result, admissionSignal: "socket-closed" };
   }
 }

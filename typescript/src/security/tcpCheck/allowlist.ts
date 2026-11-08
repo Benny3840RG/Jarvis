@@ -74,11 +74,13 @@ export function parseAllowlist(raw: unknown): AllowlistParseResult {
       seenPorts.add(port);
     }
 
-    parsed.push({ ip, ports: [...seenPorts].sort((a, b) => a - b) });
+    parsed.push(Object.freeze({ ip, ports: Object.freeze([...seenPorts].sort((a, b) => a - b)) }));
   }
 
   parsed.sort((a, b) => (a.ip < b.ip ? -1 : a.ip > b.ip ? 1 : 0));
-  return { ok: true, allowlist: { entries: parsed } };
+  // Freeze the validated allowlist so a policy snapshot cannot be extended or
+  // reordered in place after validation (internal integrity; Codex #11).
+  return { ok: true, allowlist: Object.freeze({ entries: Object.freeze(parsed) }) };
 }
 
 /** True iff `(ip, port)` matches an allowlist entry exactly. Default-deny. */

@@ -23,11 +23,12 @@ export interface SpecialUseEntry {
 }
 
 /** IANA special-purpose registries snapshot date (ISO 8601, UTC). */
-export const SPECIAL_USE_TABLE_SNAPSHOT_DATE = "2026-11-07";
+export const SPECIAL_USE_TABLE_SNAPSHOT_DATE = "2026-11-09";
 
 // Ordered, stable list. Any edit here must be matched by a new anchor digest in
 // specialUseTableAnchor.ts within the same reviewed PR, or loading fails closed.
-export const SPECIAL_USE_TABLE: readonly SpecialUseEntry[] = [
+// Deeply frozen on export so the shared policy floor cannot be extended at runtime.
+const SPECIAL_USE_TABLE_ENTRIES: readonly SpecialUseEntry[] = [
   { base: "0.0.0.0", prefix: 8, family: 4, label: "this-host-on-this-network" },
   { base: "10.0.0.0", prefix: 8, family: 4, label: "private-use" },
   { base: "100.64.0.0", prefix: 10, family: 4, label: "shared-address-space-cgn" },
@@ -44,8 +45,10 @@ export const SPECIAL_USE_TABLE: readonly SpecialUseEntry[] = [
   { base: "198.18.0.0", prefix: 15, family: 4, label: "benchmarking" },
   { base: "198.51.100.0", prefix: 24, family: 4, label: "documentation-test-net-2" },
   { base: "203.0.113.0", prefix: 24, family: 4, label: "documentation-test-net-3" },
+  { base: "224.0.0.0", prefix: 4, family: 4, label: "multicast" },
   { base: "240.0.0.0", prefix: 4, family: 4, label: "reserved-future-use" },
   { base: "255.255.255.255", prefix: 32, family: 4, label: "limited-broadcast" },
+  { base: "::", prefix: 96, family: 6, label: "ipv4-compatible-deprecated" },
   { base: "::1", prefix: 128, family: 6, label: "loopback" },
   { base: "::", prefix: 128, family: 6, label: "unspecified" },
   { base: "::ffff:0:0", prefix: 96, family: 6, label: "ipv4-mapped" },
@@ -68,8 +71,12 @@ export const SPECIAL_USE_TABLE: readonly SpecialUseEntry[] = [
   { base: "ff00::", prefix: 8, family: 6, label: "multicast" },
 ];
 
+export const SPECIAL_USE_TABLE: readonly SpecialUseEntry[] = Object.freeze(
+  SPECIAL_USE_TABLE_ENTRIES.map((entry) => Object.freeze({ ...entry })),
+);
+
 interface ResolvedEntry extends SpecialUseEntry {
-  readonly bytes: Uint8Array;
+  readonly bytes: readonly number[];
 }
 
 function resolveEntries(): readonly ResolvedEntry[] {
@@ -88,7 +95,11 @@ function resolveEntries(): readonly ResolvedEntry[] {
 
 const RESOLVED_ENTRIES = resolveEntries();
 
-function withinPrefix(address: Uint8Array, base: Uint8Array, prefix: number): boolean {
+function withinPrefix(
+  address: readonly number[],
+  base: readonly number[],
+  prefix: number,
+): boolean {
   let remaining = prefix;
   for (let index = 0; index < address.length && remaining > 0; index += 1) {
     const take = Math.min(8, remaining);

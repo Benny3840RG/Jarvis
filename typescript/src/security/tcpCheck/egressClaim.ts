@@ -33,6 +33,13 @@ export interface EgressClaim {
   readonly fenceToken: number;
   /** Policy epoch pinned at reservation; compared to the active epoch at the gate. */
   readonly policyEpoch: number;
+  /**
+   * The `allowlistDigest` of the policy approved for this claim, pinned at
+   * prepare/approval time. The egress gate refuses unless the *currently active*
+   * policy hashes to the same value, binding the effect to the approved policy
+   * content — a stronger guarantee than the epoch counter alone (Codex #4).
+   */
+  readonly approvedAllowlistDigest: string;
   /** Connect deadline in ms (origin: the approved 5 s parameter), enforced on the socket. */
   readonly deadlineMs: number;
   /** Capability expiry in epoch ms; past this the mediator opens nothing. */
@@ -46,6 +53,7 @@ export type ClaimValidationReason =
   | "bad-port"
   | "bad-fence"
   | "bad-epoch"
+  | "bad-digest"
   | "bad-deadline"
   | "bad-expiry";
 
@@ -86,6 +94,9 @@ export function validateEgressClaim(claim: EgressClaim): ClaimValidationReason {
   }
   if (!isFiniteNumber(claim.policyEpoch) || !Number.isInteger(claim.policyEpoch)) {
     return "bad-epoch";
+  }
+  if (!/^[0-9a-f]{64}$/.test(claim.approvedAllowlistDigest)) {
+    return "bad-digest";
   }
   if (!isFiniteNumber(claim.deadlineMs) || claim.deadlineMs <= 0) {
     return "bad-deadline";

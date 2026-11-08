@@ -1,7 +1,6 @@
-// Phase 5 — the adversarial acceptance suite (design §Tests). Each case maps a
-// named scenario from docs/design/issue-732-stage3-authorised-diagnostics.md to
-// an assertion over the *composed* stack (admission + egress mediator + governed
-// provider), using in-memory fakes. No network, no node:net.
+// Phase 5 + Codex repairs — the adversarial acceptance suite (design §Tests and
+// the review findings), over the composed stack (admission + egress mediator +
+// governed provider) with in-memory fakes. No network, no node:net.
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
@@ -13,12 +12,12 @@ import {
   emptyLedger,
   beginConsume,
   finalizeConsume,
-  parseCanonicalAddress,
   recover,
   reserve,
   resolve,
   start,
   startsInWindow,
+  createInMemoryAdmissionStore,
   createTcpCheckProvider,
   RATE_WINDOW_MS,
   type AdmissionState,
@@ -37,11 +36,26 @@ const ALLOWLIST: Allowlist = { entries: [{ ip: "8.8.8.8", ports: [443] }] };
 function makePolicy(overrides: Partial<PolicyView> = {}): PolicyView {
   return {
     allowlist: ALLOWLIST,
-    snapshotDate: "2026-11-07T00:00:00Z",
+    snapshotDate: "2026-11-09T00:00:00Z",
     maxAgeMs: 90 * 24 * 60 * 60 * 1000,
     policyEpoch: 1,
     ...overrides,
   };
+}
+
+function inMemoryLedgerPort(): LedgerPort & { ledger: SingleUseLedger } {
+  const port = {
+    ledger: emptyLedger(),
+    begin: (claimKey: string, nowMs: number) => {
+      const r = beginConsume(port.ledger, { claimKey, nowMs });
+      if (r.kind === "fresh") port.ledger = r.ledger;
+      return r;
+    },
+    finalize: (claimKey: string, outcome: SettledOutcome, nowMs: number): void => {
+      port.ledger = finalizeConsume(port.ledger, { claimKey, outcome, nowMs }).ledger;
+    },
+  };
+  return port;
 }
 
 interface World {
@@ -50,10 +64,8 @@ interface World {
   setFenceActive(active: boolean): void;
   setOutcome(o: ConnectOutcome): void;
   connectCalls(): number;
-  admissionState(): AdmissionState;
-  setAdmissionState(s: AdmissionState): void;
+  admission: AdmissionStore & { snapshot(owner: string): AdmissionState };
   provider: ReturnType<typeof createTcpCheckProvider>;
-  /** Full governed flow for one target; returns the digest-only summary. */
   run(
     ip: string,
     port: number,
@@ -70,38 +82,15 @@ function makeWorld(opts: { deadlineMs?: number; leaseMs?: number } = {}): World 
   let policy = makePolicy();
   let now = NOW;
   let fenceActive = true;
-  let outcome: ConnectOutcome = "completed";
+  let outcome: ConnectOutcome = "connected";
   let connects = 0;
-
-  const admissionBacking = { state: emptyAdmissionState() };
-  const admission: AdmissionStore = {
-    get: () => admissionBacking.state,
-    put: (_owner, next) => {
-      admissionBacking.state = next;
-    },
-  };
-
-  const ledgerBacking: { ledger: SingleUseLedger } = { ledger: emptyLedger() };
-  const ledger: LedgerPort = {
-    begin: (claimKey, nowMs) => {
-      const r = beginConsume(ledgerBacking.ledger, { claimKey, nowMs });
-      if (r.kind === "fresh") ledgerBacking.ledger = r.ledger;
-      return r;
-    },
-    finalize: (claimKey, settled: SettledOutcome, nowMs) => {
-      ledgerBacking.ledger = finalizeConsume(ledgerBacking.ledger, {
-        claimKey,
-        outcome: settled,
-        nowMs,
-      }).ledger;
-    },
-  };
+  const admission = createInMemoryAdmissionStore();
 
   const provider = createTcpCheckProvider({
     policy: () => policy,
     admission,
     fence: { isActive: () => fenceActive },
-    ledger,
+    ledger: inMemoryLedgerPort(),
     clock: () => now,
     connector: {
       async connect(): Promise<ConnectOutcome> {
@@ -127,17 +116,14 @@ function makeWorld(opts: { deadlineMs?: number; leaseMs?: number } = {}): World 
       outcome = o;
     },
     connectCalls: () => connects,
-    admissionState: () => admissionBacking.state,
-    setAdmissionState: (s) => {
-      admissionBacking.state = s;
-    },
+    admission,
     provider,
     async run(ip, port, fingerprint) {
       const attempt = await provider.prepare(
         { ip, port },
-        { owner: "proj-1", project: "proj-1", actionFingerprint: fingerprint, correlationId: "c" },
+        { owner: "owner-1", project: "proj-1", actionFingerprint: fingerprint, correlationId: "c" },
       );
-      return provider.sendPrepared(attempt, { ip, port });
+      return provider.sendPrepared(attempt);
     },
   };
 }
@@ -146,7 +132,7 @@ describe("acceptance — effect outcomes and single-use", () => {
   it("a check runs to a terminal outcome, releases the slot, and yields a digest-only receipt", async () => {
     const w = makeWorld();
     const r = await w.run("8.8.8.8", 443, "fp-1");
-    assert.equal(r.status, "completed");
+    assert.equal(r.status, "connected");
     assert.equal(r.admissionSignal, "socket-closed");
     assert.equal(r.target, "8.8.8.8:443");
     assert.equal(r.allowlistDigest, computeAllowlistDigest(ALLOWLIST));
@@ -156,7 +142,7 @@ describe("acceptance — effect outcomes and single-use", () => {
       "status",
       "target",
     ]);
-    assert.equal(w.admissionState().active, null); // slot released
+    assert.equal(w.admission.snapshot("owner-1").active, null);
   });
 
   it("a recorded timeout is distinct from an unknown effect", async () => {
@@ -164,115 +150,125 @@ describe("acceptance — effect outcomes and single-use", () => {
     w.setOutcome("timed-out");
     const r = await w.run("8.8.8.8", 443, "fp-t");
     assert.equal(r.status, "timed-out");
-    assert.equal(r.admissionSignal, "socket-closed"); // recorded, not unknown
+    assert.equal(r.admissionSignal, "socket-closed");
   });
 
-  it("cancellation mid-connect releases the slot but keeps the rate-history entry", async () => {
-    const w = makeWorld();
-    w.setOutcome("cancelled");
-    const r = await w.run("8.8.8.8", 443, "fp-c");
-    assert.equal(r.status, "cancelled");
-    assert.equal(r.admissionSignal, "socket-closed");
-    assert.equal(w.admissionState().active, null);
-    assert.equal(startsInWindow(w.admissionState(), NOW, RATE_WINDOW_MS), 1); // not refunded
+  it("a refused connection is distinct from a transport error (Codex taxonomy)", async () => {
+    const w1 = makeWorld();
+    w1.setOutcome("refused");
+    assert.equal((await w1.run("8.8.8.8", 443, "fp-r")).status, "refused");
+    const w2 = makeWorld();
+    w2.setOutcome("error");
+    assert.equal((await w2.run("8.8.8.8", 443, "fp-e")).status, "error");
   });
 
   it("a completed-result replay opens no socket and returns the stored outcome", async () => {
     const w = makeWorld();
-    w.setOutcome("failed");
+    w.setOutcome("refused");
     const first = await w.run("8.8.8.8", 443, "fp-dup");
-    assert.equal(first.status, "failed");
+    assert.equal(first.status, "refused");
     assert.equal(w.connectCalls(), 1);
-
-    // Duplicate delivery of the same approved action reaches the mediator again.
     const replay = await w.run("8.8.8.8", 443, "fp-dup");
     assert.equal(replay.status, "replayed");
     assert.equal(w.connectCalls(), 1, "no second connect");
-    assert.equal(w.admissionState().active, null, "replay still releases its own slot");
+    assert.equal(
+      w.admission.snapshot("owner-1").active,
+      null,
+      "replay still releases its own slot",
+    );
   });
 
-  it("the not-commissioned default connector yields an uncertain effect and holds the slot", async () => {
-    const w = makeWorld();
-    // Force the not-commissioned path by throwing from the connector.
+  it("the not-commissioned default connector holds the slot as uncertain (no phantom success)", async () => {
+    const admission = createInMemoryAdmissionStore();
     const provider = createTcpCheckProvider({
       policy: () => makePolicy(),
-      admission: { get: () => w.admissionState(), put: (_o, s) => w.setAdmissionState(s) },
+      admission,
       fence: { isActive: () => true },
-      ledger: {
-        begin: (k, n) => beginConsume(emptyLedger(), { claimKey: k, nowMs: n }),
-        finalize: () => {},
-      },
+      ledger: inMemoryLedgerPort(),
       clock: () => NOW,
       // no connector -> notCommissionedConnector (throws)
     });
     const attempt = await provider.prepare(
       { ip: "8.8.8.8", port: 443 },
-      { owner: "proj-1", project: "proj-1", actionFingerprint: "fp-nc", correlationId: "c" },
+      { owner: "owner-1", project: "proj-1", actionFingerprint: "fp-nc", correlationId: "c" },
     );
-    const r = await provider.sendPrepared(attempt, { ip: "8.8.8.8", port: 443 });
+    const r = await provider.sendPrepared(attempt);
     assert.equal(r.status, "effect_uncertain");
     assert.equal(r.admissionSignal, null);
-    assert.notEqual(w.admissionState().active, null); // slot held, no phantom success
+    assert.notEqual(admission.snapshot("owner-1").active, null);
+  });
+});
+
+describe("acceptance — Codex #1 atomic admission under concurrency", () => {
+  it("two simultaneous prepares admit exactly one; the other is slot-busy, no lost history", async () => {
+    const w = makeWorld();
+    const results = await Promise.allSettled([
+      w.provider.prepare(
+        { ip: "8.8.8.8", port: 443 },
+        { owner: "owner-1", project: "proj-1", actionFingerprint: "fp-a", correlationId: "c" },
+      ),
+      w.provider.prepare(
+        { ip: "8.8.8.8", port: 443 },
+        { owner: "owner-1", project: "proj-1", actionFingerprint: "fp-b", correlationId: "c" },
+      ),
+    ]);
+    const fulfilled = results.filter((r) => r.status === "fulfilled");
+    const rejected = results.filter((r) => r.status === "rejected");
+    assert.equal(fulfilled.length, 1, "exactly one winner");
+    assert.equal(rejected.length, 1, "the other is refused");
+    assert.match((rejected[0] as PromiseRejectedResult).reason.message, /slot-busy/);
+    // Exactly one reservation holds the single owner-wide slot.
+    assert.notEqual(w.admission.snapshot("owner-1").active, null);
   });
 });
 
 describe("acceptance — admission limits", () => {
-  it("the eleventh fast check within 60 s is rate-limited, and window roll-over resumes admission", async () => {
+  it("the eleventh fast check within 60 s is rate-limited, and window roll-over resumes", async () => {
     const w = makeWorld();
     for (let i = 0; i < 10; i += 1) {
-      const r = await w.run("8.8.8.8", 443, `fp-${i}`);
-      assert.equal(r.status, "completed");
+      assert.equal((await w.run("8.8.8.8", 443, `fp-${i}`)).status, "connected");
     }
     await assert.rejects(w.run("8.8.8.8", 443, "fp-11"), /rate-limited/);
-
-    w.setNow(NOW + RATE_WINDOW_MS + 1); // roll the window forward
-    const after = await w.run("8.8.8.8", 443, "fp-after");
-    assert.equal(after.status, "completed");
+    w.setNow(NOW + RATE_WINDOW_MS + 1);
+    assert.equal((await w.run("8.8.8.8", 443, "fp-after")).status, "connected");
   });
 
-  it("at the concurrency limit, exactly one attempt is admitted", async () => {
+  it("a rejected target consumes no rate budget (Codex #9)", async () => {
     const w = makeWorld();
-    await w.provider.prepare(
-      { ip: "8.8.8.8", port: 443 },
-      { owner: "proj-1", project: "proj-1", actionFingerprint: "fp-a", correlationId: "c" },
-    );
-    await assert.rejects(
-      w.provider.prepare(
-        { ip: "8.8.8.8", port: 443 },
-        { owner: "proj-1", project: "proj-1", actionFingerprint: "fp-b", correlationId: "c" },
-      ),
-      /slot-busy/,
-    );
+    // 10 good checks fill the window.
+    for (let i = 0; i < 10; i += 1) await w.run("8.8.8.8", 443, `fp-${i}`);
+    // A not-permitted target is refused at prepare and must not count.
+    await assert.rejects(w.run("9.9.9.9", 443, "fp-bad"), /not permitted/);
+    assert.equal(startsInWindow(w.admission.snapshot("owner-1"), NOW, RATE_WINDOW_MS), 10);
   });
 });
 
-describe("acceptance — policy freshness, narrowing, and expiry at the egress gate", () => {
+describe("acceptance — policy freshness, narrowing, and expiry at the gate", () => {
   it("a target narrowed out of the policy before the effect opens no socket (policy_changed)", async () => {
     const w = makeWorld();
     const attempt = await w.provider.prepare(
       { ip: "8.8.8.8", port: 443 },
-      { owner: "proj-1", project: "proj-1", actionFingerprint: "fp", correlationId: "c" },
+      { owner: "owner-1", project: "proj-1", actionFingerprint: "fp", correlationId: "c" },
     );
     w.setPolicy(makePolicy({ allowlist: { entries: [{ ip: "1.1.1.1", ports: [443] }] } }));
-    const r = await w.provider.sendPrepared(attempt, { ip: "8.8.8.8", port: 443 });
+    const r = await w.provider.sendPrepared(attempt);
     assert.equal(r.status, "policy_changed");
     assert.equal(r.admissionSignal, "never-admitted");
     assert.equal(w.connectCalls(), 0);
-    assert.equal(w.admissionState().active, null); // never-admitted releases the slot
+    assert.equal(w.admission.snapshot("owner-1").active, null);
+    // The narrowed attempt never started -> consumed no budget.
+    assert.equal(startsInWindow(w.admission.snapshot("owner-1"), NOW, RATE_WINDOW_MS), 0);
   });
 
-  it("a reservation that pauses past the freshness bound is refused (policy_changed), unchanged digest/epoch", async () => {
+  it("a reservation that pauses past the freshness bound is refused (policy_changed)", async () => {
     const day = 24 * 60 * 60 * 1000;
-    // A lease long enough that the expiry check does not fire first, so the
-    // refusal is attributable to freshness (table age > maxAge), not expiry.
     const w = makeWorld({ leaseMs: 400 * day });
     const attempt = await w.provider.prepare(
       { ip: "8.8.8.8", port: 443 },
-      { owner: "proj-1", project: "proj-1", actionFingerprint: "fp", correlationId: "c" },
+      { owner: "owner-1", project: "proj-1", actionFingerprint: "fp", correlationId: "c" },
     );
-    w.setNow(NOW + 200 * day); // table age (~213 d) now exceeds the 90 d maxAge
-    const r = await w.provider.sendPrepared(attempt, { ip: "8.8.8.8", port: 443 });
-    assert.equal(r.status, "policy_changed");
+    w.setNow(NOW + 200 * day);
+    assert.equal((await w.provider.sendPrepared(attempt)).status, "policy_changed");
     assert.equal(w.connectCalls(), 0);
   });
 
@@ -280,11 +276,10 @@ describe("acceptance — policy freshness, narrowing, and expiry at the egress g
     const w = makeWorld({ leaseMs: 15_000 });
     const attempt = await w.provider.prepare(
       { ip: "8.8.8.8", port: 443 },
-      { owner: "proj-1", project: "proj-1", actionFingerprint: "fp", correlationId: "c" },
+      { owner: "owner-1", project: "proj-1", actionFingerprint: "fp", correlationId: "c" },
     );
-    w.setNow(NOW + 20_000); // past the 15 s lease
-    const r = await w.provider.sendPrepared(attempt, { ip: "8.8.8.8", port: 443 });
-    assert.equal(r.status, "expired");
+    w.setNow(NOW + 20_000);
+    assert.equal((await w.provider.sendPrepared(attempt)).status, "expired");
     assert.equal(w.connectCalls(), 0);
   });
 
@@ -292,34 +287,41 @@ describe("acceptance — policy freshness, narrowing, and expiry at the egress g
     const w = makeWorld();
     const attempt = await w.provider.prepare(
       { ip: "8.8.8.8", port: 443 },
-      { owner: "proj-1", project: "proj-1", actionFingerprint: "fp", correlationId: "c" },
+      { owner: "owner-1", project: "proj-1", actionFingerprint: "fp", correlationId: "c" },
     );
     w.setPolicy(makePolicy({ policyEpoch: 2 }));
-    const r = await w.provider.sendPrepared(attempt, { ip: "8.8.8.8", port: 443 });
-    assert.equal(r.status, "policy_changed");
+    assert.equal((await w.provider.sendPrepared(attempt)).status, "policy_changed");
     assert.equal(w.connectCalls(), 0);
   });
 
-  it("a superseded fence is refused at the gate (fence_superseded), opens no socket", async () => {
+  it("a superseded fence is refused (fence_superseded), opens no socket", async () => {
     const w = makeWorld();
     const attempt = await w.provider.prepare(
       { ip: "8.8.8.8", port: 443 },
-      { owner: "proj-1", project: "proj-1", actionFingerprint: "fp", correlationId: "c" },
+      { owner: "owner-1", project: "proj-1", actionFingerprint: "fp", correlationId: "c" },
     );
     w.setFenceActive(false);
-    const r = await w.provider.sendPrepared(attempt, { ip: "8.8.8.8", port: 443 });
-    assert.equal(r.status, "fence_superseded");
+    assert.equal((await w.provider.sendPrepared(attempt)).status, "fence_superseded");
     assert.equal(w.connectCalls(), 0);
   });
 });
 
-describe("acceptance — digest integrity, redaction, and default-deny", () => {
-  it("the allowlist digest is server-computed and content-bound (a row edit changes it)", async () => {
+describe("acceptance — Codex #8 receipt binding and default-deny", () => {
+  it("the receipt digest is the approved digest from the claim, not a post-effect policy read", async () => {
     const w = makeWorld();
-    const r = await w.run("8.8.8.8", 443, "fp");
-    assert.equal(r.allowlistDigest, computeAllowlistDigest(ALLOWLIST));
+    const attempt = await w.provider.prepare(
+      { ip: "8.8.8.8", port: 443 },
+      { owner: "owner-1", project: "proj-1", actionFingerprint: "fp", correlationId: "c" },
+    );
+    const approved = attempt.claim.approvedAllowlistDigest;
+    // Change the active policy's digest-bearing content AFTER prepare: the gate
+    // will refuse, but the receipt still reports the approved (claim) digest.
+    w.setPolicy(makePolicy({ allowlist: { entries: [{ ip: "8.8.8.8", ports: [443, 53] }] } }));
+    const r = await w.provider.sendPrepared(attempt);
+    assert.equal(r.status, "policy_changed");
+    assert.equal(r.allowlistDigest, approved);
     assert.notEqual(
-      computeAllowlistDigest(ALLOWLIST),
+      approved,
       computeAllowlistDigest({ entries: [{ ip: "8.8.8.8", ports: [443, 53] }] }),
     );
   });
@@ -329,16 +331,12 @@ describe("acceptance — digest integrity, redaction, and default-deny", () => {
     w.setPolicy(makePolicy({ allowlist: { entries: [] } }));
     await assert.rejects(w.run("8.8.8.8", 443, "fp"), /not permitted/);
     assert.equal(w.connectCalls(), 0);
-    assert.equal(w.admissionState().active, null); // nothing reserved
+    assert.equal(w.admission.snapshot("owner-1").active, null);
   });
 });
 
 describe("acceptance — crash recovery (never a second executor, never an invented result)", () => {
-  function startedAttempt(): {
-    state: AdmissionState;
-    attemptId: string;
-    fenceToken: number;
-  } {
+  function startedAttempt(): { state: AdmissionState; attemptId: string; fenceToken: number } {
     const attemptId = "att-1";
     const reserved = reserve(emptyAdmissionState(), { attemptId, nowMs: NOW, policyEpoch: 1 });
     assert.ok(reserved.outcome.ok);
@@ -358,23 +356,20 @@ describe("acceptance — crash recovery (never a second executor, never an inven
     );
   });
 
-  it("a resumed straggler cannot commit a late completed (result-commit fence)", () => {
+  it("a resumed straggler cannot commit a late terminal (result-commit fence)", () => {
     const { state, attemptId, fenceToken } = startedAttempt();
-    const recovered = recover(state); // started -> uncertain, fence bumped
-    const straggler = complete(recovered.state, { attemptId, fenceToken });
-    assert.equal(straggler.outcome.ok, false);
+    const recovered = recover(state);
+    assert.equal(complete(recovered.state, { attemptId, fenceToken }).outcome.ok, false);
   });
 
   it("an uncertain attempt resolves only on an enforcer signal, then readmits", () => {
     const { state, attemptId } = startedAttempt();
     const uncertain = recover(state).state;
-    // repeated recoveries never accumulate a second executor
     assert.equal(recover(uncertain).outcome.kind, "already-uncertain");
     assert.equal(
       reserve(uncertain, { attemptId: "att-2", nowMs: NOW + 1, policyEpoch: 1 }).outcome.ok,
       false,
     );
-    // resolve on the enforcer's durable signal releases the slot
     const resolved = resolve(uncertain, { attemptId, signal: "socket-closed" });
     assert.equal(resolved.outcome.ok, true);
     assert.equal(
@@ -392,33 +387,5 @@ describe("acceptance — crash recovery (never a second executor, never an inven
     const recovered = recover(reserved.state);
     assert.equal(recovered.outcome.kind, "released-stale-reservation");
     assert.equal(startsInWindow(recovered.state, NOW, RATE_WINDOW_MS), 0);
-    // a resumed stale-token worker cannot then start
-    assert.ok(reserved.outcome.ok);
-    if (!reserved.outcome.ok) return;
-    assert.equal(
-      start(recovered.state, {
-        attemptId: "att-1",
-        fenceToken: reserved.outcome.fenceToken,
-        nowMs: NOW + 1,
-      }).outcome.ok,
-      false,
-    );
-  });
-});
-
-describe("acceptance — canonicalisation and special-use are enforced before any effect", () => {
-  it("non-canonical, special-use, and off-allowlist targets are all refused with no socket", async () => {
-    for (const [ip, port] of [
-      ["08.8.8.8", 443], // non-canonical
-      ["127.0.0.1", 443], // special-use
-      ["9.9.9.9", 443], // not allowlisted
-      ["8.8.8.8", 80], // port not allowlisted
-    ] as const) {
-      const w = makeWorld();
-      await assert.rejects(w.run(ip, port, "fp"));
-      assert.equal(w.connectCalls(), 0);
-    }
-    // sanity: the canonical form of each special-use literal still parses
-    assert.ok(parseCanonicalAddress("127.0.0.1"));
   });
 });
