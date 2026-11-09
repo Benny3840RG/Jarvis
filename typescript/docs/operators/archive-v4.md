@@ -261,7 +261,13 @@ step. `npm run commission:local-v1-recovery` drives that restart step: it reads
 configured `CONVEX_URL` or a cloud host), `JARVIS_DELIVERY_RUNTIME_TOKEN`, the
 restored `JARVIS_LV1_JSON_DIR`, and the representative ids, runs the proof, and
 writes a dated evidence file (default `~/lv1-01/restart-proof-<sha>.md`) with
-the quote body sha256. It automates only the restart proof; capture, restore,
+the quote body sha256. An absent optional `CONVEX_URL` is recorded as N/A;
+a failed refusal check cannot pass the proof. `JARVIS_LV1_LIVE_DIR` overrides
+the live directory; otherwise the environment-loaded `JARVIS_DATA_DIR` is used.
+Evidence output must be a new file outside the live and restored JSON directories
+(including symlink aliases); existing files are never overwritten. Set
+`JARVIS_LV1_EVIDENCE_FILE` to choose a fresh output path for repeat runs.
+It automates only the restart proof; capture, restore,
 reread, and the Convex-function rollback assertions stay operator steps, listed
 unchecked in that file. The driver clears no gate — it is evidence, not
 acceptance. This gate does not write the live data

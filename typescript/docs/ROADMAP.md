@@ -162,7 +162,11 @@ until the host repeats that restart step. `npm run commission:local-v1-recovery`
 against the isolated loopback backend and writes a dated evidence file with the
 quote body sha256; it automates only the restart proof and lists capture,
 restore, reread, and the rollback assertions as unchecked operator steps. The
-driver clears no gate — evidence, not acceptance. `completeness`
+driver clears no gate — evidence, not acceptance. The recovery repair makes
+configured-target refusal failures reject the proof, records an absent optional
+URL as N/A, resolves the environment-loaded live directory and refuses evidence
+inside protected data trees or overwriting existing files. Regression evidence
+and remaining exact-candidate CI/host gates are tracked in PR #765. `completeness`
 stays `partial`. `clear-local` checksums cover the core, memory, and
 business files that action quarantines. Full v4 recovery stays refused.
 Operator docs name `proveLocalV1Recovery` as that gate and state that classic

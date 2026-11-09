@@ -21,6 +21,9 @@ import { redactSecret } from "./convexSmoke.js";
  * Runs the host restart proof on an isolated self-hosted convex-local-backend
  * (Stage 8 / LV1-09), writes a dated evidence file, and prints a result table.
  * Exits non-zero on any failure. Evidence, not acceptance — it clears no gate.
+ * An absent optional CONVEX_URL is recorded as N/A, never as a passed refusal.
+ * Evidence must be outside live/restored JSON data and use a new file path;
+ * existing output files are never overwritten.
  *
  * It automates only the restart-proof slice. The capture, isolated restore,
  * reread, and Convex-function rollback assertions remain the operator's steps
@@ -84,7 +87,7 @@ function sourceSha(): string {
   return sha;
 }
 
-function configFromEnvironment(
+export function configFromEnvironment(
   environment: NodeJS.ProcessEnv,
   sha: string,
 ): LocalV1RestartProofConfig {
@@ -93,7 +96,11 @@ function configFromEnvironment(
     configuredConvexUrl: environment.CONVEX_URL?.trim(),
     deliveryRuntimeToken: required(environment, "JARVIS_DELIVERY_RUNTIME_TOKEN"),
     jsonDirectory: required(environment, "JARVIS_LV1_JSON_DIR"),
-    liveDirectory: environment.JARVIS_LV1_LIVE_DIR?.trim() ?? JARVIS_DATA_DIR,
+    liveDirectory: path.resolve(
+      environment.JARVIS_LV1_LIVE_DIR?.trim() ||
+        environment.JARVIS_DATA_DIR?.trim() ||
+        JARVIS_DATA_DIR,
+    ),
     ids: {
       clientId: required(environment, "JARVIS_LV1_CLIENT_ID"),
       taskId: required(environment, "JARVIS_LV1_TASK_ID"),
@@ -113,6 +120,40 @@ function evidencePath(environment: NodeJS.ProcessEnv, sha: string): string {
   return path.join(os.homedir(), "lv1-01", `restart-proof-${sha}.md`);
 }
 
+/** Resolve existing ancestors too, so a missing output below a symlink cannot evade isolation. */
+async function canonicalPath(candidate: string): Promise<string> {
+  const absolute = path.resolve(candidate);
+  try {
+    return await fs.realpath(absolute);
+  } catch (error: unknown) {
+    if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
+    const parent = path.dirname(absolute);
+    if (parent === absolute) throw error;
+    return path.join(await canonicalPath(parent), path.basename(absolute));
+  }
+}
+
+export async function writeRecoveryEvidence(
+  outPath: string,
+  evidence: string,
+  config: LocalV1RestartProofConfig,
+): Promise<void> {
+  const target = await canonicalPath(outPath);
+  for (const directory of [config.liveDirectory, config.jsonDirectory]) {
+    const protectedRoot = await canonicalPath(directory);
+    const relative = path.relative(protectedRoot, target);
+    if (
+      relative === "" ||
+      (!relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative))
+    ) {
+      throw new Error("Recovery evidence output must be outside every protected data directory.");
+    }
+  }
+  await fs.mkdir(path.dirname(target), { recursive: true });
+  // Never truncate an existing archive, evidence file, symlink or hardlink.
+  await fs.writeFile(target, `${evidence}\n`, { encoding: "utf8", flag: "wx", mode: 0o600 });
+}
+
 async function main(): Promise<void> {
   loadLocalEnvironment();
   const sha = sourceSha();
@@ -120,8 +161,7 @@ async function main(): Promise<void> {
   const record = await runLocalV1RestartProof(config);
   const evidence = renderLocalV1RestartProofEvidence(record);
   const outPath = evidencePath(process.env, sha);
-  await fs.mkdir(path.dirname(outPath), { recursive: true });
-  await fs.writeFile(outPath, `${evidence}\n`, "utf8");
+  await writeRecoveryEvidence(outPath, evidence, config);
 
   console.log(evidence);
   console.log("");

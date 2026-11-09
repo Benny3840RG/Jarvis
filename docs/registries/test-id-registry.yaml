@@ -138,3 +138,19 @@ tests:
   - id: TEST-SECURITY-EDUCATION-001
     path: typescript/tests/securityEducation.test.ts
     verifies: bounded lessons, port-state grammar, unsupported input, hostile text, authority and consent refusal, digest-only storage, replay, cancellation and factory binding; HTTP and authoritative staging coverage also lives in toolActionHttp.test.ts and convex/toolActions.test.ts
+
+  - id: TEST-AM-016-CORE-001
+    path: typescript/tests/tcpCheckCore.test.ts
+    verifies: canonical IPv4/IPv6 parse and non-canonical rejection, special-use deny coverage with boundary negatives, trusted-anchor table integrity, (ip, port) allowlist with exact-match, allowlistDigest determinism and sensitivity, and fail-closed freshness evaluation
+
+  - id: TEST-AM-016-ADMISSION-001
+    path: typescript/tests/tcpCheckAdmission.test.ts
+    verifies: owner-wide single slot (at-most-one-active across reserved/started/uncertain), never-refunded 60s started-history rate window, fenced reserved->started, recovery by durable phase, straggler fence supersession, and signal-only uncertain->resolved with no time-based exit
+
+  - id: TEST-AM-016-MEDIATOR-001
+    path: typescript/tests/tcpCheckEnforcer.test.ts
+    verifies: fenced pre-connect gate rejections that open no socket, two-phase single-use ledger transitions, duplicate replay that never reconnects, and ledger consumption before the final gate and socket
+
+  - id: TEST-AM-016-WIRING-001
+    path: typescript/tests/tcpCheckGovernedWiring.test.ts
+    verifies: T3 tool definition and read-only preflight gate, fail-closed not-commissioned provider, digest-only redacted result, admission slot reserve/hold/release, and that the provider is not registered into the live tool-execution service (stays planned)

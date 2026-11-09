@@ -73,8 +73,8 @@ export type LocalV1RestartProofRecord = {
   sourceSha: string;
   /** `host:port` of the isolated backend. Never includes a token. */
   isolatedEndpoint: string;
-  /** The configured CONVEX_URL was offered as the target and refused. */
-  configuredUrlRefused: boolean;
+  /** True if refused, false if failed, null when no configured URL was supplied. */
+  configuredUrlRefused: boolean | null;
   /** Both processes served the quote GET from the isolated backend. */
   quoteRecovered: boolean;
   /** sha256 of the quote GET body, for cross-run comparison. */
@@ -167,12 +167,12 @@ function assertIsolatedTarget(config: LocalV1RestartProofConfig): URL {
 async function proveConfiguredUrlRefused(
   config: LocalV1RestartProofConfig,
   runner: RestartRunner,
-): Promise<boolean> {
+): Promise<boolean | null> {
   const configured = config.configuredConvexUrl?.trim();
   if (configured === undefined || configured.length === 0) {
     // With no configured deployment there is nothing to refuse. The restart
     // proof below still runs against the isolated backend.
-    return false;
+    return null;
   }
   try {
     await runner({
@@ -297,7 +297,7 @@ export function renderLocalV1RestartProofEvidence(record: LocalV1RestartProofRec
     "",
     "| Check | Result |",
     "| --- | --- |",
-    `| Configured CONVEX_URL refused as target | ${tick(record.configuredUrlRefused)} |`,
+    `| Configured CONVEX_URL refused as target | ${record.configuredUrlRefused === null ? "N/A (no configured URL supplied)" : tick(record.configuredUrlRefused)} |`,
     `| Quote GET recovered from isolated backend | ${tick(record.quoteRecovered)} |`,
     `| Client GET identical across restart | ${tick(record.clientMatched)} |`,
     `| Task GET identical across restart | ${tick(record.taskMatched)} |`,
@@ -316,6 +316,7 @@ export function renderLocalV1RestartProofEvidence(record: LocalV1RestartProofRec
 /** True only when every recorded check passed. */
 export function localV1RestartProofPassed(record: LocalV1RestartProofRecord): boolean {
   return (
+    (record.configuredUrlRefused === true || record.configuredUrlRefused === null) &&
     record.quoteRecovered &&
     record.clientMatched &&
     record.taskMatched &&
