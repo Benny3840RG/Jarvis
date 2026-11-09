@@ -5,6 +5,7 @@ import {
   localV1RestartProofPassed,
   renderLocalV1RestartProofEvidence,
   type LocalV1RestartProofRecord,
+  type LocalV1RestartProofConfig,
 } from "../src/backup/v4/localV1RecoveryDriver.js";
 
 const passing: LocalV1RestartProofRecord = {
@@ -66,7 +67,7 @@ test("driver records absent configured URL as N/A without claiming a refusal", a
         configuredConvexUrl: undefined,
         deliveryRuntimeToken: "fixture-only",
         jsonDirectory: path.join(root, "isolated"),
-        liveDirectory: root,
+        liveDirectory: path.join(root, "live"),
         ids: { clientId: "client", taskId: "task", buildId: "build", quoteId: "quote" },
         sourceSha: passing.sourceSha,
       },
@@ -82,5 +83,144 @@ test("driver records absent configured URL as N/A without claiming a refusal", a
     assert.equal(localV1RestartProofPassed(record), true);
   } finally {
     await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
+async function driverFixture() {
+  const fs = await import("node:fs/promises");
+  const os = await import("node:os");
+  const path = await import("node:path");
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "lv1-review-"));
+  const config: LocalV1RestartProofConfig = {
+    isolatedConvexUrl: "http://127.0.0.1:3210",
+    configuredConvexUrl: undefined,
+    deliveryRuntimeToken: "fixture-only",
+    jsonDirectory: path.join(root, "isolated"),
+    liveDirectory: path.join(root, "live"),
+    ids: { clientId: "client", taskId: "task", buildId: "build", quoteId: "quote" },
+    sourceSha: passing.sourceSha,
+  };
+  await fs.mkdir(config.liveDirectory);
+  await fs.mkdir(config.jsonDirectory);
+  const body = {
+    clientBody: "client",
+    taskBody: "task",
+    buildBody: "build",
+    quoteStatus: 200,
+    quoteBody: "quote",
+  };
+  return {
+    config,
+    root,
+    result: { first: body, second: body, quoteRecovered: true },
+    cleanup: () => fs.rm(root, { recursive: true, force: true }),
+  };
+}
+
+test("loopback gate rejects 127-prefixed DNS names before invoking the runner", async () => {
+  const { runLocalV1RestartProof } = await import("../src/backup/v4/localV1RecoveryDriver.js");
+  const fixture = await driverFixture();
+  try {
+    for (const host of ["127.evil.example", "127.0.0.1.evil.example"]) {
+      let calls = 0;
+      await assert.rejects(
+        () =>
+          runLocalV1RestartProof(
+            { ...fixture.config, isolatedConvexUrl: `http://${host}:3210` },
+            {
+              restartRunner: async () => {
+                calls += 1;
+                return fixture.result;
+              },
+            },
+          ),
+        /not a loopback host/,
+      );
+      assert.equal(calls, 0, "no fixture delivery token reaches a runner");
+    }
+    for (const host of ["127.0.0.1", "127.12.34.56", "localhost", "[::1]"]) {
+      const record = await runLocalV1RestartProof(
+        { ...fixture.config, isolatedConvexUrl: `http://${host}:3210` },
+        { restartRunner: async () => fixture.result },
+      );
+      assert.equal(localV1RestartProofPassed(record), true, host);
+    }
+  } finally {
+    await fixture.cleanup();
+  }
+});
+
+test("driver refuses equal, nested and symlink-aliased JSON/live roots before any runner call", async () => {
+  const fs = await import("node:fs/promises");
+  const path = await import("node:path");
+  const { runLocalV1RestartProof } = await import("../src/backup/v4/localV1RecoveryDriver.js");
+  const fixture = await driverFixture();
+  try {
+    const alias = path.join(fixture.root, "live-alias");
+    await fs.symlink(fixture.config.liveDirectory, alias);
+    for (const jsonDirectory of [
+      fixture.config.liveDirectory,
+      alias,
+      path.join(fixture.config.liveDirectory, "child"),
+      fixture.root,
+    ]) {
+      let calls = 0;
+      await assert.rejects(
+        () =>
+          runLocalV1RestartProof(
+            { ...fixture.config, jsonDirectory },
+            {
+              restartRunner: async () => {
+                calls += 1;
+                return fixture.result;
+              },
+            },
+          ),
+        /overlaps live data/,
+      );
+      assert.equal(calls, 0);
+    }
+  } finally {
+    await fixture.cleanup();
+  }
+});
+
+test("configured cloud rejection is accepted only for the configured-target probe", async () => {
+  const { runLocalV1RestartProof } = await import("../src/backup/v4/localV1RecoveryDriver.js");
+  const { readRestartedProcess } = await import("../src/backup/v4/localV1ProcessRestart.js");
+  const fixture = await driverFixture();
+  try {
+    for (const domain of ["convex.cloud", "convex.site"]) {
+      const configured = `https://fixture.${domain}`;
+      let isolatedCalls = 0;
+      const record = await runLocalV1RestartProof(
+        { ...fixture.config, configuredConvexUrl: configured },
+        {
+          restartRunner: async (request) => {
+            if (request.isolatedConvexUrl === configured) return readRestartedProcess(request);
+            assert.equal(request.isolatedConvexUrl, fixture.config.isolatedConvexUrl);
+            isolatedCalls += 1;
+            return fixture.result;
+          },
+        },
+      );
+      assert.equal(record.configuredUrlRefused, true);
+      assert.equal(isolatedCalls, 1);
+      assert.equal(localV1RestartProofPassed(record), true);
+    }
+    await assert.rejects(
+      () =>
+        runLocalV1RestartProof(
+          { ...fixture.config, configuredConvexUrl: "https://configured.example" },
+          {
+            restartRunner: async () => {
+              throw new Error("unexpected fixture failure");
+            },
+          },
+        ),
+      /could not confirm/,
+    );
+  } finally {
+    await fixture.cleanup();
   }
 });

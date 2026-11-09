@@ -7,6 +7,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 import {
   LOCAL_V1_RECOVERY_MANUAL_STEPS,
+  canonicalRecoveryPath,
   localV1RestartProofPassed,
   renderLocalV1RestartProofEvidence,
   runLocalV1RestartProof,
@@ -120,27 +121,14 @@ function evidencePath(environment: NodeJS.ProcessEnv, sha: string): string {
   return path.join(os.homedir(), "lv1-01", `restart-proof-${sha}.md`);
 }
 
-/** Resolve existing ancestors too, so a missing output below a symlink cannot evade isolation. */
-async function canonicalPath(candidate: string): Promise<string> {
-  const absolute = path.resolve(candidate);
-  try {
-    return await fs.realpath(absolute);
-  } catch (error: unknown) {
-    if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
-    const parent = path.dirname(absolute);
-    if (parent === absolute) throw error;
-    return path.join(await canonicalPath(parent), path.basename(absolute));
-  }
-}
-
 export async function writeRecoveryEvidence(
   outPath: string,
   evidence: string,
   config: LocalV1RestartProofConfig,
 ): Promise<void> {
-  const target = await canonicalPath(outPath);
+  const target = await canonicalRecoveryPath(outPath);
   for (const directory of [config.liveDirectory, config.jsonDirectory]) {
-    const protectedRoot = await canonicalPath(directory);
+    const protectedRoot = await canonicalRecoveryPath(directory);
     const relative = path.relative(protectedRoot, target);
     if (
       relative === "" ||
@@ -161,9 +149,8 @@ async function main(): Promise<void> {
   const record = await runLocalV1RestartProof(config);
   const evidence = renderLocalV1RestartProofEvidence(record);
   const outPath = evidencePath(process.env, sha);
-  await writeRecoveryEvidence(outPath, evidence, config);
-
   console.log(evidence);
+  await writeRecoveryEvidence(outPath, evidence, config);
   console.log("");
   console.log(`Evidence written to ${outPath}`);
   console.log("");

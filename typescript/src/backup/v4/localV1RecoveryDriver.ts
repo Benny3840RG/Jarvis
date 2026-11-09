@@ -1,3 +1,7 @@
+import fs from "node:fs/promises";
+import { isIP } from "node:net";
+import path from "node:path";
+
 import { sha256Hex } from "../../actions/sha256.js";
 import { localV1LiveDirectoryDigest } from "./localV1Proof.js";
 import {
@@ -121,7 +125,7 @@ function isLoopbackHost(host: string): boolean {
     lower === "localhost" ||
     lower === "::1" ||
     lower === "0:0:0:0:0:0:0:1" ||
-    lower.startsWith("127.")
+    (isIP(lower) === 4 && lower.startsWith("127."))
   );
 }
 
@@ -188,7 +192,12 @@ async function proveConfiguredUrlRefused(
       serviceToken: config.serviceToken,
     });
   } catch (error: unknown) {
-    if (error instanceof Error && /refuses the configured CONVEX_URL/.test(error.message)) {
+    if (
+      error instanceof Error &&
+      /^Local V1 process restart refuses (?:a Convex cloud URL|the configured CONVEX_URL)\.$/.test(
+        error.message,
+      )
+    ) {
       return true;
     }
     throw new LocalV1RecoveryDriverError(
@@ -199,6 +208,37 @@ async function proveConfiguredUrlRefused(
   throw new LocalV1RecoveryDriverError(
     "Local V1 recovery driver expected the configured CONVEX_URL to be refused as a target.",
   );
+}
+
+/** Resolve existing ancestors even when the final directory does not exist. */
+export async function canonicalRecoveryPath(candidate: string): Promise<string> {
+  const absolute = path.resolve(candidate);
+  try {
+    return await fs.realpath(absolute);
+  } catch (error: unknown) {
+    if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
+    const parent = path.dirname(absolute);
+    if (parent === absolute) throw error;
+    return path.join(await canonicalRecoveryPath(parent), path.basename(absolute));
+  }
+}
+
+function isWithin(parent: string, child: string): boolean {
+  const relative = path.relative(parent, child);
+  return (
+    relative === "" ||
+    (!relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative))
+  );
+}
+
+async function assertSeparateDataDirectories(config: LocalV1RestartProofConfig): Promise<void> {
+  const live = await canonicalRecoveryPath(config.liveDirectory);
+  const json = await canonicalRecoveryPath(config.jsonDirectory);
+  if (isWithin(live, json) || isWithin(json, live)) {
+    throw new LocalV1RecoveryDriverError(
+      "Local V1 recovery driver refuses a JSON directory that overlaps live data.",
+    );
+  }
 }
 
 /**
@@ -231,6 +271,7 @@ export async function runLocalV1RestartProof(
     }
   }
 
+  await assertSeparateDataDirectories(config);
   const before = await localV1LiveDirectoryDigest(config.liveDirectory);
   try {
     const configuredUrlRefused = await proveConfiguredUrlRefused(config, runner);
