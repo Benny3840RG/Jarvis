@@ -83,3 +83,10 @@ tools:
     implementation: typescript/src/actions/securityEducation.ts
     allowlist: typescript/src/actions/toolExecutionFactory.ts
     bound_by: [AM-015]
+
+  - id: TOOL-SECURITY-TCP-CHECK
+    lifecycle_status: planned
+    implemented: false
+    description: Planned governed security:tcp-check egress-mediator binding. I/O-free policy core, admission state machine, single-use ledger, and supervised egress mediator behind an injected connector (no node:net). The default connector is fail-closed not-commissioned and the provider is deliberately NOT registered into the live tool-execution service, so no allowlist binding exists yet. Not commissioned or deployed; commissioning (real connector + kernel/proxy egress gate + populated allowlist) needs separate owner approval.
+    implementation: typescript/src/security/tcpCheck/tcpCheckTool.ts
+    bound_by: [AM-016]
