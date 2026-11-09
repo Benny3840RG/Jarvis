@@ -100,8 +100,9 @@ export type EvaluationReport = Readonly<{
   naturalCoverageDev: CoverageSlice;
   naturalCoverageHeldOut: CoverageSlice;
   canonicalCoverage: CoverageSlice;
-  /** Safety: every expected-null case must be withheld. */
+  /** Number of adversarial safety cases (excludes ambiguous-intent examples). */
   safetyCasesTotal: number;
+  /** Any recognized command where the label requires withholding. */
   safetyLeaks: readonly CaseResult[];
   /** Any clear intent resolved to the wrong command. */
   wrongMatches: readonly CaseResult[];
@@ -162,7 +163,7 @@ export function evaluate(dataset: readonly EvalCase[] = VOICE_INTENT_DATASET): E
       results.filter((r) => r.case.category === "canonical"),
     ),
     safetyCasesTotal: safetyResults.length,
-    safetyLeaks: Object.freeze(safetyResults.filter((r) => r.verdict === "leaked")),
+    safetyLeaks: Object.freeze(results.filter((r) => r.verdict === "leaked")),
     wrongMatches: Object.freeze(results.filter((r) => r.verdict === "wrong-match")),
     unsafeActuations: Object.freeze(results.filter((r) => r.unsafeActuation)),
   });

@@ -26,6 +26,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { VOICE_COMMANDS, VOICE_PROFILES } from "../src/voice/voiceCommands.js";
+import { buildMarkdown } from "./support/generateVoiceIntentReport.js";
 import { VOICE_INTENT_DATASET } from "./support/voiceIntentDataset.js";
 import { evaluate } from "./support/voiceIntentScoring.js";
 
@@ -129,5 +130,28 @@ describe("voice-intent baseline lock — the reproducible coverage gap", () => {
     assert.equal(tally["asr-error"]?.missed, 12);
     assert.equal(tally["ambiguous-intent"]?.withheld, 5);
     assert.equal(report.safetyCasesTotal, 16);
+  });
+});
+
+describe("voice-intent evaluation failure accounting", () => {
+  const status = VOICE_INTENT_DATASET.find((item) => item.id === "can-crawler-status")!;
+
+  it("counts a non-actuating match on an ambiguous intent as a safety leak", () => {
+    const result = evaluate([{ ...status, category: "ambiguous-intent", expectedCommandId: null }]);
+    assert.equal(result.unsafeActuations.length, 0);
+    assert.equal(result.safetyLeaks.length, 1);
+    assert.equal(result.safetyLeaks[0]?.resolvedCommandId, "crawler.status");
+  });
+
+  it("reports a wrong non-actuating match as unsafe, not as a declined utterance", () => {
+    const result = evaluate([
+      { ...status, category: "informal-au", expectedCommandId: "crawler.forward" },
+    ]);
+    const markdown = buildMarkdown(result);
+    assert.equal(result.wrongMatches.length, 1);
+    assert.equal(result.unsafeActuations.length, 0);
+    assert.match(markdown, /NON-ZERO/);
+    assert.match(markdown, /Coverage gap on natural phrasing:.*0\/1/);
+    assert.doesNotMatch(markdown, /all zero|Zero\*\* unsafe/);
   });
 });

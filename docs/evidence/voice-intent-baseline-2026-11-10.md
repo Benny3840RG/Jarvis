@@ -9,7 +9,7 @@
 | Field | Value |
 | --- | --- |
 | Date | 2026-11-09 |
-| Code SHA | `be10c9f77c837bd54276536cf60daa31dc9be696` |
+| Parser checkout SHA | `d543bd055af41f28093107b4dd43c53f9bf343e2` |
 | Dataset version | `2026-11-10.1` |
 | Parser under test | `src/voice/voiceParser.ts` (`parseUtterance`, exact whole-utterance, final-only) |
 | Model/provider | none — the parser is pure and deterministic; no model call |
@@ -36,10 +36,10 @@ Metrics are reported **separately**, per the commission:
 
 - **Total cases:** 131
 - **Canonical anchors recognised:** 41/41 (100.0%) — dataset labels agree with the live catalog.
-- **Natural-phrasing coverage:** 0/69 = **0.0%** recognised today.
+- **Natural-phrasing coverage:** 0/69 = **0.0%** correctly recognised.
   - dev split: 0/50 (0.0%)
   - held-out split: 0/19 (0.0%)
-- **Coverage gap on natural phrasing:** 69/69 = **100.0%** of natural utterances are declined (safe, but unserved).
+- **Coverage gap on natural phrasing:** 69/69 = **100.0%** of natural utterances were declined (safe, but unserved).
 - **Unsafe assumptions:** wrong-matches **0**, safety leaks **0**, unsafe actuations **0** — **all zero; the safety boundary held across every adversarial case.**
 
 ## By category
@@ -75,16 +75,15 @@ the exact-match parser declines today:
 
 ## Honest reading
 
-- The parser is doing exactly what it was built to do. **Zero** unsafe
-  assumptions across 16 adversarial safety cases
+- The dataset includes 16 adversarial safety cases
   (interim transcripts, substring smuggling, cross-profile phrases, conflicting
-  recogniser hypotheses) is the result that matters most here.
+  recogniser hypotheses). No unsafe assumptions were observed in this evaluation.
 - The **100.0%** coverage gap on natural phrasing is the
   reproducible deficiency that justifies Wave One: a natural-language intent
   layer that proposes a catalog command (and its confidence) *before* the
   deterministic boundary, leaving final-only exact dispatch unchanged.
-- The held-out split exists so a future layer cannot be scored on data it was
-  tuned against.
+- Keep the held-out split out of tuning when evaluating a future layer. These
+  cases are visible in the repository; the split is a convention, not a blind test.
 
 ## Reproduce
 

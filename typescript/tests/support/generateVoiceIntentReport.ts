@@ -8,13 +8,13 @@
  *   node --import tsx tests/support/generateVoiceIntentReport.ts
  *
  * It writes no production state and takes no arguments. The committed report is
- * the output of this script at the recorded code SHA.
+ * generated from the parser in the recorded checkout.
  */
 
 import { execFileSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { evaluate, formatPct, type EvaluationReport } from "./voiceIntentScoring.js";
 
@@ -61,11 +61,18 @@ function missedExamples(report: EvaluationReport, limit = 12): string {
   return lines.join("\n");
 }
 
-function buildMarkdown(report: EvaluationReport): string {
+export function buildMarkdown(report: EvaluationReport): string {
   const sha = headSha();
   const date = new Date().toISOString().slice(0, 10);
   const natural = report.naturalCoverage;
-  const safetyClean = report.safetyLeaks.length === 0 && report.unsafeActuations.length === 0;
+  const naturalMisses = report.byCategory
+    .filter(({ category }) => category === "informal-au" || category === "asr-error")
+    .reduce((sum, { missed }) => sum + missed, 0);
+  const gap = formatPct(natural.total === 0 ? 0 : naturalMisses / natural.total);
+  const safetyClean =
+    report.wrongMatches.length === 0 &&
+    report.safetyLeaks.length === 0 &&
+    report.unsafeActuations.length === 0;
 
   return `# Voice-intent baseline — evidence (#567)
 
@@ -78,7 +85,7 @@ function buildMarkdown(report: EvaluationReport): string {
 | Field | Value |
 | --- | --- |
 | Date | ${date} |
-| Code SHA | \`${sha}\` |
+| Parser checkout SHA | \`${sha}\` |
 | Dataset version | \`${report.datasetVersion}\` |
 | Parser under test | \`src/voice/voiceParser.ts\` (\`parseUtterance\`, exact whole-utterance, final-only) |
 | Model/provider | none — the parser is pure and deterministic; no model call |
@@ -105,10 +112,10 @@ Metrics are reported **separately**, per the commission:
 
 - **Total cases:** ${report.totalCases}
 - **Canonical anchors recognised:** ${report.canonicalCoverage.correct}/${report.canonicalCoverage.total} (${formatPct(report.canonicalCoverage.rate)}) — dataset labels agree with the live catalog.
-- **Natural-phrasing coverage:** ${natural.correct}/${natural.total} = **${formatPct(natural.rate)}** recognised today.
+- **Natural-phrasing coverage:** ${natural.correct}/${natural.total} = **${formatPct(natural.rate)}** correctly recognised.
   - dev split: ${report.naturalCoverageDev.correct}/${report.naturalCoverageDev.total} (${formatPct(report.naturalCoverageDev.rate)})
   - held-out split: ${report.naturalCoverageHeldOut.correct}/${report.naturalCoverageHeldOut.total} (${formatPct(report.naturalCoverageHeldOut.rate)})
-- **Coverage gap on natural phrasing:** ${natural.total - natural.correct}/${natural.total} = **${formatPct(1 - natural.rate)}** of natural utterances are declined (safe, but unserved).
+- **Coverage gap on natural phrasing:** ${naturalMisses}/${natural.total} = **${gap}** of natural utterances were declined (safe, but unserved).
 - **Unsafe assumptions:** wrong-matches **${report.wrongMatches.length}**, safety leaks **${report.safetyLeaks.length}**, unsafe actuations **${report.unsafeActuations.length}** — ${safetyClean ? "**all zero; the safety boundary held across every adversarial case.**" : "**NON-ZERO — investigate before any further work.**"}
 
 ## By category
@@ -124,16 +131,15 @@ ${missedExamples(report)}
 
 ## Honest reading
 
-- The parser is doing exactly what it was built to do. **Zero** unsafe
-  assumptions across ${report.safetyCasesTotal} adversarial safety cases
+- The dataset includes ${report.safetyCasesTotal} adversarial safety cases
   (interim transcripts, substring smuggling, cross-profile phrases, conflicting
-  recogniser hypotheses) is the result that matters most here.
-- The **${formatPct(1 - natural.rate)}** coverage gap on natural phrasing is the
+  recogniser hypotheses). ${safetyClean ? "No unsafe assumptions were observed in this evaluation." : "Resolve the unsafe findings before using this baseline as safety evidence."}
+- The **${gap}** coverage gap on natural phrasing is the
   reproducible deficiency that justifies Wave One: a natural-language intent
   layer that proposes a catalog command (and its confidence) *before* the
   deterministic boundary, leaving final-only exact dispatch unchanged.
-- The held-out split exists so a future layer cannot be scored on data it was
-  tuned against.
+- Keep the held-out split out of tuning when evaluating a future layer. These
+  cases are visible in the repository; the split is a convention, not a blind test.
 
 ## Reproduce
 
@@ -160,4 +166,5 @@ function main(): void {
   );
 }
 
-main();
+const entryPoint = process.argv[1];
+if (entryPoint && import.meta.url === pathToFileURL(entryPoint).href) main();
