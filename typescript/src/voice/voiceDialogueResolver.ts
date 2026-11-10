@@ -172,6 +172,8 @@ const AFFIRM_TOKENS: ReadonlySet<string> = new Set([
   "ok",
   "okay",
   "roger",
+  // tokenize() strips apostrophes, so "that's" arrives as "thats".
+  "thats",
 ]);
 
 /**

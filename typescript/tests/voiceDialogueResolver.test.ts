@@ -72,12 +72,14 @@ test("clarification resolver — behaviour", async (t) => {
   });
 
   await t.test("a bare affirmation closes a single-candidate clarification", () => {
-    assert.equal(
-      resolved(
-        resolveClarification({ reply: "yeah that's it", candidates: SEND_ONLY, profile: "client" }),
-      ).commandId,
-      "client.send-quote",
-    );
+    for (const reply of ["yeah that's it", "that's it", "thats it"]) {
+      assert.equal(
+        resolved(resolveClarification({ reply, candidates: SEND_ONLY, profile: "client" }))
+          .commandId,
+        "client.send-quote",
+        reply,
+      );
+    }
   });
 
   await t.test("a decline without a selection cancels", () => {
