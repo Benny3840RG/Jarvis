@@ -91,7 +91,7 @@ export type CoverageSlice = Readonly<{
 }>;
 
 export type EvaluationReport = Readonly<{
-  datasetVersion: string;
+  datasetVersion: string | null;
   totalCases: number;
   results: readonly CaseResult[];
   byCategory: readonly CategoryTally[];
@@ -145,7 +145,7 @@ export function evaluate(dataset: readonly EvalCase[] = VOICE_INTENT_DATASET): E
   const safetyResults = results.filter((r) => SAFETY.has(r.case.category));
 
   return Object.freeze({
-    datasetVersion: VOICE_INTENT_DATASET_VERSION,
+    datasetVersion: dataset === VOICE_INTENT_DATASET ? VOICE_INTENT_DATASET_VERSION : null,
     totalCases: results.length,
     results,
     byCategory,

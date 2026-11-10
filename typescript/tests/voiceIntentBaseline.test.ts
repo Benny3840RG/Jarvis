@@ -23,6 +23,7 @@
  */
 
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 
 import { VOICE_COMMANDS, VOICE_PROFILES } from "../src/voice/voiceCommands.js";
@@ -153,5 +154,23 @@ describe("voice-intent evaluation failure accounting", () => {
     assert.match(markdown, /NON-ZERO/);
     assert.match(markdown, /Coverage gap on natural phrasing:.*0\/1/);
     assert.doesNotMatch(markdown, /all zero|Zero\*\* unsafe/);
+  });
+});
+
+describe("voice-intent report provenance", () => {
+  it("regenerates the archived evidence byte for byte from this checkout", () => {
+    const archived = readFileSync(
+      new URL("../../docs/evidence/voice-intent-baseline-2026-11-10.md", import.meta.url),
+      "utf8",
+    );
+    const generated = buildMarkdown(evaluate());
+    assert.equal(generated === archived, true, "the committed evidence must reproduce");
+  });
+
+  it("does not assign the canonical version to a custom dataset", () => {
+    const custom = evaluate([]);
+    assert.equal(custom.datasetVersion, null);
+    assert.match(buildMarkdown(custom), /Dataset version \| custom \(unversioned\)/);
+    assert.notEqual(evaluate().datasetVersion, null);
   });
 });

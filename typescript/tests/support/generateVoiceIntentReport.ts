@@ -7,23 +7,34 @@
  *   cd typescript
  *   node --import tsx tests/support/generateVoiceIntentReport.ts
  *
- * It writes no production state and takes no arguments. The committed report is
- * generated from the parser in the recorded checkout.
+ * It writes no production state and takes no arguments. The committed report
+ * identifies the input source files by content, independent of Git HEAD.
  */
 
-import { execFileSync } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { evaluate, formatPct, type EvaluationReport } from "./voiceIntentScoring.js";
 
-function headSha(): string {
-  try {
-    return execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
-  } catch {
-    return "unknown";
-  }
+// This is the baseline edition, not the time of regeneration.
+const BASELINE_EDITION = "2026-11-10";
+const TYPESCRIPT_ROOT = new URL("../../", import.meta.url);
+const INPUT_SOURCES = [
+  "src/voice/voiceParser.ts",
+  "src/voice/voiceCommands.ts",
+  "tests/support/voiceIntentDataset.ts",
+  "tests/support/voiceIntentScoring.ts",
+  "tests/support/generateVoiceIntentReport.ts",
+] as const;
+
+function sourceRows(): string {
+  return INPUT_SOURCES.map((source) => {
+    const bytes = readFileSync(new URL(source, TYPESCRIPT_ROOT));
+    const digest = createHash("sha256").update(bytes).digest("hex");
+    return `| \`${source}\` SHA-256 | \`${digest}\` |`;
+  }).join("\n");
 }
 
 function categoryTable(report: EvaluationReport): string {
@@ -62,8 +73,6 @@ function missedExamples(report: EvaluationReport, limit = 12): string {
 }
 
 export function buildMarkdown(report: EvaluationReport): string {
-  const sha = headSha();
-  const date = new Date().toISOString().slice(0, 10);
   const natural = report.naturalCoverage;
   const naturalMisses = report.byCategory
     .filter(({ category }) => category === "informal-au" || category === "asr-error")
@@ -84,9 +93,9 @@ export function buildMarkdown(report: EvaluationReport): string {
 
 | Field | Value |
 | --- | --- |
-| Date | ${date} |
-| Parser checkout SHA | \`${sha}\` |
-| Dataset version | \`${report.datasetVersion}\` |
+| Baseline edition | ${BASELINE_EDITION} |
+| Dataset version | ${report.datasetVersion ?? "custom (unversioned)"} |
+${sourceRows()}
 | Parser under test | \`src/voice/voiceParser.ts\` (\`parseUtterance\`, exact whole-utterance, final-only) |
 | Model/provider | none — the parser is pure and deterministic; no model call |
 | Evaluation method | deterministic classification by \`tests/support/voiceIntentScoring.ts\` |
@@ -155,7 +164,10 @@ function main(): void {
   const report = evaluate();
   const markdown = buildMarkdown(report);
   const here = dirname(fileURLToPath(import.meta.url));
-  const outPath = resolve(here, "../../../docs/evidence/voice-intent-baseline-2026-11-10.md");
+  const outPath = resolve(
+    here,
+    `../../../docs/evidence/voice-intent-baseline-${BASELINE_EDITION}.md`,
+  );
   mkdirSync(dirname(outPath), { recursive: true });
   writeFileSync(outPath, markdown, "utf8");
   const natural = report.naturalCoverage;
