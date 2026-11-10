@@ -43,6 +43,43 @@ test("clarification resolver — behaviour", async (t) => {
     );
   });
 
+  await t.test('"the latter" selects the second of exactly two, never of three or more', () => {
+    const THREE = ["trailer.winch-up", "trailer.winch-down", "trailer.lights-on"] as const;
+    for (const reply of ["the latter", "latter", "the latter one please"]) {
+      assert.equal(
+        resolved(resolveClarification({ reply, candidates: WINCH, profile: "trailer" })).commandId,
+        "trailer.winch-down",
+        reply,
+      );
+      // With three or more offered choices "the latter" names no single option.
+      assert.equal(
+        resolveClarification({ reply, candidates: THREE, profile: "trailer" }).status,
+        "unresolved",
+        reply,
+      );
+    }
+    // A lone candidate has no "latter" either.
+    assert.equal(
+      resolveClarification({ reply: "the latter", candidates: SEND_ONLY, profile: "client" })
+        .status,
+      "unresolved",
+    );
+    // Explicit ordinals and last/final are unaffected for three candidates.
+    for (const [reply, expected] of [
+      ["the first one", "trailer.winch-up"],
+      ["second please", "trailer.winch-down"],
+      ["the third", "trailer.lights-on"],
+      ["the last one", "trailer.lights-on"],
+      ["the final one", "trailer.lights-on"],
+    ] as const) {
+      assert.equal(
+        resolved(resolveClarification({ reply, candidates: THREE, profile: "trailer" })).commandId,
+        expected,
+        reply,
+      );
+    }
+  });
+
   await t.test("resolves a distinctive content token", () => {
     assert.equal(
       resolved(

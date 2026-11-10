@@ -179,7 +179,9 @@ const AFFIRM_TOKENS: ReadonlySet<string> = new Set([
 /**
  * Ordinal words → zero-based index. Only small, unambiguous ordinals; anything
  * larger falls through to no-selection rather than an uncertain guess. `last`
- * and `final` are resolved against the candidate count separately.
+ * and `final` are resolved against the candidate count separately. `latter`
+ * names the second of exactly two options; for any other candidate count it is
+ * ambiguous and selects nothing.
  */
 const ORDINALS: ReadonlyMap<string, number> = new Map([
   ["first", 0],
@@ -191,7 +193,8 @@ const ORDINALS: ReadonlyMap<string, number> = new Map([
   ["fourth", 3],
   ["4th", 3],
 ]);
-const LAST_WORDS: ReadonlySet<string> = new Set(["last", "final", "latter"]);
+const LAST_WORDS: ReadonlySet<string> = new Set(["last", "final"]);
+const LATTER_WORD = "latter";
 
 /**
  * Filler/stopwords excluded from distinctive-token matching so that a word
@@ -327,6 +330,9 @@ export function resolveClarification(input: ResolveInput): ClarificationResoluti
     if (id === undefined) {
       if (LAST_WORDS.has(token)) {
         id = candidates[candidates.length - 1]!.id;
+      } else if (token === LATTER_WORD) {
+        // "The latter" only has a referent when exactly two options were offered.
+        if (candidates.length === 2) id = candidates[1]!.id;
       } else {
         const index = ORDINALS.get(token);
         if (index !== undefined && index < candidates.length) id = candidates[index]!.id;
