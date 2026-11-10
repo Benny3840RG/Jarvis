@@ -5,7 +5,7 @@
 production behaviour changed, nothing commissioned.
 **Reproduce:**
 `cd typescript && node --import tsx --test tests/voiceDialogueResolver.test.ts`
-(22/22) — also runs inside `npm run test:node` / `npm run check`.
+(30/30 subtests) — also runs inside `npm run test:node` / `npm run check`.
 
 ## What this adds
 
@@ -25,10 +25,12 @@ the reply. `voiceDialogueResolver.ts` closes that turn.
 ## Safety contract (the reason it is safe to add before wiring)
 
 1. **Confined to the offered set.** Resolution is computed only over the
-   candidate ids the interpreter already proposed, after dropping any id not in
-   the active profile. There is no code path by which a follow-up can name a
+   candidate ids the interpreter already proposed. An offered set containing an
+   unknown, out-of-profile or duplicate id fails closed (`unresolved`, echoing
+   only the live ids) rather than being filtered, so ordinal positions never
+   shift. There is no code path by which a follow-up can name a
    command the prior turn did not — proven by the invariant test *"a resolved
-   command is ALWAYS one of the offered candidates"* over 18 replies × 4 sets.
+   command is ALWAYS one of the offered candidates"* over 32 replies × 4 sets.
 2. **Fails closed.** A shared token, a two-candidate reply, a bare "yes" to
    several options, an out-of-range ordinal, an interim reply, an empty set, or
    an unrelated utterance all leave the clarification `unresolved` — never a
@@ -71,16 +73,31 @@ the reply. `voiceDialogueResolver.ts` closes that turn.
 | "do not send it" | draft-quote, send-quote | unresolved | hard negation scopes the "send" token — never resolves send-quote |
 | "not the draft, send it" | draft-quote, send-quote | unresolved | hard negation voids a co-occurring positive selection |
 | "don't bother" | winch-up, winch-down | cancelled | hard negation, no selection |
+| "cancel send it" / "neither send it" / "no send it" | draft-quote, send-quote | unresolved | explicit refusal accompanies the named candidate |
+| "anything but send it" | draft-quote, send-quote | unresolved | exclusion points away from the named candidate |
+| "do n’t send it" / "don t send it" / "do n t send it" | draft-quote, send-quote | unresolved | split contraction is still a hard negation |
+| "send it, nah" | draft-quote, send-quote | unresolved | soft decline after the selection retracts it |
+| "first" | client.send-quote, trailer.winch-up (under `trailer`) | unresolved (candidates: winch-up only) | mixed offered set — filtering would shift positions |
 
 > **Hard vs soft negation.** A hard scoping negation (`not`, `don't`, `never`,
 > `can't`, …) is checked *before* any positive selection, so a distinctive token
 > inside a refusal ("send" in "do not send it") can never resolve — it fails
 > closed to `unresolved` (negated selection) or `cancelled` (no selection). Soft
-> interjections ("nah", "no") are not hard negations, so an explicit selection
-> still overrides them ("nah, the winch up one" → winch-up). The tokeniser
+> interjections ("nah", "naw") are not hard negations, so an explicit selection
+> still overrides them ("nah, the winch up one" → winch-up); a plain "no"/"nope"
+> is an explicit refusal and does not override. The tokeniser
 > strips apostrophes and splits on non-alphanumerics, matching the interpreter,
 > so contractions like "don't" are recognised. (Closes jarvis-pr-maintenance
 > finding on #790.)
+>
+> **Refusal, exclusion, split contractions, mixed sets (Codex review of
+> `cbd10d0d`).** Explicit refusals (`cancel`, `forget`, `neither`, `none`, …)
+> and exclusions (`but`, `except`, `other`, `than`, …) alongside a selection fail closed;
+> only a colloquial filler (`nah`, `naw`) that *precedes* the selection is
+> overridable; a plain `no`/`nope` is an explicit refusal.
+> Stranded contraction fragments (`nt`, `t`) count as hard negation. `stop` is
+> deliberately not a refusal word — it is a catalog command (`crawler.stop`)
+> and stays selectable. Unresolved results carry only live candidate ids.
 
 ## Next (identified, not started)
 

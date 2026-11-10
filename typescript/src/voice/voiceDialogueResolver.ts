@@ -66,8 +66,25 @@ const COMMAND_BY_ID: ReadonlyMap<string, VoiceCommand> = new Map(
   VOICE_COMMANDS.map((c) => [c.id, c]),
 );
 
-/** Explicit decline markers. Present without a selection ⇒ cancel the clarification. */
-const CANCEL_TOKENS: ReadonlySet<string> = new Set([
+/**
+ * Soft decline interjections. Alone they cancel; but a selection that FOLLOWS
+ * them is a positive correction and may override ("nah, the winch up one").
+ * A soft decline that trails the selection ("send it... nah") does not override.
+ * Only the colloquial fillers qualify: a plain "no"/"nope" is an explicit
+ * refusal ("no send it" must never resolve send-quote).
+ */
+const SOFT_DECLINE_TOKENS: ReadonlySet<string> = new Set(["nah", "naw"]);
+
+/**
+ * Explicit refusals. Unlike a soft interjection these state that the speaker
+ * wants NOTHING done ("cancel send it", "neither, send it"), so a selection
+ * alongside one is never resolved: it fails closed to `unresolved`. Without a
+ * selection they cancel the clarification. "stop" is deliberately absent: it
+ * is a catalog command word (`crawler.stop`) and must stay selectable.
+ */
+const EXPLICIT_REFUSAL_TOKENS: ReadonlySet<string> = new Set([
+  "no",
+  "nope",
   "cancel",
   "forget",
   "nevermind",
@@ -75,10 +92,6 @@ const CANCEL_TOKENS: ReadonlySet<string> = new Set([
   "none",
   "neither",
   "nothing",
-  "no",
-  "nope",
-  "nah",
-  "naw",
   "abort",
   "belay",
   "disregard",
@@ -86,16 +99,35 @@ const CANCEL_TOKENS: ReadonlySet<string> = new Set([
   "scratch",
   "drop",
   "leave",
+  "skip",
+]);
+
+/**
+ * Exclusion markers. "anything but send it" / "the other one" point AWAY from
+ * the named candidate, so a selection alongside one fails closed to
+ * `unresolved`. On their own they neither select nor cancel.
+ */
+const EXCLUSION_TOKENS: ReadonlySet<string> = new Set([
+  "but",
+  "except",
+  "excluding",
+  "besides",
+  "other",
+  "instead",
+  "than",
+  "unless",
 ]);
 
 /**
  * Hard scoping negation. Unlike the soft interjections in CANCEL_TOKENS
- * ("nah", "no") — which a following selection may override ("nah, the winch up
+ * ("nah", "naw") — which a following selection may override ("nah, the winch up
  * one") — these NEGATE whatever request they accompany. "do not send it" must
  * never positively resolve `send-quote` just because the distinctive token
  * "send" is present. Their presence forces fail-closed: a negated selection
  * stays `unresolved`, and a negation with no selection `cancels`. Apostrophes
- * are stripped in `tokenize`, so "don't" arrives as "dont".
+ * are stripped in `tokenize`, so "don't" arrives as "dont". ASR may also split
+ * a contraction ("do n't", "don t", "do n t"); the stranded fragments `nt` and
+ * `t` carry no other meaning in a reply, so they count as hard negation too.
  */
 const HARD_NEGATION_TOKENS: ReadonlySet<string> = new Set([
   "not",
@@ -113,8 +145,15 @@ const HARD_NEGATION_TOKENS: ReadonlySet<string> = new Set([
   "couldnt",
   "shouldnt",
   "hadnt",
+  "hasnt",
+  "havent",
+  "wasnt",
+  "werent",
+  "neednt",
   "mustnt",
   "without",
+  "nt",
+  "t",
 ]);
 
 /** Affirmation markers. Meaningful only for a single-candidate clarification. */
@@ -241,76 +280,93 @@ function distinctiveTokens(candidates: readonly VoiceCommand[]): ReadonlyMap<str
  * `needs-clarification` offered. Pure and fail-closed.
  */
 export function resolveClarification(input: ResolveInput): ClarificationResolution {
-  const offered = input.candidates;
+  // Only ever resolve within commands that exist in the active profile and were
+  // actually offered. `live` is what an open clarification may still carry:
+  // unknown, out-of-profile and duplicate ids are never echoed back.
+  const live: VoiceCommand[] = [];
+  for (const id of input.candidates) {
+    const command = COMMAND_BY_ID.get(id);
+    if (command === undefined || command.profile !== input.profile) continue;
+    if (!live.includes(command)) live.push(command);
+  }
+  const liveIds: readonly string[] = live.map((c) => c.id);
+  const open = (rationale: string): ClarificationResolution => ({
+    status: "unresolved",
+    candidates: liveIds,
+    rationale,
+  });
 
   // Defence in depth: never resolve an interim reply.
-  if (input.isFinal === false) {
-    return { status: "unresolved", candidates: offered, rationale: "reply not final" };
-  }
+  if (input.isFinal === false) return open("reply not final");
 
-  // Only ever resolve within commands that exist in the active profile and were
-  // actually offered. Anything else is dropped before matching, so resolution
-  // is structurally confined to the prior proposal.
-  const candidates = offered
-    .map((id) => COMMAND_BY_ID.get(id))
-    .filter((c): c is VoiceCommand => c !== undefined && c.profile === input.profile);
+  if (live.length === 0) return open("no live candidates to resolve");
 
-  if (candidates.length === 0) {
-    return {
-      status: "unresolved",
-      candidates: offered,
-      rationale: "no live candidates to resolve",
-    };
+  // An offered set containing an unknown, out-of-profile or duplicate id is not
+  // the set the speaker heard: filtering it would shift ordinal positions
+  // ("first" would land on what was offered second). Fail closed rather than
+  // resolve against a set that differs from the one offered.
+  if (live.length !== input.candidates.length) {
+    return open("offered set contained unknown, out-of-profile or duplicate candidates");
   }
+  const candidates = live;
 
   const tokens = tokenize(input.reply);
-  if (tokens.length === 0) {
-    return { status: "unresolved", candidates: offered, rationale: "empty reply" };
-  }
+  if (tokens.length === 0) return open("empty reply");
 
-  // 1. Positive selection by distinctive content token (e.g. "winch", "off").
+  // 1. Positive selection by distinctive content token (e.g. "winch", "off")
+  // 2. ...or by ordinal ("the first one", "the last").
   const distinctive = distinctiveTokens(candidates);
-  const selectedByToken = new Set<string>();
-  for (const token of tokens) {
-    const owner = distinctive.get(token);
-    if (owner !== undefined) selectedByToken.add(owner);
-  }
-
-  // 2. Positive selection by ordinal ("the first one", "the last").
-  const selectedByOrdinal = new Set<string>();
-  for (const token of tokens) {
-    if (LAST_WORDS.has(token)) {
-      selectedByOrdinal.add(candidates[candidates.length - 1]!.id);
-      continue;
+  const selected = new Set<string>();
+  let firstSelectionIndex = -1;
+  tokens.forEach((token, i) => {
+    let id = distinctive.get(token);
+    if (id === undefined) {
+      if (LAST_WORDS.has(token)) {
+        id = candidates[candidates.length - 1]!.id;
+      } else {
+        const index = ORDINALS.get(token);
+        if (index !== undefined && index < candidates.length) id = candidates[index]!.id;
+      }
     }
-    const index = ORDINALS.get(token);
-    if (index !== undefined && index >= 0 && index < candidates.length) {
-      selectedByOrdinal.add(candidates[index]!.id);
+    if (id !== undefined) {
+      selected.add(id);
+      if (firstSelectionIndex === -1) firstSelectionIndex = i;
     }
-  }
-
-  const selected = new Set<string>([...selectedByToken, ...selectedByOrdinal]);
+  });
 
   // Hard scoping negation ("do not send it", "don't", "never") negates whatever
   // it accompanies. It must be checked BEFORE any positive selection, so a
   // distinctive token inside a refusal ("send" in "do not send it") can never
   // be resolved. A negated selection fails closed to `unresolved` (we cannot
   // tell what the speaker DOES want); a negation with no selection `cancels`.
-  // Soft interjections ("nah"/"no") are deliberately NOT here, so an explicit
-  // selection may still override them ("nah, the winch up one").
   if (tokens.some((t) => HARD_NEGATION_TOKENS.has(t))) {
     if (selected.size >= 1) {
-      return {
-        status: "unresolved",
-        candidates: offered,
-        rationale: "a negation scopes the named candidate; cannot infer the intended one",
-      };
+      return open("a negation scopes the named candidate; cannot infer the intended one");
     }
     return { status: "cancelled", rationale: "explicit negation with no selection" };
   }
 
-  // An explicit, single, unambiguous selection wins — even alongside a filler
-  // "nah"/"no", because "nah, the winch one" still names the winch.
+  // Explicit refusal ("cancel send it", "neither, send it") or exclusion
+  // ("anything but send it") alongside a selection: the named candidate is
+  // being refused or pointed away from, never chosen. Fail closed.
+  const refused = tokens.some((t) => EXPLICIT_REFUSAL_TOKENS.has(t));
+  const excluded = tokens.some((t) => EXCLUSION_TOKENS.has(t));
+  if (selected.size >= 1 && (refused || excluded)) {
+    return open("a refusal or exclusion accompanies the named candidate");
+  }
+
+  // A soft interjection is overridden only by a selection that FOLLOWS it
+  // ("nah, the winch one"). One at or after the selection ("send it... no")
+  // retracts it, so the clarification stays open.
+  const lastSoftDecline = tokens.reduce(
+    (last, t, i) => (SOFT_DECLINE_TOKENS.has(t) ? i : last),
+    -1,
+  );
+  const softDeclined = lastSoftDecline !== -1;
+  if (selected.size >= 1 && lastSoftDecline > firstSelectionIndex) {
+    return open("a decline follows the named candidate");
+  }
+
   if (selected.size === 1) {
     const command = COMMAND_BY_ID.get([...selected][0]!)!;
     return {
@@ -321,23 +377,17 @@ export function resolveClarification(input: ResolveInput): ClarificationResoluti
       rationale: "reply named one offered candidate",
     };
   }
-  if (selected.size > 1) {
-    return {
-      status: "unresolved",
-      candidates: offered,
-      rationale: "reply named more than one candidate",
-    };
-  }
+  if (selected.size > 1) return open("reply named more than one candidate");
 
   // 3. No selection. A single-candidate clarification can be closed by a bare
   // affirmation ("yeah", "that's it"); a multi-candidate one cannot.
   const affirmed = tokens.some((t) => AFFIRM_TOKENS.has(t));
-  const declined = tokens.some((t) => CANCEL_TOKENS.has(t));
+  const declined = refused || softDeclined;
 
   if (declined && !affirmed) {
     return { status: "cancelled", rationale: "reply declined every candidate" };
   }
-  if (candidates.length === 1 && affirmed && !declined) {
+  if (candidates.length === 1 && affirmed && !declined && !excluded) {
     const command = candidates[0]!;
     return {
       status: "resolved",
@@ -350,9 +400,5 @@ export function resolveClarification(input: ResolveInput): ClarificationResoluti
 
   // Everything else — a bare "yes" to several options, an unrelated utterance,
   // a conflicting "yes but no" — leaves the clarification open.
-  return {
-    status: "unresolved",
-    candidates: offered,
-    rationale: "reply did not select a single candidate",
-  };
+  return open("reply did not select a single candidate");
 }

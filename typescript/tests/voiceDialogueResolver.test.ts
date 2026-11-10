@@ -159,6 +159,12 @@ test("clarification resolver — fails closed", async (t) => {
       }).status,
       "unresolved",
     );
+    const r = resolveClarification({
+      reply: "send it",
+      candidates: ["client.send-quote"],
+      profile: "trailer",
+    });
+    assert.deepEqual(r.status === "unresolved" && r.candidates, []);
   });
 
   await t.test("an unrelated reply leaves the clarification open", () => {
@@ -211,6 +217,84 @@ test("clarification resolver — fails closed", async (t) => {
     });
     assert.equal(r.status, "unresolved");
   });
+
+  await t.test("an explicit refusal never resolves the candidate it names (Codex #790)", () => {
+    for (const reply of [
+      "cancel send it",
+      "neither send it",
+      "anything but send it",
+      "forget the second one",
+      "cancel the first",
+      "the other one, not send",
+      "scrap that, send it",
+      "no send it",
+      "no, send it",
+      "nope send it",
+      "send it, cancel",
+      "rather than send it",
+      "instead of send it",
+      "all except send it",
+      "no the last",
+    ]) {
+      const r = resolveClarification({ reply, candidates: QUOTES, profile: "client" });
+      assert.equal(r.status, "unresolved", reply);
+    }
+  });
+
+  await t.test("the safety-critical stop command stays selectable", () => {
+    const r = resolveClarification({
+      reply: "stop",
+      candidates: ["crawler.stop", "crawler.record-start"],
+      profile: "crawler",
+    });
+    assert.equal(r.status === "resolved" && r.commandId, "crawler.stop");
+  });
+
+  await t.test("a soft decline after the selection retracts it", () => {
+    for (const reply of ["send it, nah", "the first one naw"]) {
+      const r = resolveClarification({ reply, candidates: QUOTES, profile: "client" });
+      assert.equal(r.status, "unresolved", reply);
+    }
+  });
+
+  await t.test("split and curly-apostrophe contractions are hard negations (Codex #790)", () => {
+    for (const reply of [
+      "do n't send it",
+      "do n\u2019t send it",
+      "don\u2019t send it",
+      "don t send it",
+      "do n t send it",
+      "do nt send it",
+      "won 't send it",
+    ]) {
+      const r = resolveClarification({ reply, candidates: QUOTES, profile: "client" });
+      assert.equal(r.status, "unresolved", reply);
+    }
+  });
+
+  await t.test("a mixed or invalid offered set fails closed, positions never shift", () => {
+    // Offered second; filtering must not make it "first" (Codex #790).
+    const mixed = resolveClarification({
+      reply: "first",
+      candidates: ["client.send-quote", "trailer.winch-up"],
+      profile: "trailer",
+    });
+    assert.equal(mixed.status, "unresolved");
+    // The open clarification carries only live candidates (jarvis-pr-maintenance).
+    assert.deepEqual(mixed.status === "unresolved" && mixed.candidates, ["trailer.winch-up"]);
+
+    for (const candidates of [
+      ["no.such-command", "trailer.winch-up"],
+      ["trailer.winch-up", "trailer.winch-up"],
+      ["trailer.winch-up", "no.such-command"],
+    ]) {
+      for (const reply of ["first", "the last one", "winch up", "yes"]) {
+        const r = resolveClarification({ reply, candidates, profile: "trailer" });
+        assert.equal(r.status, "unresolved", `${reply} / ${candidates.join(",")}`);
+        assert.deepEqual(r.status === "unresolved" && r.candidates, ["trailer.winch-up"]);
+      }
+    }
+  });
 });
 
 test("clarification resolver — safety invariants", async (t) => {
@@ -238,6 +322,15 @@ test("clarification resolver — safety invariants", async (t) => {
     "not the first one",
     "never that one",
     "not the draft, send it",
+    "cancel send it",
+    "neither send it",
+    "anything but send it",
+    "do n't send it",
+    "don t send it",
+    "send it no",
+    "no send it",
+    "rather than send it",
+    "the other one",
   ];
   const sets: ReadonlyArray<{ candidates: readonly string[]; profile: "trailer" | "client" }> = [
     { candidates: WINCH, profile: "trailer" },
