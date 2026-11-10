@@ -5,7 +5,7 @@
 production behaviour changed, nothing commissioned.
 **Reproduce:**
 `cd typescript && node --import tsx --test tests/voiceDialogueResolver.test.ts`
-(21/21) — also runs inside `npm run test:node` / `npm run check`.
+(22/22) — also runs inside `npm run test:node` / `npm run check`.
 
 ## What this adds
 
@@ -68,6 +68,19 @@ the reply. `voiceDialogueResolver.ts` closes that turn.
 | "send it" | client.send-quote (under `trailer`) | unresolved | candidate not in active profile |
 | "what is the weather" | winch-up, winch-down | unresolved | no selection, no decline |
 | "no" | winch-up, winch-down | cancelled | pure negation, never resolves |
+| "do not send it" | draft-quote, send-quote | unresolved | hard negation scopes the "send" token — never resolves send-quote |
+| "not the draft, send it" | draft-quote, send-quote | unresolved | hard negation voids a co-occurring positive selection |
+| "don't bother" | winch-up, winch-down | cancelled | hard negation, no selection |
+
+> **Hard vs soft negation.** A hard scoping negation (`not`, `don't`, `never`,
+> `can't`, …) is checked *before* any positive selection, so a distinctive token
+> inside a refusal ("send" in "do not send it") can never resolve — it fails
+> closed to `unresolved` (negated selection) or `cancelled` (no selection). Soft
+> interjections ("nah", "no") are not hard negations, so an explicit selection
+> still overrides them ("nah, the winch up one" → winch-up). The tokeniser
+> strips apostrophes and splits on non-alphanumerics, matching the interpreter,
+> so contractions like "don't" are recognised. (Closes jarvis-pr-maintenance
+> finding on #790.)
 
 ## Next (identified, not started)
 

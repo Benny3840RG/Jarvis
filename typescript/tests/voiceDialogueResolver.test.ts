@@ -173,6 +173,44 @@ test("clarification resolver — fails closed", async (t) => {
     const r = resolveClarification({ reply: "no", candidates: WINCH, profile: "trailer" });
     assert.equal(r.status, "cancelled");
   });
+
+  await t.test("a negated distinctive token is never resolved (jarvis-pr-maintenance #790)", () => {
+    // "do not send it" contains the distinctive token "send"; the negation must
+    // be seen first so send-quote is never passed to downstream confirmation.
+    for (const reply of ["do not send it", "don't send it", "never send it"]) {
+      const r = resolveClarification({ reply, candidates: QUOTES, profile: "client" });
+      assert.notEqual(r.status, "resolved", reply);
+    }
+  });
+
+  await t.test("a negated ordinal is never resolved", () => {
+    const r = resolveClarification({
+      reply: "not the first one",
+      candidates: WINCH,
+      profile: "trailer",
+    });
+    assert.notEqual(r.status, "resolved");
+  });
+
+  await t.test("a hard negation with no selection cancels", () => {
+    assert.equal(
+      resolveClarification({ reply: "don't bother", candidates: WINCH, profile: "trailer" }).status,
+      "cancelled",
+    );
+  });
+
+  await t.test("a hard negation voids a co-occurring positive selection", () => {
+    // "not the draft, send it" names BOTH candidates and carries a hard
+    // negation. Even with a clear positive token ("send"), the negation must be
+    // honoured first so a guarded send-quote is never leaked to downstream
+    // confirmation. Fail-closed over any clever disambiguation (#790).
+    const r = resolveClarification({
+      reply: "not the draft, send it",
+      candidates: QUOTES,
+      profile: "client",
+    });
+    assert.equal(r.status, "unresolved");
+  });
 });
 
 test("clarification resolver — safety invariants", async (t) => {
@@ -195,6 +233,11 @@ test("clarification resolver — safety invariants", async (t) => {
     "what is the weather",
     "do the thing",
     "that one",
+    "do not send it",
+    "don't send it",
+    "not the first one",
+    "never that one",
+    "not the draft, send it",
   ];
   const sets: ReadonlyArray<{ candidates: readonly string[]; profile: "trailer" | "client" }> = [
     { candidates: WINCH, profile: "trailer" },

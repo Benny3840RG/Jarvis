@@ -88,6 +88,35 @@ const CANCEL_TOKENS: ReadonlySet<string> = new Set([
   "leave",
 ]);
 
+/**
+ * Hard scoping negation. Unlike the soft interjections in CANCEL_TOKENS
+ * ("nah", "no") — which a following selection may override ("nah, the winch up
+ * one") — these NEGATE whatever request they accompany. "do not send it" must
+ * never positively resolve `send-quote` just because the distinctive token
+ * "send" is present. Their presence forces fail-closed: a negated selection
+ * stays `unresolved`, and a negation with no selection `cancels`. Apostrophes
+ * are stripped in `tokenize`, so "don't" arrives as "dont".
+ */
+const HARD_NEGATION_TOKENS: ReadonlySet<string> = new Set([
+  "not",
+  "dont",
+  "doesnt",
+  "didnt",
+  "wont",
+  "cant",
+  "cannot",
+  "never",
+  "isnt",
+  "arent",
+  "aint",
+  "wouldnt",
+  "couldnt",
+  "shouldnt",
+  "hadnt",
+  "mustnt",
+  "without",
+]);
+
 /** Affirmation markers. Meaningful only for a single-candidate clarification. */
 const AFFIRM_TOKENS: ReadonlySet<string> = new Set([
   "yes",
@@ -154,10 +183,15 @@ const STOPWORDS: ReadonlySet<string> = new Set([
   "then",
 ]);
 
+/**
+ * Normalise, strip apostrophes ("don't"→"dont", "what's"→"whats") and split on
+ * any non-alphanumeric run — identical to the interpreter's tokeniser so that
+ * negation contractions and tokens match consistently across both layers.
+ */
 function tokenize(raw: string): readonly string[] {
-  const n = normalizeUtterance(raw);
+  const n = normalizeUtterance(raw).replace(/['’]/g, "");
   if (n === "") return [];
-  return n.split(" ").filter((t) => t.length > 0);
+  return n.split(/[^a-z0-9]+/).filter((t) => t.length > 0);
 }
 
 function isGuarded(command: VoiceCommand): boolean {
@@ -256,6 +290,24 @@ export function resolveClarification(input: ResolveInput): ClarificationResoluti
   }
 
   const selected = new Set<string>([...selectedByToken, ...selectedByOrdinal]);
+
+  // Hard scoping negation ("do not send it", "don't", "never") negates whatever
+  // it accompanies. It must be checked BEFORE any positive selection, so a
+  // distinctive token inside a refusal ("send" in "do not send it") can never
+  // be resolved. A negated selection fails closed to `unresolved` (we cannot
+  // tell what the speaker DOES want); a negation with no selection `cancels`.
+  // Soft interjections ("nah"/"no") are deliberately NOT here, so an explicit
+  // selection may still override them ("nah, the winch up one").
+  if (tokens.some((t) => HARD_NEGATION_TOKENS.has(t))) {
+    if (selected.size >= 1) {
+      return {
+        status: "unresolved",
+        candidates: offered,
+        rationale: "a negation scopes the named candidate; cannot infer the intended one",
+      };
+    }
+    return { status: "cancelled", rationale: "explicit negation with no selection" };
+  }
 
   // An explicit, single, unambiguous selection wins — even alongside a filler
   // "nah"/"no", because "nah, the winch one" still names the winch.
