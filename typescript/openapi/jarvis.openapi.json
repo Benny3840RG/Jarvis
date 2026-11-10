@@ -12958,7 +12958,12 @@
           },
           "kind": {
             "type": "string",
-            "enum": ["reminder-overdue", "maintenance-overdue", "maintenance-due-soon"]
+            "enum": [
+              "reminder-overdue",
+              "reminder-due-soon",
+              "maintenance-overdue",
+              "maintenance-due-soon"
+            ]
           },
           "severity": {
             "type": "string",
