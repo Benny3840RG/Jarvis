@@ -1441,10 +1441,9 @@ export function createJarvisMcpServer(
     {
       title: "Create a business project",
       description:
-        "Use this when the user explicitly asks to add a project (job) for a client. Pass propertyId to tie the job to one of the client's recorded properties. Pass scheduledFor as an ISO date (YYYY-MM-DD) to book the day the job is scheduled.",
+        "Use this when the user explicitly asks to add a project (job) for a client. Pass scheduledFor as an ISO date (YYYY-MM-DD) to book the day the job is scheduled.",
       inputSchema: {
         clientId: z.string().trim().min(1).max(200),
-        propertyId: z.string().trim().min(1).max(200).optional(),
         title: z.string().trim().min(1).max(200),
         status: z.enum(["lead", "quoted", "active", "on_hold", "done"]).optional(),
         notes: z.string().trim().min(1).max(2000).optional(),
@@ -1454,11 +1453,10 @@ export function createJarvisMcpServer(
       annotations: createAnnotations,
       _meta: { ui: { visibility: ["model"] } },
     },
-    async ({ clientId, propertyId, title, status, notes, scheduledFor }) => {
+    async ({ clientId, title, status, notes, scheduledFor }) => {
       try {
         const created = await client.createProject({
           clientId,
-          ...(propertyId === undefined ? {} : { propertyId }),
           title,
           ...(status === undefined ? {} : { status }),
           ...(notes === undefined ? {} : { notes }),
@@ -1477,11 +1475,10 @@ export function createJarvisMcpServer(
     {
       title: "Update a business project",
       description:
-        "Use this when the user explicitly asks to change a project's client, property, title, status, notes, or scheduled date. Pass propertyId as null to detach the property. Pass scheduledFor as an ISO date (YYYY-MM-DD), or null to clear the booking.",
+        "Use this when the user explicitly asks to change a project's client, title, status, notes, or scheduled date. Pass scheduledFor as an ISO date (YYYY-MM-DD), or null to clear the booking.",
       inputSchema: {
         projectId: z.string().min(1),
         clientId: z.string().trim().min(1).max(200).optional(),
-        propertyId: z.string().trim().min(1).max(200).nullable().optional(),
         title: z.string().trim().min(1).max(200).optional(),
         status: z.enum(["lead", "quoted", "active", "on_hold", "done"]).optional(),
         notes: z.string().trim().min(1).max(2000).nullable().optional(),
@@ -1491,11 +1488,10 @@ export function createJarvisMcpServer(
       annotations: writeAnnotations,
       _meta: { ui: { visibility: ["model"] } },
     },
-    async ({ projectId, clientId, propertyId, title, status, notes, scheduledFor }) => {
+    async ({ projectId, clientId, title, status, notes, scheduledFor }) => {
       try {
         if (
           clientId === undefined &&
-          propertyId === undefined &&
           title === undefined &&
           status === undefined &&
           notes === undefined &&
@@ -1506,14 +1502,13 @@ export function createJarvisMcpServer(
             content: [
               {
                 type: "text" as const,
-                text: "Project update requires a client, property, title, status, notes, or scheduled date.",
+                text: "Project update requires a client, title, status, notes, or scheduled date.",
               },
             ],
           };
         }
         const updated = await client.updateProject(projectId, {
           ...(clientId === undefined ? {} : { clientId }),
-          ...(propertyId === undefined ? {} : { propertyId }),
           ...(title === undefined ? {} : { title }),
           ...(status === undefined ? {} : { status }),
           ...(notes === undefined ? {} : { notes }),

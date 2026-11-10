@@ -524,24 +524,6 @@ describe("Local V1 golden business workflow", () => {
     const listed = await call(mcp, "list_projects", {});
     assert.equal(listed.count, 1);
 
-    // A job logged directly (no enquiry) can be tied to, moved off and back onto a property.
-    const direct = (
-      await call(mcp, "create_project", {
-        clientId: client.id,
-        propertyId: property.id,
-        title: "Wattle Lane stump grind",
-        status: "done",
-      })
-    ).project as { id: string; propertyId?: string };
-    assert.equal(direct.propertyId, property.id);
-    const detached = (await call(mcp, "update_project", { projectId: direct.id, propertyId: null }))
-      .project as { propertyId?: string };
-    assert.equal(detached.propertyId, undefined);
-    const reattached = (
-      await call(mcp, "update_project", { projectId: direct.id, propertyId: property.id })
-    ).project as { propertyId?: string };
-    assert.equal(reattached.propertyId, property.id);
-
     // --- quote draft and edit -------------------------------------------------
     const drafted = (
       await call(mcp, "create_quote_draft", {
