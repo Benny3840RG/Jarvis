@@ -107,9 +107,11 @@ export const enquirySchema = z.object({
 const conversionProjectSchema = z.object({
   id: z.string(),
   clientId: z.string(),
+  propertyId: z.string().optional(),
   title: z.string(),
   status: z.enum(["lead", "quoted", "active", "on_hold", "done"]),
   notes: z.string().optional(),
+  scheduledFor: z.string().optional(),
   createdAt: z.number(),
   updatedAt: z.number(),
 });

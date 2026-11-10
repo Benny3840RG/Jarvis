@@ -1,5 +1,29 @@
 # Jarvis TypeScript Roadmap
 
+## Local V1 golden business workflow, off-host (#697)
+
+`tests/localV1BusinessGoldenFlow.test.ts` carries one enquiry through MCP and
+the HTTP API: client and property, enquiry (with a retried log), conversion to
+a job, quote draft and edit, owner review and finalise over HTTP, the PDF
+read, a delivery receipt, an invoice draft, the daily brief, the HUD snapshot,
+and a restart on the same files.
+
+The run found one defect, now fixed. A job converted from an enquiry that has a
+property keeps that `propertyId`, but the MCP output schemas for
+`convert_enquiry_to_project` and for every tool that returns a project
+(`get_project`, `list_projects`, `update_project`, the brief and the dashboard)
+did not declare it. The conversion was written and the tool then reported a
+schema error; later project reads failed the same way. Both schemas now match
+the OpenAPI `Project`.
+
+Not proven here: the quote lifecycle, delivery ledger and PDF artifact store
+are file-backed test doubles over the real domain helpers, and no email is
+sent. The receipt is written straight into the ledger double.
+
+Next: #294 and #297 still need the host commissioning run for a real governed
+send; the same flow should then be repeated against the development Convex
+deployment on the operator host.
+
 ## Offline file-permission education (#777)
 
 The existing `security:interpret` ToolAction now accepts `file-mode` alongside
