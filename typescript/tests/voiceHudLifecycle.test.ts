@@ -718,14 +718,29 @@ describe("voice HUD lifecycle (actual setupVoiceConsole and real session registr
   it("serializes commands so delayed replies cannot overwrite newer pending state", async () => {
     const h = harness();
     await armCrawler(h);
+    const baseline = h.utterances().length;
+    assert.equal(baseline, 1, "arming the crawler sends one setup utterance");
     const release = h.pause("/sessions/s1/utterances", "response");
     h.type("crawler status");
     h.type("crawler halt");
     await flush();
-    assert.equal(h.utterances().length, 2, "the newer command waits for the current reply");
+    assert.deepEqual(
+      h
+        .utterances()
+        .slice(baseline)
+        .map((request) => request.body.transcript),
+      ["crawler status"],
+      "the newer command waits for the current reply",
+    );
     release();
     await flush();
-    assert.equal(h.utterances().length, 3);
+    assert.deepEqual(
+      h
+        .utterances()
+        .slice(baseline)
+        .map((request) => request.body.transcript),
+      ["crawler status", "crawler halt"],
+    );
     assert.equal(h.get("voice-pending").hidden, false);
     assert.match(h.get("voice-result").textContent, /awaiting/i);
   });
