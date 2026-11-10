@@ -2777,11 +2777,13 @@
                       <div class="voice-actions">
                         <button type="button" class="voice-btn" id="voice-enable">Enable microphone</button>
                         <button type="button" class="voice-btn" id="voice-stop">Stop</button>
+                        <button type="button" class="voice-btn" id="voice-test-output">Test spoken output</button>
                       </div>
                       <p class="voice-hint">Say “<strong>Jarvis</strong>” then a command. Partial speech never acts; critical commands need “Jarvis confirm”. Equipment with no adapter fails closed.</p>
                       <div class="voice-live"><small>HEARD</small><p id="voice-transcript">—</p></div>
                       <div class="voice-pending" id="voice-pending" hidden></div>
                       <div class="voice-result" id="voice-result" data-tone="muted">Idle.</div>
+                      <p class="voice-hint" id="voice-output-status" role="status" aria-live="polite">Spoken output has not been tested.</p>
                       <p class="voice-hint" id="voice-latency">Dispatch latency: no sample yet.</p>
                       <form id="voice-typed" class="voice-typed">
                         <input id="voice-text" type="text" placeholder="Type a command (fallback)" autocomplete="off" aria-label="Type a voice command" />
@@ -4096,15 +4098,40 @@
               Object.assign({ headers: { "content-type": "application/json", accept: "application/json" } }, options || {}),
             );
           }
+          var speechGeneration = 0;
+          function speechStatus(message) {
+            var el = document.getElementById("voice-output-status");
+            if (el) el.textContent = message;
+          }
           function speak(label) {
-            if (!caps.synthesis) return;
+            var generation = ++speechGeneration;
+            if (!caps.synthesis || typeof window.SpeechSynthesisUtterance !== "function") {
+              speechStatus("Spoken output unavailable in this browser. Text remains available.");
+              return;
+            }
             try {
               window.speechSynthesis.cancel();
-              window.speechSynthesis.speak(new SpeechSynthesisUtterance(label));
+              var utterance = new window.SpeechSynthesisUtterance(label);
+              utterance.onstart = function () {
+                if (generation === speechGeneration) speechStatus("Browser speech started; audibility cannot be confirmed.");
+              };
+              utterance.onend = function () {
+                if (generation === speechGeneration) speechStatus("Browser speech ended; cannot confirm it was heard.");
+              };
+              utterance.onerror = function () {
+                if (generation === speechGeneration) speechStatus("Browser speech failed. Text remains available.");
+              };
+              var voices = typeof window.speechSynthesis.getVoices === "function" ? window.speechSynthesis.getVoices() : null;
+              speechStatus(voices && !voices.length
+                ? "No voices currently listed; requesting speech. Check your browser audio."
+                : "Speech requested; waiting for the browser.");
+              window.speechSynthesis.speak(utterance);
             } catch (error) {
-              /* synthesis is best-effort */
+              if (generation === speechGeneration) speechStatus("Browser speech failed. Text remains available.");
             }
           }
+          var testOutputBtn = document.getElementById("voice-test-output");
+          if (testOutputBtn) testOutputBtn.addEventListener("click", function () { speak("Jarvis speech output test."); });
           function renderPending(pending) {
             var el = document.getElementById("voice-pending");
             if (!el) return;
@@ -4237,6 +4264,8 @@
             updateMicrophoneControls();
           }
           function cancelSpeech() {
+            speechGeneration += 1;
+            speechStatus("Spoken output stopped.");
             if (caps.synthesis) try { window.speechSynthesis.cancel(); } catch (error) { /* best-effort */ }
           }
           function settledWithin(promise, ms) {
