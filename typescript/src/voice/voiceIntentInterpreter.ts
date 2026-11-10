@@ -78,6 +78,11 @@ const COMMAND_BY_ID: ReadonlyMap<string, VoiceCommand> = new Map(
 
 /**
  * Explicit negation markers. Withhold rather than infer which clause is negated.
+ *
+ * Deliberately evidence-led, not a blanket ban on every "not"-contraction:
+ * `hasnt`/`havent` are excluded because real catalog queries use them
+ * ("who hasn't paid" = the unpaid-invoices query), so banning them would
+ * suppress a legitimate intent rather than a negated command.
  */
 const NEGATION_TOKENS: ReadonlySet<string> = new Set([
   "no",
@@ -93,6 +98,43 @@ const NEGATION_TOKENS: ReadonlySet<string> = new Set([
   "wouldnt",
   "couldnt",
   "didnt",
+  // Negative contractions of the command verb: "the winch isn't going up".
+  "isnt",
+  "arent",
+  "wasnt",
+  "werent",
+  "aint",
+  "doesnt",
+  "hadnt",
+  "mustnt",
+]);
+
+/**
+ * Explicit retraction markers. A speaker who says "forget the winch up" or
+ * "cancel that ramp deploy" is withdrawing the command, not issuing it, so the
+ * layer fails closed exactly as it does for negation. Kept to unambiguous
+ * retraction verbs so ordinary conversation is not suppressed.
+ */
+const RETRACTION_TOKENS: ReadonlySet<string> = new Set([
+  "forget",
+  "cancel",
+  "nevermind",
+  "disregard",
+  "scrap",
+  "belay",
+  "abort",
+  "scratch",
+]);
+
+/** Connectors that join two separate requests into a compound utterance. */
+const COMPOUND_CONNECTORS: ReadonlySet<string> = new Set([
+  "and",
+  "or",
+  "then",
+  "also",
+  "plus",
+  "after",
+  "before",
 ]);
 
 /** Lexical signals per command. Profile is implicit context, so phrasings need
@@ -219,11 +261,18 @@ function sig(commandId: string, profile: VoiceProfile, ...patterns: Pattern[]): 
   return { commandId, profile, patterns };
 }
 
-/** Normalise then strip apostrophes so "what's"→"whats", "don't"→"dont". */
-function tokenize(raw: string): { tokens: readonly string[]; joined: string } {
+/**
+ * Normalise then strip apostrophes so "what's"→"whats", "don't"→"dont". Also
+ * reports whether the utterance is compound — two requests joined by a connector
+ * word or a comma. The comma must be read here, before punctuation is stripped
+ * for tokenisation, so "crawler forward, lights on" is still seen as compound.
+ */
+function tokenize(raw: string): { tokens: readonly string[]; joined: string; compound: boolean } {
   const normalized = normalizeUtterance(raw).replace(/['’]/g, "");
+  const hasComma = normalized.includes(",");
   const tokens = normalized.split(/[^a-z0-9]+/).filter(Boolean);
-  return { tokens, joined: tokens.join(" ") };
+  const compound = hasComma || tokens.some((token) => COMPOUND_CONNECTORS.has(token));
+  return { tokens, joined: tokens.join(" "), compound };
 }
 
 /**
@@ -299,8 +348,9 @@ function bestCandidate(
     .sort((a, b) => b.score - a.score);
 }
 
-function hasNegation(tokens: readonly string[]): boolean {
-  return tokens.some((t) => NEGATION_TOKENS.has(t));
+/** A negated or explicitly retracted utterance; either withholds (fail closed). */
+function isWithheldByPolarity(tokens: readonly string[]): boolean {
+  return tokens.some((t) => NEGATION_TOKENS.has(t) || RETRACTION_TOKENS.has(t));
 }
 
 function isGuarded(command: VoiceCommand): boolean {
@@ -311,18 +361,18 @@ function proposalFor(
   tokens: readonly string[],
   profile: VoiceProfile,
   fuzzy: boolean,
+  compound: boolean,
 ): InterpretedIntent {
   const ranked = bestCandidate(profile, tokens, fuzzy);
   if (ranked.length === 0) {
     return { status: "no-intent", rationale: "no catalog signal matched in the active profile" };
   }
 
-  if (hasNegation(tokens)) {
-    return { status: "no-intent", rationale: "explicit negation; no proposal" };
+  if (isWithheldByPolarity(tokens)) {
+    return { status: "no-intent", rationale: "explicit negation or retraction; no proposal" };
   }
 
   const top = ranked[0]!;
-  const compound = tokens.includes("and") || tokens.includes("or");
   const contenders = compound
     ? ranked
     : ranked.filter((candidate) => candidate.score === top.score);
@@ -357,9 +407,13 @@ function proposalFor(
  * when exact matching finds no intent at all, so it can never override or weaken
  * an exact decision (including an exact fail-closed one).
  */
-function resolveProposal(tokens: readonly string[], profile: VoiceProfile): InterpretedIntent {
-  const exact = proposalFor(tokens, profile, false);
-  return exact.status === "no-intent" ? proposalFor(tokens, profile, true) : exact;
+function resolveProposal(
+  tokens: readonly string[],
+  profile: VoiceProfile,
+  compound: boolean,
+): InterpretedIntent {
+  const exact = proposalFor(tokens, profile, false, compound);
+  return exact.status === "no-intent" ? proposalFor(tokens, profile, true, compound) : exact;
 }
 
 /**
@@ -374,7 +428,8 @@ export function interpretIntent(input: InterpretInput): InterpretedIntent {
     return { status: "no-intent", rationale: "interim transcript withheld (final-only)" };
   }
 
-  const primary = resolveProposal(tokenize(input.transcript).tokens, input.profile);
+  const primaryTokens = tokenize(input.transcript);
+  const primary = resolveProposal(primaryTokens.tokens, input.profile, primaryTokens.compound);
 
   const alternatives = input.alternatives ?? [];
   if (alternatives.length === 0 || primary.status !== "proposed") {
@@ -386,7 +441,24 @@ export function interpretIntent(input: InterpretInput): InterpretedIntent {
   // a spurious conflict.
   const conflicting = new Set<string>([primary.commandId]);
   for (const alternative of alternatives) {
-    const alt = proposalFor(tokenize(alternative).tokens, input.profile, false);
+    const altTokens = tokenize(alternative);
+    // A negated/retracted alternative ("don't winch up") means the recogniser is
+    // unsure whether the speaker negated the command. If the negated clause still
+    // references a catalog command, fail closed rather than trust the primary.
+    if (isWithheldByPolarity(altTokens.tokens)) {
+      const bare = altTokens.tokens.filter(
+        (t) => !NEGATION_TOKENS.has(t) && !RETRACTION_TOKENS.has(t),
+      );
+      if (proposalFor(bare, input.profile, false, altTokens.compound).status !== "no-intent") {
+        return {
+          status: "needs-clarification",
+          candidates: Object.freeze([primary.commandId]),
+          rationale: "a recogniser alternative negates or retracts the proposed command",
+        };
+      }
+      continue;
+    }
+    const alt = proposalFor(altTokens.tokens, input.profile, false, altTokens.compound);
     if (alt.status === "proposed") conflicting.add(alt.commandId);
     if (alt.status === "needs-clarification") {
       for (const candidate of alt.candidates) conflicting.add(candidate);

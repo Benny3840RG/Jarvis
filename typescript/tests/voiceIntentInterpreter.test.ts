@@ -191,6 +191,68 @@ describe("intent interpreter — adversarial regressions", () => {
   });
 });
 
+describe("intent interpreter — negation, retraction and compound (#567 reproductions)", () => {
+  it("withholds on a negative contraction that is not already covered (isn't/aren't/doesn't)", () => {
+    // The verb is negated via a contraction the base negation set missed.
+    for (const transcript of [
+      "the winch isn't going up",
+      "the lights aren't on",
+      "the compressor doesn't need to start",
+    ]) {
+      const profile = transcript.includes("compressor") ? "workshop" : "trailer";
+      const intent = interpretIntent({ transcript, profile });
+      assert.notEqual(intent.status, "proposed", transcript);
+    }
+  });
+
+  it("stays evidence-led: 'paid' queries that contain no 'not' word still propose", () => {
+    // Guards against over-banning: a legitimate unpaid-invoices phrasing that
+    // merely neighbours negation territory must keep proposing. (The frozen
+    // informal tally above is the broader regression guard.)
+    const intent = interpretIntent({ transcript: "any unpaid invoices", profile: "client" });
+    assert.equal(intent.status, "proposed");
+    if (intent.status === "proposed") assert.equal(intent.commandId, "client.unpaid-invoices");
+  });
+
+  it("withholds when the speaker explicitly retracts the command", () => {
+    for (const transcript of [
+      "forget the winch up",
+      "cancel that winch up",
+      "scrap the ramp deploy",
+      "belay the winch up",
+    ]) {
+      const intent = interpretIntent({ transcript, profile: "trailer" });
+      assert.notEqual(intent.status, "proposed", transcript);
+    }
+  });
+
+  it("fails closed when a recogniser alternative is a negation of the primary", () => {
+    const intent = interpretIntent({
+      transcript: "winch up",
+      profile: "trailer",
+      alternatives: ["don't winch up"],
+    });
+    assert.notEqual(intent.status, "proposed");
+  });
+
+  it("does not rank one request above another across non-'and' compound separators", () => {
+    // Each separator joins two different-scoring crawler commands; without
+    // compound detection the higher-scoring one would be proposed outright.
+    const compounds = [
+      "crawler forward then turn crawler lights on",
+      "crawler forward, turn crawler lights on",
+      "crawler forward also turn crawler lights on",
+      "crawler forward plus turn crawler lights on",
+      "turn crawler lights on after crawler forward",
+      "turn crawler lights on before crawler forward",
+    ];
+    for (const transcript of compounds) {
+      const intent = interpretIntent({ transcript, profile: "crawler" });
+      assert.equal(intent.status, "needs-clarification", transcript);
+    }
+  });
+});
+
 describe("intent interpreter — recognition tolerance stays safe", () => {
   it("recovers an intent from a plausible speech-recognition slip", () => {
     const slip = interpretIntent({ transcript: "wench up", profile: "trailer" });
