@@ -12,11 +12,11 @@
 | Dataset version | 2026-11-10.1 |
 | `src/voice/voiceParser.ts` SHA-256 | `6ff04f3af0b5e75188b231cc997f0113607b42d692e44e8d2efa6901cca7d7ea` |
 | `src/voice/voiceCommands.ts` SHA-256 | `8978ae1306b6f3d49fc67adbcd73f5dd3b2466ae6bde067237a76aeae92a22a4` |
-| `src/voice/voiceIntentInterpreter.ts` SHA-256 | `b113670522caeb545da1e14aadb523319f4955c51bd5f914c66046b5a7b26243` |
+| `src/voice/voiceIntentInterpreter.ts` SHA-256 | `a5701d46d1928514269004e0c031ce50ad90379d38f556ad1364aa3f18d93849` |
 | `tests/support/voiceIntentDataset.ts` SHA-256 | `dea4d8e61b0c8150da8671a99eaac44d95bceee709784f309895d5d430681f40` |
 | `tests/support/voiceIntentScoring.ts` SHA-256 | `bcdeefca2797059dc4323e9025898302d88cc4b15bf7dd810fafde96cb531cef` |
-| `tests/support/voiceIntentInterpreterScoring.ts` SHA-256 | `3a07a4508855a63c7613dbc9278c7845d5aa2b28ab9b3d6daf6adece75a368cb` |
-| `tests/support/generateVoiceIntentReport.ts` SHA-256 | `d5f543767b903161bacc231b682a739f184ee10bc462c5f0637ddcbcf82eabb4` |
+| `tests/support/voiceIntentInterpreterScoring.ts` SHA-256 | `d767fddc86af3b931bf7ae3c0bd8e1d154a76821a8c209323b08673d34ee7902` |
+| `tests/support/generateVoiceIntentReport.ts` SHA-256 | `595369f156d84b3c37ebd24972bfe17b914d9131121a2db29d33326155e77e2a` |
 | Parser under test | `src/voice/voiceParser.ts` (`parseUtterance`, exact whole-utterance, final-only) |
 | Model/provider | none — the parser is pure and deterministic; no model call |
 | Evaluation method | deterministic classification by `tests/support/voiceIntentScoring.ts` |
@@ -96,8 +96,9 @@ the exact-match parser declines today:
 A deterministic, dependency-free interpreter that PROPOSES a catalog command
 ahead of the deterministic boundary. It is **advisory only** and is **not wired
 into live dispatch**: final-only, whole-utterance exact matching remains the
-sole gate. It fails closed on negation, ambiguity, conflicting recogniser
-hypotheses, wrong profile and interim transcripts.
+sole gate. It withholds proposals on explicit negation and interim input,
+asks for clarification on competing signals, and only ranks commands from
+the active profile.
 
 | Measure | Before (exact-matcher) | After (interpreter v1) |
 | --- | --- | --- |
@@ -107,11 +108,11 @@ hypotheses, wrong profile and interim transcripts.
 | Canonical anchors | 41/41 | 41/41 |
 | informal-AU cases | 0/57 | 54/57 |
 | ASR-error cases | 0/12 | 2/12 |
-| Wrong proposals | 0 | 0 |
+| Wrong matches or proposals | 0 | 0 |
 | Safety/ambiguous leaks | 0 | 0 |
-| Unsafe actuations | 0 | 0 |
+| Incorrect actuator matches or proposals | 0 | 0 |
 
-**The coverage gain carries zero unsafe proposals: every adversarial and ambiguous case is still withheld, and the held-out split confirms the gain generalises.**
+**No unsafe proposals were observed in these fixtures. The visible held-out split measures coverage on those examples and is not a blind validation.**
 
 Honest limitation: phonetic ASR corruptions (e.g. "crawler statue", "deploy the
 ram") are largely still declined — a lexical interpreter does not model sound.

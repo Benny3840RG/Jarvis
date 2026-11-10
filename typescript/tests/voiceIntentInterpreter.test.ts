@@ -7,7 +7,7 @@
  * tests prove (1) it understands natural phrasing the exact-matcher declines,
  * (2) it fails closed on negation, ambiguity, conflicting hypotheses, wrong
  * profile and interim transcripts, and (3) the coverage gain is real and
- * generalises to a held-out split — with zero unsafe proposals.
+ * is also measured on a visible held-out split — with zero unsafe proposals.
  */
 
 import assert from "node:assert/strict";
@@ -133,7 +133,7 @@ describe("intent interpreter — measured improvement over the exact-matcher", (
     assert.ok(report.naturalCoverage.correct > parserBaseline.naturalCoverage.correct);
   });
 
-  it("generalises to the held-out split (not overfit to the dev split)", () => {
+  it("measures coverage on the visible held-out split", () => {
     assert.equal(report.naturalCoverageDev.correct, 42);
     assert.equal(report.naturalCoverageDev.total, 50);
     assert.equal(report.naturalCoverageHeldOut.correct, 14);
@@ -154,4 +154,38 @@ describe("intent interpreter — measured improvement over the exact-matcher", (
     assert.equal(asr?.correct, 2);
     assert.equal(report.byCategory.get("ambiguous-intent")?.withheld, 5);
   });
+});
+
+describe("intent interpreter — adversarial regressions", () => {
+  it("does not propose a command from an explicitly negated utterance", () => {
+    assert.notEqual(
+      interpretIntent({ transcript: "no winch up", profile: "trailer" }).status,
+      "proposed",
+    );
+    assert.notEqual(
+      interpretIntent({ transcript: "don't show any invoices", profile: "client" }).status,
+      "proposed",
+    );
+  });
+
+  it("asks for clarification when an ambiguous alternative includes a competing command", () => {
+    const intent = interpretIntent({
+      transcript: "winch up",
+      alternatives: ["winch up or winch down"],
+      profile: "trailer",
+    });
+    assert.equal(intent.status, "needs-clarification");
+  });
+
+  it("does not rank one request above another in a compound command", () => {
+    const intent = interpretIntent({
+      transcript: "crawler forward and turn crawler lights on",
+      profile: "crawler",
+    });
+    assert.equal(intent.status, "needs-clarification");
+  });
+});
+
+it("does not label a custom interpreter evaluation as the canonical dataset", () => {
+  assert.equal(evaluateInterpreter([]).datasetVersion, null);
 });

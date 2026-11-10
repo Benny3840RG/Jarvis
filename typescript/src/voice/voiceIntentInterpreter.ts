@@ -77,10 +77,10 @@ const COMMAND_BY_ID: ReadonlyMap<string, VoiceCommand> = new Map(
 );
 
 /**
- * Negation markers. When present, a critical or actuating candidate is dropped
- * (fail closed): "do not winch up" must never propose raising the winch.
+ * Explicit negation markers. Withhold rather than infer which clause is negated.
  */
 const NEGATION_TOKENS: ReadonlySet<string> = new Set([
+  "no",
   "not",
   "dont",
   "never",
@@ -89,6 +89,10 @@ const NEGATION_TOKENS: ReadonlySet<string> = new Set([
   "cant",
   "cannot",
   "neither",
+  "shouldnt",
+  "wouldnt",
+  "couldnt",
+  "didnt",
 ]);
 
 /** Lexical signals per command. Profile is implicit context, so phrasings need
@@ -261,33 +265,29 @@ function proposalFor(tokens: readonly string[], profile: VoiceProfile): Interpre
     return { status: "no-intent", rationale: "no catalog signal matched in the active profile" };
   }
 
-  const negated = hasNegation(tokens);
-  // Drop guarded candidates under negation (fail closed), keeping any safe ones.
-  const eligible = ranked.filter((candidate) => {
-    const command = COMMAND_BY_ID.get(candidate.commandId);
-    return !(negated && command && isGuarded(command));
-  });
-  if (eligible.length === 0) {
-    return {
-      status: "no-intent",
-      rationale: "only negated guarded command(s) matched; declined fail-closed",
-    };
+  if (hasNegation(tokens)) {
+    return { status: "no-intent", rationale: "explicit negation; no proposal" };
   }
 
-  const top = eligible[0]!;
-  const contenders = eligible.filter((candidate) => candidate.score === top.score);
+  const top = ranked[0]!;
+  const compound = tokens.includes("and") || tokens.includes("or");
+  const contenders = compound
+    ? ranked
+    : ranked.filter((candidate) => candidate.score === top.score);
   if (contenders.length > 1) {
     return {
       status: "needs-clarification",
       candidates: Object.freeze(contenders.map((c) => c.commandId).sort()),
-      rationale: "multiple commands match equally well",
+      rationale: compound
+        ? "multiple commands in a compound utterance"
+        : "multiple commands match equally well",
     };
   }
 
   const command = COMMAND_BY_ID.get(top.commandId)!;
   const confidence = Math.min(
     1,
-    0.55 + 0.15 * top.score + (top.score - (eligible[1]?.score ?? 0)) * 0.1,
+    0.55 + 0.15 * top.score + (top.score - (ranked[1]?.score ?? 0)) * 0.1,
   );
   return {
     status: "proposed",
@@ -322,6 +322,9 @@ export function interpretIntent(input: InterpretInput): InterpretedIntent {
   for (const alternative of alternatives) {
     const alt = proposalFor(tokenize(alternative).tokens, input.profile);
     if (alt.status === "proposed") conflicting.add(alt.commandId);
+    if (alt.status === "needs-clarification") {
+      for (const candidate of alt.candidates) conflicting.add(candidate);
+    }
   }
   if (conflicting.size > 1) {
     return {

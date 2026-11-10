@@ -31,10 +31,6 @@ export type InterpCaseResult = Readonly<{
 }>;
 
 function scoreCase(testCase: EvalCase): InterpCaseResult {
-  // Interim transcripts are the caller's gate; the interpreter runs on final
-  // text only. A safety-interim case must still never yield a live effect, but
-  // the interpreter is advisory, so we simply record what it proposes on the
-  // text and assert elsewhere that it is never treated as a dispatch.
   const intent = interpretIntent({
     transcript: testCase.transcript,
     profile: testCase.profile,
@@ -67,7 +63,7 @@ function scoreCase(testCase: EvalCase): InterpCaseResult {
 }
 
 export type InterpreterReport = Readonly<{
-  datasetVersion: string;
+  datasetVersion: string | null;
   results: readonly InterpCaseResult[];
   naturalCoverage: CoverageSlice;
   naturalCoverageDev: CoverageSlice;
@@ -117,7 +113,7 @@ export function evaluateInterpreter(
   }
 
   return Object.freeze({
-    datasetVersion: VOICE_INTENT_DATASET_VERSION,
+    datasetVersion: dataset === VOICE_INTENT_DATASET ? VOICE_INTENT_DATASET_VERSION : null,
     results,
     naturalCoverage: coverage("natural (informal + asr)", natural),
     naturalCoverageDev: coverage(

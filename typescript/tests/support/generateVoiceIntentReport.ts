@@ -153,7 +153,7 @@ ${missedExamples(report)}
 - Keep the held-out split out of tuning when evaluating a future layer. These
   cases are visible in the repository; the split is a convention, not a blind test.
 
-${interpreterSection()}
+${report.datasetVersion === null ? "" : interpreterSection()}
 
 ## Reproduce
 
@@ -174,6 +174,8 @@ function interpreterSection(): string {
     after.wrongMatches.length === 0 &&
     after.safetyLeaks.length === 0 &&
     after.unsafeActuations.length === 0;
+  const beforeInformal = before.byCategory.find((row) => row.category === "informal-au");
+  const beforeAsr = before.byCategory.find((row) => row.category === "asr-error");
   const informal = after.byCategory.get("informal-au");
   const asr = after.byCategory.get("asr-error");
   return `## After — intent interpreter v1 (\`src/voice/voiceIntentInterpreter.ts\`)
@@ -181,8 +183,9 @@ function interpreterSection(): string {
 A deterministic, dependency-free interpreter that PROPOSES a catalog command
 ahead of the deterministic boundary. It is **advisory only** and is **not wired
 into live dispatch**: final-only, whole-utterance exact matching remains the
-sole gate. It fails closed on negation, ambiguity, conflicting recogniser
-hypotheses, wrong profile and interim transcripts.
+sole gate. It withholds proposals on explicit negation and interim input,
+asks for clarification on competing signals, and only ranks commands from
+the active profile.
 
 | Measure | Before (exact-matcher) | After (interpreter v1) |
 | --- | --- | --- |
@@ -190,13 +193,13 @@ hypotheses, wrong profile and interim transcripts.
 | — dev split | ${before.naturalCoverageDev.correct}/${before.naturalCoverageDev.total} | ${after.naturalCoverageDev.correct}/${after.naturalCoverageDev.total} |
 | — held-out split | ${before.naturalCoverageHeldOut.correct}/${before.naturalCoverageHeldOut.total} | ${after.naturalCoverageHeldOut.correct}/${after.naturalCoverageHeldOut.total} |
 | Canonical anchors | ${before.canonicalCoverage.correct}/${before.canonicalCoverage.total} | ${after.canonicalCoverage.correct}/${after.canonicalCoverage.total} |
-| informal-AU cases | 0/${informal?.total ?? 0} | ${informal?.correct ?? 0}/${informal?.total ?? 0} |
-| ASR-error cases | 0/${asr?.total ?? 0} | ${asr?.correct ?? 0}/${asr?.total ?? 0} |
-| Wrong proposals | 0 | ${after.wrongMatches.length} |
-| Safety/ambiguous leaks | 0 | ${after.safetyLeaks.length} |
-| Unsafe actuations | 0 | ${after.unsafeActuations.length} |
+| informal-AU cases | ${beforeInformal?.correct ?? 0}/${beforeInformal?.total ?? 0} | ${informal?.correct ?? 0}/${informal?.total ?? 0} |
+| ASR-error cases | ${beforeAsr?.correct ?? 0}/${beforeAsr?.total ?? 0} | ${asr?.correct ?? 0}/${asr?.total ?? 0} |
+| Wrong matches or proposals | ${before.wrongMatches.length} | ${after.wrongMatches.length} |
+| Safety/ambiguous leaks | ${before.safetyLeaks.length} | ${after.safetyLeaks.length} |
+| Incorrect actuator matches or proposals | ${before.unsafeActuations.length} | ${after.unsafeActuations.length} |
 
-${clean ? "**The coverage gain carries zero unsafe proposals: every adversarial and ambiguous case is still withheld, and the held-out split confirms the gain generalises.**" : "**NON-ZERO unsafe outcome — investigate.**"}
+${clean ? "**No unsafe proposals were observed in these fixtures. The visible held-out split measures coverage on those examples and is not a blind validation.**" : "**NON-ZERO unsafe outcome — investigate.**"}
 
 Honest limitation: phonetic ASR corruptions (e.g. "crawler statue", "deploy the
 ram") are largely still declined — a lexical interpreter does not model sound.
