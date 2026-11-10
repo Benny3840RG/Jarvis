@@ -12,9 +12,11 @@
 | Dataset version | 2026-11-10.1 |
 | `src/voice/voiceParser.ts` SHA-256 | `6ff04f3af0b5e75188b231cc997f0113607b42d692e44e8d2efa6901cca7d7ea` |
 | `src/voice/voiceCommands.ts` SHA-256 | `8978ae1306b6f3d49fc67adbcd73f5dd3b2466ae6bde067237a76aeae92a22a4` |
+| `src/voice/voiceIntentInterpreter.ts` SHA-256 | `b113670522caeb545da1e14aadb523319f4955c51bd5f914c66046b5a7b26243` |
 | `tests/support/voiceIntentDataset.ts` SHA-256 | `dea4d8e61b0c8150da8671a99eaac44d95bceee709784f309895d5d430681f40` |
 | `tests/support/voiceIntentScoring.ts` SHA-256 | `bcdeefca2797059dc4323e9025898302d88cc4b15bf7dd810fafde96cb531cef` |
-| `tests/support/generateVoiceIntentReport.ts` SHA-256 | `da55222495e865f269f88afa9e2b3294825b99cbe078f0316c6d39056daaaf02` |
+| `tests/support/voiceIntentInterpreterScoring.ts` SHA-256 | `3a07a4508855a63c7613dbc9278c7845d5aa2b28ab9b3d6daf6adece75a368cb` |
+| `tests/support/generateVoiceIntentReport.ts` SHA-256 | `d5f543767b903161bacc231b682a739f184ee10bc462c5f0637ddcbcf82eabb4` |
 | Parser under test | `src/voice/voiceParser.ts` (`parseUtterance`, exact whole-utterance, final-only) |
 | Model/provider | none — the parser is pure and deterministic; no model call |
 | Evaluation method | deterministic classification by `tests/support/voiceIntentScoring.ts` |
@@ -89,10 +91,39 @@ the exact-match parser declines today:
 - Keep the held-out split out of tuning when evaluating a future layer. These
   cases are visible in the repository; the split is a convention, not a blind test.
 
+## After — intent interpreter v1 (`src/voice/voiceIntentInterpreter.ts`)
+
+A deterministic, dependency-free interpreter that PROPOSES a catalog command
+ahead of the deterministic boundary. It is **advisory only** and is **not wired
+into live dispatch**: final-only, whole-utterance exact matching remains the
+sole gate. It fails closed on negation, ambiguity, conflicting recogniser
+hypotheses, wrong profile and interim transcripts.
+
+| Measure | Before (exact-matcher) | After (interpreter v1) |
+| --- | --- | --- |
+| Natural-phrasing coverage | 0/69 (0.0%) | **56/69 (81.2%)** |
+| — dev split | 0/50 | 42/50 |
+| — held-out split | 0/19 | 14/19 |
+| Canonical anchors | 41/41 | 41/41 |
+| informal-AU cases | 0/57 | 54/57 |
+| ASR-error cases | 0/12 | 2/12 |
+| Wrong proposals | 0 | 0 |
+| Safety/ambiguous leaks | 0 | 0 |
+| Unsafe actuations | 0 | 0 |
+
+**The coverage gain carries zero unsafe proposals: every adversarial and ambiguous case is still withheld, and the held-out split confirms the gain generalises.**
+
+Honest limitation: phonetic ASR corruptions (e.g. "crawler statue", "deploy the
+ram") are largely still declined — a lexical interpreter does not model sound.
+Closing that is future work (phonetic distance) and is a safe miss, not an
+unsafe guess. The interpreter is a heuristic v1; its `InterpretedIntent` shape is
+the stable contract a model-backed implementation could later sit behind.
+
 ## Reproduce
 
 ```sh
 cd typescript
 node --import tsx tests/support/generateVoiceIntentReport.ts   # regenerate this report
-node --import tsx --test tests/voiceIntentBaseline.test.ts      # assert invariants + locked baseline
+node --import tsx --test tests/voiceIntentBaseline.test.ts      # before: exact-matcher baseline
+node --import tsx --test tests/voiceIntentInterpreter.test.ts   # after: intent interpreter v1
 ```

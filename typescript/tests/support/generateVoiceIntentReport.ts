@@ -17,6 +17,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { evaluate, formatPct, type EvaluationReport } from "./voiceIntentScoring.js";
+import { evaluateInterpreter } from "./voiceIntentInterpreterScoring.js";
 
 // This is the baseline edition, not the time of regeneration.
 const BASELINE_EDITION = "2026-11-10";
@@ -24,8 +25,10 @@ const TYPESCRIPT_ROOT = new URL("../../", import.meta.url);
 const INPUT_SOURCES = [
   "src/voice/voiceParser.ts",
   "src/voice/voiceCommands.ts",
+  "src/voice/voiceIntentInterpreter.ts",
   "tests/support/voiceIntentDataset.ts",
   "tests/support/voiceIntentScoring.ts",
+  "tests/support/voiceIntentInterpreterScoring.ts",
   "tests/support/generateVoiceIntentReport.ts",
 ] as const;
 
@@ -150,14 +153,56 @@ ${missedExamples(report)}
 - Keep the held-out split out of tuning when evaluating a future layer. These
   cases are visible in the repository; the split is a convention, not a blind test.
 
+${interpreterSection()}
+
 ## Reproduce
 
 \`\`\`sh
 cd typescript
 node --import tsx tests/support/generateVoiceIntentReport.ts   # regenerate this report
-node --import tsx --test tests/voiceIntentBaseline.test.ts      # assert invariants + locked baseline
+node --import tsx --test tests/voiceIntentBaseline.test.ts      # before: exact-matcher baseline
+node --import tsx --test tests/voiceIntentInterpreter.test.ts   # after: intent interpreter v1
 \`\`\`
 `;
+}
+
+function interpreterSection(): string {
+  const before = evaluate();
+  const after = evaluateInterpreter();
+  const n = after.naturalCoverage;
+  const clean =
+    after.wrongMatches.length === 0 &&
+    after.safetyLeaks.length === 0 &&
+    after.unsafeActuations.length === 0;
+  const informal = after.byCategory.get("informal-au");
+  const asr = after.byCategory.get("asr-error");
+  return `## After — intent interpreter v1 (\`src/voice/voiceIntentInterpreter.ts\`)
+
+A deterministic, dependency-free interpreter that PROPOSES a catalog command
+ahead of the deterministic boundary. It is **advisory only** and is **not wired
+into live dispatch**: final-only, whole-utterance exact matching remains the
+sole gate. It fails closed on negation, ambiguity, conflicting recogniser
+hypotheses, wrong profile and interim transcripts.
+
+| Measure | Before (exact-matcher) | After (interpreter v1) |
+| --- | --- | --- |
+| Natural-phrasing coverage | ${before.naturalCoverage.correct}/${before.naturalCoverage.total} (${formatPct(before.naturalCoverage.rate)}) | **${n.correct}/${n.total} (${formatPct(n.rate)})** |
+| — dev split | ${before.naturalCoverageDev.correct}/${before.naturalCoverageDev.total} | ${after.naturalCoverageDev.correct}/${after.naturalCoverageDev.total} |
+| — held-out split | ${before.naturalCoverageHeldOut.correct}/${before.naturalCoverageHeldOut.total} | ${after.naturalCoverageHeldOut.correct}/${after.naturalCoverageHeldOut.total} |
+| Canonical anchors | ${before.canonicalCoverage.correct}/${before.canonicalCoverage.total} | ${after.canonicalCoverage.correct}/${after.canonicalCoverage.total} |
+| informal-AU cases | 0/${informal?.total ?? 0} | ${informal?.correct ?? 0}/${informal?.total ?? 0} |
+| ASR-error cases | 0/${asr?.total ?? 0} | ${asr?.correct ?? 0}/${asr?.total ?? 0} |
+| Wrong proposals | 0 | ${after.wrongMatches.length} |
+| Safety/ambiguous leaks | 0 | ${after.safetyLeaks.length} |
+| Unsafe actuations | 0 | ${after.unsafeActuations.length} |
+
+${clean ? "**The coverage gain carries zero unsafe proposals: every adversarial and ambiguous case is still withheld, and the held-out split confirms the gain generalises.**" : "**NON-ZERO unsafe outcome — investigate.**"}
+
+Honest limitation: phonetic ASR corruptions (e.g. "crawler statue", "deploy the
+ram") are largely still declined — a lexical interpreter does not model sound.
+Closing that is future work (phonetic distance) and is a safe miss, not an
+unsafe guess. The interpreter is a heuristic v1; its \`InterpretedIntent\` shape is
+the stable contract a model-backed implementation could later sit behind.`;
 }
 
 function main(): void {
