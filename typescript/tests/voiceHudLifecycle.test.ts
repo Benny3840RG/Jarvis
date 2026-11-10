@@ -54,7 +54,15 @@ type Request = {
   body: { profile?: VoiceProfile; transcript?: string; isFinal?: boolean; alternatives?: string[] };
 };
 
-function harness(options: { microphone?: boolean; switchWaitMs?: number } = {}) {
+function harness(
+  options: {
+    microphone?: boolean;
+    switchWaitMs?: number;
+    synthesis?: boolean;
+    noVoices?: boolean;
+    speechThrows?: boolean;
+  } = {},
+) {
   const elements = new Map<string, Element>();
   const get = (id: string) => {
     let element = elements.get(id);
@@ -68,6 +76,12 @@ function harness(options: { microphone?: boolean; switchWaitMs?: number } = {}) 
   };
   const requests: Request[] = [];
   const spoken: string[] = [];
+  const speechUtterances: {
+    text: string;
+    onstart?: () => void;
+    onend?: () => void;
+    onerror?: () => void;
+  }[] = [];
   const actuations: string[] = [];
   const recognitions: Recognition[] = [];
   const delayedRequests = new Map<string, ReturnType<typeof deferred>>();
@@ -183,12 +197,29 @@ function harness(options: { microphone?: boolean; switchWaitMs?: number } = {}) 
 
   const window = {
     ...(options.microphone === false ? {} : { SpeechRecognition: Recognition }),
-    speechSynthesis: {
-      cancel() {},
-      speak(utterance: { text: string }) {
-        spoken.push(utterance.text);
-      },
+    SpeechSynthesisUtterance: class {
+      constructor(readonly text: string) {}
     },
+    ...(options.synthesis === false
+      ? {}
+      : {
+          speechSynthesis: {
+            cancel() {},
+            getVoices() {
+              return options.noVoices ? [] : [{}];
+            },
+            speak(utterance: {
+              text: string;
+              onstart?: () => void;
+              onend?: () => void;
+              onerror?: () => void;
+            }) {
+              if (options.speechThrows) throw new Error("speech failure");
+              spoken.push(utterance.text);
+              speechUtterances.push(utterance);
+            },
+          },
+        }),
   };
   new Function(
     "window",
@@ -217,6 +248,7 @@ function harness(options: { microphone?: boolean; switchWaitMs?: number } = {}) 
     requests,
     registry,
     spoken,
+    speechUtterances,
     actuations,
     recognitions,
     advance(milliseconds: number) {
@@ -263,6 +295,106 @@ async function armCrawler(h: ReturnType<typeof harness>) {
 }
 
 describe("voice HUD lifecycle (actual setupVoiceConsole and real session registry)", () => {
+  it("tests local speech only on request and reports browser events without claiming audibility", async () => {
+    const h = harness();
+    await flush();
+    assert.equal(h.spoken.length, 0);
+    h.get("voice-test-output").fire("click");
+    assert.deepEqual(h.spoken, ["Speech output test."]);
+    assert.equal(h.recognitions.length, 0);
+    assert.equal(h.utterances().length, 0);
+    h.speechUtterances[0].onstart?.();
+    assert.match(h.get("voice-output-status").textContent, /started/i);
+    h.speechUtterances[0].onend?.();
+    assert.match(h.get("voice-output-status").textContent, /cannot confirm.*heard/i);
+    h.get("voice-test-output").fire("click");
+    h.speechUtterances[1].onerror?.();
+    assert.match(h.get("voice-output-status").textContent, /failed/i);
+    assert.equal(h.actuations.length, 0);
+  });
+
+  it("does not dispatch the spoken test phrase when the microphone hears it", async () => {
+    const h = harness();
+    const recognition = h.enable();
+    h.get("voice-test-output").fire("click");
+    recognition.emit(h.spoken[0]);
+    await flush();
+    assert.deepEqual(h.spoken, ["Speech output test."]);
+    assert.equal(h.utterances().length, 0);
+    assert.equal(h.registry.size(), 0);
+    assert.deepEqual(h.actuations, []);
+  });
+
+  it("preserves idle and unavailable speech status on Stop and profile change", async () => {
+    const idle = harness();
+    const initial = idle.get("voice-output-status").textContent;
+    idle.profile("crawler");
+    await flush();
+    assert.equal(idle.get("voice-output-status").textContent, initial);
+    idle.stop();
+    assert.equal(idle.get("voice-output-status").textContent, initial);
+    const unavailable = harness({ synthesis: false });
+    unavailable.get("voice-test-output").fire("click");
+    const status = unavailable.get("voice-output-status").textContent;
+    unavailable.stop();
+    assert.equal(unavailable.get("voice-output-status").textContent, status);
+    unavailable.profile("crawler");
+    await flush();
+    assert.equal(unavailable.get("voice-output-status").textContent, status);
+    const finished = harness();
+    finished.get("voice-test-output").fire("click");
+    finished.speechUtterances[0].onend?.();
+    const completed = finished.get("voice-output-status").textContent;
+    finished.stop();
+    assert.equal(finished.get("voice-output-status").textContent, completed);
+  });
+
+  it("ignores callbacks from superseded and cancelled utterances", async () => {
+    const h = harness();
+    h.get("voice-test-output").fire("click");
+    h.get("voice-test-output").fire("click");
+    const requested = h.get("voice-output-status").textContent;
+    h.speechUtterances[0].onstart?.();
+    h.speechUtterances[0].onend?.();
+    h.speechUtterances[0].onerror?.();
+    assert.equal(h.get("voice-output-status").textContent, requested);
+    h.profile("crawler");
+    const stopped = h.get("voice-output-status").textContent;
+    h.speechUtterances[1].onstart?.();
+    h.speechUtterances[1].onend?.();
+    h.speechUtterances[1].onerror?.();
+    assert.match(stopped, /stopped/i);
+    assert.equal(h.get("voice-output-status").textContent, stopped);
+    await flush();
+  });
+
+  it("reports unavailable speech and ignores late callbacks after Stop", async () => {
+    const unavailable = harness({ synthesis: false });
+    await flush();
+    unavailable.get("voice-test-output").fire("click");
+    assert.match(unavailable.get("voice-output-status").textContent, /unavailable/i);
+    const h = harness();
+    h.get("voice-test-output").fire("click");
+    h.stop();
+    h.speechUtterances[0].onerror?.();
+    assert.match(h.get("voice-output-status").textContent, /stopped/i);
+  });
+
+  it("reports empty voice lists, synchronous failures, and errors in normal responses", async () => {
+    const empty = harness({ noVoices: true });
+    empty.get("voice-test-output").fire("click");
+    assert.match(empty.get("voice-output-status").textContent, /no voices currently listed/i);
+    const throwing = harness({ speechThrows: true });
+    throwing.get("voice-test-output").fire("click");
+    assert.match(throwing.get("voice-output-status").textContent, /failed/i);
+    const h = harness();
+    h.type("unknown command");
+    await flush();
+    h.speechUtterances[0].onerror?.();
+    assert.match(h.get("voice-output-status").textContent, /failed/i);
+    assert.match(h.get("voice-result").textContent, /not recognised/i);
+  });
+
   it("requires explicit microphone enable and preserves typed fallback", async () => {
     const h = harness({ microphone: false });
     await flush();
@@ -586,14 +718,29 @@ describe("voice HUD lifecycle (actual setupVoiceConsole and real session registr
   it("serializes commands so delayed replies cannot overwrite newer pending state", async () => {
     const h = harness();
     await armCrawler(h);
+    const baseline = h.utterances().length;
+    assert.equal(baseline, 1, "arming the crawler sends one setup utterance");
     const release = h.pause("/sessions/s1/utterances", "response");
     h.type("crawler status");
     h.type("crawler halt");
     await flush();
-    assert.equal(h.utterances().length, 2, "the newer command waits for the current reply");
+    assert.deepEqual(
+      h
+        .utterances()
+        .slice(baseline)
+        .map((request) => request.body.transcript),
+      ["crawler status"],
+      "the newer command waits for the current reply",
+    );
     release();
     await flush();
-    assert.equal(h.utterances().length, 3);
+    assert.deepEqual(
+      h
+        .utterances()
+        .slice(baseline)
+        .map((request) => request.body.transcript),
+      ["crawler status", "crawler halt"],
+    );
     assert.equal(h.get("voice-pending").hidden, false);
     assert.match(h.get("voice-result").textContent, /awaiting/i);
   });
