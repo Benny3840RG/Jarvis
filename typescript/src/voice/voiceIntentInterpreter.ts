@@ -431,20 +431,36 @@ function proposalFor(
     }
   }
 
-  const top = ranked[0]!;
-  const contenders = compound
-    ? ranked
-    : ranked.filter((candidate) => candidate.score === top.score);
+  // A copular state description is not a request to operate equipment.
+  if (
+    tokens.some((token) => ["is", "are", "was", "were", "has", "have"].includes(token)) &&
+    ranked.some((candidate) => isGuarded(COMMAND_BY_ID.get(candidate.commandId)!))
+  ) {
+    return { status: "no-intent", rationale: "guarded state description withheld" };
+  }
+
+  // A recorder-stop phrase also contains the crawler-stop signal; its single
+  // shared "stop" is not evidence of a separate drive command.
+  const independent = ranked.filter(
+    (candidate) =>
+      candidate.commandId !== "crawler.stop" ||
+      tokens.filter((token) => token === "stop").length !== 1 ||
+      !ranked.some(
+        (other) => other.commandId === "crawler.record-stop" && other.score > candidate.score,
+      ),
+  );
+  const contenders = compound ? ranked : independent;
   if (contenders.length > 1) {
     return {
       status: "needs-clarification",
       candidates: Object.freeze(contenders.map((c) => c.commandId).sort()),
       rationale: compound
         ? "multiple commands in a compound utterance"
-        : "multiple commands match equally well",
+        : "multiple distinct commands match",
     };
   }
 
+  const top = contenders[0]!;
   const command = COMMAND_BY_ID.get(top.commandId)!;
   let confidence = Math.min(
     1,
@@ -507,8 +523,7 @@ export function interpretIntent(input: InterpretInput): InterpretedIntent {
   }
 
   // An alternative that resolves to a different command casts doubt: fail closed.
-  // Alternatives use exact matching only, so recognition noise cannot manufacture
-  // a spurious conflict.
+  // Apply the same exact-first bounded recognition tolerance as the primary.
   const conflicting = new Set<string>([primary.commandId]);
   for (const alternative of alternatives) {
     const altTokens = tokenize(alternative);
@@ -541,7 +556,7 @@ export function interpretIntent(input: InterpretInput): InterpretedIntent {
       }
       continue;
     }
-    const alt = proposalFor(altTokens.tokens, input.profile, false, altTokens.compound);
+    const alt = resolveProposal(altTokens.tokens, input.profile, altTokens.compound);
     if (alt.status === "proposed") conflicting.add(alt.commandId);
     if (alt.status === "needs-clarification") {
       for (const candidate of alt.candidates) conflicting.add(candidate);

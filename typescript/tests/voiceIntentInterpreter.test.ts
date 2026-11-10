@@ -56,6 +56,42 @@ describe("intent interpreter — understands natural phrasing", () => {
 });
 
 describe("intent interpreter — fails closed", () => {
+  it("withholds declarative actuator states while retaining commands", () => {
+    for (const [transcript, profile] of [
+      ["the winch is up", "trailer"],
+      ["the winch has gone up", "trailer"],
+      ["the crawler lights are on", "crawler"],
+    ] as const) {
+      assert.notEqual(interpretIntent({ transcript, profile }).status, "proposed", transcript);
+    }
+    assert.equal(
+      interpretIntent({ transcript: "raise the winch", profile: "trailer" }).status,
+      "proposed",
+    );
+    assert.equal(
+      interpretIntent({ transcript: "turn crawler lights on", profile: "crawler" }).status,
+      "proposed",
+    );
+  });
+
+  it("detects a slipped conflicting positive alternative without vetoing noise", () => {
+    const input = { transcript: "winch up", profile: "trailer" } as const;
+    assert.equal(
+      interpretIntent({ ...input, alternatives: ["wench down"] }).status,
+      "needs-clarification",
+    );
+    assert.equal(
+      interpretIntent({ ...input, alternatives: ["background noise"] }).status,
+      "proposed",
+    );
+  });
+
+  it("withholds adjacent distinct commands without a connector", () => {
+    const intent = interpretIntent({ transcript: "crawler forward lights on", profile: "crawler" });
+    assert.equal(intent.status, "needs-clarification");
+    if (intent.status === "needs-clarification")
+      assert.deepEqual(intent.candidates, ["crawler.forward", "crawler.lights-on"]);
+  });
   it("withholds each single-signal crawler command for its negated implicit alternative", () => {
     for (const command of ["stop", "forward", "reverse", "status"]) {
       const intent = interpretIntent({

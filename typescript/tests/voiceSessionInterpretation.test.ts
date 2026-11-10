@@ -34,6 +34,19 @@ const stubQueries: VoiceQueryProvider = {
 };
 
 describe("voice session — natural-language interpretation behind confirmation", () => {
+  it("does not arm confirmation for declarative actuator states", async () => {
+    for (const [transcript, profile] of [
+      ["the winch is up", "trailer"],
+      ["the crawler lights are on", "crawler"],
+    ] as const) {
+      const s = make({ profile });
+      const out = await s.handle({ transcript, isFinal: true, wakeAuthorized: true, now: 1 });
+      assert.notEqual(out.decision, "awaiting-confirmation", transcript);
+      assert.equal(s.pending(), undefined, transcript);
+      const confirm = await s.handle({ transcript: "confirm", isFinal: true, now: 2 });
+      assert.notEqual(confirm.decision, "actuated", transcript);
+    }
+  });
   it("routes an inferred actuating command into confirmation, never actuating directly", async () => {
     let actuated = false;
     const provider: VoiceActuationProvider = {
