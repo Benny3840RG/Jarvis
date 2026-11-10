@@ -826,4 +826,59 @@ describe("voice safe writes", () => {
     assert.equal(response.json().dispatch.toolActionId, undefined);
     assert.match(response.json().dispatch.reason, /not commissioned/i);
   });
+
+  it("routes an inferred safe-write through spoken confirmation before staging (#567)", async () => {
+    const actions = new MemoryActions();
+    const app = await makeApp(actions);
+    const sessionId = await openSession(app);
+    const capture = { title: "Call the client" };
+
+    // A natural phrasing the exact parser declines. It is interpreted but held
+    // for confirmation — nothing is staged yet.
+    const first = await utter(app, sessionId, {
+      transcript: "jarvis remind me to chase this up",
+      isFinal: true,
+      ...TARGET,
+      capture,
+    });
+    assert.equal(first.statusCode, 200);
+    const firstDispatch = first.json().dispatch;
+    assert.equal(firstDispatch.decision, "awaiting-confirmation");
+    assert.equal(firstDispatch.inferred, true);
+    assert.equal(firstDispatch.command.id, "client.follow-up-reminder");
+    assert.equal(firstDispatch.toolActionId, undefined);
+    assert.equal(actions.rows.size, 0, "an inferred command stages nothing before confirmation");
+
+    // Only an explicit spoken confirmation stages it, on the existing path.
+    const confirmed = await utter(app, sessionId, {
+      transcript: "jarvis confirm",
+      isFinal: true,
+      ...TARGET,
+      capture,
+    });
+    assert.equal(confirmed.statusCode, 200);
+    const confirmedDispatch = confirmed.json().dispatch;
+    assert.equal(confirmedDispatch.decision, "proposed");
+    assert.equal(typeof confirmedDispatch.toolActionId, "string");
+    assert.equal(actions.rows.size, 1);
+    const staged = actions.rows.get(confirmedDispatch.toolActionId);
+    assert.ok(staged);
+    assert.equal(staged.tool, "reminders");
+    assert.equal(staged.operation, "create");
+  });
+
+  it("does not interpret a natural phrase that failed the wake word (#567)", async () => {
+    const actions = new MemoryActions();
+    const app = await makeApp(actions);
+    const sessionId = await openSession(app);
+    const out = await utter(app, sessionId, {
+      transcript: "remind me to chase this up",
+      isFinal: true,
+      ...TARGET,
+      capture: { title: "Call the client" },
+    });
+    assert.equal(out.statusCode, 200);
+    assert.equal(out.json().dispatch.decision, "unrecognized");
+    assert.equal(actions.rows.size, 0);
+  });
 });

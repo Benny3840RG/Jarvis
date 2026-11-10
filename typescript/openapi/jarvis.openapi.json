@@ -8009,6 +8009,15 @@
           "expiresAt": {
             "type": "integer",
             "description": "When an armed confirmation lapses."
+          },
+          "inferred": {
+            "type": "boolean",
+            "enum": [true],
+            "description": "Present and true only on an awaiting-confirmation decision whose command was inferred from natural language by the intent interpreter rather than matched as an exact phrase. An inferred command is never dispatched directly: it always waits for an explicit spoken confirmation."
+          },
+          "confidence": {
+            "type": "number",
+            "description": "Interpreter confidence (0..1) for an inferred awaiting-confirmation decision. Advisory only; it never substitutes for the spoken confirmation."
           }
         }
       },

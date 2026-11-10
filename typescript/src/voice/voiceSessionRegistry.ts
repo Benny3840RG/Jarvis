@@ -26,6 +26,8 @@ export type VoiceSessionRegistryOptions = Readonly<{
   clock?: () => number;
   /** Confirmation TTL passed to each created session. */
   confirmationTtlMs?: number;
+  /** Enable natural-language interpretation (behind confirmation) in each session. */
+  interpretNaturalLanguage?: boolean;
   /** Id generator (tests). */
   idFactory?: () => string;
 }>;
@@ -39,6 +41,7 @@ export class VoiceSessionRegistry {
   readonly #maxSessions: number;
   readonly #clock: () => number;
   readonly #confirmationTtlMs: number | undefined;
+  readonly #interpretNaturalLanguage: boolean;
   readonly #idFactory: () => string;
   readonly #sessions = new Map<string, Entry>();
 
@@ -49,6 +52,7 @@ export class VoiceSessionRegistry {
     this.#maxSessions = options.maxSessions ?? DEFAULT_MAX_SESSIONS;
     this.#clock = options.clock ?? Date.now;
     this.#confirmationTtlMs = options.confirmationTtlMs;
+    this.#interpretNaturalLanguage = options.interpretNaturalLanguage ?? false;
     this.#idFactory = options.idFactory ?? randomUUID;
   }
 
@@ -65,6 +69,7 @@ export class VoiceSessionRegistry {
       ...(this.#confirmationTtlMs === undefined
         ? {}
         : { confirmationTtlMs: this.#confirmationTtlMs }),
+      interpretNaturalLanguage: this.#interpretNaturalLanguage,
     });
     const expiresAt = now + this.#ttlMs;
     this.#sessions.set(id, { session, expiresAt });
