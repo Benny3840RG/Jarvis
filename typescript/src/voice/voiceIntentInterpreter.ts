@@ -500,7 +500,15 @@ export function interpretIntent(input: InterpretInput): InterpretedIntent {
     // A negated/retracted alternative ("don't winch up") means the recogniser is
     // unsure whether the speaker negated the command. If the negated clause still
     // references a catalog command, fail closed rather than trust the primary.
-    if (hasAnyPolarity(altTokens.tokens)) {
+    // Query-specific has/have contractions are not negation when the
+    // alternative itself resolves to the same non-guarded query.
+    const altExact = proposalFor(altTokens.tokens, input.profile, false, altTokens.compound);
+    const agreedQuery =
+      !hasHardPolarity(altTokens.tokens) &&
+      altExact.status === "proposed" &&
+      altExact.commandId === primary.commandId &&
+      !isGuarded(COMMAND_BY_ID.get(primary.commandId)!);
+    if (hasAnyPolarity(altTokens.tokens) && !agreedQuery) {
       const bare = stripPolarity(altTokens.tokens);
       // Resolve the bare clause exact-first then recognition-tolerant, mirroring
       // how the primary was resolved. A negated ASR slip ("don't wench up"

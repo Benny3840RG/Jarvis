@@ -68,6 +68,21 @@ describe("intent interpreter — fails closed", () => {
     assert.notEqual(negated.status, "proposed");
   });
 
+  it("accepts agreeing unpaid-invoice alternatives with query-only contractions", () => {
+    for (const [transcript, alternatives] of [
+      ["any unpaid invoices", ["any invoices that haven't been paid"]],
+      ["any invoices that haven't been paid", ["any invoices that haven't been paid"]],
+    ] as const) {
+      const result = interpretIntent({
+        transcript,
+        alternatives: [...alternatives],
+        profile: "client",
+      });
+      assert.equal(result.status, "proposed", transcript);
+      if (result.status === "proposed") assert.equal(result.commandId, "client.unpaid-invoices");
+    }
+  });
+
   it("asks for clarification when recogniser alternatives disagree", () => {
     const amb = interpretIntent({
       transcript: "winch up",
