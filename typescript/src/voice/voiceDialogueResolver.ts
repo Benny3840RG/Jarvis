@@ -110,6 +110,8 @@ const EXPLICIT_REFUSAL_TOKENS: ReadonlySet<string> = new Set([
 const EXCLUSION_TOKENS: ReadonlySet<string> = new Set([
   "but",
   "except",
+  "exclude",
+  "excluded",
   "excluding",
   "besides",
   "other",
@@ -281,25 +283,20 @@ function distinctiveTokens(candidates: readonly VoiceCommand[]): ReadonlyMap<str
  */
 export function resolveClarification(input: ResolveInput): ClarificationResolution {
   // Only ever resolve within commands that exist in the active profile and were
-  // actually offered. `live` is what an open clarification may still carry:
-  // unknown, out-of-profile and duplicate ids are never echoed back.
+  // actually offered. Invalid sets cannot be carried into a later turn.
   const live: VoiceCommand[] = [];
   for (const id of input.candidates) {
     const command = COMMAND_BY_ID.get(id);
     if (command === undefined || command.profile !== input.profile) continue;
     if (!live.includes(command)) live.push(command);
   }
-  const liveIds: readonly string[] = live.map((c) => c.id);
+  const liveIds: readonly string[] =
+    live.length === input.candidates.length ? live.map((c) => c.id) : [];
   const open = (rationale: string): ClarificationResolution => ({
     status: "unresolved",
     candidates: liveIds,
     rationale,
   });
-
-  // Defence in depth: never resolve an interim reply.
-  if (input.isFinal === false) return open("reply not final");
-
-  if (live.length === 0) return open("no live candidates to resolve");
 
   // An offered set containing an unknown, out-of-profile or duplicate id is not
   // the set the speaker heard: filtering it would shift ordinal positions
@@ -308,6 +305,11 @@ export function resolveClarification(input: ResolveInput): ClarificationResoluti
   if (live.length !== input.candidates.length) {
     return open("offered set contained unknown, out-of-profile or duplicate candidates");
   }
+  // Defence in depth: never resolve an interim reply.
+  if (input.isFinal === false) return open("reply not final");
+
+  if (live.length === 0) return open("no live candidates to resolve");
+
   const candidates = live;
 
   const tokens = tokenize(input.reply);

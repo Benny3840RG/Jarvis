@@ -272,27 +272,112 @@ test("clarification resolver — fails closed", async (t) => {
     }
   });
 
-  await t.test("a mixed or invalid offered set fails closed, positions never shift", () => {
-    // Offered second; filtering must not make it "first" (Codex #790).
-    const mixed = resolveClarification({
-      reply: "first",
-      candidates: ["client.send-quote", "trailer.winch-up"],
-      profile: "trailer",
-    });
-    assert.equal(mixed.status, "unresolved");
-    // The open clarification carries only live candidates (jarvis-pr-maintenance).
-    assert.deepEqual(mixed.status === "unresolved" && mixed.candidates, ["trailer.winch-up"]);
+  await t.test("imperative exclusions and refusal inflections never resolve (Codex #790)", () => {
+    // "exclude send it" is the imperative of the existing "excluding" marker:
+    // it points AWAY from send-quote, so the guarded send must never resolve.
+    for (const reply of [
+      "exclude send it",
+      "excluded send it",
+      "excluding send it",
+      "exclude the first",
+    ]) {
+      for (const candidates of [QUOTES, ["client.send-quote", "client.draft-quote"]]) {
+        const r = resolveClarification({ reply, candidates, profile: "client" });
+        assert.equal(r.status, "unresolved", reply);
+      }
+    }
+    // An exclusion can never be turned into a selection by an affirmation.
+    for (const reply of ["yeah exclude that", "yes exclude it"]) {
+      const r = resolveClarification({ reply, candidates: SEND_ONLY, profile: "client" });
+      assert.notEqual(r.status, "resolved", reply);
+    }
+  });
 
-    for (const candidates of [
+  await t.test("an invalid offered set fails closed and echoes no candidates", () => {
+    // Offered second; filtering must not make it "first" (Codex #790). Nothing
+    // is echoed: a filtered list is not the set the speaker heard, so it must
+    // not be carried into a later turn either.
+    const invalidSets: ReadonlyArray<readonly string[]> = [
+      ["client.send-quote", "trailer.winch-up"],
+      ["trailer.winch-up", "client.send-quote"],
+      ["no.such-command", "trailer.winch-up"],
+      ["trailer.winch-up", "no.such-command"],
+      ["trailer.winch-up", "trailer.winch-up"],
+      ["trailer.winch-up", "trailer.winch-down", "trailer.winch-up"],
+      ["client.send-quote"],
+      ["no.such-command"],
+    ];
+    for (const candidates of invalidSets) {
+      for (const reply of ["first", "the last one", "winch up", "yes", "nah forget it", ""]) {
+        for (const isFinal of [undefined, true, false]) {
+          const r = resolveClarification({
+            reply,
+            candidates,
+            profile: "trailer",
+            ...(isFinal === undefined ? {} : { isFinal }),
+          });
+          const label = `${reply} / ${candidates.join(",")} / isFinal=${String(isFinal)}`;
+          assert.equal(r.status, "unresolved", label);
+          assert.deepEqual(r.status === "unresolved" && r.candidates, [], label);
+        }
+      }
+    }
+  });
+
+  await t.test("an invalid offered set stays fail-closed across two turns (Codex #790)", () => {
+    // Turn one leaves the clarification unresolved. Feeding its candidate list
+    // into turn two must never resolve the item that was originally offered
+    // second — including when turn one was an interim (isFinal:false) reply.
+    const offers: ReadonlyArray<readonly string[]> = [
+      ["client.send-quote", "trailer.winch-up"],
       ["no.such-command", "trailer.winch-up"],
       ["trailer.winch-up", "trailer.winch-up"],
-      ["trailer.winch-up", "no.such-command"],
-    ]) {
-      for (const reply of ["first", "the last one", "winch up", "yes"]) {
-        const r = resolveClarification({ reply, candidates, profile: "trailer" });
-        assert.equal(r.status, "unresolved", `${reply} / ${candidates.join(",")}`);
-        assert.deepEqual(r.status === "unresolved" && r.candidates, ["trailer.winch-up"]);
+      ["client.send-quote", "trailer.winch-up", "trailer.winch-down"],
+    ];
+    for (const offered of offers) {
+      for (const firstTurnFinal of [true, false]) {
+        for (const firstReply of ["first", "what is the weather", "the winch one"]) {
+          const one = resolveClarification({
+            reply: firstReply,
+            candidates: offered,
+            profile: "trailer",
+            isFinal: firstTurnFinal,
+          });
+          assert.equal(one.status, "unresolved");
+          if (one.status !== "unresolved") throw new Error("unreachable");
+          for (const secondReply of ["first", "the last one", "winch up", "up", "yes"]) {
+            const two = resolveClarification({
+              reply: secondReply,
+              candidates: one.candidates,
+              profile: "trailer",
+            });
+            const label = `${offered.join(",")} / final=${String(firstTurnFinal)} / ${firstReply} → ${secondReply}`;
+            assert.equal(two.status, "unresolved", label);
+            assert.deepEqual(two.status === "unresolved" && two.candidates, [], label);
+          }
+        }
       }
+    }
+  });
+
+  await t.test("a valid offered set is carried unchanged across an open turn", () => {
+    // The fail-closed rule above must not break the legitimate two-turn flow:
+    // an interim or non-selecting reply keeps the exact offered set, in order.
+    for (const isFinal of [true, false]) {
+      const one = resolveClarification({
+        reply: "the winch one",
+        candidates: WINCH,
+        profile: "trailer",
+        isFinal,
+      });
+      assert.deepEqual(one.status === "unresolved" && one.candidates, [...WINCH]);
+      if (one.status !== "unresolved") throw new Error("unreachable");
+      const two = resolveClarification({
+        reply: "second",
+        candidates: one.candidates,
+        profile: "trailer",
+      });
+      assert.equal(two.status === "resolved" && two.commandId, "trailer.winch-down");
     }
   });
 });
@@ -331,6 +416,7 @@ test("clarification resolver — safety invariants", async (t) => {
     "no send it",
     "rather than send it",
     "the other one",
+    "exclude send it",
   ];
   const sets: ReadonlyArray<{ candidates: readonly string[]; profile: "trailer" | "client" }> = [
     { candidates: WINCH, profile: "trailer" },
