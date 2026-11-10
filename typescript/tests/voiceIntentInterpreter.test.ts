@@ -253,6 +253,58 @@ describe("intent interpreter — negation, retraction and compound (#567 reprodu
   });
 });
 
+describe("intent interpreter — query-specific has/have negation (#786 P2)", () => {
+  it("withholds a guarded command negated with hasn't/haven't", () => {
+    // Previously hasnt/havent were globally exempt from negation, so a negated
+    // guarded command slipped through as a proposal. The exemption is now
+    // query-specific: guarded (actuate/critical) commands always fail closed.
+    const winch = interpretIntent({ transcript: "the winch hasn't gone up", profile: "trailer" });
+    assert.notEqual(winch.status, "proposed", "the winch hasn't gone up");
+
+    const quote = interpretIntent({ transcript: "i haven't sent the quote", profile: "client" });
+    assert.notEqual(quote.status, "proposed", "i haven't sent the quote");
+  });
+
+  it("still proposes a non-guarded query that legitimately uses haven't", () => {
+    // The whole point of the exemption: an unpaid-invoices query phrased with a
+    // has/have contraction stays a legitimate proposal.
+    const intent = interpretIntent({
+      transcript: "any invoices that haven't been paid",
+      profile: "client",
+    });
+    assert.equal(intent.status, "proposed");
+    if (intent.status === "proposed") assert.equal(intent.commandId, "client.unpaid-invoices");
+  });
+});
+
+describe("intent interpreter — fuzzy-slip negated alternative fails closed (#786 P2)", () => {
+  it("withholds when an ASR-slipped alternative negates a recognition-tolerant primary", () => {
+    // The primary "wench up" only resolves to winch-up via recognition
+    // tolerance; the alternative "don't wench up" negates that same slipped
+    // command. The negated-alternative check must use the same tolerance, so it
+    // fails closed rather than trusting the primary.
+    const intent = interpretIntent({
+      transcript: "wench up",
+      profile: "trailer",
+      alternatives: ["don't wench up"],
+    });
+    assert.notEqual(intent.status, "proposed");
+  });
+});
+
+describe("intent interpreter — compound hiding an ASR-slipped request fails closed (#786 P2)", () => {
+  it("does not propose a lone request when a mis-recognised one shares the compound", () => {
+    // "wench up then turn lights on": exact matching sees only lights-on because
+    // "wench" is a slip, but the compound still carries a second (guarded)
+    // request. It must fail closed to clarification, not propose lights-on.
+    const intent = interpretIntent({
+      transcript: "wench up then turn lights on",
+      profile: "trailer",
+    });
+    assert.equal(intent.status, "needs-clarification", "wench up then turn lights on");
+  });
+});
+
 describe("intent interpreter — recognition tolerance stays safe", () => {
   it("recovers an intent from a plausible speech-recognition slip", () => {
     const slip = interpretIntent({ transcript: "wench up", profile: "trailer" });

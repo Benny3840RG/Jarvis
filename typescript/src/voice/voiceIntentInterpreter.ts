@@ -79,10 +79,10 @@ const COMMAND_BY_ID: ReadonlyMap<string, VoiceCommand> = new Map(
 /**
  * Explicit negation markers. Withhold rather than infer which clause is negated.
  *
- * Deliberately evidence-led, not a blanket ban on every "not"-contraction:
- * `hasnt`/`havent` are excluded because real catalog queries use them
- * ("who hasn't paid" = the unpaid-invoices query), so banning them would
- * suppress a legitimate intent rather than a negated command.
+ * `hasnt`/`havent` are deliberately NOT here: they are polarity-bearing but
+ * query-specific, handled separately via `QUERY_EXEMPT_NEGATION_TOKENS` so a
+ * legitimate read-only query may use them while a guarded command still fails
+ * closed. See that set's note.
  */
 const NEGATION_TOKENS: ReadonlySet<string> = new Set([
   "no",
@@ -125,6 +125,19 @@ const RETRACTION_TOKENS: ReadonlySet<string> = new Set([
   "abort",
   "scratch",
 ]);
+
+/**
+ * Negation contractions of "has"/"have" ("hasn't", "haven't"). These are NOT a
+ * blanket negation: a read-only query legitimately uses them — "any invoices
+ * that haven't been paid" is the unpaid-invoices query — so banning them
+ * outright would suppress a legitimate intent. The exemption is therefore
+ * QUERY-SPECIFIC: they withhold exactly like any other negation when the matched
+ * command is guarded (actuate/critical), and are tolerated only for non-guarded
+ * queries. This closes the previous leak where "the winch hasn't gone up"
+ * proposed the guarded winch-up and "I haven't sent the quote" proposed the
+ * critical send-quote.
+ */
+const QUERY_EXEMPT_NEGATION_TOKENS: ReadonlySet<string> = new Set(["hasnt", "havent"]);
 
 /** Connectors that join two separate requests into a compound utterance. */
 const COMPOUND_CONNECTORS: ReadonlySet<string> = new Set([
@@ -348,9 +361,27 @@ function bestCandidate(
     .sort((a, b) => b.score - a.score);
 }
 
-/** A negated or explicitly retracted utterance; either withholds (fail closed). */
-function isWithheldByPolarity(tokens: readonly string[]): boolean {
+/** A hard negation or explicit retraction; either always withholds (fail closed). */
+function hasHardPolarity(tokens: readonly string[]): boolean {
   return tokens.some((t) => NEGATION_TOKENS.has(t) || RETRACTION_TOKENS.has(t));
+}
+
+/** The query-exempt has/have contractions, independent of hard polarity. */
+function hasQueryExemptNegation(tokens: readonly string[]): boolean {
+  return tokens.some((t) => QUERY_EXEMPT_NEGATION_TOKENS.has(t));
+}
+
+/** Any polarity marker at all, including the query-exempt has/have contractions. */
+function hasAnyPolarity(tokens: readonly string[]): boolean {
+  return hasHardPolarity(tokens) || hasQueryExemptNegation(tokens);
+}
+
+/** Strip every polarity marker, leaving the bare request clause. */
+function stripPolarity(tokens: readonly string[]): readonly string[] {
+  return tokens.filter(
+    (t) =>
+      !NEGATION_TOKENS.has(t) && !RETRACTION_TOKENS.has(t) && !QUERY_EXEMPT_NEGATION_TOKENS.has(t),
+  );
 }
 
 function isGuarded(command: VoiceCommand): boolean {
@@ -368,8 +399,21 @@ function proposalFor(
     return { status: "no-intent", rationale: "no catalog signal matched in the active profile" };
   }
 
-  if (isWithheldByPolarity(tokens)) {
+  // Polarity. A hard negation or explicit retraction always withholds. The
+  // has/have contractions withhold too, but only when a matched command is
+  // guarded (actuate/critical): a non-guarded query ("invoices that haven't
+  // been paid") stays a legitimate proposal.
+  if (hasHardPolarity(tokens)) {
     return { status: "no-intent", rationale: "explicit negation or retraction; no proposal" };
+  }
+  if (hasQueryExemptNegation(tokens)) {
+    const anyGuarded = ranked.some((c) => isGuarded(COMMAND_BY_ID.get(c.commandId)!));
+    if (anyGuarded) {
+      return {
+        status: "no-intent",
+        rationale: "negated has/have contraction over a guarded command; no proposal",
+      };
+    }
   }
 
   const top = ranked[0]!;
@@ -413,7 +457,18 @@ function resolveProposal(
   compound: boolean,
 ): InterpretedIntent {
   const exact = proposalFor(tokens, profile, false, compound);
-  return exact.status === "no-intent" ? proposalFor(tokens, profile, true, compound) : exact;
+  if (exact.status === "no-intent") {
+    return proposalFor(tokens, profile, true, compound);
+  }
+  // A compound utterance may hide a second request whose verb was mis-recognised
+  // ("wench up then turn lights on" — exact matching sees only lights-on). Re-run
+  // with recognition tolerance; if the slipped request surfaces as a second
+  // command, fail closed to clarification rather than propose the lone exact one.
+  if (compound) {
+    const tolerant = proposalFor(tokens, profile, true, compound);
+    if (tolerant.status === "needs-clarification") return tolerant;
+  }
+  return exact;
 }
 
 /**
@@ -445,11 +500,13 @@ export function interpretIntent(input: InterpretInput): InterpretedIntent {
     // A negated/retracted alternative ("don't winch up") means the recogniser is
     // unsure whether the speaker negated the command. If the negated clause still
     // references a catalog command, fail closed rather than trust the primary.
-    if (isWithheldByPolarity(altTokens.tokens)) {
-      const bare = altTokens.tokens.filter(
-        (t) => !NEGATION_TOKENS.has(t) && !RETRACTION_TOKENS.has(t),
-      );
-      if (proposalFor(bare, input.profile, false, altTokens.compound).status !== "no-intent") {
+    if (hasAnyPolarity(altTokens.tokens)) {
+      const bare = stripPolarity(altTokens.tokens);
+      // Resolve the bare clause exact-first then recognition-tolerant, mirroring
+      // how the primary was resolved. A negated ASR slip ("don't wench up"
+      // against a recognition-tolerant "wench up" primary) must fail closed, not
+      // slip through because the bare clause only matched fuzzily.
+      if (resolveProposal(bare, input.profile, altTokens.compound).status !== "no-intent") {
         return {
           status: "needs-clarification",
           candidates: Object.freeze([primary.commandId]),
