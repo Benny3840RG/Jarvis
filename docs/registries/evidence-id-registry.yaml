@@ -41,3 +41,7 @@ evidence:
   - id: EVD-SECURITY-EDUCATION-001
     path: docs/evidence/security-education-mvp.md
     description: Education-only design, threat boundaries, test commands and review handoff. No live commissioning, deployment or diagnostics authority.
+
+  - id: EVD-AM-016-001
+    path: docs/evidence/am-016-tcp-check-planning.md
+    description: Planning-only implementation evidence for the security:tcp-check core (Phases 1-4) — I/O-free modules, the governed T3 tool definition, and the egress provider, with CI run references. Records no commissioning, deployment, real-target allowlist, or diagnostics authority; AM-016 stays lifecycle_status planned pending the kernel/proxy egress enforcer and a separate owner-approved commissioning tranche.
