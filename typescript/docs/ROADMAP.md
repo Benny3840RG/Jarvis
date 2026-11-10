@@ -14,7 +14,13 @@ property keeps that `propertyId`, but the MCP output schemas for
 (`get_project`, `list_projects`, `update_project`, the brief and the dashboard)
 did not declare it. The conversion was written and the tool then reported a
 schema error; later project reads failed the same way. Both schemas now match
-the OpenAPI `Project`.
+the OpenAPI `Project`. `create_project` and `update_project` also accept
+`propertyId` (null detaches), which the HTTP API already supported, so a job
+logged without an enquiry can be tied to a property through MCP.
+
+Open, not changed here: the project and enquiry routes confirm the referenced
+client exists but do not check that a `propertyId` exists or belongs to that
+client.
 
 Not proven here: the quote lifecycle, delivery ledger and PDF artifact store
 are file-backed test doubles over the real domain helpers, and no email is
