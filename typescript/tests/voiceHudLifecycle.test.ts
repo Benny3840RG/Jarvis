@@ -300,7 +300,7 @@ describe("voice HUD lifecycle (actual setupVoiceConsole and real session registr
     await flush();
     assert.equal(h.spoken.length, 0);
     h.get("voice-test-output").fire("click");
-    assert.deepEqual(h.spoken, ["Jarvis speech output test."]);
+    assert.deepEqual(h.spoken, ["Speech output test."]);
     assert.equal(h.recognitions.length, 0);
     assert.equal(h.utterances().length, 0);
     h.speechUtterances[0].onstart?.();
@@ -311,6 +311,61 @@ describe("voice HUD lifecycle (actual setupVoiceConsole and real session registr
     h.speechUtterances[1].onerror?.();
     assert.match(h.get("voice-output-status").textContent, /failed/i);
     assert.equal(h.actuations.length, 0);
+  });
+
+  it("does not dispatch the spoken test phrase when the microphone hears it", async () => {
+    const h = harness();
+    const recognition = h.enable();
+    h.get("voice-test-output").fire("click");
+    recognition.emit(h.spoken[0]);
+    await flush();
+    assert.deepEqual(h.spoken, ["Speech output test."]);
+    assert.equal(h.utterances().length, 0);
+    assert.equal(h.registry.size(), 0);
+    assert.deepEqual(h.actuations, []);
+  });
+
+  it("preserves idle and unavailable speech status on Stop and profile change", async () => {
+    const idle = harness();
+    const initial = idle.get("voice-output-status").textContent;
+    idle.profile("crawler");
+    await flush();
+    assert.equal(idle.get("voice-output-status").textContent, initial);
+    idle.stop();
+    assert.equal(idle.get("voice-output-status").textContent, initial);
+    const unavailable = harness({ synthesis: false });
+    unavailable.get("voice-test-output").fire("click");
+    const status = unavailable.get("voice-output-status").textContent;
+    unavailable.stop();
+    assert.equal(unavailable.get("voice-output-status").textContent, status);
+    unavailable.profile("crawler");
+    await flush();
+    assert.equal(unavailable.get("voice-output-status").textContent, status);
+    const finished = harness();
+    finished.get("voice-test-output").fire("click");
+    finished.speechUtterances[0].onend?.();
+    const completed = finished.get("voice-output-status").textContent;
+    finished.stop();
+    assert.equal(finished.get("voice-output-status").textContent, completed);
+  });
+
+  it("ignores callbacks from superseded and cancelled utterances", async () => {
+    const h = harness();
+    h.get("voice-test-output").fire("click");
+    h.get("voice-test-output").fire("click");
+    const requested = h.get("voice-output-status").textContent;
+    h.speechUtterances[0].onstart?.();
+    h.speechUtterances[0].onend?.();
+    h.speechUtterances[0].onerror?.();
+    assert.equal(h.get("voice-output-status").textContent, requested);
+    h.profile("crawler");
+    const stopped = h.get("voice-output-status").textContent;
+    h.speechUtterances[1].onstart?.();
+    h.speechUtterances[1].onend?.();
+    h.speechUtterances[1].onerror?.();
+    assert.match(stopped, /stopped/i);
+    assert.equal(h.get("voice-output-status").textContent, stopped);
+    await flush();
   });
 
   it("reports unavailable speech and ignores late callbacks after Stop", async () => {

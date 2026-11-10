@@ -4099,12 +4099,14 @@
             );
           }
           var speechGeneration = 0;
+          var speechInFlight = false;
           function speechStatus(message) {
             var el = document.getElementById("voice-output-status");
             if (el) el.textContent = message;
           }
           function speak(label) {
             var generation = ++speechGeneration;
+            speechInFlight = false;
             if (!caps.synthesis || typeof window.SpeechSynthesisUtterance !== "function") {
               speechStatus("Spoken output unavailable in this browser. Text remains available.");
               return;
@@ -4116,22 +4118,23 @@
                 if (generation === speechGeneration) speechStatus("Browser speech started; audibility cannot be confirmed.");
               };
               utterance.onend = function () {
-                if (generation === speechGeneration) speechStatus("Browser speech ended; cannot confirm it was heard.");
+                if (generation === speechGeneration) { speechInFlight = false; speechStatus("Browser speech ended; cannot confirm it was heard."); }
               };
               utterance.onerror = function () {
-                if (generation === speechGeneration) speechStatus("Browser speech failed. Text remains available.");
+                if (generation === speechGeneration) { speechInFlight = false; speechStatus("Browser speech failed. Text remains available."); }
               };
               var voices = typeof window.speechSynthesis.getVoices === "function" ? window.speechSynthesis.getVoices() : null;
               speechStatus(voices && !voices.length
                 ? "No voices currently listed; requesting speech. Check your browser audio."
                 : "Speech requested; waiting for the browser.");
+              speechInFlight = true;
               window.speechSynthesis.speak(utterance);
             } catch (error) {
-              if (generation === speechGeneration) speechStatus("Browser speech failed. Text remains available.");
+              if (generation === speechGeneration) { speechInFlight = false; speechStatus("Browser speech failed. Text remains available."); }
             }
           }
           var testOutputBtn = document.getElementById("voice-test-output");
-          if (testOutputBtn) testOutputBtn.addEventListener("click", function () { speak("Jarvis speech output test."); });
+          if (testOutputBtn) testOutputBtn.addEventListener("click", function () { speak("Speech output test."); });
           function renderPending(pending) {
             var el = document.getElementById("voice-pending");
             if (!el) return;
@@ -4265,7 +4268,8 @@
           }
           function cancelSpeech() {
             speechGeneration += 1;
-            speechStatus("Spoken output stopped.");
+            if (speechInFlight) speechStatus("Spoken output stopped.");
+            speechInFlight = false;
             if (caps.synthesis) try { window.speechSynthesis.cancel(); } catch (error) { /* best-effort */ }
           }
           function settledWithin(promise, ms) {
