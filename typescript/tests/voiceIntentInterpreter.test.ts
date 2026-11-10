@@ -56,6 +56,32 @@ describe("intent interpreter — understands natural phrasing", () => {
 });
 
 describe("intent interpreter — fails closed", () => {
+  it("withholds each single-signal crawler command for its negated implicit alternative", () => {
+    for (const command of ["stop", "forward", "reverse", "status"]) {
+      const intent = interpretIntent({
+        transcript: `crawler ${command}`,
+        profile: "crawler",
+        alternatives: [`do not ${command}`],
+      });
+      assert.equal(intent.status, "needs-clarification", command);
+      if (intent.status === "needs-clarification") {
+        assert.deepEqual(intent.candidates, [`crawler.${command}`]);
+      }
+    }
+  });
+
+  it("does not veto single-signal crawler commands for unrelated negation", () => {
+    for (const command of ["stop", "forward", "reverse", "status"]) {
+      const intent = interpretIntent({
+        transcript: `crawler ${command}`,
+        profile: "crawler",
+        alternatives: ["do not open the door"],
+      });
+      assert.equal(intent.status, "proposed", command);
+      if (intent.status === "proposed") assert.equal(intent.commandId, `crawler.${command}`);
+    }
+  });
+
   it("withholds a crawler proposal when a negated alternative omits the profile noun", () => {
     for (const alternative of [
       "don't turn lights on",

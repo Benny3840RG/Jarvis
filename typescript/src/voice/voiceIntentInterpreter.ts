@@ -392,7 +392,7 @@ function matchesImplicitCrawlerCommand(commandId: string, tokens: readonly strin
   return (signal?.patterns ?? []).some((pattern) => {
     const contextual = pattern.filter((group) => !(group.length === 1 && group[0] === "crawler"));
     return (
-      contextual.length >= 2 &&
+      contextual.length >= 1 &&
       contextual.length < pattern.length &&
       contextual.every((group) => groupMatches(group, tokens, tokenSet, joined, true))
     );
