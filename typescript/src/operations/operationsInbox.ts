@@ -3,6 +3,9 @@ import { deriveAssetView } from "../assets/assetView.js";
 import type { Reminder } from "../persistence/types.js";
 import { compareInboxItems, type InboxSeverity } from "./inboxSeverity.js";
 
+/** Reminders due in the next 24 hours also appear in the inbox — matches BRIEF_UPCOMING_WINDOW_MS in briefs/brief.ts. */
+export const REMINDER_SOON_WINDOW_MS = 24 * 60 * 60 * 1000;
+
 /** Assets due within this window of "now" (but not yet overdue) count as due soon — matches BRIEF_MAINTENANCE_SOON_WINDOW_MS in briefs/brief.ts. */
 export const MAINTENANCE_SOON_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
 
@@ -24,7 +27,8 @@ export interface InboxSourceReport {
   checkedAt: string;
 }
 
-export type InboxItemKind = "reminder-overdue" | "maintenance-overdue" | "maintenance-due-soon";
+export type InboxItemKind =
+  "reminder-overdue" | "reminder-due-soon" | "maintenance-overdue" | "maintenance-due-soon";
 
 export interface InboxItem {
   itemId: string;
@@ -93,23 +97,29 @@ async function reportSource<T, TSource extends "reminders" | "maintenance">(
 }
 
 function reminderItems(reminders: Reminder[], now: number): InboxItem[] {
-  return reminders
-    .filter((reminder): reminder is Reminder & { dueAt: number } => reminder.dueAt !== undefined)
-    .filter((reminder) => reminder.dueAt <= now)
-    .map((reminder) => ({
-      itemId: `reminder-overdue:${reminder.id}`,
-      kind: "reminder-overdue" as const,
-      severity: "normal" as const,
+  const items: InboxItem[] = [];
+  for (const reminder of reminders) {
+    const dueAt = reminder.dueAt;
+    if (dueAt === undefined || dueAt > now + REMINDER_SOON_WINDOW_MS) continue;
+    const overdue = dueAt <= now;
+    items.push({
+      itemId: `reminder-${overdue ? "overdue" : "due-soon"}:${reminder.id}`,
+      kind: overdue ? "reminder-overdue" : "reminder-due-soon",
+      severity: "normal",
       title: reminder.title,
-      explanation: `Reminder due ${iso(reminder.dueAt)} has passed.`,
-      sourceSubsystem: "reminders" as const,
+      explanation: overdue
+        ? `Reminder due ${iso(dueAt)} has passed.`
+        : `Reminder falls due ${iso(dueAt)}.`,
+      sourceSubsystem: "reminders",
       sourceRecordId: reminder.id,
       createdAt: iso(reminder.createdAt),
-      dueAt: iso(reminder.dueAt),
-      updatedAt: iso(reminder.dueAt),
-      status: "overdue",
-      actionRequired: true,
-    }));
+      dueAt: iso(dueAt),
+      updatedAt: iso(dueAt),
+      status: overdue ? "overdue" : "due-soon",
+      actionRequired: overdue,
+    });
+  }
+  return items;
 }
 
 function maintenanceItems(assets: Asset[], now: number): InboxItem[] {
