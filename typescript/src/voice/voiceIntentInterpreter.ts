@@ -11,10 +11,10 @@
  * WHAT THIS IS NOT — and the safety contract that makes it safe to add:
  *   - It NEVER dispatches, approves, actuates or executes. It returns a
  *     proposal and nothing else; there is no code path from here to an effect.
- *   - It is NOT wired into `voiceParser.ts`, `voiceSession.ts` or any live
- *     path. Final-only, whole-utterance exact dispatch remains the sole gate.
- *     A proposal is advisory context a caller may surface or confirm; it can
- *     never substitute for the deterministic boundary or for governed approval.
+ *   - Opt-in VoiceSession integration runs only after an exact no-match on
+ *     wake-authorised final input. Proposals enter the existing TTL-limited,
+ *     single-use confirmation path and are never dispatched directly; they
+ *     cannot substitute for governed approval.
  *   - It FAILS CLOSED: it abstains (proposes nothing) on genuine ambiguity, on
  *     conflicting recogniser hypotheses, and on negated requests; and it never
  *     proposes a command outside the active profile. In particular it will not
@@ -384,6 +384,21 @@ function stripPolarity(tokens: readonly string[]): readonly string[] {
   );
 }
 
+/** Match a crawler alternative against the proposed command without its implicit profile noun. */
+function matchesImplicitCrawlerCommand(commandId: string, tokens: readonly string[]): boolean {
+  const signal = SIGNALS.find((item) => item.profile === "crawler" && item.commandId === commandId);
+  const tokenSet = new Set(tokens);
+  const joined = tokens.join(" ");
+  return (signal?.patterns ?? []).some((pattern) => {
+    const contextual = pattern.filter((group) => !(group.length === 1 && group[0] === "crawler"));
+    return (
+      contextual.length >= 2 &&
+      contextual.length < pattern.length &&
+      contextual.every((group) => groupMatches(group, tokens, tokenSet, joined, true))
+    );
+  });
+}
+
 function isGuarded(command: VoiceCommand): boolean {
   return command.kind === "actuate" || command.criticality === "critical";
 }
@@ -514,7 +529,10 @@ export function interpretIntent(input: InterpretInput): InterpretedIntent {
       // how the primary was resolved. A negated ASR slip ("don't wench up"
       // against a recognition-tolerant "wench up" primary) must fail closed, not
       // slip through because the bare clause only matched fuzzily.
-      if (resolveProposal(bare, input.profile, altTokens.compound).status !== "no-intent") {
+      if (
+        resolveProposal(bare, input.profile, altTokens.compound).status !== "no-intent" ||
+        (input.profile === "crawler" && matchesImplicitCrawlerCommand(primary.commandId, bare))
+      ) {
         return {
           status: "needs-clarification",
           candidates: Object.freeze([primary.commandId]),

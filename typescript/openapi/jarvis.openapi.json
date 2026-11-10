@@ -8017,9 +8017,21 @@
           },
           "confidence": {
             "type": "number",
+            "minimum": 0,
+            "maximum": 1,
             "description": "Interpreter confidence (0..1) for an inferred awaiting-confirmation decision. Advisory only; it never substitutes for the spoken confirmation."
           }
-        }
+        },
+        "allOf": [
+          {
+            "if": { "properties": { "inferred": {} }, "required": ["inferred"] },
+            "then": {
+              "required": ["confidence"],
+              "properties": { "decision": { "const": "awaiting-confirmation" }, "confidence": {} }
+            },
+            "else": { "not": { "properties": { "confidence": {} }, "required": ["confidence"] } }
+          }
+        ]
       },
       "VoiceDispatchResponse": {
         "type": "object",

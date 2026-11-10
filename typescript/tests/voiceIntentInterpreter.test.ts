@@ -3,7 +3,8 @@
  * improvement over the exact-match baseline (#567, Wave One).
  *
  * The interpreter is advisory: it only ever PROPOSES a catalog command ahead of
- * the deterministic action boundary, and is not wired into live dispatch. These
+ * the deterministic action boundary. Opt-in session integration requires a
+ * wake-authorised final no-match and confirmation before dispatch. These
  * tests prove (1) it understands natural phrasing the exact-matcher declines,
  * (2) it fails closed on negation, ambiguity, conflicting hypotheses, wrong
  * profile and interim transcripts, and (3) the coverage gain is real and
@@ -55,6 +56,31 @@ describe("intent interpreter — understands natural phrasing", () => {
 });
 
 describe("intent interpreter — fails closed", () => {
+  it("withholds a crawler proposal when a negated alternative omits the profile noun", () => {
+    for (const alternative of [
+      "don't turn lights on",
+      "do not turn lights on",
+      "don’t turn lights on",
+    ]) {
+      assert.notEqual(
+        interpretIntent({
+          transcript: "crawler lights on",
+          profile: "crawler",
+          alternatives: [alternative],
+        }).status,
+        "proposed",
+        alternative,
+      );
+    }
+    assert.equal(
+      interpretIntent({
+        transcript: "crawler lights on",
+        profile: "crawler",
+        alternatives: ["don't open the door"],
+      }).status,
+      "proposed",
+    );
+  });
   it("withholds on a negated actuating request", () => {
     const negated = interpretIntent({ transcript: "do not winch up", profile: "trailer" });
     assert.notEqual(negated.status, "proposed");

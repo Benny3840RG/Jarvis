@@ -27,6 +27,27 @@ async function handle(
 }
 
 describe("voice session — dispatch and confirmation lifecycle", () => {
+  it("does not arm an inferred crawler command when an alternative negates it", async () => {
+    const s = new VoiceSession({
+      profile: "crawler",
+      provider: new AbsentHardwareProvider(),
+      interpretNaturalLanguage: true,
+    });
+    const result = await s.handle({
+      transcript: "please crawler lights on",
+      alternatives: ["don't turn lights on"],
+      isFinal: true,
+      wakeAuthorized: true,
+      now: 0,
+    });
+    assert.equal(result.decision, "ambiguous");
+    assert.equal(s.pending(), undefined);
+    assert.equal(
+      (await s.handle({ transcript: "confirm", isFinal: true, wakeAuthorized: true, now: 1 }))
+        .decision,
+      "confirmation-not-pending",
+    );
+  });
   it("reports a query as unavailable when no read-only provider is connected", async () => {
     const s = new VoiceSession({ profile: "client", provider: new AbsentHardwareProvider() });
     const d = await s.handle({ transcript: "any unpaid invoices", isFinal: true, now: 0 });

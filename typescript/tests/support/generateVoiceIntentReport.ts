@@ -181,9 +181,10 @@ function interpreterSection(): string {
   return `## After — intent interpreter v1 (\`src/voice/voiceIntentInterpreter.ts\`)
 
 A deterministic, dependency-free interpreter that PROPOSES a catalog command
-ahead of the deterministic boundary. It is **advisory only** and is **not wired
-into live dispatch**: final-only, whole-utterance exact matching remains the
-sole gate. It withholds proposals on explicit negation and interim input,
+ahead of the deterministic boundary. Opt-in VoiceSession integration runs only
+after an exact no-match on wake-authorised final input; proposals enter the
+existing TTL-limited, single-use confirmation path, with no direct dispatch.
+It withholds proposals on explicit negation and interim input,
 asks for clarification on competing signals, and only ranks commands from
 the active profile.
 

@@ -12,11 +12,11 @@
 | Dataset version | 2026-11-10.1 |
 | `src/voice/voiceParser.ts` SHA-256 | `6ff04f3af0b5e75188b231cc997f0113607b42d692e44e8d2efa6901cca7d7ea` |
 | `src/voice/voiceCommands.ts` SHA-256 | `8978ae1306b6f3d49fc67adbcd73f5dd3b2466ae6bde067237a76aeae92a22a4` |
-| `src/voice/voiceIntentInterpreter.ts` SHA-256 | `449c783d246d2d64af4cd7077620cf96e84a7c78d17fcdbc640cb9aff69ed3ab` |
+| `src/voice/voiceIntentInterpreter.ts` SHA-256 | `9702bfec261963777bb9ac36a63c95f0ce3cb168664987141a4b55340776a111` |
 | `tests/support/voiceIntentDataset.ts` SHA-256 | `dea4d8e61b0c8150da8671a99eaac44d95bceee709784f309895d5d430681f40` |
 | `tests/support/voiceIntentScoring.ts` SHA-256 | `bcdeefca2797059dc4323e9025898302d88cc4b15bf7dd810fafde96cb531cef` |
 | `tests/support/voiceIntentInterpreterScoring.ts` SHA-256 | `d767fddc86af3b931bf7ae3c0bd8e1d154a76821a8c209323b08673d34ee7902` |
-| `tests/support/generateVoiceIntentReport.ts` SHA-256 | `595369f156d84b3c37ebd24972bfe17b914d9131121a2db29d33326155e77e2a` |
+| `tests/support/generateVoiceIntentReport.ts` SHA-256 | `9abb726a19c72517fe5f36899372610cc418bb954f4ea926b3b46ad28e148921` |
 | Parser under test | `src/voice/voiceParser.ts` (`parseUtterance`, exact whole-utterance, final-only) |
 | Model/provider | none — the parser is pure and deterministic; no model call |
 | Evaluation method | deterministic classification by `tests/support/voiceIntentScoring.ts` |
@@ -94,9 +94,10 @@ the exact-match parser declines today:
 ## After — intent interpreter v1 (`src/voice/voiceIntentInterpreter.ts`)
 
 A deterministic, dependency-free interpreter that PROPOSES a catalog command
-ahead of the deterministic boundary. It is **advisory only** and is **not wired
-into live dispatch**: final-only, whole-utterance exact matching remains the
-sole gate. It withholds proposals on explicit negation and interim input,
+ahead of the deterministic boundary. Opt-in VoiceSession integration runs only
+after an exact no-match on wake-authorised final input; proposals enter the
+existing TTL-limited, single-use confirmation path, with no direct dispatch.
+It withholds proposals on explicit negation and interim input,
 asks for clarification on competing signals, and only ranks commands from
 the active profile.
 
