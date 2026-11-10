@@ -12,7 +12,7 @@
 | Dataset version | 2026-11-10.1 |
 | `src/voice/voiceParser.ts` SHA-256 | `6ff04f3af0b5e75188b231cc997f0113607b42d692e44e8d2efa6901cca7d7ea` |
 | `src/voice/voiceCommands.ts` SHA-256 | `8978ae1306b6f3d49fc67adbcd73f5dd3b2466ae6bde067237a76aeae92a22a4` |
-| `src/voice/voiceIntentInterpreter.ts` SHA-256 | `a5701d46d1928514269004e0c031ce50ad90379d38f556ad1364aa3f18d93849` |
+| `src/voice/voiceIntentInterpreter.ts` SHA-256 | `94d001b715675e06e91415fe6111e8c8149db9900cbf65387c0c829aa9c057ee` |
 | `tests/support/voiceIntentDataset.ts` SHA-256 | `dea4d8e61b0c8150da8671a99eaac44d95bceee709784f309895d5d430681f40` |
 | `tests/support/voiceIntentScoring.ts` SHA-256 | `bcdeefca2797059dc4323e9025898302d88cc4b15bf7dd810fafde96cb531cef` |
 | `tests/support/voiceIntentInterpreterScoring.ts` SHA-256 | `d767fddc86af3b931bf7ae3c0bd8e1d154a76821a8c209323b08673d34ee7902` |
@@ -102,12 +102,12 @@ the active profile.
 
 | Measure | Before (exact-matcher) | After (interpreter v1) |
 | --- | --- | --- |
-| Natural-phrasing coverage | 0/69 (0.0%) | **56/69 (81.2%)** |
-| — dev split | 0/50 | 42/50 |
-| — held-out split | 0/19 | 14/19 |
+| Natural-phrasing coverage | 0/69 (0.0%) | **60/69 (87.0%)** |
+| — dev split | 0/50 | 45/50 |
+| — held-out split | 0/19 | 15/19 |
 | Canonical anchors | 41/41 | 41/41 |
 | informal-AU cases | 0/57 | 54/57 |
-| ASR-error cases | 0/12 | 2/12 |
+| ASR-error cases | 0/12 | 6/12 |
 | Wrong matches or proposals | 0 | 0 |
 | Safety/ambiguous leaks | 0 | 0 |
 | Incorrect actuator matches or proposals | 0 | 0 |

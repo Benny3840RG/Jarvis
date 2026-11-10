@@ -226,13 +226,61 @@ function tokenize(raw: string): { tokens: readonly string[]; joined: string } {
   return { tokens, joined: tokens.join(" ") };
 }
 
-function groupMatches(group: Group, tokens: ReadonlySet<string>, joined: string): boolean {
-  return group.some((alt) => (alt.includes(" ") ? joined.includes(alt) : tokens.has(alt)));
+/**
+ * True when `a` and `b` are within a single edit (substitution, insertion or
+ * deletion). Used only as a bounded tolerance for speech-recognition slips
+ * ("statue"→"status", "ram"→"ramp"). Restricted by the caller to tokens of
+ * length ≥ 4, so short polarity words ("on"/"off"/"up"/"down") are never fuzzed
+ * and a reversal of meaning can never slip through.
+ */
+function withinOneEdit(a: string, b: string): boolean {
+  if (a === b) return true;
+  const [short, long] = a.length <= b.length ? [a, b] : [b, a];
+  if (long.length - short.length > 1) return false;
+  if (long.length === short.length) {
+    let diffs = 0;
+    for (let i = 0; i < long.length; i += 1) if (long[i] !== short[i]) diffs += 1;
+    return diffs === 1;
+  }
+  // One insertion/deletion: skip exactly one char in `long` and compare.
+  for (let skip = 0; skip < long.length; skip += 1) {
+    const candidate = long.slice(0, skip) + long.slice(skip + 1);
+    if (candidate === short) return true;
+  }
+  return false;
+}
+
+/** A single-word alt may match a token fuzzily only when both are ≥ 4 chars. */
+function tokenMatches(
+  alt: string,
+  tokens: readonly string[],
+  tokenSet: ReadonlySet<string>,
+  fuzzy: boolean,
+): boolean {
+  if (tokenSet.has(alt)) return true;
+  if (!fuzzy || alt.length < 4) return false;
+  return tokens.some((token) => token.length >= 4 && withinOneEdit(token, alt));
+}
+
+function groupMatches(
+  group: Group,
+  tokens: readonly string[],
+  tokenSet: ReadonlySet<string>,
+  joined: string,
+  fuzzy: boolean,
+): boolean {
+  return group.some((alt) =>
+    alt.includes(" ") ? joined.includes(alt) : tokenMatches(alt, tokens, tokenSet, fuzzy),
+  );
 }
 
 type Candidate = Readonly<{ commandId: string; score: number }>;
 
-function bestCandidate(profile: VoiceProfile, tokens: readonly string[]): Candidate[] {
+function bestCandidate(
+  profile: VoiceProfile,
+  tokens: readonly string[],
+  fuzzy: boolean,
+): Candidate[] {
   const tokenSet = new Set(tokens);
   const joined = tokens.join(" ");
   const byCommand = new Map<string, number>();
@@ -240,7 +288,7 @@ function bestCandidate(profile: VoiceProfile, tokens: readonly string[]): Candid
     if (signal.profile !== profile) continue;
     let best = 0;
     for (const pattern of signal.patterns) {
-      if (pattern.every((group) => groupMatches(group, tokenSet, joined))) {
+      if (pattern.every((group) => groupMatches(group, tokens, tokenSet, joined, fuzzy))) {
         best = Math.max(best, pattern.length);
       }
     }
@@ -259,8 +307,12 @@ function isGuarded(command: VoiceCommand): boolean {
   return command.kind === "actuate" || command.criticality === "critical";
 }
 
-function proposalFor(tokens: readonly string[], profile: VoiceProfile): InterpretedIntent {
-  const ranked = bestCandidate(profile, tokens);
+function proposalFor(
+  tokens: readonly string[],
+  profile: VoiceProfile,
+  fuzzy: boolean,
+): InterpretedIntent {
+  const ranked = bestCandidate(profile, tokens, fuzzy);
   if (ranked.length === 0) {
     return { status: "no-intent", rationale: "no catalog signal matched in the active profile" };
   }
@@ -285,17 +337,29 @@ function proposalFor(tokens: readonly string[], profile: VoiceProfile): Interpre
   }
 
   const command = COMMAND_BY_ID.get(top.commandId)!;
-  const confidence = Math.min(
+  let confidence = Math.min(
     1,
     0.55 + 0.15 * top.score + (top.score - (ranked[1]?.score ?? 0)) * 0.1,
   );
+  // A fuzzy (recognition-tolerant) match is inherently less certain.
+  if (fuzzy) confidence = Math.min(confidence, 0.7);
   return {
     status: "proposed",
     commandId: top.commandId,
     confidence: Number(confidence.toFixed(2)),
     requiresConfirmation: isGuarded(command),
-    rationale: `matched ${top.score} intent group(s) for ${top.commandId}`,
+    rationale: `matched ${top.score} intent group(s) for ${top.commandId}${fuzzy ? " (recognition-tolerant)" : ""}`,
   };
+}
+
+/**
+ * Resolve a proposal exact-first: fuzzy recognition tolerance is only consulted
+ * when exact matching finds no intent at all, so it can never override or weaken
+ * an exact decision (including an exact fail-closed one).
+ */
+function resolveProposal(tokens: readonly string[], profile: VoiceProfile): InterpretedIntent {
+  const exact = proposalFor(tokens, profile, false);
+  return exact.status === "no-intent" ? proposalFor(tokens, profile, true) : exact;
 }
 
 /**
@@ -310,7 +374,7 @@ export function interpretIntent(input: InterpretInput): InterpretedIntent {
     return { status: "no-intent", rationale: "interim transcript withheld (final-only)" };
   }
 
-  const primary = proposalFor(tokenize(input.transcript).tokens, input.profile);
+  const primary = resolveProposal(tokenize(input.transcript).tokens, input.profile);
 
   const alternatives = input.alternatives ?? [];
   if (alternatives.length === 0 || primary.status !== "proposed") {
@@ -318,9 +382,11 @@ export function interpretIntent(input: InterpretInput): InterpretedIntent {
   }
 
   // An alternative that resolves to a different command casts doubt: fail closed.
+  // Alternatives use exact matching only, so recognition noise cannot manufacture
+  // a spurious conflict.
   const conflicting = new Set<string>([primary.commandId]);
   for (const alternative of alternatives) {
-    const alt = proposalFor(tokenize(alternative).tokens, input.profile);
+    const alt = proposalFor(tokenize(alternative).tokens, input.profile, false);
     if (alt.status === "proposed") conflicting.add(alt.commandId);
     if (alt.status === "needs-clarification") {
       for (const candidate of alt.candidates) conflicting.add(candidate);

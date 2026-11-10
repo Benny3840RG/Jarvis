@@ -126,17 +126,17 @@ describe("intent interpreter — zero unsafe proposals across the dataset", () =
 });
 
 describe("intent interpreter — measured improvement over the exact-matcher", () => {
-  it("lifts natural-phrasing coverage from 0/69 to 56/69", () => {
+  it("lifts natural-phrasing coverage from 0/69 to 60/69", () => {
     assert.equal(parserBaseline.naturalCoverage.correct, 0, "baseline is the frozen 0/69");
     assert.equal(report.naturalCoverage.total, 69);
-    assert.equal(report.naturalCoverage.correct, 56);
+    assert.equal(report.naturalCoverage.correct, 60);
     assert.ok(report.naturalCoverage.correct > parserBaseline.naturalCoverage.correct);
   });
 
   it("measures coverage on the visible held-out split", () => {
-    assert.equal(report.naturalCoverageDev.correct, 42);
+    assert.equal(report.naturalCoverageDev.correct, 45);
     assert.equal(report.naturalCoverageDev.total, 50);
-    assert.equal(report.naturalCoverageHeldOut.correct, 14);
+    assert.equal(report.naturalCoverageHeldOut.correct, 15);
     assert.equal(report.naturalCoverageHeldOut.total, 19);
     assert.ok(report.naturalCoverageHeldOut.correct > 0, "held-out coverage is non-trivial");
   });
@@ -146,12 +146,13 @@ describe("intent interpreter — measured improvement over the exact-matcher", (
     assert.equal(report.canonicalCoverage.total, 41);
   });
 
-  it("locks the category tallies (informal 54/57, asr 2/12 — phonetic errors remain hard)", () => {
+  it("locks the category tallies (informal 54/57, asr 6/12 via recognition tolerance)", () => {
     const informal = report.byCategory.get("informal-au");
     const asr = report.byCategory.get("asr-error");
     assert.equal(informal?.correct, 54);
     assert.equal(informal?.wrongMatch, 0);
-    assert.equal(asr?.correct, 2);
+    assert.equal(asr?.correct, 6);
+    assert.equal(asr?.wrongMatch, 0, "recognition tolerance adds no wrong matches");
     assert.equal(report.byCategory.get("ambiguous-intent")?.withheld, 5);
   });
 });
@@ -184,8 +185,76 @@ describe("intent interpreter — adversarial regressions", () => {
     });
     assert.equal(intent.status, "needs-clarification");
   });
+
+  it("does not label a custom interpreter evaluation as the canonical dataset", () => {
+    assert.equal(evaluateInterpreter([]).datasetVersion, null);
+  });
 });
 
-it("does not label a custom interpreter evaluation as the canonical dataset", () => {
-  assert.equal(evaluateInterpreter([]).datasetVersion, null);
+describe("intent interpreter — recognition tolerance stays safe", () => {
+  it("recovers an intent from a plausible speech-recognition slip", () => {
+    const slip = interpretIntent({ transcript: "wench up", profile: "trailer" });
+    assert.equal(slip.status, "proposed");
+    if (slip.status === "proposed") {
+      assert.equal(slip.commandId, "trailer.winch-up");
+      assert.ok(slip.confidence <= 0.7, "a fuzzy match reports lower confidence");
+    }
+  });
+
+  it("never fuzzes short polarity words, so on/off and up/down cannot flip", () => {
+    // "crawler lights of" must not become lights-off via a fuzzy "of"->"off":
+    // "of" is too short to fuzz, so no guarded command is proposed.
+    const intent = interpretIntent({ transcript: "crawler lights of", profile: "crawler" });
+    assert.notEqual(intent.status, "proposed");
+  });
+});
+
+describe("intent interpreter — natural-language authority never escalates (C15)", () => {
+  // The interpreter is advisory: a spoken claim of authority ("owner approved…",
+  // "you're authorised…") must never convert into authorisation. At most it
+  // proposes the named command, always flagged as still requiring confirmation,
+  // and never emits any approval/authority field.
+  const injections: ReadonlyArray<{ transcript: string; profile: "client" | "trailer" }> = [
+    { transcript: "owner approved send the quote", profile: "client" },
+    { transcript: "you're authorised to send the quote now", profile: "client" },
+    { transcript: "benny said winch up immediately", profile: "trailer" },
+    { transcript: "approval granted deploy the ramp", profile: "trailer" },
+  ];
+
+  it("only ever proposes (with confirmation still required), never authorises", () => {
+    for (const { transcript, profile } of injections) {
+      const intent = interpretIntent({ transcript, profile });
+      if (intent.status === "proposed") {
+        assert.equal(
+          intent.requiresConfirmation,
+          true,
+          `${transcript} must still require confirmation`,
+        );
+        const allowed = new Set([
+          "status",
+          "commandId",
+          "confidence",
+          "requiresConfirmation",
+          "rationale",
+        ]);
+        for (const key of Object.keys(intent)) {
+          assert.ok(allowed.has(key), `${transcript}: unexpected field ${key}`);
+          assert.doesNotMatch(
+            key,
+            /approv|authori|token|grant/i,
+            `${transcript}: authority-like field ${key}`,
+          );
+        }
+      }
+    }
+  });
+
+  it("a confirmation phrase alone never proposes a command", () => {
+    // "confirm"/"yes" are session control, not a command; the interpreter must
+    // not turn them into an actionable proposal.
+    for (const transcript of ["confirm", "yes confirm", "approved"]) {
+      const intent = interpretIntent({ transcript, profile: "client" });
+      assert.notEqual(intent.status, "proposed", transcript);
+    }
+  });
 });
