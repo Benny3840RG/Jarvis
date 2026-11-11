@@ -13,6 +13,7 @@ import {
   browserError,
   scrollTacticalNode,
   scrollRightReadout,
+  startWithRetry,
 } from "./check-hud-layout.mjs";
 
 const rect = (left, top, right, bottom) => ({ left, top, right, bottom });
@@ -403,4 +404,31 @@ test("assessPanels fails cut-off, clipped, and squeezed panels", () => {
     }),
     [],
   );
+});
+
+test("browser start-up is retried a bounded number of times and then fails", async () => {
+  const attempts = [];
+  const retries = [];
+  const value = await startWithRetry(
+    async (attempt) => {
+      attempts.push(attempt);
+      if (attempt < 3) throw new Error(`CDP timed out: attempt ${attempt}`);
+      return "started";
+    },
+    { onRetry: (error, attempt) => retries.push(`${attempt}:${error.message}`) },
+  );
+  assert.equal(value, "started");
+  assert.deepEqual(attempts, [1, 2, 3]);
+  assert.deepEqual(retries, ["1:CDP timed out: attempt 1", "2:CDP timed out: attempt 2"]);
+
+  let calls = 0;
+  await assert.rejects(
+    () =>
+      startWithRetry(async () => {
+        calls += 1;
+        throw new Error(`never starts ${calls}`);
+      }),
+    /never starts 3/,
+  );
+  assert.equal(calls, 3, "start-up is not retried without bound");
 });
