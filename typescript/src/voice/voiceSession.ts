@@ -21,6 +21,7 @@
  */
 
 import {
+  VOICE_COMMANDS,
   VOICE_CONTROL_PHRASES,
   findVoiceCommand,
   normalizeUtterance,
@@ -28,11 +29,17 @@ import {
   type VoiceProfile,
 } from "./voiceCommands.js";
 import type { VoiceActuationProvider } from "./voiceHardware.js";
+import { interpretIntent } from "./voiceIntentInterpreter.js";
 import { parseUtterance } from "./voiceParser.js";
 import type { VoiceQueryProvider } from "./voiceQuery.js";
 
 const DEFAULT_HISTORY_LIMIT = 20;
 const DEFAULT_CONFIRMATION_TTL_MS = 30_000;
+
+/** Resolve a catalog command by id, for mapping an interpreter proposal. */
+const COMMAND_BY_ID: ReadonlyMap<string, VoiceCommand> = new Map(
+  VOICE_COMMANDS.map((command) => [command.id, command]),
+);
 
 const CONFIRM_PHRASES = new Set(VOICE_CONTROL_PHRASES.confirm.map(normalizeUtterance));
 const CANCEL_PHRASES = new Set(VOICE_CONTROL_PHRASES.cancel.map(normalizeUtterance));
@@ -95,7 +102,20 @@ export type VoiceDispatch =
   | Readonly<{ decision: "ambiguous"; candidates: readonly string[] }>
   | Readonly<{ decision: "answered"; command: VoiceCommand; answer: string }>
   | Readonly<{ decision: "query-unavailable"; command: VoiceCommand; reason: string }>
-  | Readonly<{ decision: "awaiting-confirmation"; command: VoiceCommand; expiresAt: number }>
+  | Readonly<{
+      decision: "awaiting-confirmation";
+      command: VoiceCommand;
+      expiresAt: number;
+      /**
+       * True when the command was inferred from natural language by the intent
+       * interpreter rather than matched exactly. An inferred command is NEVER
+       * dispatched directly: it always waits here for an explicit spoken
+       * confirmation, so natural-language confidence can never actuate on its own.
+       */
+      inferred?: true;
+      /** Interpreter confidence (0..1) for an inferred command. */
+      confidence?: number;
+    }>
   | Readonly<{ decision: "confirmation-not-pending" }>
   | Readonly<{ decision: "confirmation-expired"; command: VoiceCommand }>
   | Readonly<{ decision: "cancelled"; command: VoiceCommand }>
@@ -122,12 +142,29 @@ export type VoiceSessionOptions = Readonly<{
   historyLimit?: number;
   confirmationTtlMs?: number;
   clock?: () => number;
+  /**
+   * When true, a final transcript the exact parser does not recognise is passed
+   * to the natural-language intent interpreter. A confident proposal is routed
+   * INTO the confirmation path (it arms a single-use pending confirmation and
+   * returns `awaiting-confirmation`), never dispatched directly. Interpretation
+   * only runs for a wake-authorised call (see `VoiceSessionInput.wakeAuthorized`),
+   * so it cannot smuggle an intent out of unaddressed or wake-failed speech.
+   * Defaults to false: with it off the session behaves exactly as before.
+   */
+  interpretNaturalLanguage?: boolean;
 }>;
 
 export type VoiceSessionInput = Readonly<{
   transcript: string;
   isFinal: boolean;
   alternatives?: readonly string[];
+  /**
+   * Whether this utterance passed the wake-word gate. Natural-language
+   * interpretation runs only when this is true, so wake-failed speech (e.g.
+   * "jarvisx add a task") can never be interpreted into a command. The exact
+   * parser path is unaffected by this field.
+   */
+  wakeAuthorized?: boolean;
   /** Deterministic clock override for a single call (tests). */
   now?: number;
 }>;
@@ -139,6 +176,7 @@ export class VoiceSession {
   readonly #historyLimit: number;
   readonly #confirmationTtlMs: number;
   readonly #clock: () => number;
+  readonly #interpret: boolean;
   readonly #history: VoiceHistoryEntry[] = [];
   #pending: PendingConfirmation | undefined;
 
@@ -149,6 +187,7 @@ export class VoiceSession {
     this.#historyLimit = options.historyLimit ?? DEFAULT_HISTORY_LIMIT;
     this.#confirmationTtlMs = options.confirmationTtlMs ?? DEFAULT_CONFIRMATION_TTL_MS;
     this.#clock = options.clock ?? Date.now;
+    this.#interpret = options.interpretNaturalLanguage ?? false;
   }
 
   get profile(): VoiceProfile {
@@ -230,8 +269,7 @@ export class VoiceSession {
         this.#record(now, normalized, "empty");
         return { decision: "empty" };
       case "no-match":
-        this.#record(now, outcome.normalizedTranscript, "unrecognized");
-        return { decision: "unrecognized", normalizedTranscript: outcome.normalizedTranscript };
+        return this.#handleNoMatch(now, outcome.normalizedTranscript, input);
       case "ambiguous":
         this.#record(now, outcome.normalizedTranscript, "ambiguous");
         return { decision: "ambiguous", candidates: outcome.candidates };
@@ -241,6 +279,62 @@ export class VoiceSession {
       default:
         return { decision: "empty" };
     }
+  }
+
+  /**
+   * The exact parser found no whole-utterance match. When natural-language
+   * interpretation is enabled AND the call is wake-authorised, consult the
+   * interpreter. A confident proposal is routed into the confirmation path (it
+   * arms a single-use pending and returns `awaiting-confirmation`), never
+   * dispatched directly; a tie asks for clarification. Otherwise the utterance
+   * stays `unrecognized`, exactly as before.
+   */
+  #handleNoMatch(
+    now: number,
+    normalizedTranscript: string,
+    input: VoiceSessionInput,
+  ): VoiceDispatch {
+    if (this.#interpret && input.wakeAuthorized === true) {
+      const intent = interpretIntent({
+        transcript: input.transcript,
+        profile: this.#profile,
+        isFinal: true,
+        ...(input.alternatives ? { alternatives: input.alternatives } : {}),
+      });
+      if (intent.status === "proposed") {
+        const command = COMMAND_BY_ID.get(intent.commandId);
+        if (command) {
+          // A control hypothesis cannot be ignored just because the top
+          // hypothesis needed inference instead of an exact catalog match.
+          const controlAlternatives = controlAlternativeCandidates(input.alternatives);
+          if (controlAlternatives.length > 0) {
+            const candidates = Object.freeze([command.id, ...controlAlternatives].sort());
+            this.#invalidatePending();
+            this.#record(now, normalizedTranscript, "ambiguous");
+            return { decision: "ambiguous", candidates };
+          }
+          // Inferred intent always waits for an explicit confirmation — it is
+          // never dispatched here, whatever the command's own criticality.
+          this.#invalidatePending();
+          this.#record(now, normalizedTranscript, "interpreted", command.id);
+          const expiresAt = now + this.#confirmationTtlMs;
+          this.#pending = { command, issuedAt: now, expiresAt };
+          return {
+            decision: "awaiting-confirmation",
+            command,
+            expiresAt,
+            inferred: true,
+            confidence: intent.confidence,
+          };
+        }
+      } else if (intent.status === "needs-clarification") {
+        this.#invalidatePending();
+        this.#record(now, normalizedTranscript, "ambiguous");
+        return { decision: "ambiguous", candidates: intent.candidates };
+      }
+    }
+    this.#record(now, normalizedTranscript, "unrecognized");
+    return { decision: "unrecognized", normalizedTranscript };
   }
 
   #handleRecognized(

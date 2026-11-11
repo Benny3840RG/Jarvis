@@ -475,6 +475,9 @@ export async function createJarvisHttpApp(
             errands: errandStore,
             builds: buildStore,
           }),
+          // Natural speech the exact parser declines is interpreted and routed
+          // into the spoken-confirmation path — never dispatched directly (#567).
+          interpretNaturalLanguage: true,
         }),
     }),
     adapter,

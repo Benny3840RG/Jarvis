@@ -94,6 +94,52 @@ function utter(app: NestFastifyApplication, sessionId: string, payload: Record<s
 }
 
 describe("voice HTTP boundary", () => {
+  it("leaves no pending HTTP action after unsafe inferred speech", async () => {
+    const app = await makeApp();
+    for (const [profile, transcript, alternatives] of [
+      ["crawler", "Jarvis move forward and turn crawler lights on", []],
+      ["workshop", "Jarvis start the fan and turn workshop lights on", []],
+      ["workshop", "Jarvis turn the crawler's lights on", []],
+      ["trailer", "Jarvis stop the ramp", []],
+      ["trailer", "Jarvis raise the winch", ["I won't raise the winch"]],
+      ["client", "Jarvis I'd send the quote", []],
+      ["trailer", "Jarvis we've put the ramp down", []],
+      ["trailer", "Jarvis the winch can go up", []],
+      ["trailer", "Jarvis the winch could go up", []],
+      ["trailer", "Jarvis the winch may go up", []],
+      ["trailer", "Jarvis the winch might go up", []],
+      ["trailer", "Jarvis the winch would go up", []],
+      ["trailer", "Jarvis the winch should go up", []],
+    ] as const) {
+      const sessionId = await openSession(app, profile);
+      const response = await utter(app, sessionId, { transcript, alternatives, isFinal: true });
+      assert.equal(response.statusCode, 200, transcript);
+      assert.notEqual(response.json().dispatch.decision, "awaiting-confirmation", transcript);
+      assert.equal(response.json().pending, null, transcript);
+      const confirm = await utter(app, sessionId, { transcript: "confirm", isFinal: true });
+      assert.equal(confirm.json().dispatch.decision, "confirmation-not-pending", transcript);
+      assert.equal(confirm.json().pending, null, transcript);
+    }
+  });
+
+  it("withholds inferred winch with a cancel alternative and an out-of-profile lights request", async () => {
+    const app = await makeApp();
+    for (const [profile, transcript, alternatives] of [
+      ["trailer", "Jarvis raise the winch", ["cancel"]],
+      ["workshop", "Jarvis turn the trailer lights on", []],
+      ["trailer", "Jarvis turn the workshop lights on", []],
+    ] as const) {
+      const sessionId = await openSession(app, profile);
+      const response = await utter(app, sessionId, { transcript, alternatives, isFinal: true });
+      assert.equal(response.statusCode, 200, transcript);
+      assert.notEqual(response.json().dispatch.decision, "awaiting-confirmation", transcript);
+      assert.equal(response.json().pending, null, transcript);
+      const confirm = await utter(app, sessionId, { transcript: "confirm", isFinal: true });
+      assert.equal(confirm.json().dispatch.decision, "confirmation-not-pending", transcript);
+      assert.equal(confirm.json().pending, null, transcript);
+    }
+  });
+
   it("requires authentication on a non-local (production) bind", async () => {
     const app = await makeApp("10.0.0.5"); // non-loopback → serveLocalPage false
     const response = await app.inject({ method: "GET", url: "/api/v1/voice/catalog" });

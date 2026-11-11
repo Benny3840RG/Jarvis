@@ -1,5 +1,37 @@
 # Jarvis TypeScript Roadmap
 
+## PR #786 voice inference safety repair (2026-11-11)
+
+- Modal equipment statements (`can`, `could`, `may`, `might`, `would`, `should`)
+  now leave no inferred pending action, including when the modal follows the
+  equipment noun. Direct imperative and polite `can/could/would you` requests
+  still use the existing confirmation path. Interpreter, session, and HTTP
+  regressions cover a later `confirm` after withheld speech.
+- The follow-up review repair withholds compound speech even when only one
+  action ranks, keeps possessive/plural profile targets bound to their named
+  profile, and replaces arbitrary one-edit ASR matching with reviewed aliases.
+- Subject-led negated alternatives now block the matching guarded proposal;
+  `I'd`/`I'll` reports stay declarative. Active crawler context accepts
+  `move forward` through the same confirmation path.
+- Interpreter, session, and HTTP regressions assert that unsafe speech leaves
+  no pending action and a later `confirm` cannot dispatch.
+- Inferred final, wake-authorised commands now reject a recogniser control
+  alternative before arming confirmation. A later `confirm` has no pending action.
+- Explicit crawler, workshop, trailer, or client wording cannot be rebound to
+  another active profile. Unqualified lights use the current crawler, workshop,
+  or trailer profile, including on/off in crawler context; inferred commands
+  still require spoken confirmation before dispatch.
+- Retrospective equipment reports and actuator questions do not produce inferred
+  commands. Present-perfect contractions such as `we've put the ramp down`
+  are reports, so they leave no pending confirmation. Read-only unpaid-invoice
+  questions remain available.
+- The prior ambiguous-actuator repair (`094ed3cb`) remains in this candidate;
+  canonical exact matching, single-use TTL, and absent hardware are unchanged.
+
+Next: obtain exact-head CI and fresh independent Claude review of the repaired
+candidate, then Benny's separate merge decision. Host commissioning and real
+hardware proof remain open.
+
 ## Local V1 golden business workflow, off-host (#697)
 
 `tests/localV1BusinessGoldenFlow.test.ts` carries one enquiry through MCP and
