@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { constants } from "node:fs";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -137,9 +138,54 @@ export async function writeRecoveryEvidence(
       throw new Error("Recovery evidence output must be outside every protected data directory.");
     }
   }
-  await fs.mkdir(path.dirname(target), { recursive: true });
-  // Never truncate an existing archive, evidence file, symlink or hardlink.
-  await fs.writeFile(target, `${evidence}\n`, { encoding: "utf8", flag: "wx", mode: 0o600 });
+  // Node has no openat API. On Linux, /proc/self/fd lets each child be opened
+  // relative to a pinned parent; O_NOFOLLOW rejects a swapped-in symlink.
+  if (process.platform !== "linux") {
+    throw new Error("Recovery evidence output requires Linux directory-handle containment.");
+  }
+  const parent = path.dirname(target);
+  let directory = await fs.open(
+    path.parse(parent).root,
+    constants.O_RDONLY | constants.O_DIRECTORY,
+  );
+  try {
+    for (const component of parent.split(path.sep).filter(Boolean)) {
+      const child = path.join("/proc/self/fd", String(directory.fd), component);
+      let next: fs.FileHandle;
+      try {
+        next = await fs.open(
+          child,
+          constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW,
+        );
+      } catch (error: unknown) {
+        if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
+        await fs.mkdir(child, { mode: 0o700 });
+        next = await fs.open(
+          child,
+          constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW,
+        );
+      }
+      await directory.close();
+      directory = next;
+    }
+    // Never truncate an existing archive, evidence file, symlink or hardlink.
+    const file = await fs.open(
+      path.join("/proc/self/fd", String(directory.fd), path.basename(target)),
+      constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW,
+      0o600,
+    );
+    try {
+      await file.writeFile(`${evidence}\n`, { encoding: "utf8" });
+    } finally {
+      await file.close();
+    }
+    const [expected, actual] = await Promise.all([directory.stat(), fs.lstat(parent)]);
+    if (!actual.isDirectory() || expected.dev !== actual.dev || expected.ino !== actual.ino) {
+      throw new Error("Recovery evidence output parent changed during creation.");
+    }
+  } finally {
+    await directory.close();
+  }
 }
 
 async function main(): Promise<void> {

@@ -101,3 +101,77 @@ test("evidence writes refuse dangling links into protected trees without a raw E
     await fs.rm(root, { recursive: true, force: true });
   }
 });
+
+test("replacing a newly created output parent with a live-data symlink cannot redirect evidence", async (t) => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "lv1-evidence-race-"));
+  try {
+    const live = path.join(root, "live");
+    const isolated = path.join(root, "isolated");
+    const output = path.join(root, "evidence");
+    await fs.mkdir(live);
+    await fs.mkdir(isolated);
+    const config = {
+      ...configFromEnvironment(environment, "fixture"),
+      liveDirectory: live,
+      jsonDirectory: isolated,
+    };
+    const originalMkdir = fs.mkdir;
+    let replaced = false;
+    t.mock.method(fs, "mkdir", async (...args: Parameters<typeof fs.mkdir>) => {
+      const result = await originalMkdir(...args);
+      if (!replaced && path.basename(String(args[0])) === "evidence") {
+        replaced = true;
+        await fs.rename(output, path.join(root, "moved-evidence"));
+        await fs.symlink(live, output);
+      }
+      return result;
+    });
+    await assert.rejects(() =>
+      writeRecoveryEvidence(path.join(output, "proof.md"), "secret", config),
+    );
+    assert.equal(replaced, true);
+    assert.deepEqual(await fs.readdir(live), []);
+    assert.deepEqual(await fs.readdir(isolated), []);
+  } finally {
+    t.mock.restoreAll();
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
+test("replacing an opened output parent with a live-data symlink fails closed", async (t) => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "lv1-evidence-open-race-"));
+  try {
+    const live = path.join(root, "live");
+    const isolated = path.join(root, "isolated");
+    const output = path.join(root, "evidence");
+    await fs.mkdir(live);
+    await fs.mkdir(isolated);
+    await fs.mkdir(output);
+    const config = {
+      ...configFromEnvironment(environment, "fixture"),
+      liveDirectory: live,
+      jsonDirectory: isolated,
+    };
+    const originalOpen = fs.open;
+    let replaced = false;
+    t.mock.method(fs, "open", async (...args: Parameters<typeof fs.open>) => {
+      const handle = await originalOpen(...args);
+      if (!replaced && path.basename(String(args[0])) === "evidence") {
+        replaced = true;
+        await fs.rename(output, path.join(root, "moved-evidence"));
+        await fs.symlink(live, output);
+      }
+      return handle;
+    });
+    await assert.rejects(
+      () => writeRecoveryEvidence(path.join(output, "proof.md"), "secret", config),
+      /parent changed during creation/,
+    );
+    assert.equal(replaced, true);
+    assert.deepEqual(await fs.readdir(live), []);
+    assert.deepEqual(await fs.readdir(isolated), []);
+  } finally {
+    t.mock.restoreAll();
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
