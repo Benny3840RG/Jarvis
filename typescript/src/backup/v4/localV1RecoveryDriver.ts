@@ -217,6 +217,23 @@ export async function canonicalRecoveryPath(candidate: string): Promise<string> 
     return await fs.realpath(absolute);
   } catch (error: unknown) {
     if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
+    // realpath reports ENOENT for a dangling symlink as well as a missing
+    // entry. Rebuilding the path from its parent would hide where the link
+    // points, so an entry that exists here is refused instead.
+    let entryExists = true;
+    try {
+      await fs.lstat(absolute);
+    } catch (lstatError: unknown) {
+      if (!(lstatError instanceof Error && "code" in lstatError && lstatError.code === "ENOENT")) {
+        throw lstatError;
+      }
+      entryExists = false;
+    }
+    if (entryExists) {
+      throw new LocalV1RecoveryDriverError(
+        "Local V1 recovery driver refuses a dangling symbolic link in a recovery path.",
+      );
+    }
     const parent = path.dirname(absolute);
     if (parent === absolute) throw error;
     return path.join(await canonicalRecoveryPath(parent), path.basename(absolute));

@@ -150,6 +150,54 @@ test("loopback gate rejects 127-prefixed DNS names before invoking the runner", 
   }
 });
 
+test("driver refuses dangling JSON-directory links into live data before any runner call", async () => {
+  const fs = await import("node:fs/promises");
+  const path = await import("node:path");
+  const { canonicalRecoveryPath, runLocalV1RestartProof } =
+    await import("../src/backup/v4/localV1RecoveryDriver.js");
+  const fixture = await driverFixture();
+  try {
+    const live = fixture.config.liveDirectory;
+    const finalLink = path.join(fixture.root, "dangling-json");
+    await fs.symlink(path.join(live, "restored"), finalLink);
+    const relativeLink = path.join(fixture.root, "dangling-relative");
+    await fs.symlink(path.join("live", "restored"), relativeLink);
+    for (const jsonDirectory of [
+      finalLink,
+      relativeLink,
+      // A dangling intermediate component must be refused the same way.
+      path.join(finalLink, "nested", "json"),
+    ]) {
+      let calls = 0;
+      await assert.rejects(
+        () =>
+          runLocalV1RestartProof(
+            { ...fixture.config, jsonDirectory },
+            {
+              restartRunner: async () => {
+                calls += 1;
+                return fixture.result;
+              },
+            },
+          ),
+        /refuses a dangling symbolic link/,
+      );
+      assert.equal(calls, 0);
+    }
+    assert.deepEqual(await fs.readdir(live), [], "nothing is created through the link");
+
+    // A genuinely missing final directory still canonicalises through its
+    // existing ancestors.
+    const realRoot = await fs.realpath(fixture.root);
+    assert.equal(
+      await canonicalRecoveryPath(path.join(fixture.root, "missing", "json")),
+      path.join(realRoot, "missing", "json"),
+    );
+  } finally {
+    await fixture.cleanup();
+  }
+});
+
 test("driver refuses equal, nested and symlink-aliased JSON/live roots before any runner call", async () => {
   const fs = await import("node:fs/promises");
   const path = await import("node:path");

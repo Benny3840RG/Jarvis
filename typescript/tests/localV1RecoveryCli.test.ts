@@ -65,3 +65,39 @@ test("evidence writes refuse protected trees, symlink aliases and existing files
     await fs.rm(root, { recursive: true, force: true });
   }
 });
+
+test("evidence writes refuse dangling links into protected trees without a raw EEXIST", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "lv1-evidence-dangling-"));
+  try {
+    const live = path.join(root, "live");
+    const isolated = path.join(root, "isolated");
+    const work = path.join(root, "work");
+    await fs.mkdir(live);
+    await fs.mkdir(isolated);
+    await fs.mkdir(work);
+    const config = {
+      ...configFromEnvironment(environment, "fixture"),
+      liveDirectory: live,
+      jsonDirectory: isolated,
+    };
+    const liveFile = path.join(work, "live-evidence.md");
+    await fs.symlink(path.join(live, "planted.md"), liveFile);
+    const isolatedFile = path.join(work, "isolated-evidence.md");
+    await fs.symlink(path.join(isolated, "planted.md"), isolatedFile);
+    const liveDirectoryLink = path.join(work, "live-directory");
+    await fs.symlink(path.join(live, "planted"), liveDirectoryLink);
+    for (const target of [liveFile, isolatedFile, path.join(liveDirectoryLink, "proof.md")]) {
+      await assert.rejects(
+        () => writeRecoveryEvidence(target, "evidence", config),
+        (error: unknown) =>
+          error instanceof Error &&
+          /refuses a dangling symbolic link/.test(error.message) &&
+          !/EEXIST|ENOENT|ENOTDIR/.test(error.message),
+      );
+    }
+    assert.deepEqual(await fs.readdir(live), []);
+    assert.deepEqual(await fs.readdir(isolated), []);
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
