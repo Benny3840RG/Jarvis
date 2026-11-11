@@ -152,6 +152,98 @@ test("loopback gate rejects 127-prefixed DNS names before invoking the runner", 
   }
 });
 
+test("numeric mapped loopback reaches the runner and records bracketed IPv6 evidence", async () => {
+  const { runLocalV1RestartProof } = await import("../src/backup/v4/localV1RecoveryDriver.js");
+  const fixture = await driverFixture();
+  try {
+    let calls = 0;
+    const record = await runLocalV1RestartProof(
+      { ...fixture.config, isolatedConvexUrl: "http://[::ffff:127.0.0.1]:3210" },
+      {
+        restartRunner: async () => {
+          calls += 1;
+          return fixture.result;
+        },
+      },
+    );
+    assert.equal(calls, 1);
+    assert.equal(record.isolatedEndpoint, "[::ffff:7f00:1]:3210");
+    assert.match(
+      renderLocalV1RestartProofEvidence(record),
+      /Isolated backend: `\[::ffff:7f00:1\]:3210`/,
+    );
+    assert.equal(localV1RestartProofPassed(record), true);
+  } finally {
+    await fixture.cleanup();
+  }
+});
+
+test("IPv6 endpoint evidence keeps brackets", async () => {
+  const { runLocalV1RestartProof } = await import("../src/backup/v4/localV1RecoveryDriver.js");
+  const fixture = await driverFixture();
+  try {
+    const record = await runLocalV1RestartProof(
+      { ...fixture.config, isolatedConvexUrl: "http://[::1]:3210" },
+      { restartRunner: async () => fixture.result },
+    );
+    assert.equal(record.isolatedEndpoint, "[::1]:3210");
+  } finally {
+    await fixture.cleanup();
+  }
+});
+
+test("mapped non-loopback IPv6 is refused before invoking the runner", async () => {
+  const { runLocalV1RestartProof } = await import("../src/backup/v4/localV1RecoveryDriver.js");
+  const fixture = await driverFixture();
+  try {
+    let calls = 0;
+    await assert.rejects(
+      () =>
+        runLocalV1RestartProof(
+          { ...fixture.config, isolatedConvexUrl: "http://[::ffff:192.0.2.1]:3210" },
+          {
+            restartRunner: async () => {
+              calls += 1;
+              return fixture.result;
+            },
+          },
+        ),
+      /not a loopback host/,
+    );
+    assert.equal(calls, 0);
+  } finally {
+    await fixture.cleanup();
+  }
+});
+
+test("mapped loopback still refuses a same-port configured alias before invoking the runner", async () => {
+  const { runLocalV1RestartProof } = await import("../src/backup/v4/localV1RecoveryDriver.js");
+  const fixture = await driverFixture();
+  try {
+    let calls = 0;
+    await assert.rejects(
+      () =>
+        runLocalV1RestartProof(
+          {
+            ...fixture.config,
+            isolatedConvexUrl: "http://[::ffff:127.0.0.1]:3210",
+            configuredConvexUrl: "http://127.0.0.1:3210",
+          },
+          {
+            restartRunner: async () => {
+              calls += 1;
+              return fixture.result;
+            },
+          },
+        ),
+      /refuses the configured CONVEX_URL/,
+    );
+    assert.equal(calls, 0);
+  } finally {
+    await fixture.cleanup();
+  }
+});
+
 test("driver rejects a quote that changes across the restart even when the runner reports recovery", async () => {
   const { runLocalV1RestartProof } = await import("../src/backup/v4/localV1RecoveryDriver.js");
   const fixture = await driverFixture();

@@ -208,9 +208,7 @@ async function configuredSharesIsolatedEndpoint(
 
 /** host:port with the scheme's default port filled in. Never carries a token. */
 function endpointOf(url: URL): string {
-  let host = url.hostname.toLowerCase();
-  if (host.startsWith("[") && host.endsWith("]")) host = host.slice(1, -1);
-  return `${host}:${portOf(url)}`;
+  return `${url.hostname.toLowerCase()}:${portOf(url)}`;
 }
 
 async function assertIsolatedTarget(
@@ -232,7 +230,7 @@ async function assertIsolatedTarget(
     );
   }
   const host = normaliseHost(parsed.hostname);
-  if (host !== "localhost" && !isLoopbackHost(host)) {
+  if (!isLoopbackAlias(host)) {
     throw new LocalV1RecoveryDriverError(
       "Local V1 recovery driver refuses an isolated Convex URL that is not a loopback host.",
     );
