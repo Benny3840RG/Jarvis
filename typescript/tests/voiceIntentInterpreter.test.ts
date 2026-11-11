@@ -311,6 +311,55 @@ describe("intent interpreter — measured improvement over the exact-matcher", (
 });
 
 describe("intent interpreter — adversarial regressions", () => {
+  it("withholds a compound when only its second action is ranked", () => {
+    const result = interpretIntent({
+      transcript: "start the fan and turn workshop lights on",
+      profile: "workshop",
+    });
+    assert.equal(result.status, "needs-clarification");
+  });
+
+  it("does not rebind possessive or plural targets to another profile", () => {
+    for (const [profile, transcript] of [
+      ["workshop", "turn the crawler's lights on"],
+      ["workshop", "turn the crawler’s lights on"],
+      ["workshop", "turn the crawlers lights on"],
+      ["trailer", "turn the workshops lights on"],
+    ] as const) {
+      assert.notEqual(interpretIntent({ profile, transcript }).status, "proposed", transcript);
+    }
+    const sameProfile = interpretIntent({
+      profile: "crawler",
+      transcript: "turn the crawler's lights on",
+    });
+    assert.equal(sameProfile.status, "proposed");
+    if (sameProfile.status === "proposed") assert.equal(sameProfile.commandId, "crawler.lights-on");
+  });
+
+  it("does not turn a distinct stop action into ramp stow", () => {
+    assert.notEqual(
+      interpretIntent({ profile: "trailer", transcript: "stop the ramp" }).status,
+      "proposed",
+    );
+  });
+
+  it("treats a subject-led negated alternative as conflicting with a guarded command", () => {
+    const result = interpretIntent({
+      profile: "trailer",
+      transcript: "raise the winch",
+      alternatives: ["I won't raise the winch"],
+    });
+    assert.equal(result.status, "needs-clarification");
+  });
+
+  it("supports contextual crawler movement and withholds declarative quote contractions", () => {
+    const movement = interpretIntent({ profile: "crawler", transcript: "move forward" });
+    assert.equal(movement.status, "proposed");
+    if (movement.status === "proposed") assert.equal(movement.commandId, "crawler.forward");
+    for (const transcript of ["I'd send the quote", "I'll send the quote"]) {
+      assert.notEqual(interpretIntent({ profile: "client", transcript }).status, "proposed");
+    }
+  });
   it("does not propose a command from an explicitly negated utterance", () => {
     assert.notEqual(
       interpretIntent({ transcript: "no winch up", profile: "trailer" }).status,

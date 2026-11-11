@@ -2,6 +2,14 @@
 
 ## PR #786 voice inference safety repair (2026-11-11)
 
+- The follow-up review repair withholds compound speech even when only one
+  action ranks, keeps possessive/plural profile targets bound to their named
+  profile, and replaces arbitrary one-edit ASR matching with reviewed aliases.
+- Subject-led negated alternatives now block the matching guarded proposal;
+  `I'd`/`I'll` reports stay declarative. Active crawler context accepts
+  `move forward` through the same confirmation path.
+- Interpreter, session, and HTTP regressions assert that unsafe speech leaves
+  no pending action and a later `confirm` cannot dispatch.
 - Inferred final, wake-authorised commands now reject a recogniser control
   alternative before arming confirmation. A later `confirm` has no pending action.
 - Explicit crawler, workshop, trailer, or client wording cannot be rebound to

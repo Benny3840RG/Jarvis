@@ -157,11 +157,24 @@ const COMPOUND_CONNECTORS: ReadonlySet<string> = new Set([
 const SIGNALS: readonly Signal[] = [
   // ── Crawler ──
   sig("crawler.status", "crawler", [["status", "how", "hows", "check", "doing"], ["crawler"]]),
-  sig("crawler.forward", "crawler", [["crawler"], ["forward", "forwards", "ahead", "advance"]]),
-  sig("crawler.reverse", "crawler", [
-    ["crawler"],
-    ["reverse", "back", "backward", "backwards", "backup"],
-  ]),
+  sig(
+    "crawler.forward",
+    "crawler",
+    [["crawler"], ["forward", "forwards", "ahead", "advance"]],
+    [
+      ["move", "go", "drive"],
+      ["forward", "forwards", "ahead", "advance"],
+    ],
+  ),
+  sig(
+    "crawler.reverse",
+    "crawler",
+    [["crawler"], ["reverse", "back", "backward", "backwards", "backup"]],
+    [
+      ["move", "go", "drive"],
+      ["reverse", "back", "backward", "backwards", "backup"],
+    ],
+  ),
   sig("crawler.stop", "crawler", [["crawler"], ["stop", "halt", "pull", "whoa"]]),
   sig("crawler.lights-on", "crawler", [["crawler"], ["light", "lights"], ["on"]]),
   sig("crawler.lights-off", "crawler", [["crawler"], ["light", "lights"], ["off", "out", "kill"]]),
@@ -284,36 +297,28 @@ function sig(commandId: string, profile: VoiceProfile, ...patterns: Pattern[]): 
 function tokenize(raw: string): { tokens: readonly string[]; joined: string; compound: boolean } {
   const normalized = normalizeUtterance(raw).replace(/['’]/g, "");
   const hasComma = normalized.includes(",");
-  const tokens = normalized.split(/[^a-z0-9]+/).filter(Boolean);
+  const tokens = normalized
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean)
+    .map(
+      (token) =>
+        ({ crawlers: "crawler", workshops: "workshop", trailers: "trailer", clients: "client" })[
+          token
+        ] ?? token,
+    );
   const compound = hasComma || tokens.some((token) => COMPOUND_CONNECTORS.has(token));
   return { tokens, joined: tokens.join(" "), compound };
 }
 
-/**
- * True when `a` and `b` are within a single edit (substitution, insertion or
- * deletion). Used only as a bounded tolerance for speech-recognition slips
- * ("statue"→"status", "ram"→"ramp"). Restricted by the caller to tokens of
- * length ≥ 4, so short polarity words ("on"/"off"/"up"/"down") are never fuzzed
- * and a reversal of meaning can never slip through.
- */
-function withinOneEdit(a: string, b: string): boolean {
-  if (a === b) return true;
-  const [short, long] = a.length <= b.length ? [a, b] : [b, a];
-  if (long.length - short.length > 1) return false;
-  if (long.length === short.length) {
-    let diffs = 0;
-    for (let i = 0; i < long.length; i += 1) if (long[i] !== short[i]) diffs += 1;
-    return diffs === 1;
-  }
-  // One insertion/deletion: skip exactly one char in `long` and compare.
-  for (let skip = 0; skip < long.length; skip += 1) {
-    const candidate = long.slice(0, skip) + long.slice(skip + 1);
-    if (candidate === short) return true;
-  }
-  return false;
-}
+/** Observed, reviewed ASR slips. Arbitrary one-edit action words are unsafe. */
+const ASR_TOKEN_ALIASES: Readonly<Record<string, string>> = {
+  statue: "status",
+  stopp: "stop",
+  wench: "winch",
+  quota: "quote",
+};
 
-/** A single-word alt may match a token fuzzily only when both are ≥ 4 chars. */
+/** A single-word alternative may match only a curated recognition slip. */
 function tokenMatches(
   alt: string,
   tokens: readonly string[],
@@ -321,8 +326,8 @@ function tokenMatches(
   fuzzy: boolean,
 ): boolean {
   if (tokenSet.has(alt)) return true;
-  if (!fuzzy || alt.length < 4) return false;
-  return tokens.some((token) => token.length >= 4 && withinOneEdit(token, alt));
+  if (!fuzzy) return false;
+  return tokens.some((token) => ASR_TOKEN_ALIASES[token] === alt);
 }
 
 function groupMatches(
@@ -443,10 +448,12 @@ function guardedReportOrQuestion(tokens: readonly string[]): boolean {
   )
     return true;
   if (["can", "could", "would"].includes(tokens[0] ?? "") && tokens[1] !== "you") return true;
-  if (["i", "we", "he", "she", "they", "someone", "somebody"].includes(tokens[0] ?? "")) {
+  if (
+    ["i", "id", "ill", "we", "he", "she", "they", "someone", "somebody"].includes(tokens[0] ?? "")
+  ) {
     // A subject-led statement about an action is a report unless the speaker
     // explicitly expresses a request. This includes ambiguous past-tense "put".
-    return !["want", "need", "like", "id"].includes(tokens[1] ?? "");
+    return !["want", "need", "like"].includes(tokens[1] ?? "");
   }
   return false;
 }
@@ -526,6 +533,13 @@ function proposalFor(
       ),
   );
   const contenders = compound ? ranked : independent;
+  if (compound && contenders.length === 1) {
+    return {
+      status: "needs-clarification",
+      candidates: Object.freeze([contenders[0]!.commandId]),
+      rationale: "compound utterance may contain another request",
+    };
+  }
   if (contenders.length > 1) {
     return {
       status: "needs-clarification",
@@ -638,6 +652,9 @@ export function interpretIntent(input: InterpretInput): InterpretedIntent {
       // slip through because the bare clause only matched fuzzily.
       if (
         resolveProposal(bare, input.profile, altTokens.compound).status !== "no-intent" ||
+        bestCandidate(input.profile, bare, true).some(
+          (candidate) => candidate.commandId === primary.commandId,
+        ) ||
         (input.profile === "crawler" && matchesImplicitCrawlerCommand(primary.commandId, bare))
       ) {
         return {

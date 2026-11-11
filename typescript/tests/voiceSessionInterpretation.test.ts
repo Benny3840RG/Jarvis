@@ -34,6 +34,39 @@ const stubQueries: VoiceQueryProvider = {
 };
 
 describe("voice session — natural-language interpretation behind confirmation", () => {
+  it("does not dispatch after unsafe interpreted speech and a later confirm", async () => {
+    let actuations = 0;
+    const provider: VoiceActuationProvider = {
+      statusOf: () => "available",
+      async actuate(input) {
+        actuations += 1;
+        return { status: "actuated", target: input.target };
+      },
+    };
+    for (const [profile, transcript, alternatives] of [
+      ["crawler", "move forward and turn crawler lights on", []],
+      ["workshop", "start the fan and turn workshop lights on", []],
+      ["workshop", "turn the crawler's lights on", []],
+      ["trailer", "stop the ramp", []],
+      ["trailer", "raise the winch", ["I won't raise the winch"]],
+      ["client", "I'll send the quote", []],
+    ] as const) {
+      const s = make({ profile, provider });
+      const out = await s.handle({
+        transcript,
+        alternatives,
+        isFinal: true,
+        wakeAuthorized: true,
+        now: 1,
+      });
+      assert.notEqual(out.decision, "awaiting-confirmation", transcript);
+      assert.equal(s.pending(), undefined, transcript);
+      const confirmed = await s.handle({ transcript: "confirm", isFinal: true, now: 2 });
+      assert.equal(confirmed.decision, "confirmation-not-pending", transcript);
+    }
+    assert.equal(actuations, 0);
+  });
+
   it("rejects a cancel alternative before arming an inferred actuator command", async () => {
     let actuations = 0;
     const provider: VoiceActuationProvider = {

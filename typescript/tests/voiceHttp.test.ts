@@ -94,6 +94,27 @@ function utter(app: NestFastifyApplication, sessionId: string, payload: Record<s
 }
 
 describe("voice HTTP boundary", () => {
+  it("leaves no pending HTTP action after unsafe inferred speech", async () => {
+    const app = await makeApp();
+    for (const [profile, transcript, alternatives] of [
+      ["crawler", "Jarvis move forward and turn crawler lights on", []],
+      ["workshop", "Jarvis start the fan and turn workshop lights on", []],
+      ["workshop", "Jarvis turn the crawler's lights on", []],
+      ["trailer", "Jarvis stop the ramp", []],
+      ["trailer", "Jarvis raise the winch", ["I won't raise the winch"]],
+      ["client", "Jarvis I'd send the quote", []],
+    ] as const) {
+      const sessionId = await openSession(app, profile);
+      const response = await utter(app, sessionId, { transcript, alternatives, isFinal: true });
+      assert.equal(response.statusCode, 200, transcript);
+      assert.notEqual(response.json().dispatch.decision, "awaiting-confirmation", transcript);
+      assert.equal(response.json().pending, null, transcript);
+      const confirm = await utter(app, sessionId, { transcript: "confirm", isFinal: true });
+      assert.equal(confirm.json().dispatch.decision, "confirmation-not-pending", transcript);
+      assert.equal(confirm.json().pending, null, transcript);
+    }
+  });
+
   it("withholds inferred winch with a cancel alternative and an out-of-profile lights request", async () => {
     const app = await makeApp();
     for (const [profile, transcript, alternatives] of [
