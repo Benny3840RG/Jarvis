@@ -266,34 +266,43 @@ export async function writeRecoveryEvidence(
         constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW,
         0o600,
       );
-      // Checked while the file is still empty, and again after the write. A
-      // failed check removes the file; if it cannot be removed, say so. The
+      // Checked while the file is still empty, and again after the write. The
       // writer cannot detect a rename that happens after the last check, so
       // the evidence parent must not be relocated while the proof runs.
       const assertParentInPlace = async (): Promise<void> => {
-        try {
-          await assertNoProtectedAncestor(directory);
-          const [expected, actual] = await Promise.all([directory.stat(), fs.lstat(parent)]);
-          if (!actual.isDirectory() || expected.dev !== actual.dev || expected.ino !== actual.ino) {
-            throw new Error("Recovery evidence output parent changed during creation.");
-          }
-        } catch (error: unknown) {
-          try {
-            await fs.unlink(created);
-          } catch (cleanup: unknown) {
-            const reason = error instanceof Error ? error.message : String(error);
-            throw new Error(
-              `Recovery evidence file could not be removed after a failed containment check: ${reason}`,
-              { cause: cleanup },
-            );
-          }
-          throw error;
+        await assertNoProtectedAncestor(directory);
+        const [expected, actual] = await Promise.all([directory.stat(), fs.lstat(parent)]);
+        if (!actual.isDirectory() || expected.dev !== actual.dev || expected.ino !== actual.ino) {
+          throw new Error("Recovery evidence output parent changed during creation.");
         }
+      };
+      // Any failure after creation removes the file, but only if the entry at
+      // that name is still the inode this writer created. Anything else is left
+      // alone and reported.
+      const removeCreated = async (reason: unknown): Promise<never> => {
+        try {
+          const [mine, entry] = await Promise.all([
+            file.stat({ bigint: true }),
+            fs.lstat(created, { bigint: true }),
+          ]);
+          if (mine.dev !== entry.dev || mine.ino !== entry.ino) {
+            throw new Error("The evidence path no longer names the file this writer created.");
+          }
+          await fs.unlink(created);
+        } catch (cleanup: unknown) {
+          const text = reason instanceof Error ? reason.message : String(reason);
+          throw new Error(`Recovery evidence file could not be removed after a failure: ${text}`, {
+            cause: cleanup,
+          });
+        }
+        throw reason;
       };
       try {
         await assertParentInPlace();
         await file.writeFile(`${evidence}\n`, { encoding: "utf8" });
         await assertParentInPlace();
+      } catch (error: unknown) {
+        await removeCreated(error);
       } finally {
         await file.close();
       }

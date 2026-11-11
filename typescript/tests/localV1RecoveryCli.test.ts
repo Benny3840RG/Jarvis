@@ -324,6 +324,85 @@ test("a failed ancestor check closes the ancestor handle it opened", async (t) =
   }
 });
 
+test("a failed write removes the partial evidence file", async (t) => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "lv1-evidence-partial-"));
+  try {
+    const live = path.join(root, "live");
+    const isolated = path.join(root, "isolated");
+    const output = path.join(root, "evidence");
+    await Promise.all([fs.mkdir(live), fs.mkdir(isolated), fs.mkdir(output)]);
+    const config = {
+      ...configFromEnvironment(environment, "fixture"),
+      liveDirectory: live,
+      jsonDirectory: isolated,
+    };
+    const originalOpen = fs.open;
+    t.mock.method(fs, "open", async (...args: Parameters<typeof fs.open>) => {
+      const handle = await originalOpen(...args);
+      if (path.basename(String(args[0])) === "proof.md") {
+        const write = handle.writeFile.bind(handle);
+        handle.writeFile = async () => {
+          await write("partial");
+          throw new Error("injected EIO");
+        };
+      }
+      return handle;
+    });
+    await assert.rejects(
+      () => writeRecoveryEvidence(path.join(output, "proof.md"), "secret", config),
+      /^Error: injected EIO$/,
+    );
+    assert.deepEqual(await fs.readdir(output), []);
+  } finally {
+    t.mock.restoreAll();
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
+test("cleanup never deletes a file that replaced the one the writer created", async (t) => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "lv1-evidence-replaced-"));
+  try {
+    const live = path.join(root, "live");
+    const isolated = path.join(root, "isolated");
+    const output = path.join(root, "evidence");
+    await Promise.all([fs.mkdir(live), fs.mkdir(isolated), fs.mkdir(output)]);
+    const config = {
+      ...configFromEnvironment(environment, "fixture"),
+      liveDirectory: live,
+      jsonDirectory: isolated,
+    };
+    const originalOpen = fs.open;
+    t.mock.method(fs, "open", async (...args: Parameters<typeof fs.open>) => {
+      const handle = await originalOpen(...args);
+      if (path.basename(String(args[0])) === "proof.md") {
+        const write = handle.writeFile.bind(handle);
+        handle.writeFile = async (...writeArgs: Parameters<typeof write>) => {
+          await write(...writeArgs);
+          await fs.rename(path.join(output, "proof.md"), path.join(output, "created.md"));
+          await fs.writeFile(path.join(output, "proof.md"), "someone else");
+          throw new Error("injected failure after replacement");
+        };
+      }
+      return handle;
+    });
+    await assert.rejects(
+      () => writeRecoveryEvidence(path.join(output, "proof.md"), "secret", config),
+      (error: unknown) =>
+        error instanceof Error &&
+        /could not be removed after a failure: injected failure after replacement/.test(
+          error.message,
+        ) &&
+        error.cause instanceof Error &&
+        /no longer names the file this writer created/.test(error.cause.message),
+    );
+    assert.equal(await fs.readFile(path.join(output, "proof.md"), "utf8"), "someone else");
+    assert.deepEqual((await fs.readdir(output)).sort(), ["created.md", "proof.md"]);
+  } finally {
+    t.mock.restoreAll();
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
 test("evidence path problems are reported before the proof would run", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "lv1-evidence-preflight-"));
   try {
