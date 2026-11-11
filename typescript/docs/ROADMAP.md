@@ -16,6 +16,23 @@ did not declare it. The conversion was written and the tool then reported a
 schema error; later project reads failed the same way. Both schemas now match
 the OpenAPI `Project`.
 
+MCP boundary: `create_project` and `update_project` do not accept `propertyId`.
+An earlier candidate of this change added it and was withdrawn in review,
+because the HTTP project route confirms the referenced client exists but does
+not check that a `propertyId` exists or belongs to that client. Through MCP a
+job only gets a property from `convert_enquiry_to_project`, which copies the
+enquiry's. The golden flow asserts the two input schemas omit the field and
+that foreign, missing and null `propertyId` arguments never change the stored
+job.
+
+Open, not changed here (already true on main): `POST`/`PATCH
+/api/v1/projects` and the enquiry routes accept any `propertyId` string, and
+`update_project` or the HTTP route can move a job to another client while it
+keeps its old property. Closing that needs property existence and client
+ownership checks at the HTTP write boundary for create, update, client change
+and detach, plus a decision on what happens to jobs when a property is deleted
+or moved. MCP must not accept `propertyId` before that lands.
+
 Not proven here: the quote lifecycle, delivery ledger and PDF artifact store
 are file-backed test doubles over the real domain helpers, and no email is
 sent. The receipt is written straight into the ledger double.

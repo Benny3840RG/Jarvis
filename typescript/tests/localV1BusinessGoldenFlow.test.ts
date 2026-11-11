@@ -524,6 +524,72 @@ describe("Local V1 golden business workflow", () => {
     const listed = await call(mcp, "list_projects", {});
     assert.equal(listed.count, 1);
 
+    // MCP gives the model no way to write a job's property. The HTTP project
+    // route does not yet check that a propertyId exists or belongs to the job's
+    // client, so the only property a job gets through MCP is the one the
+    // enquiry conversion copies across.
+    const tools = (await mcp.listTools()).tools;
+    for (const name of ["create_project", "update_project"]) {
+      const tool = tools.find((item) => item.name === name);
+      assert.ok(tool, `${name} is registered`);
+      const inputProperties = (tool.inputSchema as { properties?: Record<string, unknown> })
+        .properties;
+      assert.ok(inputProperties, `${name} declares its input properties`);
+      assert.equal(
+        Object.hasOwn(inputProperties, "propertyId"),
+        false,
+        `${name} must not accept propertyId`,
+      );
+    }
+    const storedProject = async (projectId: string) => {
+      const response = await http(first, "GET", `/api/v1/projects/${projectId}`);
+      assert.equal(response.status, 200);
+      return ((await response.json()) as { data: { clientId: string; propertyId?: string } }).data;
+    };
+    const otherClient = (await call(mcp, "create_client", { name: "Rowan Pike" })).client as {
+      id: string;
+    };
+    const foreignProperty = (
+      await call(mcp, "create_property", {
+        clientId: otherClient.id,
+        address: "3 Banksia Court, Emerald",
+      })
+    ).property as { id: string };
+    for (const propertyId of [foreignProperty.id, property.id, "property-that-does-not-exist"]) {
+      const attempt = await raw(mcp, "create_project", {
+        clientId: client.id,
+        propertyId,
+        title: `Stump grind ${propertyId}`,
+        status: "done",
+      });
+      if (attempt.isError !== true) {
+        const created = attempt.structuredContent?.project as { id: string; propertyId?: string };
+        assert.equal(created.propertyId, undefined, "create_project must not write a property");
+        assert.equal((await storedProject(created.id)).propertyId, undefined);
+      }
+    }
+    for (const propertyId of [foreignProperty.id, "property-that-does-not-exist", null]) {
+      const attempt = await raw(mcp, "update_project", { projectId: project.id, propertyId });
+      assert.equal(attempt.isError, true, "a property-only update_project must be refused");
+      const withNotes = await raw(mcp, "update_project", {
+        projectId: project.id,
+        propertyId,
+        notes: "Access via side gate",
+      });
+      if (withNotes.isError !== true) {
+        assert.equal(
+          (withNotes.structuredContent?.project as { propertyId?: string }).propertyId,
+          property.id,
+        );
+      }
+      assert.equal(
+        (await storedProject(project.id)).propertyId,
+        property.id,
+        "update_project must not move or detach the job's property",
+      );
+    }
+    assert.equal((await storedProject(project.id)).clientId, client.id);
+
     // --- quote draft and edit -------------------------------------------------
     const drafted = (
       await call(mcp, "create_quote_draft", {
