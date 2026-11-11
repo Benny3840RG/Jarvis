@@ -23,7 +23,9 @@ function constantTimeEquals(candidate: string, secret: string): boolean {
 }
 
 export function requireOwner(serviceToken: string): string {
+  // eslint-disable-next-line @convex-dev/no-process-env -- Keep the established fail-closed runtime credential reads; typed Convex env codegen requires a separately verified migration.
   const current = process.env.JARVIS_SERVICE_TOKEN;
+  // eslint-disable-next-line @convex-dev/no-process-env -- Keep the established fail-closed runtime credential reads; typed Convex env codegen requires a separately verified migration.
   const previous = process.env.JARVIS_SERVICE_TOKEN_PREVIOUS;
 
   if (!current) {
@@ -79,13 +81,19 @@ function requireIndependentRuntimeToken(
   previousName: RuntimePreviousTokenName,
   label: string,
 ): void {
+  // eslint-disable-next-line @convex-dev/no-process-env -- Keep the established fail-closed runtime credential reads; typed Convex env codegen requires a separately verified migration.
   const current = process.env[currentName];
+  // eslint-disable-next-line @convex-dev/no-process-env -- Keep the established fail-closed runtime credential reads; typed Convex env codegen requires a separately verified migration.
   const previous = process.env[previousName];
   const peerNames = peerRuntimeTokenNames(currentName);
   const forbiddenCredentials = [
+    // eslint-disable-next-line @convex-dev/no-process-env -- Keep the established fail-closed runtime credential reads; typed Convex env codegen requires a separately verified migration.
     process.env.JARVIS_SERVICE_TOKEN,
+    // eslint-disable-next-line @convex-dev/no-process-env -- Keep the established fail-closed runtime credential reads; typed Convex env codegen requires a separately verified migration.
     process.env.JARVIS_SERVICE_TOKEN_PREVIOUS,
+    // eslint-disable-next-line @convex-dev/no-process-env -- Keep the established fail-closed runtime credential reads; typed Convex env codegen requires a separately verified migration.
     process.env[peerNames.current],
+    // eslint-disable-next-line @convex-dev/no-process-env -- Keep the established fail-closed runtime credential reads; typed Convex env codegen requires a separately verified migration.
     process.env[peerNames.previous],
   ].filter((value): value is string => value !== undefined);
 

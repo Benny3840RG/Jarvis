@@ -48,6 +48,7 @@ export function modelInvocationLimitConfig(): {
   return {
     kind: "fixed window",
     rate: boundedInteger(
+      // eslint-disable-next-line @convex-dev/no-process-env -- Keep existing optional runtime rate settings; typed Convex env codegen requires a separately verified migration.
       process.env.JARVIS_CONVEX_MODEL_INVOCATION_RATE,
       "JARVIS_CONVEX_MODEL_INVOCATION_RATE",
       DEFAULT_MODEL_INVOCATION_RATE,
@@ -55,6 +56,7 @@ export function modelInvocationLimitConfig(): {
       100_000,
     ),
     period: boundedInteger(
+      // eslint-disable-next-line @convex-dev/no-process-env -- Keep existing optional runtime rate settings; typed Convex env codegen requires a separately verified migration.
       process.env.JARVIS_CONVEX_MODEL_INVOCATION_PERIOD_MS,
       "JARVIS_CONVEX_MODEL_INVOCATION_PERIOD_MS",
       DEFAULT_MODEL_INVOCATION_PERIOD_MS,
