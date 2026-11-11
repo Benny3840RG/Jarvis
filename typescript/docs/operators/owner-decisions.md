@@ -78,7 +78,8 @@ showed:
 5. For an approval, every subject and every piece of evidence live against
    GitHub: the pull request head, the issue's or comment's last-updated time,
    the branch head. If any has changed the approval is refused; if any cannot
-   be checked (deleted evidence, GitHub unreachable, rate limited) the approval
+   be checked (deleted evidence, a comment that is not on the pinned issue or pull
+   request, GitHub unreachable, rate limited) the approval
    is also refused. Reject and Request changes do not need the live check.
 6. The idempotency key. A double click repeats the same key and returns the
    first record; nothing is written twice. A second, different decision on a
@@ -122,6 +123,11 @@ is what a crash between the append and the checkpoint write leaves behind. The
 next write brings the checkpoint level before appending, so repeated crashes
 cannot leave it further behind. An empty ledger file with no checkpoint is a
 start that was interrupted; "Start a new ledger" completes it.
+
+Before each append the ledger is read and verified again, and the new record
+must extend exactly that verified tail. If the file changed while a click was
+being checked, the click fails, nothing is appended and the checkpoint is not
+moved.
 
 ### Starting the ledger, and restoring a backup
 

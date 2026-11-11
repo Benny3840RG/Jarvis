@@ -7582,7 +7582,7 @@
       "post": {
         "operationId": "startOwnerDecisionLedger",
         "summary": "Start a new, empty decision ledger",
-        "description": "Starts the decision ledger on a runtime that has none. Deliberate and confirmed, because a data directory restored from a backup also has no ledger: starting a new one there would hide every earlier decision, so the ledger and its checkpoint should be restored instead. Requires the service token (or the OIDC owner), the approval token and the exact confirmation START NEW LEDGER. Refused with 409 when any ledger file already exists; an existing ledger is never replaced.",
+        "description": "Starts the decision ledger on a runtime that has none. Deliberate and confirmed, because a data directory restored from a backup also has no ledger: starting a new one there would hide every earlier decision, so the ledger and its checkpoint should be restored instead. Requires the service token (or the OIDC owner), the approval token and the exact confirmation START NEW LEDGER. Refused with 409 when a ledger with any record, or a checkpoint, already exists; an existing ledger is never replaced. The one exception is an empty ledger file with no checkpoint, which is what an interrupted start leaves behind: the start is then completed.",
         "tags": ["Owner Decisions"],
         "x-mcp-tool": {
           "exposed": false,
@@ -15189,37 +15189,115 @@
           "audit": { "$ref": "#/components/schemas/DangerZoneAuditRecord" }
         }
       },
-      "OwnerDecisionSubject": {
+      "OwnerDecisionPullRequestPin": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["kind", "revision"],
-        "description": "One thing a decision is about, pinned to the revision the card was written against: a commit SHA for a pull request or branch, the last-updated time for an issue.",
+        "required": ["kind", "number", "revision"],
+        "description": "A pull request pinned to its head commit.",
         "properties": {
           "kind": {
             "type": "string",
-            "enum": ["pull-request", "issue", "branch", "comment"]
+            "const": "pull-request"
           },
           "number": {
             "type": "integer",
             "minimum": 1
           },
-          "name": {
+          "revision": {
             "type": "string"
+          }
+        }
+      },
+      "OwnerDecisionIssuePin": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "number", "revision"],
+        "description": "An issue pinned to its last-updated time.",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "issue"
           },
-          "id": {
+          "number": {
             "type": "integer",
-            "minimum": 1,
-            "description": "Comment id."
-          },
-          "on": {
-            "type": "integer",
-            "minimum": 1,
-            "description": "The issue or pull request a comment is on."
+            "minimum": 1
           },
           "revision": {
             "type": "string"
           }
         }
+      },
+      "OwnerDecisionBranchPin": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "name", "revision"],
+        "description": "A branch pinned to its head commit.",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "branch"
+          },
+          "name": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "string"
+          }
+        }
+      },
+      "OwnerDecisionCommentPin": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "id", "on", "revision"],
+        "description": "A comment (id) on issue or pull request (on), pinned to its last-updated time.",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "comment"
+          },
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "on": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "revision": {
+            "type": "string"
+          }
+        }
+      },
+      "OwnerDecisionSubject": {
+        "description": "One thing a decision is about, pinned to the revision the card was written against.",
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/OwnerDecisionPullRequestPin"
+          },
+          {
+            "$ref": "#/components/schemas/OwnerDecisionIssuePin"
+          },
+          {
+            "$ref": "#/components/schemas/OwnerDecisionBranchPin"
+          },
+          {
+            "$ref": "#/components/schemas/OwnerDecisionCommentPin"
+          }
+        ]
+      },
+      "OwnerDecisionEvidencePin": {
+        "description": "What a piece of proof is pinned to. A branch cannot be proof.",
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/OwnerDecisionPullRequestPin"
+          },
+          {
+            "$ref": "#/components/schemas/OwnerDecisionIssuePin"
+          },
+          {
+            "$ref": "#/components/schemas/OwnerDecisionCommentPin"
+          }
+        ]
       },
       "OwnerDecisionEntry": {
         "type": "object",
@@ -15306,7 +15384,7 @@
                   "type": "string"
                 },
                 "pin": {
-                  "$ref": "#/components/schemas/OwnerDecisionSubject"
+                  "$ref": "#/components/schemas/OwnerDecisionEvidencePin"
                 }
               }
             }

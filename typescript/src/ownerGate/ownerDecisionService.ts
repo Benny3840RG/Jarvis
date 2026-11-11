@@ -231,7 +231,21 @@ export class JsonLinesOwnerDecisionLedger implements OwnerDecisionLedger {
     // one valid record ahead. Bring the checkpoint level first; otherwise a
     // second interruption would leave it two behind, which read() refuses.
     const existing = await this.read();
+    // The checkpoint must never be moved onto a chain that does not verify, and
+    // the new record must extend exactly the tail that was just verified. The
+    // file may have changed since the caller last read it.
+    try {
+      assertLedgerIntact(existing);
+    } catch {
+      throw damaged("The decision ledger failed its integrity check; nothing was appended.");
+    }
     const last = existing.at(-1);
+    if (
+      record.sequence !== existing.length + 1 ||
+      record.previousHash !== (last?.hash ?? LEDGER_GENESIS_HASH)
+    ) {
+      throw damaged("The decision ledger changed while a record was being prepared.");
+    }
     await this.writeCheckpoint(
       last === undefined
         ? { count: 0, hash: LEDGER_GENESIS_HASH }
@@ -649,7 +663,8 @@ export class OwnerDecisionService {
       const resolvesUnknown =
         card.status === "EXPIRED" &&
         card.decision?.choice === "approve" &&
-        card.execution?.status === "indeterminate";
+        card.execution?.status === "indeterminate" &&
+        report.status !== "indeterminate";
       if (card.status !== "APPROVED" && !resolvesUnknown) {
         throw new OwnerDecisionRefusal(
           "not-approved",

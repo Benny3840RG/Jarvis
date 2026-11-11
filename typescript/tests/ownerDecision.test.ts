@@ -319,6 +319,8 @@ test("an execution left unresolved can still be resolved after the request expir
     const waiting = (await service.inspect()).cards[0]!;
     assert.equal(waiting.status, "EXPIRED");
     assert.equal(waiting.execution?.status, "indeterminate");
+    // Only a real outcome is accepted after expiry, not another "unknown".
+    await assert.rejects(() => report("indeterminate"), refusal("not-approved"));
     const resolved = await report(outcome);
     assert.equal(resolved.card.status, outcome === "executed" ? "EXECUTED" : "EXPIRED");
     assert.equal(resolved.card.execution?.status, outcome);
@@ -823,6 +825,35 @@ test("repeated interrupted appends never wedge a valid ledger", async () => {
       queue.cards.map((card) => card.status),
       ["APPROVED", "APPROVED"],
     );
+  } finally {
+    await fs.rm(world.root, { recursive: true, force: true });
+  }
+});
+
+test("a ledger altered while an approval is being checked is not anchored or appended to", async () => {
+  const world = await fileWorld();
+  try {
+    await world.open().startLedger();
+    const genesis = await fs.readFile(world.checkpoint, "utf8");
+    await world.decide("a");
+    // The valid one-record-ahead state an interrupted append leaves behind.
+    await fs.writeFile(world.checkpoint, genesis);
+    const before = await fs.readFile(world.file, "utf8");
+    const altered = before.replace('"decision":"approve"', '"decision":"reject"');
+    assert.notEqual(altered, before);
+    // The live check runs after the service verified the ledger and before
+    // the append. Change a recorded decision in that window.
+    const service = serviceOf(world.manifest, {
+      ledger: new JsonLinesOwnerDecisionLedger(world.file),
+      subjectProbe: async (subject) => {
+        await fs.writeFile(world.file, altered);
+        return subject.revision;
+      },
+    }).service;
+    await assert.rejects(() => world.decide("b", service), /integrity check; nothing was appended/);
+    assert.equal(await fs.readFile(world.file, "utf8"), altered, "nothing appended");
+    assert.equal(await fs.readFile(world.checkpoint, "utf8"), genesis, "checkpoint not moved");
+    assert.equal((await world.open().inspect()).ledgerState, "damaged");
   } finally {
     await fs.rm(world.root, { recursive: true, force: true });
   }

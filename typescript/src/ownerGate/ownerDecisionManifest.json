@@ -61,51 +61,11 @@
       "expiresAt": "2026-12-12T00:00:00.000Z"
     },
     {
-      "id": "merge-recovery-driver",
-      "title": "Merge the Local V1 recovery restart driver",
-      "issues": [697, 307],
-      "proposedAction": "Merge pull request #765 at the exact commit shown.",
-      "consequence": "The repeatable restart-proof command lands on main. It proves nothing by itself: capture, isolated restore, reread and rollback remain operator steps. The writer cannot detect the evidence folder being moved after its final check, so the operator note says not to relocate it during a run.",
-      "scope": "Repository only. Adds a commissioning tool, its tests and operator notes. No runtime, data or deployment change.",
-      "environment": "repository",
-      "risk": "standard",
-      "subjects": [
-        {
-          "kind": "pull-request",
-          "number": 765,
-          "revision": "8b59c61a400477091598b3436dbe21848d9883e7"
-        }
-      ],
-      "dependsOn": [],
-      "evidence": [
-        {
-          "label": "Pull request #765",
-          "pin": {
-            "kind": "pull-request",
-            "number": 765,
-            "revision": "8b59c61a400477091598b3436dbe21848d9883e7"
-          }
-        },
-        {
-          "label": "Independent review of this exact commit: pass, no findings",
-          "pin": {
-            "kind": "comment",
-            "id": 6808894057,
-            "on": 765,
-            "revision": "2026-11-11T22:45:02Z"
-          }
-        }
-      ],
-      "missingPrerequisites": [],
-      "rollback": "Revert the merge commit.",
-      "expiresAt": "2026-12-12T00:00:00.000Z"
-    },
-    {
       "id": "recovery-isolated-proof",
       "title": "Authorise the isolated restore and restart proof",
       "issues": [697],
       "proposedAction": "Run capture, isolated restore, reread, rollback and the restart proof against an isolated local backend, and record the evidence.",
-      "consequence": "Produces the recovery evidence Local V1 needs. The live data directory is read, never written; the driver refuses any non-loopback or configured target.",
+      "consequence": "Produces the recovery evidence Local V1 needs. The live data directory is read, never written; the driver refuses any non-loopback or configured target. The evidence directory must exist before the run; the driver never creates it.",
       "scope": "Development only, on the Lenovo host, against a throwaway loopback backend.",
       "environment": "development",
       "risk": "standard",
@@ -116,7 +76,7 @@
           "revision": "2026-11-10T12:37:40Z"
         }
       ],
-      "dependsOn": ["merge-recovery-driver"],
+      "dependsOn": [],
       "evidence": [
         {
           "label": "Issue #697",
@@ -133,9 +93,18 @@
             "number": 765,
             "revision": "8b59c61a400477091598b3436dbe21848d9883e7"
           }
+        },
+        {
+          "label": "Independent review of the merged driver: pass, no findings",
+          "pin": {
+            "kind": "comment",
+            "id": 6808894057,
+            "on": 765,
+            "revision": "2026-11-11T22:45:02Z"
+          }
         }
       ],
-      "missingPrerequisites": ["The recovery driver is not merged."],
+      "missingPrerequisites": [],
       "rollback": "Delete the isolated backend and its restored copy. Live data is untouched by design.",
       "expiresAt": "2026-12-12T00:00:00.000Z"
     },
@@ -508,7 +477,7 @@
         {
           "kind": "branch",
           "name": "main",
-          "revision": "d11d13c99f23b92bd2e3f6da7e51e3b7ba7ca184"
+          "revision": "8d90db25167018cf29c6177abf530f79ff3e6d2b"
         }
       ],
       "dependsOn": [

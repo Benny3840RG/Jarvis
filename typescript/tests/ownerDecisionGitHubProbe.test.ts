@@ -31,7 +31,9 @@ test("the probe reads each kind of subject from its own read-only endpoint", asy
     [`${BASE}/pulls/7`]: { body: { head: { sha: "a".repeat(40) } } },
     [`${BASE}/issues/3`]: { body: { updated_at: "2026-11-01T00:00:00Z" } },
     [`${BASE}/branches/main`]: { body: { commit: { sha: "b".repeat(40) } } },
-    [`${BASE}/issues/comments/55`]: { body: { updated_at: "2026-11-02T00:00:00Z" } },
+    [`${BASE}/issues/comments/55`]: {
+      body: { updated_at: "2026-11-02T00:00:00Z", issue_url: `${BASE}/issues/3` },
+    },
   });
   const probe = createGitHubSubjectProbe({ repository: "example/repo", fetch: fetcher });
   assert.equal(await probe({ kind: "pull-request", number: 7, revision: "x" }), "a".repeat(40));
@@ -44,6 +46,28 @@ test("the probe reads each kind of subject from its own read-only endpoint", asy
   for (const call of calls) {
     assert.equal(call.headers.authorization, undefined);
     assert.equal(call.redirect, "error");
+  }
+});
+
+test("a comment only counts when it sits on the pinned issue or pull request", async () => {
+  const pin = { kind: "comment", id: 55, on: 1, revision: "2026-11-02T00:00:00Z" } as const;
+  for (const [issueUrl, expected] of [
+    [`${BASE}/issues/1`, pin.revision],
+    [`${BASE}/issues/999`, null],
+    ["https://api.github.com/repos/other/repo/issues/1", null],
+    [`${BASE}/issues/10`, null],
+    [undefined, null],
+  ] as const) {
+    const { fetcher } = fakeFetch({
+      [`${BASE}/issues/comments/55`]: {
+        body: {
+          updated_at: pin.revision,
+          ...(issueUrl === undefined ? {} : { issue_url: issueUrl }),
+        },
+      },
+    });
+    const probe = createGitHubSubjectProbe({ repository: "example/repo", fetch: fetcher });
+    assert.equal(await probe(pin), expected, String(issueUrl));
   }
 });
 

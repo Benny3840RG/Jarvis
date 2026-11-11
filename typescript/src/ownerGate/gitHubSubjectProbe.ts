@@ -19,8 +19,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function revisionFrom(subject: OwnerDecisionSubject, body: unknown): string | null {
+function revisionFrom(subject: OwnerDecisionSubject, body: unknown, base: string): string | null {
   if (!isRecord(body)) return null;
+  // A comment id alone says nothing about where the comment is. It only counts
+  // as the pinned proof if it sits on the pinned issue or pull request.
+  if (subject.kind === "comment" && body.issue_url !== `${base}/issues/${subject.on}`) return null;
   if (subject.kind === "issue" || subject.kind === "comment") {
     return typeof body.updated_at === "string" ? body.updated_at : null;
   }
@@ -53,7 +56,7 @@ export function createGitHubSubjectProbe(
         signal: AbortSignal.timeout(options.timeoutMs ?? 5000),
       });
       if (!response.ok) return null;
-      return revisionFrom(subject, (await response.json()) as unknown);
+      return revisionFrom(subject, (await response.json()) as unknown, base);
     } catch {
       return null;
     }
