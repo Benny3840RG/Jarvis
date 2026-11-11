@@ -126,7 +126,6 @@ function isLoopbackHost(host: string): boolean {
   const lower = host.toLowerCase();
   return (
     lower === "127.0.0.1" ||
-    lower === "localhost" ||
     lower === "::1" ||
     lower === "0:0:0:0:0:0:0:1" ||
     (isIP(lower) === 4 && lower.startsWith("127."))
@@ -147,12 +146,44 @@ function normaliseHost(hostname: string): string {
 function isLoopbackAlias(hostname: string): boolean {
   const host = normaliseHost(hostname);
   return (
-    isLoopbackHost(host) || (isIP(host) === 6 && /^::ffff:7f[0-9a-f]{2}:[0-9a-f]{1,4}$/.test(host))
+    host === "localhost" ||
+    isLoopbackHost(host) ||
+    (isIP(host) === 6 && /^::ffff:7f[0-9a-f]{2}:[0-9a-f]{1,4}$/.test(host))
   );
 }
 
 function portOf(url: URL): string {
   return url.port !== "" ? url.port : url.protocol === "https:" ? "443" : "80";
+}
+
+async function resolveBoundedHostAddresses(
+  host: string,
+  label: string,
+  resolveHostAddresses: (host: string) => Promise<readonly string[]>,
+): Promise<readonly string[]> {
+  let timeout: NodeJS.Timeout | undefined;
+  try {
+    const addresses = await Promise.race([
+      resolveHostAddresses(host),
+      new Promise<never>((_resolve, reject) => {
+        timeout = setTimeout(() => reject(new Error("resolution timed out")), 1_000);
+      }),
+    ]);
+    if (
+      addresses.length === 0 ||
+      addresses.length > 64 ||
+      addresses.some((address) => isIP(address) === 0)
+    ) {
+      throw new Error("resolution returned no usable addresses");
+    }
+    return addresses;
+  } catch (error: unknown) {
+    throw new LocalV1RecoveryDriverError(`Local V1 recovery driver could not resolve ${label}.`, {
+      cause: error,
+    });
+  } finally {
+    if (timeout !== undefined) clearTimeout(timeout);
+  }
 }
 
 async function configuredSharesIsolatedEndpoint(
@@ -167,30 +198,11 @@ async function configuredSharesIsolatedEndpoint(
 
   // A same-port DNS name may include loopback after a non-loopback answer.
   // Resolve every answer without making a request to either backend.
-  let timeout: NodeJS.Timeout | undefined;
-  let addresses: readonly string[];
-  try {
-    addresses = await Promise.race([
-      resolveHostAddresses(configuredHost),
-      new Promise<never>((_resolve, reject) => {
-        timeout = setTimeout(() => reject(new Error("resolution timed out")), 1_000);
-      }),
-    ]);
-    if (
-      addresses.length === 0 ||
-      addresses.length > 64 ||
-      addresses.some((address) => isIP(address) === 0)
-    ) {
-      throw new Error("resolution returned no usable addresses");
-    }
-  } catch (error: unknown) {
-    throw new LocalV1RecoveryDriverError(
-      "Local V1 recovery driver could not resolve the configured CONVEX_URL.",
-      { cause: error },
-    );
-  } finally {
-    if (timeout !== undefined) clearTimeout(timeout);
-  }
+  const addresses = await resolveBoundedHostAddresses(
+    configuredHost,
+    "the configured CONVEX_URL",
+    resolveHostAddresses,
+  );
   return addresses.some(isLoopbackAlias);
 }
 
@@ -201,7 +213,10 @@ function endpointOf(url: URL): string {
   return `${host}:${portOf(url)}`;
 }
 
-function assertIsolatedTarget(config: LocalV1RestartProofConfig): URL {
+async function assertIsolatedTarget(
+  config: LocalV1RestartProofConfig,
+  resolveHostAddresses: (host: string) => Promise<readonly string[]>,
+): Promise<URL> {
   const raw = assertNonEmpty(config.isolatedConvexUrl, "the isolated Convex URL");
   let parsed: URL;
   try {
@@ -216,12 +231,23 @@ function assertIsolatedTarget(config: LocalV1RestartProofConfig): URL {
       "Local V1 recovery driver isolated Convex URL is not an http(s) URL.",
     );
   }
-  let host = parsed.hostname.toLowerCase();
-  if (host.startsWith("[") && host.endsWith("]")) host = host.slice(1, -1);
-  if (!isLoopbackHost(host)) {
+  const host = normaliseHost(parsed.hostname);
+  if (host !== "localhost" && !isLoopbackHost(host)) {
     throw new LocalV1RecoveryDriverError(
       "Local V1 recovery driver refuses an isolated Convex URL that is not a loopback host.",
     );
+  }
+  if (host === "localhost") {
+    const addresses = await resolveBoundedHostAddresses(
+      host,
+      "the isolated Convex URL",
+      resolveHostAddresses,
+    );
+    if (!addresses.every(isLoopbackAlias)) {
+      throw new LocalV1RecoveryDriverError(
+        "Local V1 recovery driver refuses an isolated Convex URL that is not a loopback host.",
+      );
+    }
   }
   return parsed;
 }
@@ -410,7 +436,10 @@ export async function runLocalV1RestartProof(
   deps: LocalV1RestartProofDeps = {},
 ): Promise<LocalV1RestartProofRecord> {
   const runner = deps.restartRunner ?? readRestartedProcess;
-  const isolated = assertIsolatedTarget(config);
+  const resolveHostAddresses =
+    deps.resolveHostAddresses ??
+    (async (host: string) => (await lookup(host, { all: true })).map(({ address }) => address));
+  const isolated = await assertIsolatedTarget(config, resolveHostAddresses);
   assertNonEmpty(config.deliveryRuntimeToken, "JARVIS_DELIVERY_RUNTIME_TOKEN");
   assertNonEmpty(config.sourceSha, "the source commit SHA");
   for (const [value, label] of [
@@ -436,12 +465,7 @@ export async function runLocalV1RestartProof(
     }
     if (
       configuredUrl !== null &&
-      (await configuredSharesIsolatedEndpoint(
-        configuredUrl,
-        isolated,
-        deps.resolveHostAddresses ??
-          (async (host) => (await lookup(host, { all: true })).map(({ address }) => address)),
-      ))
+      (await configuredSharesIsolatedEndpoint(configuredUrl, isolated, resolveHostAddresses))
     ) {
       throw new LocalV1RecoveryDriverError(
         "Local V1 recovery driver refuses the configured CONVEX_URL as the isolated target.",

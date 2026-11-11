@@ -202,6 +202,98 @@ describe("Local V1 recovery driver — restart proof", () => {
     );
   });
 
+  it("refuses localhost when every resolved address is non-loopback before invoking the runner", async () => {
+    const { config } = await baseConfig();
+    let runnerCalls = 0;
+    let resolvedHost = "";
+    await assert.rejects(
+      () =>
+        runLocalV1RestartProof(
+          { ...config, isolatedConvexUrl: "http://localhost:3210" },
+          {
+            resolveHostAddresses: async (host) => {
+              resolvedHost = host;
+              return ["192.0.2.10"];
+            },
+            restartRunner: async () => {
+              runnerCalls += 1;
+              throw new Error("runner should not be called");
+            },
+          },
+        ),
+      /not a loopback host/,
+    );
+    assert.equal(resolvedHost, "localhost");
+    assert.equal(runnerCalls, 0);
+  });
+
+  it("refuses localhost when resolved answers mix loopback and non-loopback", async () => {
+    const { config } = await baseConfig();
+    let runnerCalls = 0;
+    await assert.rejects(
+      () =>
+        runLocalV1RestartProof(
+          { ...config, isolatedConvexUrl: "http://localhost:3210" },
+          {
+            resolveHostAddresses: async () => ["127.0.0.1", "2001:db8::1"],
+            restartRunner: async () => {
+              runnerCalls += 1;
+              throw new Error("runner should not be called");
+            },
+          },
+        ),
+      /not a loopback host/,
+    );
+    assert.equal(runnerCalls, 0);
+  });
+
+  it("accepts all-loopback localhost answers before the existing runner guard", async () => {
+    const { config } = await baseConfig();
+    let runnerCalls = 0;
+    await assert.rejects(
+      () =>
+        runLocalV1RestartProof(
+          { ...config, isolatedConvexUrl: "http://localhost:3210", configuredConvexUrl: undefined },
+          {
+            resolveHostAddresses: async () => ["127.0.0.1", "::1", "127.0.0.2"],
+            restartRunner: async () => {
+              runnerCalls += 1;
+              throw new Error("runner reached");
+            },
+          },
+        ),
+      /runner reached/,
+    );
+    assert.equal(runnerCalls, 1);
+  });
+
+  it("fails closed on failed or empty localhost resolution before invoking the runner", async () => {
+    const { config } = await baseConfig();
+    for (const resolveHostAddresses of [
+      async () => {
+        throw new Error("lookup failed");
+      },
+      async () => [] as string[],
+    ]) {
+      let runnerCalls = 0;
+      await assert.rejects(
+        () =>
+          runLocalV1RestartProof(
+            { ...config, isolatedConvexUrl: "http://localhost:3210" },
+            {
+              resolveHostAddresses,
+              restartRunner: async () => {
+                runnerCalls += 1;
+                throw new Error("runner should not be called");
+              },
+            },
+          ),
+        /could not resolve the isolated Convex URL/,
+      );
+      assert.equal(runnerCalls, 0);
+    }
+  });
+
   it("refuses a cloud isolated URL", async () => {
     const { config } = await baseConfig();
     await assert.rejects(
@@ -247,6 +339,7 @@ describe("Local V1 recovery driver — restart proof", () => {
           runLocalV1RestartProof(
             { ...config, configuredConvexUrl, isolatedConvexUrl },
             {
+              resolveHostAddresses: async () => ["127.0.0.1", "::1"],
               restartRunner: async () => {
                 runnerCalls += 1;
                 throw new Error("runner should not be called");
