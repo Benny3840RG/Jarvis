@@ -336,6 +336,30 @@ describe("a referenced property cannot be moved or deleted", () => {
     assert.equal((await inject(app, "DELETE", propertyUrl, { headers: AUTH })).statusCode, 200);
   });
 
+  it("returns 404, not 409, for an absent property that historical records still name", async () => {
+    const projectStore = new InMemoryProjectStore();
+    const enquiryStore = new InMemoryEnquiryStore();
+    const app = await makeApp({ projectStore, enquiryStore });
+    const { mine } = await fixture(app);
+    await projectStore.add({ clientId: mine, propertyId: "gone-property", title: "Legacy job" });
+    await enquiryStore.add({
+      clientId: mine,
+      propertyId: "gone-property",
+      source: "phone",
+      requestedWork: "Prune",
+    });
+    assertProblem(
+      await inject(app, "DELETE", "/api/v1/properties/gone-property", { headers: AUTH }),
+      404,
+      "property-not-found",
+    );
+    assertProblem(
+      await patch(app, "/api/v1/properties/gone-property", { clientId: mine }),
+      404,
+      "property-not-found",
+    );
+  });
+
   it("serialises a property delete against a job create that references it", async () => {
     const app = await makeApp();
     const { mine, myProperty } = await fixture(app);

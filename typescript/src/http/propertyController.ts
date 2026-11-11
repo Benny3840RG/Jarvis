@@ -167,6 +167,9 @@ export class PropertyController {
     let property: Property | null;
     try {
       property = await withClientReferenceLock(async () => {
+        // An absent property is a 404 even if a historical record still
+        // names its id; only an existing property can be "still referenced".
+        if (!(await this.properties.get(propertyId))) return null;
         await this.assertUnreferenced(propertyId);
         return this.properties.remove(propertyId);
       });
