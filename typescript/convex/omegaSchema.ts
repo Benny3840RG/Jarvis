@@ -44,6 +44,7 @@ export const omegaTables = {
     contradicts: v.array(v.string()),
     createdAt: v.number(),
   })
+    // eslint-disable-next-line @convex-dev/no-duplicate-indexes -- Preserve creation-time order for mission scans; the longer index orders by another identifier.
     .index("by_owner_and_mission_id", ["ownerId", "missionId"])
     .index("by_owner_mission_and_evidence_id", ["ownerId", "missionId", "evidenceId"]),
   omegaActionContracts: defineTable({
@@ -68,6 +69,7 @@ export const omegaTables = {
     createdAt: v.number(),
     updatedAt: v.number(),
   })
+    // eslint-disable-next-line @convex-dev/no-duplicate-indexes -- Preserve creation-time order for mission scans; the longer index orders by another identifier.
     .index("by_owner_and_mission_id", ["ownerId", "missionId"])
     .index("by_owner_mission_and_contract_id", ["ownerId", "missionId", "contractId"])
     .index("by_owner_and_tool_action_id", ["ownerId", "toolActionId"]),
@@ -83,6 +85,7 @@ export const omegaTables = {
     performedBy: v.string(),
     performedAt: v.number(),
   })
+    // eslint-disable-next-line @convex-dev/no-duplicate-indexes -- Preserve creation-time order for mission scans; the longer index orders by another identifier.
     .index("by_owner_and_mission_id", ["ownerId", "missionId"])
     .index("by_owner_mission_and_proof_id", ["ownerId", "missionId", "proofId"]),
   omegaContradictionResolutions: defineTable({
@@ -96,6 +99,7 @@ export const omegaTables = {
     authority: v.literal("approval-token"),
     resolvedAt: v.number(),
   })
+    // eslint-disable-next-line @convex-dev/no-duplicate-indexes -- Preserve creation-time order for mission scans; the longer index orders by another identifier.
     .index("by_owner_and_mission_id", ["ownerId", "missionId"])
     .index("by_owner_mission_and_resolution_id", ["ownerId", "missionId", "resolutionId"])
     .index("by_owner_mission_and_contradiction_edge", [

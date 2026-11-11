@@ -71,6 +71,7 @@ export default defineSchema({
     revision: v.optional(v.number()),
     createdAt: v.number(),
   })
+    // eslint-disable-next-line @convex-dev/no-duplicate-indexes -- Preserve owner scan creation-time ordering; the longer index sorts by another key.
     .index("by_owner", ["ownerId"])
     .index("by_owner_and_project", ["ownerId", "projectId"])
     .index("by_owner_and_direct_create_idempotency_key", ["ownerId", "directCreateIdempotencyKey"]),
@@ -88,6 +89,7 @@ export default defineSchema({
     revision: v.optional(v.number()),
     createdAt: v.number(),
   })
+    // eslint-disable-next-line @convex-dev/no-duplicate-indexes -- Preserve owner scan creation-time ordering; the longer index sorts by another key.
     .index("by_owner", ["ownerId"])
     .index("by_owner_and_project", ["ownerId", "projectId"])
     .index("by_owner_and_direct_create_idempotency_key", ["ownerId", "directCreateIdempotencyKey"]),
@@ -192,6 +194,7 @@ export default defineSchema({
     appliedRevision: v.optional(v.number()),
   })
     .index("by_owner_and_change_set_id", ["ownerId", "changeSetId"])
+    // eslint-disable-next-line @convex-dev/no-duplicate-indexes -- Preserve project scan creation-time ordering; the longer index sorts by state.
     .index("by_owner_and_project_key", ["ownerId", "projectKey"])
     .index("by_owner_and_project_key_and_state", ["ownerId", "projectKey", "state"])
     .index("by_owner_and_request_id", ["ownerId", "requestId"]),
@@ -250,6 +253,7 @@ export default defineSchema({
   })
     .index("by_owner_and_action_id", ["ownerId", "actionId"])
     .index("by_owner_and_idempotency_key", ["ownerId", "idempotencyKey"])
+    // eslint-disable-next-line @convex-dev/no-duplicate-indexes -- Preserve project scan creation-time ordering; the longer index sorts by state.
     .index("by_owner_and_project_key", ["ownerId", "projectKey"])
     .index("by_owner_and_project_key_and_state", ["ownerId", "projectKey", "state"])
     .index("by_owner_and_request_id", ["ownerId", "requestId"])
@@ -509,6 +513,7 @@ export default defineSchema({
   })
     .index("by_owner_and_delivery_attempt_id", ["ownerId", "deliveryAttemptId"])
     .index("by_owner_and_send_scope", ["ownerId", "quoteId", "revision", "recipient", "channel"])
+    // eslint-disable-next-line @convex-dev/no-duplicate-indexes -- Preserve quote revision creation-time ordering; the longer index sorts by recipient.
     .index("by_owner_quote_and_revision", ["ownerId", "quoteId", "revision"])
     .index("by_owner_and_reconciliation_id", ["ownerId", "reconciliationId"])
     .index("by_owner_and_status", ["ownerId", "status"]),
@@ -597,6 +602,7 @@ export default defineSchema({
     // with an optional field before any backfill migration narrows it.
     updatedAt: v.optional(v.number()),
   })
+    // eslint-disable-next-line @convex-dev/no-duplicate-indexes -- Preserve owner scan creation-time ordering; the longer index sorts by another key.
     .index("by_owner", ["ownerId"])
     .index("by_owner_and_build_id", ["ownerId", "buildId"]),
   upgrades: defineTable({
@@ -615,6 +621,7 @@ export default defineSchema({
     // with an optional field before any backfill migration narrows it.
     updatedAt: v.optional(v.number()),
   })
+    // eslint-disable-next-line @convex-dev/no-duplicate-indexes -- Preserve owner scan creation-time ordering; the longer index sorts by another key.
     .index("by_owner", ["ownerId"])
     .index("by_owner_and_build_id", ["ownerId", "buildId"]),
   assets: defineTable({
