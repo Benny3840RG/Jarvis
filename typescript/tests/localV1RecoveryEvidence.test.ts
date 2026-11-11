@@ -143,7 +143,11 @@ test("loopback gate rejects 127-prefixed DNS names before invoking the runner", 
     for (const host of ["127.0.0.1", "127.12.34.56", "localhost", "[::1]"]) {
       const record = await runLocalV1RestartProof(
         { ...fixture.config, isolatedConvexUrl: `http://${host}:3210` },
-        { restartRunner: async () => fixture.result },
+        {
+          restartRunner: async () => fixture.result,
+          // Deterministic: never depend on the machine's own name resolution.
+          resolveHostAddresses: async () => ["127.0.0.1", "::1"],
+        },
       );
       assert.equal(localV1RestartProofPassed(record), true, host);
     }

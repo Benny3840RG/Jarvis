@@ -202,6 +202,31 @@ export async function writeRecoveryEvidence(
       }
     };
 
+    // Root identity alone misses a directory that sits below a protected
+    // root, for example an output parent renamed into the live tree after it
+    // was opened. Walk ".." from the pinned handle and refuse any protected
+    // ancestor.
+    const assertNoProtectedAncestor = async (handle: fs.FileHandle): Promise<void> => {
+      let current = handle;
+      try {
+        for (let depth = 0; depth < 4096; depth += 1) {
+          await assertUnprotected(current);
+          // Built by hand: path.join would fold the ".." away.
+          const above = await fs.open(`/proc/self/fd/${current.fd}/..`, DIRECTORY_FLAGS);
+          const [here, up] = await Promise.all([
+            current.stat({ bigint: true }),
+            above.stat({ bigint: true }),
+          ]);
+          if (current !== handle) await current.close();
+          current = above;
+          if (here.dev === up.dev && here.ino === up.ino) return;
+        }
+        throw new Error("Recovery evidence output parent is nested too deeply to verify.");
+      } finally {
+        if (current !== handle) await current.close();
+      }
+    };
+
     const target = await assertRecoveryEvidencePath(outPath, config);
     const parent = path.dirname(target);
     let directory = await fs.open(path.parse(parent).root, DIRECTORY_FLAGS | constants.O_NOFOLLOW);
@@ -226,21 +251,31 @@ export async function writeRecoveryEvidence(
         await directory.close();
         directory = next;
       }
-      await assertUnprotected(directory);
+      await assertNoProtectedAncestor(directory);
       // Never truncate an existing archive, evidence file, symlink or hardlink.
+      const created = path.join("/proc/self/fd", String(directory.fd), path.basename(target));
       const file = await fs.open(
-        path.join("/proc/self/fd", String(directory.fd), path.basename(target)),
+        created,
         constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW,
         0o600,
       );
       try {
+        // The file exists but is still empty. Re-check where the pinned parent
+        // now sits before any evidence is written, and remove the empty file
+        // if the parent moved under protected data or away from its path.
+        try {
+          await assertNoProtectedAncestor(directory);
+          const [expected, actual] = await Promise.all([directory.stat(), fs.lstat(parent)]);
+          if (!actual.isDirectory() || expected.dev !== actual.dev || expected.ino !== actual.ino) {
+            throw new Error("Recovery evidence output parent changed during creation.");
+          }
+        } catch (error: unknown) {
+          await fs.unlink(created).catch(() => undefined);
+          throw error;
+        }
         await file.writeFile(`${evidence}\n`, { encoding: "utf8" });
       } finally {
         await file.close();
-      }
-      const [expected, actual] = await Promise.all([directory.stat(), fs.lstat(parent)]);
-      if (!actual.isDirectory() || expected.dev !== actual.dev || expected.ino !== actual.ino) {
-        throw new Error("Recovery evidence output parent changed during creation.");
       }
     } finally {
       await directory.close();

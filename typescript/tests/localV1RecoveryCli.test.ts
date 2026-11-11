@@ -219,6 +219,61 @@ test("renaming the protected live inode into the evidence parent during traversa
   }
 });
 
+test("moving the opened output parent beneath live data leaves no evidence there", async (t) => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "lv1-evidence-descendant-race-"));
+  try {
+    const live = path.join(root, "live");
+    const isolated = path.join(root, "isolated");
+    const output = path.join(root, "evidence");
+    await fs.mkdir(live);
+    await fs.mkdir(isolated);
+    await fs.mkdir(output);
+    const config = {
+      ...configFromEnvironment(environment, "fixture"),
+      liveDirectory: live,
+      jsonDirectory: isolated,
+    };
+    for (const moment of ["before-create", "after-create"] as const) {
+      const originalOpen = fs.open;
+      let moved = false;
+      t.mock.method(fs, "open", async (...args: Parameters<typeof fs.open>) => {
+        const name = path.basename(String(args[0]));
+        const move = async (): Promise<void> => {
+          moved = true;
+          // The pinned handle now names a descendant of live data whose inode
+          // differs from the protected root, and the old path is a real
+          // directory again.
+          await fs.rename(output, path.join(live, "nested"));
+          await fs.mkdir(output);
+        };
+        if (!moved && moment === "before-create" && name === "evidence") {
+          const handle = await originalOpen(...args);
+          await move();
+          return handle;
+        }
+        const handle = await originalOpen(...args);
+        if (!moved && moment === "after-create" && name === "proof.md") await move();
+        return handle;
+      });
+      await assert.rejects(
+        () => writeRecoveryEvidence(path.join(output, "proof.md"), "secret", config),
+        /outside every protected data directory/,
+        moment,
+      );
+      t.mock.restoreAll();
+      assert.equal(moved, true, moment);
+      assert.deepEqual(await fs.readdir(path.join(live, "nested")), [], moment);
+      assert.deepEqual(await fs.readdir(output), [], moment);
+      assert.deepEqual(await fs.readdir(isolated), [], moment);
+      await fs.rename(path.join(live, "nested"), path.join(root, "spare"));
+      await fs.rm(path.join(root, "spare"), { recursive: true });
+    }
+  } finally {
+    t.mock.restoreAll();
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
 test("evidence path problems are reported before the proof would run", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "lv1-evidence-preflight-"));
   try {
