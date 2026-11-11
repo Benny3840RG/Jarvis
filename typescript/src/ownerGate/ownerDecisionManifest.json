@@ -1,0 +1,500 @@
+{
+  "version": 1,
+  "repository": "Benny3840RG/Jarvis",
+  "decisions": [
+    {
+      "id": "outlook-evidence-acceptance",
+      "title": "Accept the Outlook send and reconcile evidence",
+      "issues": [294, 297],
+      "proposedAction": "Accept the 18 October 2026 development commissioning run as satisfying the quote delivery gate (#294) and the Outlook reconciliation gate (#297), with its listed gaps.",
+      "consequence": "Both gates can be closed and the Local V1 checklist item for Outlook delivery is met. The five gaps listed in the evidence stay unproven: no direct trace of the immutable-ID header, no recorded transition history, no live parallel-worker run, only the tool's own assertion for the repeat send, and PowerShell setup tests never run on a real shell.",
+      "scope": "Development only. One non-customer quote, already sent and reconciled once. No new send, no customer recipient, no production.",
+      "environment": "development",
+      "risk": "standard",
+      "subject": {
+        "kind": "issue",
+        "ref": "#294",
+        "sha": "d11d13c99f23b92bd2e3f6da7e51e3b7ba7ca184"
+      },
+      "dependsOn": [],
+      "evidence": [
+        {
+          "label": "Commissioning evidence and gaps (ledger comment on #697)",
+          "url": "https://github.com/Benny3840RG/Jarvis/issues/697#issuecomment-6243177909"
+        },
+        {
+          "label": "Issue #294",
+          "url": "https://github.com/Benny3840RG/Jarvis/issues/294"
+        },
+        {
+          "label": "Issue #297",
+          "url": "https://github.com/Benny3840RG/Jarvis/issues/297"
+        }
+      ],
+      "missingPrerequisites": [],
+      "rollback": "Reopen #294 and #297. Nothing was changed on the runtime by accepting the evidence.",
+      "expiresAt": "2026-12-12T00:00:00.000Z"
+    },
+    {
+      "id": "merge-recovery-driver",
+      "title": "Merge the Local V1 recovery restart driver",
+      "issues": [697, 307],
+      "proposedAction": "Merge pull request #765 at the exact commit shown.",
+      "consequence": "The repeatable restart-proof command lands on main. It proves nothing by itself: capture, isolated restore, reread and rollback remain operator steps. The writer cannot detect the evidence folder being moved after its final check, so the operator note says not to relocate it during a run.",
+      "scope": "Repository only. Adds a commissioning tool, its tests and operator notes. No runtime, data or deployment change.",
+      "environment": "repository",
+      "risk": "standard",
+      "subject": {
+        "kind": "pull-request",
+        "ref": "#765",
+        "sha": "8b59c61a400477091598b3436dbe21848d9883e7"
+      },
+      "dependsOn": [],
+      "evidence": [
+        {
+          "label": "Pull request #765",
+          "url": "https://github.com/Benny3840RG/Jarvis/pull/765"
+        },
+        {
+          "label": "Independent review of this exact commit: pass, no findings",
+          "url": "https://github.com/Benny3840RG/Jarvis/pull/765#issuecomment-6808894057"
+        }
+      ],
+      "missingPrerequisites": [],
+      "rollback": "Revert the merge commit.",
+      "expiresAt": "2026-12-12T00:00:00.000Z"
+    },
+    {
+      "id": "recovery-isolated-proof",
+      "title": "Authorise the isolated restore and restart proof",
+      "issues": [697],
+      "proposedAction": "Run capture, isolated restore, reread, rollback and the restart proof against an isolated local backend, and record the evidence.",
+      "consequence": "Produces the recovery evidence Local V1 needs. The live data directory is read, never written; the driver refuses any non-loopback or configured target.",
+      "scope": "Development only, on the Lenovo host, against a throwaway loopback backend.",
+      "environment": "development",
+      "risk": "standard",
+      "subject": {
+        "kind": "issue",
+        "ref": "#697",
+        "sha": "d11d13c99f23b92bd2e3f6da7e51e3b7ba7ca184"
+      },
+      "dependsOn": ["merge-recovery-driver"],
+      "evidence": [
+        {
+          "label": "Issue #697",
+          "url": "https://github.com/Benny3840RG/Jarvis/issues/697"
+        },
+        {
+          "label": "Pull request #765",
+          "url": "https://github.com/Benny3840RG/Jarvis/pull/765"
+        }
+      ],
+      "missingPrerequisites": ["The recovery driver is not merged."],
+      "rollback": "Delete the isolated backend and its restored copy. Live data is untouched by design.",
+      "expiresAt": "2026-12-12T00:00:00.000Z"
+    },
+    {
+      "id": "voice-model-provider-key",
+      "title": "Authorise a model-provider key for the reasoning service",
+      "issues": [567, 697],
+      "proposedAction": "Configure a model-provider API key on the Lenovo development runtime through the approved secret onboarding path.",
+      "consequence": "The reasoning service stops reporting not-configured, so spoken commissioning can proceed. This starts paid usage on the provider account.",
+      "scope": "Development runtime only. One secret, stored where the runtime reads its other secrets. Not committed.",
+      "environment": "development",
+      "risk": "standard",
+      "subject": {
+        "kind": "issue",
+        "ref": "#567",
+        "sha": "d11d13c99f23b92bd2e3f6da7e51e3b7ba7ca184"
+      },
+      "dependsOn": [],
+      "evidence": [
+        {
+          "label": "Issue #567",
+          "url": "https://github.com/Benny3840RG/Jarvis/issues/567"
+        },
+        {
+          "label": "Issue #697",
+          "url": "https://github.com/Benny3840RG/Jarvis/issues/697"
+        }
+      ],
+      "missingPrerequisites": [],
+      "rollback": "Remove the key from the runtime and revoke it at the provider.",
+      "expiresAt": "2026-12-12T00:00:00.000Z"
+    },
+    {
+      "id": "voice-host-commissioning",
+      "title": "Accept guarded voice commissioning",
+      "issues": [567, 697],
+      "proposedAction": "Accept the guarded voice interface as commissioned on the Lenovo host.",
+      "consequence": "The voice item on the Local V1 checklist is met and #567 can close. Physical machinery control stays out of scope.",
+      "scope": "Development host only: microphone, speaker, wake word, confirmations and typed fallback.",
+      "environment": "development",
+      "risk": "standard",
+      "subject": {
+        "kind": "issue",
+        "ref": "#567",
+        "sha": "d11d13c99f23b92bd2e3f6da7e51e3b7ba7ca184"
+      },
+      "dependsOn": ["voice-model-provider-key"],
+      "evidence": [
+        {
+          "label": "Issue #567",
+          "url": "https://github.com/Benny3840RG/Jarvis/issues/567"
+        }
+      ],
+      "missingPrerequisites": [
+        "The reasoning service is not configured on the host.",
+        "No microphone and audibility acceptance run has been recorded on the real host."
+      ],
+      "rollback": "Reopen #567. Voice can be disabled by leaving the microphone off; no hardware adapter ships.",
+      "expiresAt": "2026-12-12T00:00:00.000Z"
+    },
+    {
+      "id": "google-home-announcement",
+      "title": "Authorise one governed Google Home announcement",
+      "issues": [697],
+      "proposedAction": "Pin one named speaker and play one governed test announcement through the existing ToolAction path.",
+      "consequence": "A speaker in the house plays audio once. This commissions the home announcement path for Local V1.",
+      "scope": "One pinned Cast device, one announcement, development runtime. The ToolAction approval for the announcement itself is still required separately.",
+      "environment": "development",
+      "risk": "high",
+      "highRiskKind": "hardware-actuation",
+      "subject": {
+        "kind": "issue",
+        "ref": "#697",
+        "sha": "d11d13c99f23b92bd2e3f6da7e51e3b7ba7ca184"
+      },
+      "dependsOn": [],
+      "evidence": [
+        {
+          "label": "Issue #697",
+          "url": "https://github.com/Benny3840RG/Jarvis/issues/697"
+        }
+      ],
+      "missingPrerequisites": [
+        "No pinned speaker target has been named; the pinned-target map is absent."
+      ],
+      "rollback": "Remove the pinned-target map; the announcement path then fails closed again.",
+      "expiresAt": "2026-12-12T00:00:00.000Z"
+    },
+    {
+      "id": "merge-tcp-check-specifications",
+      "title": "Merge the tcp-check commissioning specifications",
+      "issues": [779],
+      "proposedAction": "Merge pull request #800 at the exact commit shown.",
+      "consequence": "The proposed enforcer, durable store and clock specifications and the adversarial test matrix land on main as a planning document. It authorises no code.",
+      "scope": "Repository only. One new design document.",
+      "environment": "repository",
+      "risk": "standard",
+      "subject": {
+        "kind": "pull-request",
+        "ref": "#800",
+        "sha": "68b8cb190e3e258411b4290c2bee531c432f454c"
+      },
+      "dependsOn": [],
+      "evidence": [
+        {
+          "label": "Pull request #800",
+          "url": "https://github.com/Benny3840RG/Jarvis/pull/800"
+        },
+        {
+          "label": "Issue #779",
+          "url": "https://github.com/Benny3840RG/Jarvis/issues/779"
+        }
+      ],
+      "missingPrerequisites": ["An independent review of this pull request has not been done."],
+      "rollback": "Revert the merge commit.",
+      "expiresAt": "2026-12-12T00:00:00.000Z"
+    },
+    {
+      "id": "tcp-check-enforcer-build",
+      "title": "Approve building the tcp-check egress enforcer (WS-A)",
+      "issues": [779],
+      "proposedAction": "Approve implementation of the egress enforcer specification: a separate broker process and a root-owned kernel rule set.",
+      "consequence": "Work starts on code that owns a real network socket, behind the default-deny registry entry. It also means accepting root-owned components on the development host.",
+      "scope": "Development only. Draft pull requests; the capability stays planned and no real target is allowlisted.",
+      "environment": "development",
+      "risk": "standard",
+      "subject": {
+        "kind": "issue",
+        "ref": "#779",
+        "sha": "d11d13c99f23b92bd2e3f6da7e51e3b7ba7ca184"
+      },
+      "dependsOn": ["merge-tcp-check-specifications"],
+      "evidence": [
+        {
+          "label": "Pull request #800",
+          "url": "https://github.com/Benny3840RG/Jarvis/pull/800"
+        },
+        {
+          "label": "Issue #779",
+          "url": "https://github.com/Benny3840RG/Jarvis/issues/779"
+        }
+      ],
+      "missingPrerequisites": [],
+      "rollback": "Close the implementation pull requests; remove the rule set and broker user from the host.",
+      "expiresAt": "2026-12-12T00:00:00.000Z"
+    },
+    {
+      "id": "tcp-check-store-build",
+      "title": "Approve building the tcp-check durable store (WS-B)",
+      "issues": [779],
+      "proposedAction": "Approve implementation of the durable single-use store specification.",
+      "consequence": "Work starts on the store transactions that grant the sole right to connect and record outcomes.",
+      "scope": "Development only. Draft pull requests; no socket is opened by this workstream.",
+      "environment": "development",
+      "risk": "standard",
+      "subject": {
+        "kind": "issue",
+        "ref": "#779",
+        "sha": "d11d13c99f23b92bd2e3f6da7e51e3b7ba7ca184"
+      },
+      "dependsOn": ["merge-tcp-check-specifications"],
+      "evidence": [
+        {
+          "label": "Pull request #800",
+          "url": "https://github.com/Benny3840RG/Jarvis/pull/800"
+        },
+        {
+          "label": "Issue #779",
+          "url": "https://github.com/Benny3840RG/Jarvis/issues/779"
+        }
+      ],
+      "missingPrerequisites": [],
+      "rollback": "Close the implementation pull requests.",
+      "expiresAt": "2026-12-12T00:00:00.000Z"
+    },
+    {
+      "id": "tcp-check-time-build",
+      "title": "Approve building the tcp-check time rules (WS-C)",
+      "issues": [779],
+      "proposedAction": "Approve implementation of the clock, deadline, rate-window and port-range specification.",
+      "consequence": "Work starts on the trusted-clock checks and the rule for recording a timeout versus an unknown effect.",
+      "scope": "Development only. Draft pull requests.",
+      "environment": "development",
+      "risk": "standard",
+      "subject": {
+        "kind": "issue",
+        "ref": "#779",
+        "sha": "d11d13c99f23b92bd2e3f6da7e51e3b7ba7ca184"
+      },
+      "dependsOn": ["merge-tcp-check-specifications"],
+      "evidence": [
+        {
+          "label": "Pull request #800",
+          "url": "https://github.com/Benny3840RG/Jarvis/pull/800"
+        },
+        {
+          "label": "Issue #779",
+          "url": "https://github.com/Benny3840RG/Jarvis/issues/779"
+        }
+      ],
+      "missingPrerequisites": [],
+      "rollback": "Close the implementation pull requests.",
+      "expiresAt": "2026-12-12T00:00:00.000Z"
+    },
+    {
+      "id": "tcp-check-evidence-run",
+      "title": "Authorise the tcp-check adversarial evidence run (WS-D)",
+      "issues": [779],
+      "proposedAction": "Run the 22-case adversarial matrix against a host-local synthetic target.",
+      "consequence": "Real TCP connections are attempted on the development host, to a listener that never leaves the machine.",
+      "scope": "Development host only. One synthetic, host-local target approved for this run. No third-party target.",
+      "environment": "development",
+      "risk": "standard",
+      "subject": {
+        "kind": "issue",
+        "ref": "#779",
+        "sha": "d11d13c99f23b92bd2e3f6da7e51e3b7ba7ca184"
+      },
+      "dependsOn": ["tcp-check-enforcer-build", "tcp-check-store-build", "tcp-check-time-build"],
+      "evidence": [
+        {
+          "label": "Pull request #800",
+          "url": "https://github.com/Benny3840RG/Jarvis/pull/800"
+        },
+        {
+          "label": "Issue #779",
+          "url": "https://github.com/Benny3840RG/Jarvis/issues/779"
+        }
+      ],
+      "missingPrerequisites": [
+        "The enforcer, store and time workstreams are not implemented.",
+        "No synthetic test target has been chosen."
+      ],
+      "rollback": "Stop the broker, flush the kernel rule set and remove the test network namespace.",
+      "expiresAt": "2026-12-12T00:00:00.000Z"
+    },
+    {
+      "id": "tcp-check-registry-promotion",
+      "title": "Promote tcp-check and allow the first development target (WS-E)",
+      "issues": [779],
+      "proposedAction": "Move the tcp-check capability out of planned, populate the reviewed allowlist and allow the first authorised development target.",
+      "consequence": "Jarvis can make governed TCP connection checks to the allowlisted target. Each check still needs its own T3 approval.",
+      "scope": "Development only. One reviewed allowlist entry.",
+      "environment": "development",
+      "risk": "standard",
+      "subject": {
+        "kind": "issue",
+        "ref": "#779",
+        "sha": "d11d13c99f23b92bd2e3f6da7e51e3b7ba7ca184"
+      },
+      "dependsOn": ["tcp-check-evidence-run"],
+      "evidence": [
+        {
+          "label": "Issue #779",
+          "url": "https://github.com/Benny3840RG/Jarvis/issues/779"
+        }
+      ],
+      "missingPrerequisites": ["No passing adversarial evidence run exists."],
+      "rollback": "Empty the allowlist and set the registry entry back to planned; the capability is default-deny again.",
+      "expiresAt": "2026-12-12T00:00:00.000Z"
+    },
+    {
+      "id": "local-v1-release",
+      "title": "Release Jarvis Local V1",
+      "issues": [697],
+      "proposedAction": "Declare one exact release candidate as Jarvis Local V1.",
+      "consequence": "Jarvis becomes the daily system for business, home and workshop on the local runtime.",
+      "scope": "The local runtime on the Lenovo host. No remote exposure, no production deployment, no physical machinery control.",
+      "environment": "development",
+      "risk": "standard",
+      "subject": {
+        "kind": "release",
+        "ref": "Jarvis Local V1",
+        "sha": "d11d13c99f23b92bd2e3f6da7e51e3b7ba7ca184"
+      },
+      "dependsOn": [
+        "outlook-evidence-acceptance",
+        "voice-host-commissioning",
+        "google-home-announcement",
+        "recovery-isolated-proof"
+      ],
+      "evidence": [
+        {
+          "label": "Issue #697",
+          "url": "https://github.com/Benny3840RG/Jarvis/issues/697"
+        }
+      ],
+      "missingPrerequisites": [
+        "No release candidate commit has been frozen.",
+        "The complete Beez Treez workflow has not been proven end to end.",
+        "No integrated dogfood pass has been recorded.",
+        "No independent review of a release candidate exists.",
+        "The operator runbook and release evidence are not recorded."
+      ],
+      "rollback": "Return to the previous known-good commit and restore from the recovery archive.",
+      "expiresAt": "2026-12-12T00:00:00.000Z"
+    },
+    {
+      "id": "remote-access-commissioning",
+      "title": "Commission remote access",
+      "issues": [306],
+      "proposedAction": "Expose Jarvis beyond the local machine behind the chosen identity provider and TLS terminator.",
+      "consequence": "Jarvis becomes reachable from outside the host. A mistake here exposes business and home data.",
+      "scope": "One public hostname, one identity provider, one exact release.",
+      "environment": "production",
+      "risk": "high",
+      "highRiskKind": "remote-exposure",
+      "subject": {
+        "kind": "issue",
+        "ref": "#306",
+        "sha": "d11d13c99f23b92bd2e3f6da7e51e3b7ba7ca184"
+      },
+      "dependsOn": ["local-v1-release"],
+      "evidence": [
+        {
+          "label": "Issue #306",
+          "url": "https://github.com/Benny3840RG/Jarvis/issues/306"
+        }
+      ],
+      "missingPrerequisites": [
+        "No identity provider has been chosen.",
+        "No public hostname or TLS terminator has been chosen.",
+        "No live authentication, proxy-spoofing, origin or rate-limit evidence exists.",
+        "No exact release has been proposed."
+      ],
+      "rollback": "Rebind to loopback and disable the remote gateway; revoke the application registration.",
+      "expiresAt": "2026-12-12T00:00:00.000Z"
+    },
+    {
+      "id": "production-operations",
+      "title": "Approve a production runtime",
+      "issues": [307],
+      "proposedAction": "Deploy one exact release to an authorised hosted production runtime.",
+      "consequence": "Jarvis runs in production with real data. Requires backup, restore, secret rotation, restart, rollback and alerting to be proven first.",
+      "scope": "One hosted runtime and its production database.",
+      "environment": "production",
+      "risk": "high",
+      "highRiskKind": "production-deployment",
+      "subject": {
+        "kind": "issue",
+        "ref": "#307",
+        "sha": "d11d13c99f23b92bd2e3f6da7e51e3b7ba7ca184"
+      },
+      "dependsOn": ["local-v1-release"],
+      "evidence": [
+        {
+          "label": "Issue #307",
+          "url": "https://github.com/Benny3840RG/Jarvis/issues/307"
+        }
+      ],
+      "missingPrerequisites": [
+        "No production host or runtime has been chosen.",
+        "No telemetry and retention policy has been decided.",
+        "No backup and restore, secret rotation, restart, rollback or alerting drill evidence exists.",
+        "No exact release has been proposed."
+      ],
+      "rollback": "Roll back to the recorded previous release and restore from the proven backup.",
+      "expiresAt": "2026-12-12T00:00:00.000Z"
+    },
+    {
+      "id": "durable-orchestration-commissioning",
+      "title": "Commission live durable orchestration",
+      "issues": [324],
+      "proposedAction": "Wire the durable orchestration boundary into live trigger paths on the commissioned runtime.",
+      "consequence": "Scheduled and triggered work can run unattended against real providers.",
+      "scope": "The commissioned runtime only, after one bounded commissioning exercise.",
+      "environment": "production",
+      "risk": "high",
+      "highRiskKind": "production-deployment",
+      "subject": {
+        "kind": "issue",
+        "ref": "#324",
+        "sha": "d11d13c99f23b92bd2e3f6da7e51e3b7ba7ca184"
+      },
+      "dependsOn": ["remote-access-commissioning", "production-operations"],
+      "evidence": [
+        {
+          "label": "Issue #324",
+          "url": "https://github.com/Benny3840RG/Jarvis/issues/324"
+        }
+      ],
+      "missingPrerequisites": [
+        "No commissioned runtime, remote identity or gateway exists.",
+        "No restart, lease recovery, duplicate-trigger or provider reconciliation evidence exists on a deployment."
+      ],
+      "rollback": "Disconnect the trigger ingress; the offline composition remains inert.",
+      "expiresAt": "2026-12-12T00:00:00.000Z"
+    }
+  ],
+  "excluded": [
+    {
+      "issue": 561,
+      "reason": "Dependency watch. TypeScript 7 is blocked by the published lint stack, not by an owner decision."
+    },
+    {
+      "issue": 734,
+      "reason": "Parked idea, not approved for implementation."
+    },
+    {
+      "issue": 742,
+      "reason": "Parked until Local V1 is declared; not an actionable approval."
+    },
+    {
+      "issue": 801,
+      "reason": "This queue itself. Its pull request is merged through the normal review path, not through the queue it adds."
+    }
+  ]
+}

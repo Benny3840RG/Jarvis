@@ -1,0 +1,418 @@
+// Owner decision queue (#801): the canonical manifest of owner-gated decisions,
+// the digest each decision is bound to, and the status derived from the
+// append-only ledger. Pure: no I/O, no clock of its own.
+//
+// A recorded decision is the owner's answer and nothing more. It executes
+// nothing and replaces no existing gate: ToolAction approval, CI, review,
+// credentials and deployment controls stay authoritative for the work itself.
+
+import { canonicalJson } from "../actions/canonicalJson.js";
+import { sha256Hex } from "../actions/sha256.js";
+
+export const OWNER_DECISION_STATUSES = [
+  "NOT_READY",
+  "READY",
+  "APPROVED",
+  "REJECTED",
+  "CHANGES_REQUESTED",
+  "EXPIRED",
+  "EXECUTED",
+] as const;
+export type OwnerDecisionStatus = (typeof OWNER_DECISION_STATUSES)[number];
+
+export const OWNER_DECISION_CHOICES = ["approve", "request-changes", "reject"] as const;
+export type OwnerDecisionChoice = (typeof OWNER_DECISION_CHOICES)[number];
+
+export const OWNER_DECISION_ENVIRONMENTS = ["repository", "development", "production"] as const;
+export type OwnerDecisionEnvironment = (typeof OWNER_DECISION_ENVIRONMENTS)[number];
+
+/** Gates that always need a separate typed confirmation and never a blanket approve. */
+export const HIGH_RISK_KINDS = [
+  "production-deployment",
+  "remote-exposure",
+  "hardware-actuation",
+  "destructive",
+  "customer-send",
+] as const;
+export type HighRiskKind = (typeof HIGH_RISK_KINDS)[number];
+
+export const EXECUTION_STATUSES = ["executed", "failed", "indeterminate"] as const;
+export type OwnerExecutionStatus = (typeof EXECUTION_STATUSES)[number];
+
+export type OwnerDecisionEvidence = Readonly<{ label: string; url: string }>;
+
+export type OwnerDecisionSubject = Readonly<{
+  kind: "pull-request" | "issue" | "release";
+  /** For example `#765` or a release name. */
+  ref: string;
+  /** The exact commit the decision is about. */
+  sha: string;
+}>;
+
+export type OwnerDecisionEntry = Readonly<{
+  id: string;
+  title: string;
+  issues: readonly number[];
+  proposedAction: string;
+  consequence: string;
+  scope: string;
+  environment: OwnerDecisionEnvironment;
+  risk: "standard" | "high";
+  highRiskKind?: HighRiskKind;
+  subject: OwnerDecisionSubject;
+  dependsOn: readonly string[];
+  evidence: readonly OwnerDecisionEvidence[];
+  /** What is still missing before the owner can usefully decide. Empty means ready. */
+  missingPrerequisites: readonly string[];
+  rollback: string;
+  expiresAt: string;
+}>;
+
+export type OwnerDecisionManifest = Readonly<{
+  version: 1;
+  repository: string;
+  decisions: readonly OwnerDecisionEntry[];
+  /** Open items deliberately left out of the queue, with the reason. */
+  excluded: readonly Readonly<{ issue: number; reason: string }>[];
+}>;
+
+export class OwnerDecisionManifestError extends Error {}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function text(value: unknown, field: string, max = 2000): string {
+  if (typeof value !== "string" || value.trim().length === 0 || value.length > max) {
+    throw new OwnerDecisionManifestError(`${field} must be non-empty text.`);
+  }
+  return value;
+}
+
+function textList(value: unknown, field: string): string[] {
+  if (!Array.isArray(value)) throw new OwnerDecisionManifestError(`${field} must be a list.`);
+  return value.map((item, index) => text(item, `${field}[${index}]`));
+}
+
+function oneOf<T extends string>(value: unknown, allowed: readonly T[], field: string): T {
+  if (typeof value !== "string" || !allowed.includes(value as T)) {
+    throw new OwnerDecisionManifestError(`${field} must be one of ${allowed.join(", ")}.`);
+  }
+  return value as T;
+}
+
+function exactKeys(value: Record<string, unknown>, allowed: readonly string[], field: string) {
+  for (const key of Object.keys(value)) {
+    if (!allowed.includes(key)) {
+      throw new OwnerDecisionManifestError(`${field} has an unexpected field ${key}.`);
+    }
+  }
+}
+
+const ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const SHA_PATTERN = /^[0-9a-f]{40}$/;
+
+function parseEntry(raw: unknown, repository: string, index: number): OwnerDecisionEntry {
+  const field = `decisions[${index}]`;
+  if (!isRecord(raw)) throw new OwnerDecisionManifestError(`${field} must be an object.`);
+  exactKeys(
+    raw,
+    [
+      "id",
+      "title",
+      "issues",
+      "proposedAction",
+      "consequence",
+      "scope",
+      "environment",
+      "risk",
+      "highRiskKind",
+      "subject",
+      "dependsOn",
+      "evidence",
+      "missingPrerequisites",
+      "rollback",
+      "expiresAt",
+    ],
+    field,
+  );
+  const id = text(raw.id, `${field}.id`, 80);
+  if (!ID_PATTERN.test(id)) {
+    throw new OwnerDecisionManifestError(`${field}.id must be lower-case words joined by hyphens.`);
+  }
+  if (
+    !Array.isArray(raw.issues) ||
+    raw.issues.length === 0 ||
+    !raw.issues.every((issue) => Number.isInteger(issue) && (issue as number) > 0)
+  ) {
+    throw new OwnerDecisionManifestError(`${field}.issues must list issue numbers.`);
+  }
+  const environment = oneOf(raw.environment, OWNER_DECISION_ENVIRONMENTS, `${field}.environment`);
+  const risk = oneOf(raw.risk, ["standard", "high"] as const, `${field}.risk`);
+  const highRiskKind =
+    raw.highRiskKind === undefined
+      ? undefined
+      : oneOf(raw.highRiskKind, HIGH_RISK_KINDS, `${field}.highRiskKind`);
+  if ((risk === "high") !== (highRiskKind !== undefined)) {
+    throw new OwnerDecisionManifestError(
+      `${field} must set highRiskKind exactly when risk is high.`,
+    );
+  }
+  if (environment === "production" && risk !== "high") {
+    throw new OwnerDecisionManifestError(`${field} targets production and must be high risk.`);
+  }
+  if (!isRecord(raw.subject)) {
+    throw new OwnerDecisionManifestError(`${field}.subject must be an object.`);
+  }
+  exactKeys(raw.subject, ["kind", "ref", "sha"], `${field}.subject`);
+  const sha = text(raw.subject.sha, `${field}.subject.sha`, 40);
+  if (!SHA_PATTERN.test(sha)) {
+    throw new OwnerDecisionManifestError(`${field}.subject.sha must be a full commit SHA.`);
+  }
+  if (!Array.isArray(raw.evidence)) {
+    throw new OwnerDecisionManifestError(`${field}.evidence must be a list.`);
+  }
+  const evidence = raw.evidence.map((item, evidenceIndex) => {
+    const evidenceField = `${field}.evidence[${evidenceIndex}]`;
+    if (!isRecord(item))
+      throw new OwnerDecisionManifestError(`${evidenceField} must be an object.`);
+    exactKeys(item, ["label", "url"], evidenceField);
+    const url = text(item.url, `${evidenceField}.url`, 400);
+    if (!url.startsWith(`https://github.com/${repository}/`)) {
+      throw new OwnerDecisionManifestError(`${evidenceField}.url must point into ${repository}.`);
+    }
+    return { label: text(item.label, `${evidenceField}.label`, 200), url };
+  });
+  const expiresAt = text(raw.expiresAt, `${field}.expiresAt`, 40);
+  if (!Number.isFinite(Date.parse(expiresAt)) || new Date(expiresAt).toISOString() !== expiresAt) {
+    throw new OwnerDecisionManifestError(`${field}.expiresAt must be an ISO-8601 UTC timestamp.`);
+  }
+  return {
+    id,
+    title: text(raw.title, `${field}.title`, 200),
+    issues: raw.issues as number[],
+    proposedAction: text(raw.proposedAction, `${field}.proposedAction`),
+    consequence: text(raw.consequence, `${field}.consequence`),
+    scope: text(raw.scope, `${field}.scope`),
+    environment,
+    risk,
+    ...(highRiskKind === undefined ? {} : { highRiskKind }),
+    subject: {
+      kind: oneOf(
+        raw.subject.kind,
+        ["pull-request", "issue", "release"] as const,
+        `${field}.subject.kind`,
+      ),
+      ref: text(raw.subject.ref, `${field}.subject.ref`, 120),
+      sha,
+    },
+    dependsOn: textList(raw.dependsOn, `${field}.dependsOn`),
+    evidence,
+    missingPrerequisites: textList(raw.missingPrerequisites, `${field}.missingPrerequisites`),
+    rollback: text(raw.rollback, `${field}.rollback`),
+    expiresAt,
+  };
+}
+
+/** Strictly validates a manifest. Any defect rejects the whole manifest. */
+export function parseOwnerDecisionManifest(raw: unknown): OwnerDecisionManifest {
+  if (!isRecord(raw)) throw new OwnerDecisionManifestError("Manifest must be an object.");
+  exactKeys(raw, ["version", "repository", "decisions", "excluded"], "manifest");
+  if (raw.version !== 1) throw new OwnerDecisionManifestError("Manifest version must be 1.");
+  const repository = text(raw.repository, "repository", 200);
+  if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository)) {
+    throw new OwnerDecisionManifestError("repository must be owner/name.");
+  }
+  if (!Array.isArray(raw.decisions)) {
+    throw new OwnerDecisionManifestError("decisions must be a list.");
+  }
+  const decisions = raw.decisions.map((entry, index) => parseEntry(entry, repository, index));
+  const ids = new Set<string>();
+  for (const entry of decisions) {
+    if (ids.has(entry.id)) throw new OwnerDecisionManifestError(`Duplicate decision ${entry.id}.`);
+    ids.add(entry.id);
+  }
+  const byId = new Map(decisions.map((entry) => [entry.id, entry]));
+  const visiting = new Set<string>();
+  const cleared = new Set<string>();
+  const walk = (id: string): void => {
+    if (cleared.has(id)) return;
+    if (visiting.has(id)) throw new OwnerDecisionManifestError(`Dependency cycle at ${id}.`);
+    visiting.add(id);
+    for (const dependency of byId.get(id)!.dependsOn) {
+      if (!byId.has(dependency)) {
+        throw new OwnerDecisionManifestError(`${id} depends on unknown decision ${dependency}.`);
+      }
+      walk(dependency);
+    }
+    visiting.delete(id);
+    cleared.add(id);
+  };
+  for (const entry of decisions) walk(entry.id);
+  if (!Array.isArray(raw.excluded)) {
+    throw new OwnerDecisionManifestError("excluded must be a list.");
+  }
+  const excluded = raw.excluded.map((item, index) => {
+    if (!isRecord(item) || !Number.isInteger(item.issue) || (item.issue as number) <= 0) {
+      throw new OwnerDecisionManifestError(`excluded[${index}] must name an issue.`);
+    }
+    exactKeys(item, ["issue", "reason"], `excluded[${index}]`);
+    return { issue: item.issue as number, reason: text(item.reason, `excluded[${index}].reason`) };
+  });
+  return { version: 1, repository, decisions, excluded };
+}
+
+/**
+ * The digest a decision is bound to: every field of the entry, including the
+ * subject SHA, environment and expiry. Any change to the card produces a new
+ * digest, and a decision recorded against the old one no longer applies.
+ */
+export function ownerDecisionDigest(entry: OwnerDecisionEntry): string {
+  return sha256Hex(canonicalJson(entry));
+}
+
+/** The phrase the owner must type to approve a high-risk decision. */
+export function confirmationPhrase(entry: OwnerDecisionEntry): string {
+  return `APPROVE ${entry.id}`;
+}
+
+export type OwnerDecisionRecord = Readonly<{
+  sequence: number;
+  recordId: string;
+  kind: "decision" | "execution";
+  decisionId: string;
+  actionDigest: string;
+  subjectSha: string;
+  environment: OwnerDecisionEnvironment;
+  decision?: OwnerDecisionChoice;
+  execution?: Readonly<{ status: OwnerExecutionStatus; reference?: string }>;
+  note?: string;
+  actor: string;
+  idempotencyKey: string;
+  /** Digest of the request that produced this record, for replay detection. */
+  requestDigest: string;
+  recordedAt: string;
+  previousHash: string;
+  hash: string;
+}>;
+
+export const LEDGER_GENESIS_HASH = "0".repeat(64);
+
+export function ownerDecisionRecordHash(record: Omit<OwnerDecisionRecord, "hash">): string {
+  return sha256Hex(canonicalJson(record));
+}
+
+/** Confirms sequence numbers and the hash chain. Throws on any break. */
+export function assertLedgerIntact(records: readonly OwnerDecisionRecord[]): void {
+  let previousHash = LEDGER_GENESIS_HASH;
+  records.forEach((record, index) => {
+    const { hash, ...rest } = record;
+    if (
+      record.sequence !== index + 1 ||
+      record.previousHash !== previousHash ||
+      ownerDecisionRecordHash(rest) !== hash
+    ) {
+      throw new Error(`Owner decision ledger is not intact at record ${index + 1}.`);
+    }
+    previousHash = hash;
+  });
+}
+
+export type OwnerDecisionCard = Readonly<{
+  entry: OwnerDecisionEntry;
+  actionDigest: string;
+  status: OwnerDecisionStatus;
+  /** Plain reasons the card is not ready or cannot be approved now. */
+  blockedBy: readonly string[];
+  /** Present only for high-risk cards. */
+  confirmationPhrase?: string;
+  decision?: Readonly<{
+    choice: OwnerDecisionChoice;
+    recordedAt: string;
+    actor: string;
+    note?: string;
+  }>;
+  execution?: Readonly<{ status: OwnerExecutionStatus; recordedAt: string; reference?: string }>;
+  /** Decisions recorded against an earlier version of this card. They no longer apply. */
+  supersededDecisions: number;
+}>;
+
+/** Derives every card's status from the manifest, the ledger and the time. */
+export function deriveOwnerDecisionCards(
+  manifest: OwnerDecisionManifest,
+  records: readonly OwnerDecisionRecord[],
+  nowMs: number,
+): OwnerDecisionCard[] {
+  const cards = new Map<string, OwnerDecisionCard>();
+  const byId = new Map(manifest.decisions.map((entry) => [entry.id, entry]));
+
+  const derive = (entry: OwnerDecisionEntry): OwnerDecisionCard => {
+    const known = cards.get(entry.id);
+    if (known) return known;
+    const actionDigest = ownerDecisionDigest(entry);
+    const mine = records.filter((record) => record.decisionId === entry.id);
+    const current = mine.filter((record) => record.actionDigest === actionDigest);
+    const newestFirst = [...current].reverse();
+    const lastDecision = newestFirst.find((record) => record.kind === "decision");
+    const lastExecution =
+      lastDecision === undefined
+        ? undefined
+        : newestFirst.find(
+            (record) => record.kind === "execution" && record.sequence > lastDecision.sequence,
+          );
+    const expired = nowMs > Date.parse(entry.expiresAt);
+
+    const blockedBy = [...entry.missingPrerequisites];
+    for (const dependencyId of entry.dependsOn) {
+      const dependency = derive(byId.get(dependencyId)!);
+      if (dependency.status !== "APPROVED" && dependency.status !== "EXECUTED") {
+        blockedBy.push(`Depends on "${dependency.entry.title}", which is ${dependency.status}.`);
+      }
+    }
+
+    let status: OwnerDecisionStatus;
+    if (lastDecision?.decision === "approve") {
+      if (lastExecution?.execution?.status === "executed") status = "EXECUTED";
+      else status = expired ? "EXPIRED" : "APPROVED";
+    } else if (lastDecision?.decision === "reject") status = "REJECTED";
+    else if (lastDecision?.decision === "request-changes") status = "CHANGES_REQUESTED";
+    else if (blockedBy.length > 0) status = "NOT_READY";
+    else status = expired ? "EXPIRED" : "READY";
+
+    const card: OwnerDecisionCard = {
+      entry,
+      actionDigest,
+      status,
+      blockedBy,
+      ...(entry.risk === "high" ? { confirmationPhrase: confirmationPhrase(entry) } : {}),
+      ...(lastDecision?.decision === undefined
+        ? {}
+        : {
+            decision: {
+              choice: lastDecision.decision,
+              recordedAt: lastDecision.recordedAt,
+              actor: lastDecision.actor,
+              ...(lastDecision.note === undefined ? {} : { note: lastDecision.note }),
+            },
+          }),
+      ...(lastExecution?.execution === undefined
+        ? {}
+        : {
+            execution: {
+              status: lastExecution.execution.status,
+              recordedAt: lastExecution.recordedAt,
+              ...(lastExecution.execution.reference === undefined
+                ? {}
+                : { reference: lastExecution.execution.reference }),
+            },
+          }),
+      supersededDecisions: mine.filter(
+        (record) => record.kind === "decision" && record.actionDigest !== actionDigest,
+      ).length,
+    };
+    cards.set(entry.id, card);
+    return card;
+  };
+
+  return manifest.decisions.map(derive);
+}

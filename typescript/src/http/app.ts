@@ -92,6 +92,13 @@ import {
   createInactiveDangerZone,
   type DangerZoneService,
 } from "../settings/dangerZone/service.js";
+import {
+  InMemoryOwnerDecisionLedger,
+  JsonLinesOwnerDecisionLedger,
+  loadOwnerDecisionManifest,
+  OwnerDecisionService,
+} from "../ownerGate/ownerDecisionService.js";
+import { jarvisDataFile } from "../persistence/jarvisDataPaths.js";
 import { resolveHttpAppConfig, type HttpAppConfig } from "./config.js";
 import {
   registerHttpRateLimit,
@@ -153,6 +160,8 @@ export type CreateJarvisHttpAppOptions = (
   activityEventReader?: ActivityEventReader | null;
   developmentLiveWorkSource?: DevelopmentLiveWorkSource | null;
   dangerZone?: DangerZoneService;
+  /** Owner decision queue (#801). Defaults to the reviewed manifest. */
+  ownerDecisions?: OwnerDecisionService;
   /**
    * The voice session registry (#567). Defaults to one backed by the
    * absent-hardware provider — no hardware adapter ships in main. Tests inject
@@ -459,6 +468,16 @@ export async function createJarvisHttpApp(
         (usesEnvironment
           ? createDangerZoneFromEnv(providerName)
           : createInactiveDangerZone(providerName)),
+      ownerDecisions:
+        options.ownerDecisions ??
+        new OwnerDecisionService({
+          manifest: loadOwnerDecisionManifest(),
+          // Outside a real runtime nothing is written to disk.
+          ledger: usesEnvironment
+            ? new JsonLinesOwnerDecisionLedger(jarvisDataFile("jarvis-owner-decisions.jsonl"))
+            : new InMemoryOwnerDecisionLedger(),
+          approvalConfigured: () => config.currentApprovalToken !== undefined,
+        }),
       voiceSessionRegistry:
         options.voiceSessionRegistry ??
         new VoiceSessionRegistry({

@@ -72,6 +72,13 @@ add a parallel Home or Business view that reads a second way.
 The primary action stays **clear task**. The concept's "Start" button is not a
 Jarvis operation, so it is not on the board.
 
+## Owner decision queue
+
+The Approvals panel in Systems links to `/settings/owner-decisions`, the
+owner decision queue. The HUD itself still does not approve, reject or execute
+and holds no token; decisions are recorded on that separate page. See
+`owner-decisions.md`.
+
 ## NOW chip and backdrop
 
 There is one limits NOW chip, `#limits-now-chip`, ranked
