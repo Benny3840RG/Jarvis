@@ -53,6 +53,12 @@ describe("voice session — natural-language interpretation behind confirmation"
       ["client", "I'll send the quote", []],
       ["trailer", "we've put the ramp down", []],
       ["trailer", "I've put the ramp down", []],
+      ["trailer", "the winch can go up", []],
+      ["trailer", "the winch could go up", []],
+      ["trailer", "the winch may go up", []],
+      ["trailer", "the winch might go up", []],
+      ["trailer", "the winch would go up", []],
+      ["trailer", "the winch should go up", []],
     ] as const) {
       const s = make({ profile, provider });
       const out = await s.handle({

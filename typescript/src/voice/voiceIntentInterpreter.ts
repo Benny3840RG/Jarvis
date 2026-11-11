@@ -456,6 +456,15 @@ const GUARDED_REPORT_OR_QUESTION_TOKENS: ReadonlySet<string> = new Set([
   "whether",
 ]);
 
+const GUARDED_MODAL_TOKENS: ReadonlySet<string> = new Set([
+  "can",
+  "could",
+  "may",
+  "might",
+  "would",
+  "should",
+]);
+
 function guardedReportOrQuestion(tokens: readonly string[]): boolean {
   if (
     tokens.some(
@@ -465,7 +474,11 @@ function guardedReportOrQuestion(tokens: readonly string[]): boolean {
     )
   )
     return true;
-  if (["can", "could", "would"].includes(tokens[0] ?? "") && tokens[1] !== "you") return true;
+  // A modal anywhere in an equipment statement describes possibility or asks
+  // about it. A leading imperative (including "put ... would ya") or a direct
+  // "can/could/would you" request remains a request.
+  if (tokens.some((token) => GUARDED_MODAL_TOKENS.has(token)) && !guardedQuestionIsRequest(tokens))
+    return true;
   if (
     ["i", "id", "ill", "we", "he", "she", "they", "someone", "somebody"].includes(tokens[0] ?? "")
   ) {
@@ -477,8 +490,9 @@ function guardedReportOrQuestion(tokens: readonly string[]): boolean {
 }
 
 function guardedQuestionIsRequest(tokens: readonly string[]): boolean {
+  const request = tokens[0] === "please" ? tokens.slice(1) : tokens;
   return (
-    (["can", "could", "would"].includes(tokens[0] ?? "") && tokens[1] === "you") ||
+    (["can", "could", "would"].includes(request[0] ?? "") && request[1] === "you") ||
     [
       "put",
       "turn",
@@ -496,7 +510,7 @@ function guardedQuestionIsRequest(tokens: readonly string[]): boolean {
       "kill",
       "back",
       "reverse",
-    ].includes(tokens[0] ?? "")
+    ].includes(request[0] ?? "")
   );
 }
 

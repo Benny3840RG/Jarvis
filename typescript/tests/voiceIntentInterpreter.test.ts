@@ -133,6 +133,39 @@ describe("intent interpreter — fails closed", () => {
     );
   });
 
+  it("withholds modal equipment statements without suppressing explicit requests", () => {
+    for (const transcript of [
+      "the winch can go up",
+      "the winch could go up",
+      "the winch may go up",
+      "the winch might go up",
+      "the winch would go up",
+      "the winch should go up",
+      "maybe the winch can go up",
+      "the winch can go up?",
+      "you could put the winch up",
+    ]) {
+      assert.equal(
+        interpretIntent({ transcript, profile: "trailer" }).status,
+        "no-intent",
+        transcript,
+      );
+    }
+    for (const transcript of [
+      "put the winch up would ya",
+      "can you put the winch up?",
+      "could you put the winch up?",
+      "would you put the winch up?",
+      "please can you put the winch up?",
+    ]) {
+      assert.equal(
+        interpretIntent({ transcript, profile: "trailer" }).status,
+        "proposed",
+        transcript,
+      );
+    }
+  });
+
   it("detects a slipped conflicting positive alternative without vetoing noise", () => {
     const input = { transcript: "winch up", profile: "trailer" } as const;
     assert.equal(

@@ -2,6 +2,11 @@
 
 ## PR #786 voice inference safety repair (2026-11-11)
 
+- Modal equipment statements (`can`, `could`, `may`, `might`, `would`, `should`)
+  now leave no inferred pending action, including when the modal follows the
+  equipment noun. Direct imperative and polite `can/could/would you` requests
+  still use the existing confirmation path. Interpreter, session, and HTTP
+  regressions cover a later `confirm` after withheld speech.
 - The follow-up review repair withholds compound speech even when only one
   action ranks, keeps possessive/plural profile targets bound to their named
   profile, and replaces arbitrary one-edit ASR matching with reviewed aliases.
