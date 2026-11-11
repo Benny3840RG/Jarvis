@@ -14,6 +14,7 @@ import {
   scrollTacticalNode,
   scrollRightReadout,
   startWithRetry,
+  startupFailureRecord,
 } from "./check-hud-layout.mjs";
 
 const rect = (left, top, right, bottom) => ({ left, top, right, bottom });
@@ -431,4 +432,27 @@ test("browser start-up is retried a bounded number of times and then fails", asy
     /never starts 3/,
   );
   assert.equal(calls, 3, "start-up is not retried without bound");
+});
+
+test("every failed start-up attempt keeps its own bounded stderr evidence", async () => {
+  // First attempt prints a diagnostic; later attempts fail silently.
+  const output = ["first-attempt-diagnostic", "", ""];
+  const failures = [];
+  await assert.rejects(() =>
+    startWithRetry(async (attempt) => {
+      const stderr = output[attempt - 1];
+      const error = new Error("read ECONNRESET");
+      failures.push(startupFailureRecord(attempt, error, stderr));
+      throw error;
+    }),
+  );
+  assert.deepEqual(failures, [
+    { attempt: 1, error: "read ECONNRESET", stderr: "first-attempt-diagnostic" },
+    { attempt: 2, error: "read ECONNRESET", stderr: "" },
+    { attempt: 3, error: "read ECONNRESET", stderr: "" },
+  ]);
+  const long = startupFailureRecord(1, "plain failure", `${"x".repeat(9000)}tail`);
+  assert.equal(long.stderr.length, 4000);
+  assert.ok(long.stderr.endsWith("tail"));
+  assert.equal(long.error, "plain failure");
 });

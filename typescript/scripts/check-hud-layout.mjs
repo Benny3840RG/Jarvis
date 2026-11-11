@@ -770,6 +770,15 @@ export async function startWithRetry(start, { attempts = 3, onRetry } = {}) {
   throw lastError;
 }
 
+/** One failed start-up attempt, with a bounded tail of that attempt's stderr. */
+export function startupFailureRecord(attempt, error, stderr) {
+  return {
+    attempt,
+    error: error instanceof Error ? error.message : String(error),
+    stderr: String(stderr ?? "").slice(-4000),
+  };
+}
+
 async function stopBrowser(child) {
   if (!child?.pid || child.exitCode !== null || child.signalCode !== null) return;
   const stopped = new Promise((resolve) => child.once("exit", resolve));
@@ -795,6 +804,7 @@ async function main() {
   const profile = await mkdtemp(join(tmpdir(), "jarvis-hud-layout-"));
   let child;
   let stderr = "";
+  const startupFailures = [];
   try {
     const executable = await chromePath();
     // Keep the browser's normal sandbox. A restricted host that cannot launch
@@ -826,6 +836,8 @@ async function main() {
           return { cdp: started, browser: await started.send("Browser.getVersion") };
         } catch (error) {
           await stopBrowser(child);
+          // The next attempt resets stderr, so keep this attempt's diagnostics.
+          startupFailures.push(startupFailureRecord(attempt, error, stderr));
           throw error;
         }
       },
@@ -854,6 +866,8 @@ async function main() {
     throw error;
   } finally {
     await stopBrowser(child);
+    // Recorded on success too, so a pass that needed a retry stays visible.
+    if (startupFailures.length) evidence.browserStartupFailures = startupFailures;
     if (options.outputDir)
       await writeFile(
         join(options.outputDir, "results.json"),
