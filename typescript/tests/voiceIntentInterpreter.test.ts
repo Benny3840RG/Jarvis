@@ -64,11 +64,16 @@ describe("intent interpreter — fails closed", () => {
     ] as const) {
       assert.notEqual(interpretIntent({ profile, transcript }).status, "proposed", transcript);
     }
-    for (const profile of ["workshop", "trailer"] as const) {
-      const unqualified = interpretIntent({ profile, transcript: "turn the lights on" });
-      assert.equal(unqualified.status, "proposed", profile);
-      if (unqualified.status === "proposed")
-        assert.equal(unqualified.commandId, `${profile}.lights-on`);
+    for (const profile of ["crawler", "workshop", "trailer"] as const) {
+      for (const mode of ["on", "off"] as const) {
+        const unqualified = interpretIntent({ profile, transcript: `turn the lights ${mode}` });
+        assert.equal(unqualified.status, "proposed", `${profile} ${mode}`);
+        if (unqualified.status === "proposed")
+          assert.equal(unqualified.commandId, `${profile}.lights-${mode}`);
+      }
+    }
+    for (const transcript of ["turn the trailer's lights on", "turn the trailers lights on"]) {
+      assert.notEqual(interpretIntent({ profile: "crawler", transcript }).status, "proposed");
     }
   });
 
@@ -87,6 +92,10 @@ describe("intent interpreter — fails closed", () => {
       ["client", "should I send the quote"],
       ["trailer", "I put the winch up"],
       ["trailer", "should the winch go up"],
+      ["trailer", "we've put the ramp down"],
+      ["trailer", "I've put the ramp down"],
+      ["trailer", "they've put the ramp down"],
+      ["trailer", "you've put the ramp down"],
     ] as const) {
       assert.notEqual(interpretIntent({ profile, transcript }).status, "proposed", transcript);
     }

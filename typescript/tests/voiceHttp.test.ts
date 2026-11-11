@@ -103,6 +103,7 @@ describe("voice HTTP boundary", () => {
       ["trailer", "Jarvis stop the ramp", []],
       ["trailer", "Jarvis raise the winch", ["I won't raise the winch"]],
       ["client", "Jarvis I'd send the quote", []],
+      ["trailer", "Jarvis we've put the ramp down", []],
     ] as const) {
       const sessionId = await openSession(app, profile);
       const response = await utter(app, sessionId, { transcript, alternatives, isFinal: true });

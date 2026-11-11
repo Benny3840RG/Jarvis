@@ -176,8 +176,21 @@ const SIGNALS: readonly Signal[] = [
     ],
   ),
   sig("crawler.stop", "crawler", [["crawler"], ["stop", "halt", "pull", "whoa"]]),
-  sig("crawler.lights-on", "crawler", [["crawler"], ["light", "lights"], ["on"]]),
-  sig("crawler.lights-off", "crawler", [["crawler"], ["light", "lights"], ["off", "out", "kill"]]),
+  sig(
+    "crawler.lights-on",
+    "crawler",
+    [["crawler"], ["light", "lights"], ["on"]],
+    [["light", "lights"], ["on"]],
+  ),
+  sig(
+    "crawler.lights-off",
+    "crawler",
+    [["crawler"], ["light", "lights"], ["off", "out", "kill"]],
+    [
+      ["light", "lights"],
+      ["off", "out", "kill"],
+    ],
+  ),
   sig("crawler.record-start", "crawler", [
     ["crawler"],
     ["record", "recording"],
@@ -428,6 +441,11 @@ const GUARDED_REPORT_OR_QUESTION_TOKENS: ReadonlySet<string> = new Set([
   "sent",
   "left",
   "been",
+  // Apostrophes are stripped during tokenization: "we've" becomes "weve".
+  "ive",
+  "youve",
+  "weve",
+  "theyve",
   "had",
   "did",
   "does",

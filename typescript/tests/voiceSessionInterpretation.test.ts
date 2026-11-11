@@ -47,9 +47,12 @@ describe("voice session — natural-language interpretation behind confirmation"
       ["crawler", "move forward and turn crawler lights on", []],
       ["workshop", "start the fan and turn workshop lights on", []],
       ["workshop", "turn the crawler's lights on", []],
+      ["crawler", "turn the trailer's lights on", []],
       ["trailer", "stop the ramp", []],
       ["trailer", "raise the winch", ["I won't raise the winch"]],
       ["client", "I'll send the quote", []],
+      ["trailer", "we've put the ramp down", []],
+      ["trailer", "I've put the ramp down", []],
     ] as const) {
       const s = make({ profile, provider });
       const out = await s.handle({
@@ -128,6 +131,24 @@ describe("voice session — natural-language interpretation behind confirmation"
       const confirm = await s.handle({ transcript: "confirm", isFinal: true, now: 2 });
       assert.notEqual(confirm.decision, "actuated", transcript);
     }
+  });
+  it("uses crawler context for unqualified lights but still waits for confirmation", async () => {
+    const s = make({ profile: "crawler" });
+    const first = await s.handle({
+      transcript: "turn the lights on",
+      isFinal: true,
+      wakeAuthorized: true,
+      now: 1,
+    });
+    assert.equal(first.decision, "awaiting-confirmation");
+    if (first.decision === "awaiting-confirmation") {
+      assert.equal(first.command.id, "crawler.lights-on");
+      assert.equal(first.inferred, true);
+    }
+    assert.equal(s.pending()?.command.id, "crawler.lights-on");
+    const confirm = await s.handle({ transcript: "confirm", isFinal: true, now: 2 });
+    assert.equal(confirm.decision, "actuation-unavailable");
+    assert.equal(s.pending(), undefined);
   });
   it("routes an inferred actuating command into confirmation, never actuating directly", async () => {
     let actuated = false;

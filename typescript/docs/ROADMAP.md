@@ -13,15 +13,19 @@
 - Inferred final, wake-authorised commands now reject a recogniser control
   alternative before arming confirmation. A later `confirm` has no pending action.
 - Explicit crawler, workshop, trailer, or client wording cannot be rebound to
-  another active profile. Unqualified lights still use the current profile.
+  another active profile. Unqualified lights use the current crawler, workshop,
+  or trailer profile, including on/off in crawler context; inferred commands
+  still require spoken confirmation before dispatch.
 - Retrospective equipment reports and actuator questions do not produce inferred
-  commands. Read-only unpaid-invoice questions remain available.
+  commands. Present-perfect contractions such as `we've put the ramp down`
+  are reports, so they leave no pending confirmation. Read-only unpaid-invoice
+  questions remain available.
 - The prior ambiguous-actuator repair (`094ed3cb`) remains in this candidate;
   canonical exact matching, single-use TTL, and absent hardware are unchanged.
 
-Next: publish the isolated repair for independent Claude review after GitHub
-head and branch ownership can be verified; obtain exact-head CI and Benny's
-separate merge decision. Host commissioning and real hardware proof remain open.
+Next: obtain exact-head CI and fresh independent Claude review of the repaired
+candidate, then Benny's separate merge decision. Host commissioning and real
+hardware proof remain open.
 
 ## Offline file-permission education (#777)
 
