@@ -21,11 +21,13 @@ An earlier candidate of this change added it and was withdrawn in review,
 because the HTTP project route confirms the referenced client exists but does
 not check that a `propertyId` exists or belongs to that client. Through MCP a
 job only gets a property from `convert_enquiry_to_project`, which copies the
-enquiry's. The golden flow asserts the two input schemas omit the field and
-that foreign, missing and null `propertyId` arguments never change the stored
-job.
+enquiry's. The golden flow asserts only that the two model-visible input
+schemas omit the field and that a supported `update_project` leaves the stored
+`propertyId` unchanged. It does not prove that a call carrying an undeclared
+`propertyId` is rejected at the MCP boundary; no such rejection is enforced or
+claimed here.
 
-Open, not changed here (already true on main): `POST`/`PATCH
+Open, not changed here (already true on main, tracked as #796): `POST`/`PATCH
 /api/v1/projects` and the enquiry routes accept any `propertyId` string, and
 `update_project` or the HTTP route can move a job to another client while it
 keeps its old property. Closing that needs property existence and client
