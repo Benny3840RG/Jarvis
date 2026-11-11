@@ -4,18 +4,25 @@
   "decisions": [
     {
       "id": "outlook-evidence-acceptance",
-      "title": "Accept the Outlook send and reconcile evidence",
+      "title": "Close the Outlook send and reconcile gates",
       "issues": [294, 297],
-      "proposedAction": "Accept the 18 October 2026 development commissioning run as satisfying the quote delivery gate (#294) and the Outlook reconciliation gate (#297), with its listed gaps.",
-      "consequence": "Both gates can be closed and the Local V1 checklist item for Outlook delivery is met. The five gaps listed in the evidence stay unproven: no direct trace of the immutable-ID header, no recorded transition history, no live parallel-worker run, only the tool's own assertion for the repeat send, and PowerShell setup tests never run on a real shell.",
+      "proposedAction": "Close the quote delivery gate (#294) and the Outlook reconciliation gate (#297) on the development commissioning evidence.",
+      "consequence": "Both gates close and the Local V1 checklist item for Outlook delivery is met.",
       "scope": "Development only. One non-customer quote, already sent and reconciled once. No new send, no customer recipient, no production.",
       "environment": "development",
       "risk": "standard",
-      "subject": {
-        "kind": "issue",
-        "ref": "#294",
-        "sha": "d11d13c99f23b92bd2e3f6da7e51e3b7ba7ca184"
-      },
+      "subjects": [
+        {
+          "kind": "issue",
+          "number": 294,
+          "revision": "2026-10-17T23:38:10Z"
+        },
+        {
+          "kind": "issue",
+          "number": 297,
+          "revision": "2026-10-17T23:38:10Z"
+        }
+      ],
       "dependsOn": [],
       "evidence": [
         {
@@ -31,7 +38,12 @@
           "url": "https://github.com/Benny3840RG/Jarvis/issues/297"
         }
       ],
-      "missingPrerequisites": [],
+      "missingPrerequisites": [
+        "No direct trace shows the immutable-ID header on draft creation (required by #294).",
+        "No recorded pending, executing, provider-reference and indeterminate transition history exists for the delivery (required by #294).",
+        "No live run shows that parallel workers cannot produce duplicate terminal records (required by #297).",
+        "The blocked repeat send is evidenced only by the tool's own assertion, not by the repeat action's recorded status."
+      ],
       "rollback": "Reopen #294 and #297. Nothing was changed on the runtime by accepting the evidence.",
       "expiresAt": "2026-12-12T00:00:00.000Z"
     },
@@ -44,11 +56,13 @@
       "scope": "Repository only. Adds a commissioning tool, its tests and operator notes. No runtime, data or deployment change.",
       "environment": "repository",
       "risk": "standard",
-      "subject": {
-        "kind": "pull-request",
-        "ref": "#765",
-        "sha": "8b59c61a400477091598b3436dbe21848d9883e7"
-      },
+      "subjects": [
+        {
+          "kind": "pull-request",
+          "number": 765,
+          "revision": "8b59c61a400477091598b3436dbe21848d9883e7"
+        }
+      ],
       "dependsOn": [],
       "evidence": [
         {
@@ -73,11 +87,13 @@
       "scope": "Development only, on the Lenovo host, against a throwaway loopback backend.",
       "environment": "development",
       "risk": "standard",
-      "subject": {
-        "kind": "issue",
-        "ref": "#697",
-        "sha": "d11d13c99f23b92bd2e3f6da7e51e3b7ba7ca184"
-      },
+      "subjects": [
+        {
+          "kind": "issue",
+          "number": 697,
+          "revision": "2026-11-10T12:37:40Z"
+        }
+      ],
       "dependsOn": ["merge-recovery-driver"],
       "evidence": [
         {
@@ -102,11 +118,13 @@
       "scope": "Development runtime only. One secret, stored where the runtime reads its other secrets. Not committed.",
       "environment": "development",
       "risk": "standard",
-      "subject": {
-        "kind": "issue",
-        "ref": "#567",
-        "sha": "d11d13c99f23b92bd2e3f6da7e51e3b7ba7ca184"
-      },
+      "subjects": [
+        {
+          "kind": "issue",
+          "number": 567,
+          "revision": "2026-11-10T12:45:52Z"
+        }
+      ],
       "dependsOn": [],
       "evidence": [
         {
@@ -131,11 +149,13 @@
       "scope": "Development host only: microphone, speaker, wake word, confirmations and typed fallback.",
       "environment": "development",
       "risk": "standard",
-      "subject": {
-        "kind": "issue",
-        "ref": "#567",
-        "sha": "d11d13c99f23b92bd2e3f6da7e51e3b7ba7ca184"
-      },
+      "subjects": [
+        {
+          "kind": "issue",
+          "number": 567,
+          "revision": "2026-11-10T12:45:52Z"
+        }
+      ],
       "dependsOn": ["voice-model-provider-key"],
       "evidence": [
         {
@@ -160,11 +180,13 @@
       "environment": "development",
       "risk": "high",
       "highRiskKind": "hardware-actuation",
-      "subject": {
-        "kind": "issue",
-        "ref": "#697",
-        "sha": "d11d13c99f23b92bd2e3f6da7e51e3b7ba7ca184"
-      },
+      "subjects": [
+        {
+          "kind": "issue",
+          "number": 697,
+          "revision": "2026-11-10T12:37:40Z"
+        }
+      ],
       "dependsOn": [],
       "evidence": [
         {
@@ -187,11 +209,13 @@
       "scope": "Repository only. One new design document.",
       "environment": "repository",
       "risk": "standard",
-      "subject": {
-        "kind": "pull-request",
-        "ref": "#800",
-        "sha": "68b8cb190e3e258411b4290c2bee531c432f454c"
-      },
+      "subjects": [
+        {
+          "kind": "pull-request",
+          "number": 800,
+          "revision": "68b8cb190e3e258411b4290c2bee531c432f454c"
+        }
+      ],
       "dependsOn": [],
       "evidence": [
         {
@@ -216,11 +240,18 @@
       "scope": "Development only. Draft pull requests; the capability stays planned and no real target is allowlisted.",
       "environment": "development",
       "risk": "standard",
-      "subject": {
-        "kind": "issue",
-        "ref": "#779",
-        "sha": "d11d13c99f23b92bd2e3f6da7e51e3b7ba7ca184"
-      },
+      "subjects": [
+        {
+          "kind": "issue",
+          "number": 779,
+          "revision": "2026-11-09T14:07:38Z"
+        },
+        {
+          "kind": "pull-request",
+          "number": 800,
+          "revision": "68b8cb190e3e258411b4290c2bee531c432f454c"
+        }
+      ],
       "dependsOn": ["merge-tcp-check-specifications"],
       "evidence": [
         {
@@ -245,11 +276,18 @@
       "scope": "Development only. Draft pull requests; no socket is opened by this workstream.",
       "environment": "development",
       "risk": "standard",
-      "subject": {
-        "kind": "issue",
-        "ref": "#779",
-        "sha": "d11d13c99f23b92bd2e3f6da7e51e3b7ba7ca184"
-      },
+      "subjects": [
+        {
+          "kind": "issue",
+          "number": 779,
+          "revision": "2026-11-09T14:07:38Z"
+        },
+        {
+          "kind": "pull-request",
+          "number": 800,
+          "revision": "68b8cb190e3e258411b4290c2bee531c432f454c"
+        }
+      ],
       "dependsOn": ["merge-tcp-check-specifications"],
       "evidence": [
         {
@@ -274,11 +312,18 @@
       "scope": "Development only. Draft pull requests.",
       "environment": "development",
       "risk": "standard",
-      "subject": {
-        "kind": "issue",
-        "ref": "#779",
-        "sha": "d11d13c99f23b92bd2e3f6da7e51e3b7ba7ca184"
-      },
+      "subjects": [
+        {
+          "kind": "issue",
+          "number": 779,
+          "revision": "2026-11-09T14:07:38Z"
+        },
+        {
+          "kind": "pull-request",
+          "number": 800,
+          "revision": "68b8cb190e3e258411b4290c2bee531c432f454c"
+        }
+      ],
       "dependsOn": ["merge-tcp-check-specifications"],
       "evidence": [
         {
@@ -303,11 +348,13 @@
       "scope": "Development host only. One synthetic, host-local target approved for this run. No third-party target.",
       "environment": "development",
       "risk": "standard",
-      "subject": {
-        "kind": "issue",
-        "ref": "#779",
-        "sha": "d11d13c99f23b92bd2e3f6da7e51e3b7ba7ca184"
-      },
+      "subjects": [
+        {
+          "kind": "issue",
+          "number": 779,
+          "revision": "2026-11-09T14:07:38Z"
+        }
+      ],
       "dependsOn": ["tcp-check-enforcer-build", "tcp-check-store-build", "tcp-check-time-build"],
       "evidence": [
         {
@@ -335,11 +382,13 @@
       "scope": "Development only. One reviewed allowlist entry.",
       "environment": "development",
       "risk": "standard",
-      "subject": {
-        "kind": "issue",
-        "ref": "#779",
-        "sha": "d11d13c99f23b92bd2e3f6da7e51e3b7ba7ca184"
-      },
+      "subjects": [
+        {
+          "kind": "issue",
+          "number": 779,
+          "revision": "2026-11-09T14:07:38Z"
+        }
+      ],
       "dependsOn": ["tcp-check-evidence-run"],
       "evidence": [
         {
@@ -360,11 +409,18 @@
       "scope": "The local runtime on the Lenovo host. No remote exposure, no production deployment, no physical machinery control.",
       "environment": "development",
       "risk": "standard",
-      "subject": {
-        "kind": "release",
-        "ref": "Jarvis Local V1",
-        "sha": "d11d13c99f23b92bd2e3f6da7e51e3b7ba7ca184"
-      },
+      "subjects": [
+        {
+          "kind": "issue",
+          "number": 697,
+          "revision": "2026-11-10T12:37:40Z"
+        },
+        {
+          "kind": "branch",
+          "name": "main",
+          "revision": "d11d13c99f23b92bd2e3f6da7e51e3b7ba7ca184"
+        }
+      ],
       "dependsOn": [
         "outlook-evidence-acceptance",
         "voice-host-commissioning",
@@ -397,11 +453,13 @@
       "environment": "production",
       "risk": "high",
       "highRiskKind": "remote-exposure",
-      "subject": {
-        "kind": "issue",
-        "ref": "#306",
-        "sha": "d11d13c99f23b92bd2e3f6da7e51e3b7ba7ca184"
-      },
+      "subjects": [
+        {
+          "kind": "issue",
+          "number": 306,
+          "revision": "2026-10-06T12:08:21Z"
+        }
+      ],
       "dependsOn": ["local-v1-release"],
       "evidence": [
         {
@@ -428,11 +486,13 @@
       "environment": "production",
       "risk": "high",
       "highRiskKind": "production-deployment",
-      "subject": {
-        "kind": "issue",
-        "ref": "#307",
-        "sha": "d11d13c99f23b92bd2e3f6da7e51e3b7ba7ca184"
-      },
+      "subjects": [
+        {
+          "kind": "issue",
+          "number": 307,
+          "revision": "2026-10-31T05:29:26Z"
+        }
+      ],
       "dependsOn": ["local-v1-release"],
       "evidence": [
         {
@@ -459,11 +519,13 @@
       "environment": "production",
       "risk": "high",
       "highRiskKind": "production-deployment",
-      "subject": {
-        "kind": "issue",
-        "ref": "#324",
-        "sha": "d11d13c99f23b92bd2e3f6da7e51e3b7ba7ca184"
-      },
+      "subjects": [
+        {
+          "kind": "issue",
+          "number": 324,
+          "revision": "2026-10-06T12:23:17Z"
+        }
+      ],
       "dependsOn": ["remote-access-commissioning", "production-operations"],
       "evidence": [
         {

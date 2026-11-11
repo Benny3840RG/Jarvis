@@ -56,7 +56,7 @@ const MANIFEST = parseOwnerDecisionManifest({
       scope: "Development only.",
       environment: "development",
       risk: "standard",
-      subject: { kind: "issue", ref: "#1", sha: "a".repeat(40) },
+      subjects: [{ kind: "issue", number: 1, revision: "2026-11-01T00:00:00Z" }],
       dependsOn: [],
       evidence: [{ label: "Issue", url: "https://github.com/example/repo/issues/1" }],
       missingPrerequisites: [],
@@ -73,7 +73,7 @@ const MANIFEST = parseOwnerDecisionManifest({
       environment: "production",
       risk: "high",
       highRiskKind: "remote-exposure",
-      subject: { kind: "issue", ref: "#2", sha: "b".repeat(40) },
+      subjects: [{ kind: "pull-request", number: 2, revision: "b".repeat(40) }],
       dependsOn: [],
       evidence: [],
       missingPrerequisites: [],
@@ -89,7 +89,7 @@ const MANIFEST = parseOwnerDecisionManifest({
       scope: "Everything.",
       environment: "development",
       risk: "standard",
-      subject: { kind: "release", ref: "v1", sha: "c".repeat(40) },
+      subjects: [{ kind: "branch", name: "main", revision: "c".repeat(40) }],
       dependsOn: [],
       evidence: [],
       missingPrerequisites: ["No evidence run exists."],
@@ -104,6 +104,9 @@ type World = {
   approvalToken?: string | undefined;
   oidcVerifier?: OidcVerifier;
   config?: Partial<HttpAppConfig>;
+  ledgerStarted?: boolean;
+  /** What the live check reports for every subject; default: unchanged. */
+  liveRevision?: string | null;
 };
 
 async function open(world: World = {}) {
@@ -121,7 +124,7 @@ async function open(world: World = {}) {
       : { currentApprovalToken: APPROVAL }),
     ...world.config,
   };
-  const ledger = new InMemoryOwnerDecisionLedger();
+  const ledger = new InMemoryOwnerDecisionLedger({ started: world.ledgerStarted ?? true });
   const app = await createJarvisHttpApp({
     config,
     credentialsRuntime: captureCredentials({
@@ -144,6 +147,8 @@ async function open(world: World = {}) {
       manifest: MANIFEST,
       ledger,
       approvalConfigured: () => config.currentApprovalToken !== undefined,
+      subjectProbe: async (subject) =>
+        world.liveRevision === undefined ? subject.revision : world.liveRevision,
     }),
   });
   openApps.push(app);
@@ -401,7 +406,67 @@ describe("owner decision queue HTTP", () => {
       decision: "approve",
     });
     assert.equal(refused.statusCode, 503);
+    const report = await app.inject({
+      method: "POST",
+      url: "/api/v1/owner-decisions/standard/executions",
+      headers: AUTH,
+      payload: {
+        expectedDigest: data.cards[0]!.actionDigest,
+        status: "executed",
+        idempotencyKey: "http-test-readonly-exec",
+      },
+    });
+    assert.equal(report.statusCode, 503);
     assert.deepEqual(await ledger.read(), []);
+  });
+
+  it("refuses an approval when a subject moved or cannot be checked", async () => {
+    for (const [liveRevision, slug, status] of [
+      ["2026-11-09T00:00:00Z", "owner-decision-subject-changed", 409],
+      [null, "owner-decision-unavailable", 503],
+    ] as const) {
+      const { app, ledger } = await open({ liveRevision });
+      const { standard } = await cards(app);
+      const refused = await click(app, "standard", {
+        expectedDigest: standard!.actionDigest,
+        decision: "approve",
+      });
+      assert.equal(refused.statusCode, status);
+      assert.match(refused.body, new RegExp(slug));
+      assert.deepEqual(await ledger.read(), []);
+    }
+  });
+
+  it("starts a ledger only on purpose, with the approval token, and only once", async () => {
+    const { app } = await open({ ledgerStarted: false });
+    const before = await app.inject({ method: "GET", url: "/api/v1/owner-decisions" });
+    const data = (
+      before.json() as { data: { ledgerState: string; decisionsAvailable: boolean; cards: Card[] } }
+    ).data;
+    assert.equal(data.ledgerState, "not-started");
+    assert.equal(data.decisionsAvailable, false);
+    const refused = await click(app, "standard", {
+      expectedDigest: data.cards[0]!.actionDigest,
+      decision: "reject",
+    });
+    assert.equal(refused.statusCode, 503);
+
+    const start = (payload: Record<string, unknown>, headers: Record<string, string> = AUTH) =>
+      app.inject({ method: "POST", url: "/api/v1/owner-decisions/ledger", headers, payload });
+    const good = { approvalToken: APPROVAL, confirmation: "START NEW LEDGER" };
+    assert.equal((await start(good, {})).statusCode, 401);
+    assert.equal((await start({ ...good, approvalToken: SERVICE })).statusCode, 403);
+    assert.equal((await start({ ...good, confirmation: "start" })).statusCode, 422);
+    assert.equal((await start({ approvalToken: APPROVAL })).statusCode, 422);
+    const started = await start(good);
+    assert.equal(started.statusCode, 200);
+    assert.equal((started.json() as { data: { ledgerState: string } }).data.ledgerState, "ready");
+    assert.equal((await start(good)).statusCode, 409);
+    const approved = await click(app, "standard", {
+      expectedDigest: data.cards[0]!.actionDigest,
+      decision: "approve",
+    });
+    assert.equal(approved.statusCode, 200);
   });
 
   it("shows execution and indeterminate status without running anything", async () => {
@@ -427,6 +492,12 @@ describe("owner decision queue HTTP", () => {
     const afterUnknown = (await cards(app)).standard as Card & { execution: { status: string } };
     assert.equal(afterUnknown.status, "APPROVED");
     assert.equal(afterUnknown.execution.status, "indeterminate");
+    const withdraw = await click(app, "standard", {
+      expectedDigest: standard!.actionDigest,
+      decision: "reject",
+    });
+    assert.equal(withdraw.statusCode, 409);
+    assert.match(withdraw.body, /owner-decision-execution-unresolved/);
     assert.equal((await report("executed")).statusCode, 200);
     assert.equal((await cards(app)).standard!.status, "EXECUTED");
     assert.equal((await report("failed")).statusCode, 409);

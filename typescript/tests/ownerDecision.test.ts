@@ -20,7 +20,8 @@ import {
   OwnerDecisionService,
 } from "../src/ownerGate/ownerDecisionService.js";
 
-const SHA = "a".repeat(40);
+const REVISION = "2026-11-01T00:00:00Z";
+const SUBJECT = { kind: "issue", number: 1, revision: REVISION } as const;
 const NOW = Date.parse("2026-11-12T00:00:00.000Z");
 
 function rawEntry(id: string, overrides: Record<string, unknown> = {}): Record<string, unknown> {
@@ -33,7 +34,7 @@ function rawEntry(id: string, overrides: Record<string, unknown> = {}): Record<s
     scope: "One thing.",
     environment: "development",
     risk: "standard",
-    subject: { kind: "issue", ref: "#1", sha: SHA },
+    subjects: [SUBJECT],
     dependsOn: [],
     evidence: [{ label: "Issue", url: "https://github.com/example/repo/issues/1" }],
     missingPrerequisites: [],
@@ -63,6 +64,8 @@ function serviceOf(
     ledger,
     approvalConfigured: () => true,
     clock: () => now,
+    // By default every subject is confirmed unchanged.
+    subjectProbe: async (subject) => subject.revision,
     ...options,
   });
   return {
@@ -109,7 +112,16 @@ test("the shipped manifest is valid and never offers a not-ready card as ready",
 
 test("a malformed manifest is rejected whole", () => {
   const cases: [string, Record<string, unknown>][] = [
-    ["short SHA", { subject: { kind: "issue", ref: "#1", sha: "abc" } }],
+    ["short SHA", { subjects: [{ kind: "pull-request", number: 1, revision: "abc" }] }],
+    [
+      "issue pinned to a commit",
+      { subjects: [{ kind: "issue", number: 1, revision: "a".repeat(40) }] },
+    ],
+    ["no subject", { subjects: [] }],
+    [
+      "branch with a number",
+      { subjects: [{ kind: "branch", number: 1, revision: "a".repeat(40) }] },
+    ],
     ["production at standard risk", { environment: "production" }],
     ["high risk without a kind", { risk: "high" }],
     [
@@ -141,7 +153,7 @@ test("one click approves a ready card and writes one chained audit record", asyn
   assert.equal(result.replayed, false);
   const records = await ledger.read();
   assert.equal(records.length, 1);
-  assert.equal(records[0]!.subjectSha, SHA);
+  assert.deepEqual(records[0]!.subjects, [SUBJECT]);
   assert.equal(records[0]!.environment, "development");
   assertLedgerIntact(records);
 });
@@ -204,7 +216,7 @@ test("a stale digest, a moved subject and an expired request are refused", async
     refusal("stale"),
   );
 
-  const moved = serviceOf(manifest, { subjectProbe: async () => ({ sha: "b".repeat(40) }) });
+  const moved = serviceOf(manifest, { subjectProbe: async () => "2026-11-02T00:00:00Z" });
   await assert.rejects(
     () => moved.service.decide({ ...request, idempotencyKey: key() }),
     refusal("subject-changed"),
@@ -214,7 +226,24 @@ test("a stale digest, a moved subject and an expired request are refused", async
     () => unknown.service.decide({ ...request, idempotencyKey: key() }),
     refusal("unavailable"),
   );
-  const same = serviceOf(manifest, { subjectProbe: async () => ({ sha: SHA }) });
+  // No live check at all is the same as an unknown answer: nothing is approved.
+  const unprobedLedger = new InMemoryOwnerDecisionLedger();
+  const unprobed = new OwnerDecisionService({
+    manifest,
+    ledger: unprobedLedger,
+    approvalConfigured: () => true,
+  });
+  assert.equal((await unprobed.inspect()).subjectVerification, "none");
+  await assert.rejects(
+    () => unprobed.decide({ ...request, idempotencyKey: key() }),
+    refusal("unavailable"),
+  );
+  assert.equal((await unprobedLedger.read()).length, 0);
+  assert.equal(
+    (await unprobed.decide({ ...request, choice: "reject", idempotencyKey: key() })).card.status,
+    "REJECTED",
+  );
+  const same = serviceOf(manifest);
   assert.equal(
     (await same.service.decide({ ...request, idempotencyKey: key() })).card.status,
     "APPROVED",
@@ -345,11 +374,60 @@ test("a high-risk card needs its own typed confirmation", async () => {
   assert.equal(approved.card.status, "APPROVED");
 });
 
-test("revoked approval authority makes the queue read-only", async () => {
-  const manifest = manifestOf(rawEntry("a"));
+test("every subject of a card is checked, and one changed subject refuses the approval", async () => {
+  const manifest = manifestOf(
+    rawEntry("a", {
+      subjects: [SUBJECT, { kind: "pull-request", number: 7, revision: "a".repeat(40) }],
+    }),
+  );
+  const asked: string[] = [];
+  const { service, ledger } = serviceOf(manifest, {
+    subjectProbe: async (subject) => {
+      asked.push(subject.kind);
+      return subject.kind === "pull-request" ? "b".repeat(40) : subject.revision;
+    },
+  });
+  await assert.rejects(
+    () =>
+      service.decide({
+        decisionId: "a",
+        expectedDigest: digestOf(manifest, "a"),
+        choice: "approve",
+        idempotencyKey: key(),
+        actor: "owner",
+      }),
+    (error: unknown) =>
+      error instanceof OwnerDecisionRefusal &&
+      error.code === "subject-changed" &&
+      /pull request #7/.test(error.message),
+  );
+  assert.deepEqual(asked, ["issue", "pull-request"]);
+  assert.equal((await ledger.read()).length, 0);
+});
+
+test("revoked approval authority makes the queue read-only for every write", async () => {
+  const manifest = manifestOf(rawEntry("a"), rawEntry("b"));
   let configured = true;
   const { service, ledger } = serviceOf(manifest, { approvalConfigured: () => configured });
+  await service.decide({
+    decisionId: "b",
+    expectedDigest: digestOf(manifest, "b"),
+    choice: "approve",
+    idempotencyKey: key(),
+    actor: "owner",
+  });
   configured = false;
+  await assert.rejects(
+    () =>
+      service.reportExecution({
+        decisionId: "b",
+        expectedDigest: digestOf(manifest, "b"),
+        status: "executed",
+        idempotencyKey: key(),
+        actor: "operator",
+      }),
+    refusal("unavailable"),
+  );
   const queue = await service.inspect();
   assert.equal(queue.decisionsAvailable, false);
   assert.match(queue.unavailableReason ?? "", /read-only/);
@@ -365,7 +443,7 @@ test("revoked approval authority makes the queue read-only", async () => {
       }),
     refusal("unavailable"),
   );
-  assert.equal((await ledger.read()).length, 0);
+  assert.equal((await ledger.read()).length, 1);
 });
 
 test("approval is separate from execution, and an indeterminate result stays visible", async () => {
@@ -394,6 +472,21 @@ test("approval is separate from execution, and an indeterminate result stays vis
   const unknown = await report("indeterminate");
   assert.equal(unknown.card.status, "APPROVED");
   assert.equal(unknown.card.execution?.status, "indeterminate");
+  // An unresolved effect cannot be buried by withdrawing the approval.
+  for (const choice of ["reject", "request-changes"] as const) {
+    await assert.rejects(
+      () =>
+        service.decide({
+          decisionId: "a",
+          expectedDigest,
+          choice,
+          idempotencyKey: key(),
+          actor: "owner",
+        }),
+      refusal("execution-unresolved"),
+    );
+  }
+  assert.equal((await service.inspect()).cards[0]!.execution?.status, "indeterminate");
   const done = await report("executed");
   assert.equal(done.card.status, "EXECUTED");
   assert.equal(done.card.execution?.reference, "run 42");
@@ -430,7 +523,9 @@ test("a failed execution is final for that approval, and an approval can be with
   assert.equal(failed.card.status, "APPROVED");
   assert.equal(failed.card.execution?.status, "failed");
   await assert.rejects(() => report("executed"), refusal("already-executed"));
-  assert.equal((await decide("reject")).card.status, "REJECTED");
+  const withdrawn = await decide("reject");
+  assert.equal(withdrawn.card.status, "REJECTED");
+  assert.equal(withdrawn.card.execution?.status, "failed", "the failed effect stays visible");
   await assert.rejects(() => report("executed"), refusal("not-approved"));
 });
 
@@ -445,7 +540,7 @@ test("a changed card drops the old decision and a tampered ledger fails closed",
     actor: "owner",
   });
   const after = manifestOf(
-    rawEntry("a", { subject: { kind: "issue", ref: "#1", sha: "c".repeat(40) } }),
+    rawEntry("a", { subjects: [{ kind: "issue", number: 1, revision: "2026-11-05T00:00:00Z" }] }),
   );
   const card = (await serviceOf(after, { ledger }).service.inspect()).cards[0]!;
   assert.equal(card.status, "READY");
@@ -471,28 +566,163 @@ test("a changed card drops the old decision and a tampered ledger fails closed",
   );
 });
 
-test("the file ledger appends owner-only lines and survives a restart", async () => {
+async function fileWorld() {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "owner-decisions-"));
+  const file = path.join(root, "nested", "decisions.jsonl");
+  const checkpoint = `${file}.checkpoint.json`;
+  const manifest = manifestOf(rawEntry("a"), rawEntry("b"));
+  const open = () =>
+    serviceOf(manifest, { ledger: new JsonLinesOwnerDecisionLedger(file) }).service;
+  const decide = (id: string, service = open()) =>
+    service.decide({
+      decisionId: id,
+      expectedDigest: digestOf(manifest, id),
+      choice: "approve",
+      idempotencyKey: key(),
+      actor: "owner",
+    });
+  return { root, file, checkpoint, manifest, open, decide };
+}
+
+test("a runtime with no ledger records nothing until one is started on purpose", async () => {
+  const world = await fileWorld();
   try {
-    const file = path.join(root, "nested", "decisions.jsonl");
-    const manifest = manifestOf(rawEntry("a"), rawEntry("b"));
-    for (const id of ["a", "b"]) {
-      await serviceOf(manifest, { ledger: new JsonLinesOwnerDecisionLedger(file) }).service.decide({
-        decisionId: id,
-        expectedDigest: digestOf(manifest, id),
-        choice: id === "a" ? "approve" : "request-changes",
-        idempotencyKey: key(),
-        actor: "owner",
-      });
+    const service = world.open();
+    const queue = await service.inspect();
+    assert.equal(queue.ledgerState, "not-started");
+    assert.equal(queue.decisionsAvailable, false);
+    assert.match(queue.unavailableReason ?? "", /restored from a backup/);
+    await assert.rejects(() => world.decide("a", service), refusal("unavailable"));
+    await assert.rejects(fs.stat(world.file), /ENOENT/);
+
+    await service.startLedger();
+    assert.equal((await service.inspect()).ledgerState, "ready");
+    await assert.rejects(() => service.startLedger(), refusal("ledger-exists"));
+    assert.equal((await world.decide("a", service)).card.status, "APPROVED");
+  } finally {
+    await fs.rm(world.root, { recursive: true, force: true });
+  }
+});
+
+test("the file ledger keeps owner-only files and survives a restart", async () => {
+  const world = await fileWorld();
+  try {
+    await world.open().startLedger();
+    await world.decide("a");
+    await world.decide("b");
+    for (const file of [world.file, world.checkpoint]) {
+      assert.equal((await fs.stat(file)).mode & 0o777, 0o600);
     }
-    assert.equal((await fs.stat(file)).mode & 0o777, 0o600);
-    assert.equal((await fs.readFile(file, "utf8")).trimEnd().split("\n").length, 2);
-    const reopened = serviceOf(manifest, { ledger: new JsonLinesOwnerDecisionLedger(file) });
+    assert.equal((await fs.readFile(world.file, "utf8")).trimEnd().split("\n").length, 2);
     assert.deepEqual(
-      (await reopened.service.inspect()).cards.map((card) => card.status),
-      ["APPROVED", "CHANGES_REQUESTED"],
+      (await world.open().inspect()).cards.map((card) => card.status),
+      ["APPROVED", "APPROVED"],
     );
   } finally {
-    await fs.rm(root, { recursive: true, force: true });
+    await fs.rm(world.root, { recursive: true, force: true });
+  }
+});
+
+test("a shortened, emptied or deleted ledger fails closed instead of forgetting a decision", async () => {
+  const world = await fileWorld();
+  try {
+    await world.open().startLedger();
+    await world.decide("a");
+    await world.decide("b");
+    const full = await fs.readFile(world.file, "utf8");
+    const savedCheckpoint = await fs.readFile(world.checkpoint, "utf8");
+    const [first] = full.trimEnd().split("\n");
+    const variants: [string, () => Promise<void>][] = [
+      ["last record removed", () => fs.writeFile(world.file, `${first}\n`)],
+      ["all records removed", () => fs.writeFile(world.file, "")],
+      ["ledger deleted", () => fs.rm(world.file)],
+      ["checkpoint deleted", () => fs.rm(world.checkpoint)],
+      [
+        "checkpoint rewound",
+        () => fs.writeFile(world.checkpoint, JSON.stringify({ count: 0, hash: "0".repeat(64) })),
+      ],
+      ["checkpoint corrupt", () => fs.writeFile(world.checkpoint, "{")],
+    ];
+    for (const [name, damage] of variants) {
+      await damage();
+      const service = world.open();
+      const queue = await service.inspect();
+      assert.equal(queue.ledgerState, "damaged", name);
+      assert.equal(queue.decisionsAvailable, false, name);
+      assert.ok(
+        queue.cards.every((card) => card.decision === undefined),
+        name,
+      );
+      await assert.rejects(() => world.decide("b", service), refusal("unavailable"), name);
+      await assert.rejects(() => service.startLedger(), refusal("ledger-exists"), name);
+      await fs.writeFile(world.file, full, { mode: 0o600 });
+      await fs.writeFile(world.checkpoint, savedCheckpoint, { mode: 0o600 });
+    }
+    assert.equal((await world.open().inspect()).ledgerState, "ready");
+  } finally {
+    await fs.rm(world.root, { recursive: true, force: true });
+  }
+});
+
+test("an incomplete last record is refused and never appended after", async () => {
+  const world = await fileWorld();
+  try {
+    await world.open().startLedger();
+    await world.decide("a");
+    const full = await fs.readFile(world.file, "utf8");
+    for (const torn of [full.slice(0, -1), `${full}{"sequence":2`]) {
+      await fs.writeFile(world.file, torn);
+      const service = world.open();
+      assert.equal((await service.inspect()).ledgerState, "damaged");
+      await assert.rejects(() => world.decide("b", service), refusal("unavailable"));
+      assert.equal(await fs.readFile(world.file, "utf8"), torn);
+    }
+  } finally {
+    await fs.rm(world.root, { recursive: true, force: true });
+  }
+});
+
+test("a record written just before a crash, ahead of the checkpoint, is kept", async () => {
+  const world = await fileWorld();
+  try {
+    await world.open().startLedger();
+    await world.decide("a");
+    const before = await fs.readFile(world.checkpoint, "utf8");
+    await world.decide("b");
+    await fs.writeFile(world.checkpoint, before);
+    const queue = await world.open().inspect();
+    assert.equal(queue.ledgerState, "ready");
+    assert.deepEqual(
+      queue.cards.map((card) => card.status),
+      ["APPROVED", "APPROVED"],
+    );
+  } finally {
+    await fs.rm(world.root, { recursive: true, force: true });
+  }
+});
+
+test("a ledger file with loose permissions or behind a symlink is refused", async () => {
+  const world = await fileWorld();
+  try {
+    await world.open().startLedger();
+    await world.decide("a");
+    const before = await fs.readFile(world.file, "utf8");
+
+    await fs.chmod(world.file, 0o644);
+    const loose = world.open();
+    assert.equal((await loose.inspect()).ledgerState, "damaged");
+    await assert.rejects(() => world.decide("b", loose), refusal("unavailable"));
+    assert.equal(await fs.readFile(world.file, "utf8"), before);
+    await fs.chmod(world.file, 0o600);
+
+    const elsewhere = path.join(world.root, "elsewhere.jsonl");
+    await fs.rename(world.file, elsewhere);
+    await fs.symlink(elsewhere, world.file);
+    const linked = world.open();
+    assert.equal((await linked.inspect()).ledgerState, "damaged");
+    await assert.rejects(() => world.decide("b", linked), refusal("unavailable"));
+    assert.equal(await fs.readFile(elsewhere, "utf8"), before);
+  } finally {
+    await fs.rm(world.root, { recursive: true, force: true });
   }
 });

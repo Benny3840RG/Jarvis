@@ -41,13 +41,22 @@ export type OwnerExecutionStatus = (typeof EXECUTION_STATUSES)[number];
 
 export type OwnerDecisionEvidence = Readonly<{ label: string; url: string }>;
 
-export type OwnerDecisionSubject = Readonly<{
-  kind: "pull-request" | "issue" | "release";
-  /** For example `#765` or a release name. */
-  ref: string;
-  /** The exact commit the decision is about. */
-  sha: string;
-}>;
+/**
+ * One thing a decision is about, pinned to the exact revision the card was
+ * written against. A pull request and a branch are pinned to a commit; an issue
+ * is pinned to its last-updated time, so a new comment or edit (new evidence,
+ * a changed requirement) makes the card stale.
+ */
+export type OwnerDecisionSubject = Readonly<
+  | { kind: "pull-request"; number: number; revision: string }
+  | { kind: "issue"; number: number; revision: string }
+  | { kind: "branch"; name: string; revision: string }
+>;
+
+export function subjectLabel(subject: OwnerDecisionSubject): string {
+  if (subject.kind === "branch") return `branch ${subject.name}`;
+  return `${subject.kind === "issue" ? "issue" : "pull request"} #${subject.number}`;
+}
 
 export type OwnerDecisionEntry = Readonly<{
   id: string;
@@ -59,7 +68,7 @@ export type OwnerDecisionEntry = Readonly<{
   environment: OwnerDecisionEnvironment;
   risk: "standard" | "high";
   highRiskKind?: HighRiskKind;
-  subject: OwnerDecisionSubject;
+  subjects: readonly OwnerDecisionSubject[];
   dependsOn: readonly string[];
   evidence: readonly OwnerDecisionEvidence[];
   /** What is still missing before the owner can usefully decide. Empty means ready. */
@@ -111,6 +120,35 @@ function exactKeys(value: Record<string, unknown>, allowed: readonly string[], f
 
 const ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const SHA_PATTERN = /^[0-9a-f]{40}$/;
+const ISO_SECONDS_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
+
+function parseSubject(raw: unknown, field: string): OwnerDecisionSubject {
+  if (!isRecord(raw)) throw new OwnerDecisionManifestError(`${field} must be an object.`);
+  const kind = oneOf(raw.kind, ["pull-request", "issue", "branch"] as const, `${field}.kind`);
+  const revision = text(raw.revision, `${field}.revision`, 40);
+  if (kind === "issue") {
+    if (!ISO_SECONDS_PATTERN.test(revision) || !Number.isFinite(Date.parse(revision))) {
+      throw new OwnerDecisionManifestError(
+        `${field}.revision must be the issue's last-updated time.`,
+      );
+    }
+  } else if (!SHA_PATTERN.test(revision)) {
+    throw new OwnerDecisionManifestError(`${field}.revision must be a full commit SHA.`);
+  }
+  if (kind === "branch") {
+    exactKeys(raw, ["kind", "name", "revision"], field);
+    const name = text(raw.name, `${field}.name`, 100);
+    if (!/^[A-Za-z0-9._/-]+$/.test(name)) {
+      throw new OwnerDecisionManifestError(`${field}.name is not a branch name.`);
+    }
+    return { kind, name, revision };
+  }
+  exactKeys(raw, ["kind", "number", "revision"], field);
+  if (!Number.isInteger(raw.number) || (raw.number as number) <= 0) {
+    throw new OwnerDecisionManifestError(`${field}.number must be a positive integer.`);
+  }
+  return { kind, number: raw.number as number, revision };
+}
 
 function parseEntry(raw: unknown, repository: string, index: number): OwnerDecisionEntry {
   const field = `decisions[${index}]`;
@@ -127,7 +165,7 @@ function parseEntry(raw: unknown, repository: string, index: number): OwnerDecis
       "environment",
       "risk",
       "highRiskKind",
-      "subject",
+      "subjects",
       "dependsOn",
       "evidence",
       "missingPrerequisites",
@@ -161,14 +199,12 @@ function parseEntry(raw: unknown, repository: string, index: number): OwnerDecis
   if (environment === "production" && risk !== "high") {
     throw new OwnerDecisionManifestError(`${field} targets production and must be high risk.`);
   }
-  if (!isRecord(raw.subject)) {
-    throw new OwnerDecisionManifestError(`${field}.subject must be an object.`);
+  if (!Array.isArray(raw.subjects) || raw.subjects.length === 0) {
+    throw new OwnerDecisionManifestError(`${field}.subjects must list at least one subject.`);
   }
-  exactKeys(raw.subject, ["kind", "ref", "sha"], `${field}.subject`);
-  const sha = text(raw.subject.sha, `${field}.subject.sha`, 40);
-  if (!SHA_PATTERN.test(sha)) {
-    throw new OwnerDecisionManifestError(`${field}.subject.sha must be a full commit SHA.`);
-  }
+  const subjects = raw.subjects.map((item, subjectIndex) =>
+    parseSubject(item, `${field}.subjects[${subjectIndex}]`),
+  );
   if (!Array.isArray(raw.evidence)) {
     throw new OwnerDecisionManifestError(`${field}.evidence must be a list.`);
   }
@@ -197,15 +233,7 @@ function parseEntry(raw: unknown, repository: string, index: number): OwnerDecis
     environment,
     risk,
     ...(highRiskKind === undefined ? {} : { highRiskKind }),
-    subject: {
-      kind: oneOf(
-        raw.subject.kind,
-        ["pull-request", "issue", "release"] as const,
-        `${field}.subject.kind`,
-      ),
-      ref: text(raw.subject.ref, `${field}.subject.ref`, 120),
-      sha,
-    },
+    subjects,
     dependsOn: textList(raw.dependsOn, `${field}.dependsOn`),
     evidence,
     missingPrerequisites: textList(raw.missingPrerequisites, `${field}.missingPrerequisites`),
@@ -282,7 +310,7 @@ export type OwnerDecisionRecord = Readonly<{
   kind: "decision" | "execution";
   decisionId: string;
   actionDigest: string;
-  subjectSha: string;
+  subjects: readonly OwnerDecisionSubject[];
   environment: OwnerDecisionEnvironment;
   decision?: OwnerDecisionChoice;
   execution?: Readonly<{ status: OwnerExecutionStatus; reference?: string }>;
@@ -354,11 +382,17 @@ export function deriveOwnerDecisionCards(
     const current = mine.filter((record) => record.actionDigest === actionDigest);
     const newestFirst = [...current].reverse();
     const lastDecision = newestFirst.find((record) => record.kind === "decision");
+    // Execution reports belong to the most recent approval. They stay on the
+    // card after a later rejection so an unresolved or failed effect is never
+    // hidden by a change of mind.
+    const lastApproval = newestFirst.find(
+      (record) => record.kind === "decision" && record.decision === "approve",
+    );
     const lastExecution =
-      lastDecision === undefined
+      lastApproval === undefined
         ? undefined
         : newestFirst.find(
-            (record) => record.kind === "execution" && record.sequence > lastDecision.sequence,
+            (record) => record.kind === "execution" && record.sequence > lastApproval.sequence,
           );
     const expired = nowMs > Date.parse(entry.expiresAt);
 

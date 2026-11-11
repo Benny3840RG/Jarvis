@@ -97,6 +97,8 @@ const REFUSAL_STATUS: Record<OwnerDecisionRefusal["code"], number> = {
   "idempotency-conflict": HttpStatus.CONFLICT,
   "not-approved": HttpStatus.CONFLICT,
   "already-executed": HttpStatus.CONFLICT,
+  "execution-unresolved": HttpStatus.CONFLICT,
+  "ledger-exists": HttpStatus.CONFLICT,
   "confirmation-required": HttpStatus.UNPROCESSABLE_ENTITY,
   unavailable: HttpStatus.SERVICE_UNAVAILABLE,
 };
@@ -188,6 +190,23 @@ export class OwnerDecisionController {
   private actor(request: FastifyRequest): string {
     const principal = getAuthenticatedPrincipal(request);
     return principal === undefined ? "approval-token-holder" : `oidc:${principal.subject}`;
+  }
+
+  @Post("api/v1/owner-decisions/ledger")
+  @HttpCode(HttpStatus.OK)
+  @Header("Cache-Control", "no-store")
+  async startLedger(@Body() raw: unknown): Promise<{ data: OwnerDecisionQueue }> {
+    try {
+      const body = parseBody(raw, ["approvalToken", "confirmation"]);
+      this.requireApprovalToken(boundedText(body, "approvalToken", 4096));
+      if (body.confirmation !== "START NEW LEDGER") {
+        throw invalid('Type "START NEW LEDGER" to start a new, empty decision ledger.');
+      }
+      await this.decisions.startLedger();
+      return { data: await this.decisions.inspect() };
+    } catch (error: unknown) {
+      throw toProblem(error);
+    }
   }
 
   @Post("api/v1/owner-decisions/:decisionId/decisions")

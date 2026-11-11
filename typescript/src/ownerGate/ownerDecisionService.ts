@@ -5,7 +5,7 @@
 // never performs the decided work and grants no authority to any other path.
 
 import { randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { constants, readFileSync } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 
@@ -18,60 +18,241 @@ import {
   LEDGER_GENESIS_HASH,
   ownerDecisionRecordHash,
   parseOwnerDecisionManifest,
+  subjectLabel,
   type OwnerDecisionCard,
   type OwnerDecisionChoice,
-  type OwnerDecisionEntry,
   type OwnerDecisionManifest,
   type OwnerDecisionRecord,
+  type OwnerDecisionSubject,
   type OwnerExecutionStatus,
 } from "./ownerDecision.js";
 
+export type OwnerDecisionLedgerState = "ready" | "not-started" | "damaged";
+
+/** Thrown by a ledger that has not been started or cannot be trusted. */
+export class OwnerDecisionLedgerError extends Error {
+  constructor(
+    readonly state: Exclude<OwnerDecisionLedgerState, "ready">,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
 /** Append-only storage for decision records. */
 export interface OwnerDecisionLedger {
+  /** Throws OwnerDecisionLedgerError when the ledger is not started or is damaged. */
   read(): Promise<OwnerDecisionRecord[]>;
-  /** Appends exactly one record after the given tail. Never rewrites history. */
+  /** Appends exactly one record. Never rewrites history. */
   append(record: OwnerDecisionRecord): Promise<void>;
+  /** Starts a new, empty ledger. Refuses when anything is already there. */
+  start(): Promise<void>;
 }
 
 export class InMemoryOwnerDecisionLedger implements OwnerDecisionLedger {
   private readonly records: OwnerDecisionRecord[] = [];
+  private started: boolean;
+
+  constructor(options: { started?: boolean } = {}) {
+    this.started = options.started ?? true;
+  }
 
   async read(): Promise<OwnerDecisionRecord[]> {
+    if (!this.started) {
+      throw new OwnerDecisionLedgerError(
+        "not-started",
+        "The decision ledger has not been started.",
+      );
+    }
     return [...this.records];
   }
 
   async append(record: OwnerDecisionRecord): Promise<void> {
+    await this.read();
     this.records.push(record);
+  }
+
+  async start(): Promise<void> {
+    if (this.started) throw new Error("The decision ledger already exists.");
+    this.started = true;
   }
 }
 
-/** One JSON record per line, opened for append only, owner-readable only. */
-export class JsonLinesOwnerDecisionLedger implements OwnerDecisionLedger {
-  constructor(private readonly filePath: string) {}
+type LedgerCheckpoint = { count: number; hash: string };
 
-  async read(): Promise<OwnerDecisionRecord[]> {
-    let raw: string;
+function isMissing(error: unknown): boolean {
+  return error instanceof Error && "code" in error && error.code === "ENOENT";
+}
+
+function damaged(message: string): OwnerDecisionLedgerError {
+  return new OwnerDecisionLedgerError("damaged", message);
+}
+
+/**
+ * One JSON record per line in an append-only file, plus a checkpoint file
+ * holding the count and hash of the last record. The checkpoint is what makes
+ * a shortened or deleted ledger detectable: the hash chain alone only proves
+ * that what remains is consistent.
+ *
+ * A data directory with neither file has no ledger. That is never treated as
+ * an empty ledger, because a directory restored from a backup looks the same;
+ * the owner must restore the two files or start a new ledger on purpose.
+ */
+export class JsonLinesOwnerDecisionLedger implements OwnerDecisionLedger {
+  private readonly checkpointPath: string;
+
+  constructor(private readonly filePath: string) {
+    this.checkpointPath = `${filePath}.checkpoint.json`;
+  }
+
+  /** Opens an existing owner-only regular file without following a symlink. */
+  private async openPrivate(filePath: string, flags: number): Promise<fs.FileHandle> {
+    let handle: fs.FileHandle;
     try {
-      raw = await fs.readFile(this.filePath, "utf8");
+      handle = await fs.open(filePath, flags | constants.O_NOFOLLOW);
     } catch (error: unknown) {
-      if (error instanceof Error && "code" in error && error.code === "ENOENT") return [];
+      if (isMissing(error)) throw error;
+      throw damaged("A decision ledger file could not be opened safely.");
+    }
+    try {
+      const stat = await handle.stat();
+      if (!stat.isFile() || (stat.mode & 0o777) !== 0o600) {
+        throw damaged("A decision ledger file is not an owner-only regular file (mode 0600).");
+      }
+      return handle;
+    } catch (error: unknown) {
+      await handle.close();
       throw error;
     }
-    return raw
-      .split("\n")
-      .filter((line) => line.length > 0)
-      .map((line) => JSON.parse(line) as OwnerDecisionRecord);
+  }
+
+  private async readPrivate(filePath: string): Promise<string | null> {
+    let handle: fs.FileHandle;
+    try {
+      handle = await this.openPrivate(filePath, constants.O_RDONLY);
+    } catch (error: unknown) {
+      if (isMissing(error)) return null;
+      throw error;
+    }
+    try {
+      return await handle.readFile("utf8");
+    } finally {
+      await handle.close();
+    }
+  }
+
+  private async readCheckpoint(): Promise<LedgerCheckpoint | null> {
+    const raw = await this.readPrivate(this.checkpointPath);
+    if (raw === null) return null;
+    let value: unknown;
+    try {
+      value = JSON.parse(raw);
+    } catch {
+      throw damaged("The decision ledger checkpoint is unreadable.");
+    }
+    const checkpoint = value as Partial<LedgerCheckpoint> | null;
+    if (
+      typeof checkpoint !== "object" ||
+      checkpoint === null ||
+      typeof checkpoint.count !== "number" ||
+      !Number.isInteger(checkpoint.count) ||
+      checkpoint.count < 0 ||
+      typeof checkpoint.hash !== "string" ||
+      !/^[0-9a-f]{64}$/.test(checkpoint.hash)
+    ) {
+      throw damaged("The decision ledger checkpoint is unreadable.");
+    }
+    return { count: checkpoint.count, hash: checkpoint.hash };
+  }
+
+  async read(): Promise<OwnerDecisionRecord[]> {
+    const [raw, checkpoint] = await Promise.all([
+      this.readPrivate(this.filePath),
+      this.readCheckpoint(),
+    ]);
+    if (raw === null && checkpoint === null) {
+      throw new OwnerDecisionLedgerError(
+        "not-started",
+        "No decision ledger exists in this data directory.",
+      );
+    }
+    if (raw === null || checkpoint === null) {
+      throw damaged("The decision ledger and its checkpoint are not both present.");
+    }
+    // A crash can leave a partial last line. Appending after it would fuse two
+    // records, so an unterminated file is refused rather than repaired.
+    if (raw.length > 0 && !raw.endsWith("\n")) {
+      throw damaged("The decision ledger ends in an incomplete record.");
+    }
+    let records: OwnerDecisionRecord[];
+    try {
+      records = raw
+        .split("\n")
+        .filter((line) => line.length > 0)
+        .map((line) => JSON.parse(line) as OwnerDecisionRecord);
+    } catch {
+      throw damaged("The decision ledger contains an unreadable record.");
+    }
+    // The file may be one record ahead of the checkpoint if the process died
+    // between the append and the checkpoint write. It may never be behind.
+    const anchored =
+      checkpoint.count === 0
+        ? checkpoint.hash === LEDGER_GENESIS_HASH
+        : records[checkpoint.count - 1]?.hash === checkpoint.hash;
+    if (!anchored || records.length > checkpoint.count + 1) {
+      throw damaged("The decision ledger does not match its checkpoint; records are missing.");
+    }
+    return records;
+  }
+
+  private async writeCheckpoint(checkpoint: LedgerCheckpoint): Promise<void> {
+    const temporary = `${this.checkpointPath}.${process.pid}.tmp`;
+    await fs.rm(temporary, { force: true });
+    const handle = await fs.open(
+      temporary,
+      constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW,
+      0o600,
+    );
+    try {
+      await handle.chmod(0o600);
+      await handle.writeFile(`${JSON.stringify(checkpoint)}\n`, "utf8");
+      await handle.sync();
+    } finally {
+      await handle.close();
+    }
+    await fs.rename(temporary, this.checkpointPath);
   }
 
   async append(record: OwnerDecisionRecord): Promise<void> {
-    await fs.mkdir(path.dirname(this.filePath), { recursive: true });
-    const handle = await fs.open(this.filePath, "a", 0o600);
+    const handle = await this.openPrivate(this.filePath, constants.O_WRONLY | constants.O_APPEND);
     try {
       await handle.writeFile(`${JSON.stringify(record)}\n`, "utf8");
       await handle.sync();
     } finally {
       await handle.close();
     }
+    await this.writeCheckpoint({ count: record.sequence, hash: record.hash });
+  }
+
+  async start(): Promise<void> {
+    await fs.mkdir(path.dirname(this.filePath), { recursive: true });
+    for (const existing of [this.filePath, this.checkpointPath]) {
+      if ((await fs.lstat(existing).catch(() => null)) !== null) {
+        throw new Error("A decision ledger file already exists; it is never replaced.");
+      }
+    }
+    const handle = await fs.open(
+      this.filePath,
+      constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW,
+      0o600,
+    );
+    try {
+      await handle.chmod(0o600);
+      await handle.sync();
+    } finally {
+      await handle.close();
+    }
+    await this.writeCheckpoint({ count: 0, hash: LEDGER_GENESIS_HASH });
   }
 }
 
@@ -86,6 +267,8 @@ export type OwnerDecisionRefusalCode =
   | "idempotency-conflict"
   | "not-approved"
   | "already-executed"
+  | "execution-unresolved"
+  | "ledger-exists"
   | "unavailable";
 
 export class OwnerDecisionRefusal extends Error {
@@ -98,21 +281,22 @@ export class OwnerDecisionRefusal extends Error {
 }
 
 /**
- * Optional live check of a decision's subject. Returns the commit the subject
- * is at now, or null when it cannot tell. Without a probe the service checks
- * the click against the manifest only.
+ * Live check of one subject. Returns the revision the subject is at now (a
+ * commit for a pull request or branch, the last-updated time for an issue), or
+ * null when it cannot tell. An approval is refused unless every subject of the
+ * card is confirmed unchanged, so no probe means no approvals.
  */
-export type OwnerDecisionSubjectProbe = (
-  entry: OwnerDecisionEntry,
-) => Promise<{ sha: string } | null>;
+export type OwnerDecisionSubjectProbe = (subject: OwnerDecisionSubject) => Promise<string | null>;
 
 export type OwnerDecisionQueue = Readonly<{
   repository: string;
   generatedAt: string;
-  /** False when the queue can only be read: no approval token, or the ledger is unreadable. */
+  /** False when nothing can be recorded. The queue can still be read. */
   decisionsAvailable: boolean;
   unavailableReason?: string;
-  subjectVerification: "manifest-only" | "live-probe";
+  ledgerState: OwnerDecisionLedgerState;
+  /** "none" means approvals are refused: nothing can confirm the subjects are unchanged. */
+  subjectVerification: "none" | "live-probe";
   cards: readonly OwnerDecisionCard[];
   excluded: OwnerDecisionManifest["excluded"];
 }>;
@@ -152,6 +336,13 @@ export type OwnerDecisionServiceOptions = Readonly<{
   subjectProbe?: OwnerDecisionSubjectProbe;
 }>;
 
+type WriteState = {
+  ledgerState: OwnerDecisionLedgerState;
+  records: OwnerDecisionRecord[];
+  /** Why nothing can be written right now; undefined when writes are allowed. */
+  reason?: string;
+};
+
 export class OwnerDecisionService {
   private readonly manifest: OwnerDecisionManifest;
   private readonly ledger: OwnerDecisionLedger;
@@ -175,36 +366,74 @@ export class OwnerDecisionService {
     return run;
   }
 
-  private async intactRecords(): Promise<OwnerDecisionRecord[]> {
-    const records = await this.ledger.read();
-    assertLedgerIntact(records);
-    return records;
+  /** The one read-only rule, used by the view and by every write. */
+  private async writeState(): Promise<WriteState> {
+    let records: OwnerDecisionRecord[];
+    try {
+      records = await this.ledger.read();
+      assertLedgerIntact(records);
+    } catch (error: unknown) {
+      if (error instanceof OwnerDecisionLedgerError && error.state === "not-started") {
+        return {
+          ledgerState: "not-started",
+          records: [],
+          reason:
+            "No decision ledger exists on this runtime. If this runtime was restored from a backup, restore the ledger and its checkpoint first; otherwise start a new ledger. Until then nothing can be recorded and no earlier decision is shown.",
+        };
+      }
+      return {
+        ledgerState: "damaged",
+        records: [],
+        reason:
+          "The decision ledger could not be read or failed its integrity check. Recorded decisions are not shown and nothing can be recorded.",
+      };
+    }
+    return {
+      ledgerState: "ready",
+      records,
+      ...(this.approvalConfigured()
+        ? {}
+        : {
+            reason:
+              "No approval token is configured on this runtime. The queue is read-only until one is set.",
+          }),
+    };
   }
 
-  /** Read-only view. Works without any token and when decisions are unavailable. */
+  /** Read-only view. Works without any token and when nothing can be recorded. */
   async inspect(): Promise<OwnerDecisionQueue> {
     const nowMs = this.clock();
-    let records: OwnerDecisionRecord[] = [];
-    let unavailableReason: string | undefined;
-    try {
-      records = await this.intactRecords();
-    } catch {
-      unavailableReason =
-        "The decision ledger could not be read or failed its integrity check. Recorded decisions are not shown and no new decision can be recorded.";
-    }
-    if (unavailableReason === undefined && !this.approvalConfigured()) {
-      unavailableReason =
-        "No approval token is configured on this runtime. The queue is read-only until one is set.";
-    }
+    const { ledgerState, records, reason } = await this.writeState();
     return {
       repository: this.manifest.repository,
       generatedAt: new Date(nowMs).toISOString(),
-      decisionsAvailable: unavailableReason === undefined,
-      ...(unavailableReason === undefined ? {} : { unavailableReason }),
-      subjectVerification: this.subjectProbe === undefined ? "manifest-only" : "live-probe",
+      decisionsAvailable: reason === undefined,
+      ...(reason === undefined ? {} : { unavailableReason: reason }),
+      ledgerState,
+      subjectVerification: this.subjectProbe === undefined ? "none" : "live-probe",
       cards: deriveOwnerDecisionCards(this.manifest, records, nowMs),
       excluded: this.manifest.excluded,
     };
+  }
+
+  /**
+   * Starts a new, empty ledger on a runtime that has none. Deliberate, so a
+   * restored data directory is never mistaken for one with no decisions.
+   */
+  startLedger(): Promise<void> {
+    return this.exclusive(async () => {
+      if (!this.approvalConfigured()) {
+        throw new OwnerDecisionRefusal("unavailable", "No approval token is configured.");
+      }
+      const { ledgerState } = await this.writeState();
+      if (ledgerState !== "not-started") {
+        throw new OwnerDecisionRefusal(
+          "ledger-exists",
+          "A decision ledger already exists on this runtime. It is never replaced.",
+        );
+      }
+      await this.ledger.start();
+    });
   }
 
   private async loadForWrite(decisionId: string): Promise<{
@@ -212,14 +441,9 @@ export class OwnerDecisionService {
     card: OwnerDecisionCard;
     nowMs: number;
   }> {
-    let records: OwnerDecisionRecord[];
-    try {
-      records = await this.intactRecords();
-    } catch {
-      throw new OwnerDecisionRefusal(
-        "unavailable",
-        "The decision ledger is unreadable or not intact. Nothing was recorded.",
-      );
+    const { records, reason } = await this.writeState();
+    if (reason !== undefined) {
+      throw new OwnerDecisionRefusal("unavailable", `${reason} Nothing was recorded.`);
     }
     const nowMs = this.clock();
     const card = deriveOwnerDecisionCards(this.manifest, records, nowMs).find(
@@ -247,13 +471,7 @@ export class OwnerDecisionService {
     return earlier;
   }
 
-  private async currentCard(decisionId: string): Promise<OwnerDecisionCard> {
-    const records = await this.intactRecords();
-    return deriveOwnerDecisionCards(this.manifest, records, this.clock()).find(
-      (candidate) => candidate.entry.id === decisionId,
-    )!;
-  }
-
+  /** Appends one record and returns the card as it now stands. */
   private async appendRecord(
     records: readonly OwnerDecisionRecord[],
     card: OwnerDecisionCard,
@@ -262,13 +480,13 @@ export class OwnerDecisionService {
       OwnerDecisionRecord,
       "kind" | "decision" | "execution" | "note" | "actor" | "idempotencyKey" | "requestDigest"
     >,
-  ): Promise<OwnerDecisionRecord> {
+  ): Promise<RecordedResult> {
     const unhashed: Omit<OwnerDecisionRecord, "hash"> = {
       sequence: records.length + 1,
       recordId: randomUUID(),
       decisionId: card.entry.id,
       actionDigest: card.actionDigest,
-      subjectSha: card.entry.subject.sha,
+      subjects: card.entry.subjects,
       environment: card.entry.environment,
       recordedAt: new Date(nowMs).toISOString(),
       previousHash: records.at(-1)?.hash ?? LEDGER_GENESIS_HASH,
@@ -276,18 +494,34 @@ export class OwnerDecisionService {
     };
     const record = { ...unhashed, hash: ownerDecisionRecordHash(unhashed) };
     await this.ledger.append(record);
-    return record;
+    const updated = deriveOwnerDecisionCards(this.manifest, [...records, record], nowMs).find(
+      (candidate) => candidate.entry.id === card.entry.id,
+    )!;
+    return { card: updated, recordId: record.recordId, replayed: false };
+  }
+
+  /** Every subject must still be at the revision the card was written against. */
+  private async assertSubjectsUnchanged(card: OwnerDecisionCard): Promise<void> {
+    for (const subject of card.entry.subjects) {
+      const live = this.subjectProbe === undefined ? null : await this.subjectProbe(subject);
+      if (live === null) {
+        throw new OwnerDecisionRefusal(
+          "unavailable",
+          `The current state of ${subjectLabel(subject)} could not be confirmed, so this cannot be approved now. Nothing was recorded.`,
+        );
+      }
+      if (live !== subject.revision) {
+        throw new OwnerDecisionRefusal(
+          "subject-changed",
+          `${subjectLabel(subject)} has changed since this card was written. The card must be reviewed and updated before it can be approved.`,
+        );
+      }
+    }
   }
 
   /** Records the owner's decision after re-checking everything on the server. */
   decide(request: DecideRequest): Promise<RecordedResult> {
     return this.exclusive(async () => {
-      if (!this.approvalConfigured()) {
-        throw new OwnerDecisionRefusal(
-          "unavailable",
-          "No approval token is configured. Nothing was recorded.",
-        );
-      }
       const { records, card, nowMs } = await this.loadForWrite(request.decisionId);
       const requestDigest = sha256Hex(
         canonicalJson({
@@ -307,21 +541,6 @@ export class OwnerDecisionService {
           "stale",
           "This card changed after it was shown. Reload the queue and read it again.",
         );
-      }
-      if (this.subjectProbe !== undefined) {
-        const live = await this.subjectProbe(card.entry);
-        if (live === null) {
-          throw new OwnerDecisionRefusal(
-            "unavailable",
-            "The current state of the subject could not be confirmed. Nothing was recorded.",
-          );
-        }
-        if (live.sha !== card.entry.subject.sha) {
-          throw new OwnerDecisionRefusal(
-            "subject-changed",
-            `${card.entry.subject.ref} has moved to a different commit since this card was written.`,
-          );
-        }
       }
       const { status } = card;
       if (request.choice === "approve") {
@@ -346,6 +565,15 @@ export class OwnerDecisionService {
             `Type "${confirmationPhrase(card.entry)}" to approve this high-risk decision.`,
           );
         }
+        // Last, because it leaves the process. Unknown counts as changed.
+        await this.assertSubjectsUnchanged(card);
+      } else if (status === "APPROVED" && card.execution?.status === "indeterminate") {
+        // The effect may have happened. Withdrawing now would bury that; the
+        // outcome has to be reported as executed or failed first.
+        throw new OwnerDecisionRefusal(
+          "execution-unresolved",
+          "An execution of this approval is still unresolved. Report its outcome before withdrawing the approval.",
+        );
       } else if (status !== "READY" && status !== "NOT_READY" && status !== "APPROVED") {
         // Reject and request-changes may also withdraw an approval that has not
         // been executed. Anything else is already settled for this card.
@@ -354,7 +582,7 @@ export class OwnerDecisionService {
           `This card is already ${status}. Nothing was recorded.`,
         );
       }
-      const record = await this.appendRecord(records, card, nowMs, {
+      return this.appendRecord(records, card, nowMs, {
         kind: "decision",
         decision: request.choice,
         ...(request.note === undefined ? {} : { note: request.note }),
@@ -362,11 +590,6 @@ export class OwnerDecisionService {
         idempotencyKey: request.idempotencyKey,
         requestDigest,
       });
-      return {
-        card: await this.currentCard(request.decisionId),
-        recordId: record.recordId,
-        replayed: false,
-      };
     });
   }
 
@@ -394,7 +617,10 @@ export class OwnerDecisionService {
       if (report.expectedDigest !== card.actionDigest) {
         throw new OwnerDecisionRefusal("stale", "This card changed since it was approved.");
       }
-      if (card.status === "EXECUTED" || card.execution?.status === "failed") {
+      if (
+        card.status === "EXECUTED" ||
+        (card.status === "APPROVED" && card.execution?.status === "failed")
+      ) {
         throw new OwnerDecisionRefusal(
           "already-executed",
           "An execution result is already final for this approval.",
@@ -406,7 +632,7 @@ export class OwnerDecisionService {
           `Execution can only be reported for an approved decision; this card is ${card.status}.`,
         );
       }
-      const record = await this.appendRecord(records, card, nowMs, {
+      return this.appendRecord(records, card, nowMs, {
         kind: "execution",
         execution: {
           status: report.status,
@@ -416,11 +642,6 @@ export class OwnerDecisionService {
         idempotencyKey: report.idempotencyKey,
         requestDigest,
       });
-      return {
-        card: await this.currentCard(report.decisionId),
-        recordId: record.recordId,
-        replayed: false,
-      };
     });
   }
 }

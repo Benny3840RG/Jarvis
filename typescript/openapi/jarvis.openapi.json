@@ -61,7 +61,7 @@
     },
     {
       "name": "Owner Decisions",
-      "description": "The owner decision queue: every owner-gated decision as one card bound to an exact commit, action digest, environment and expiry. Recording a decision writes an audit record only. It executes nothing and replaces no existing approval, review or deployment gate."
+      "description": "The owner decision queue: every owner-gated decision as one card bound to exact subject revisions, an action digest, an environment and an expiry. Recording a decision writes an audit record only. It executes nothing and replaces no existing approval, review or deployment gate."
     }
   ],
   "x-jarvis-architecture": {
@@ -7532,7 +7532,7 @@
       "get": {
         "operationId": "listOwnerDecisions",
         "summary": "Read the owner decision queue",
-        "description": "Returns every owner-gated decision from the reviewed manifest with its derived status (NOT_READY, READY, APPROVED, REJECTED, CHANGES_REQUESTED, EXPIRED, EXECUTED), what is still missing, and any recorded decision and execution report. Read-only. When no approval token is configured or the ledger fails its integrity check, decisionsAvailable is false and the queue can only be read. Authentication is deployment-conditional: a local-serve loopback bind may omit Bearer authentication for the same-origin page; non-loopback binds retain the configured service-token/OIDC requirement.",
+        "description": "Returns every owner-gated decision from the reviewed manifest with its derived status (NOT_READY, READY, APPROVED, REJECTED, CHANGES_REQUESTED, EXPIRED, EXECUTED), what is still missing, and any recorded decision and execution report. Read-only. decisionsAvailable is false, with the reason, when nothing can be recorded: no approval token is configured, no ledger has been started on this runtime, or the ledger failed its integrity check. Authentication is deployment-conditional: a local-serve loopback bind may omit Bearer authentication for the same-origin page; non-loopback binds retain the configured service-token/OIDC requirement.",
         "tags": ["Owner Decisions"],
         "security": [
           {
@@ -7578,11 +7578,73 @@
         }
       }
     },
+    "/api/v1/owner-decisions/ledger": {
+      "post": {
+        "operationId": "startOwnerDecisionLedger",
+        "summary": "Start a new, empty decision ledger",
+        "description": "Starts the decision ledger on a runtime that has none. Deliberate and confirmed, because a data directory restored from a backup also has no ledger: starting a new one there would hide every earlier decision, so the ledger and its checkpoint should be restored instead. Requires the service token (or the OIDC owner), the approval token and the exact confirmation START NEW LEDGER. Refused with 409 when any ledger file already exists; an existing ledger is never replaced.",
+        "tags": ["Owner Decisions"],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": false
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OwnerDecisionLedgerStartRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The ledger was started. Returns the queue as it now stands.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OwnerDecisionQueueResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
     "/api/v1/owner-decisions/{decisionId}/decisions": {
       "post": {
         "operationId": "recordOwnerDecision",
         "summary": "Record the owner's decision on one card",
-        "description": "Records approve, request-changes or reject for one card. Requires the service token (or the OIDC owner) and, separately, the approval token in the body. The server re-checks everything at click time: the card's digest must equal expectedDigest (409 if the card changed), the request must not have expired, approval needs a READY card with no missing prerequisite or unmet dependency, and a high-risk card needs its own typed confirmation phrase. A repeat of the same idempotencyKey and request returns the original record with replayed true; the same key with a different request is refused. Recording a decision appends one hash-chained audit record. It executes nothing: ToolAction approval, CI, review, credential and deployment gates remain authoritative for the work itself.",
+        "description": "Records approve, request-changes or reject for one card. Requires the service token (or the OIDC owner) and, separately, the approval token in the body. The server re-checks everything at click time: the card's digest must equal expectedDigest (409 if the card changed), the request must not have expired, approval needs a READY card with no missing prerequisite or unmet dependency, a high-risk card needs its own typed confirmation phrase, and before an approval is recorded every subject of the card (pull request head, issue last-updated time, branch head) is checked live; a changed subject is refused with 409 and one that cannot be checked with 503. An approval whose execution is still indeterminate cannot be withdrawn until the outcome is reported. A repeat of the same idempotencyKey and request returns the original record with replayed true; the same key with a different request is refused. Recording a decision appends one hash-chained audit record. It executes nothing: ToolAction approval, CI, review, credential and deployment gates remain authoritative for the work itself.",
         "tags": ["Owner Decisions"],
         "parameters": [
           {
@@ -7659,7 +7721,7 @@
       "post": {
         "operationId": "reportOwnerDecisionExecution",
         "summary": "Report what happened when approved work was carried out",
-        "description": "Appends an execution report (executed, failed or indeterminate) to an APPROVED card so the queue can show the result. The work itself is done elsewhere through its own governed path; this endpoint runs nothing. An indeterminate report may later be resolved; executed and failed are final for that approval. Idempotent on idempotencyKey.",
+        "description": "Appends an execution report (executed, failed or indeterminate) to an APPROVED card so the queue can show the result. The work itself is done elsewhere through its own governed path; this endpoint runs nothing. An indeterminate report may later be resolved; executed and failed are final for that approval. Refused with 503 whenever the queue is read-only. Idempotent on idempotencyKey.",
         "tags": ["Owner Decisions"],
         "parameters": [
           {
@@ -15127,6 +15189,28 @@
           "audit": { "$ref": "#/components/schemas/DangerZoneAuditRecord" }
         }
       },
+      "OwnerDecisionSubject": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "revision"],
+        "description": "One thing a decision is about, pinned to the revision the card was written against: a commit SHA for a pull request or branch, the last-updated time for an issue.",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["pull-request", "issue", "branch"]
+          },
+          "number": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "name": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "string"
+          }
+        }
+      },
       "OwnerDecisionEntry": {
         "type": "object",
         "additionalProperties": false,
@@ -15139,7 +15223,7 @@
           "scope",
           "environment",
           "risk",
-          "subject",
+          "subjects",
           "dependsOn",
           "evidence",
           "missingPrerequisites",
@@ -15187,22 +15271,11 @@
               "customer-send"
             ]
           },
-          "subject": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": ["kind", "ref", "sha"],
-            "properties": {
-              "kind": {
-                "type": "string",
-                "enum": ["pull-request", "issue", "release"]
-              },
-              "ref": {
-                "type": "string"
-              },
-              "sha": {
-                "type": "string",
-                "pattern": "^[0-9a-f]{40}$"
-              }
+          "subjects": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "$ref": "#/components/schemas/OwnerDecisionSubject"
             }
           },
           "dependsOn": {
@@ -15302,6 +15375,7 @@
             "type": "object",
             "additionalProperties": false,
             "required": ["status", "recordedAt"],
+            "description": "The latest execution report for the most recent approval. It stays on the card after a later rejection.",
             "properties": {
               "status": {
                 "type": "string",
@@ -15334,6 +15408,7 @@
               "repository",
               "generatedAt",
               "decisionsAvailable",
+              "ledgerState",
               "subjectVerification",
               "cards",
               "excluded"
@@ -15352,9 +15427,14 @@
               "unavailableReason": {
                 "type": "string"
               },
+              "ledgerState": {
+                "type": "string",
+                "enum": ["ready", "not-started", "damaged"]
+              },
               "subjectVerification": {
                 "type": "string",
-                "enum": ["manifest-only", "live-probe"]
+                "enum": ["none", "live-probe"],
+                "description": "none means no live check is available and every approval is refused."
               },
               "cards": {
                 "type": "array",
@@ -15380,6 +15460,23 @@
                 }
               }
             }
+          }
+        }
+      },
+      "OwnerDecisionLedgerStartRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["approvalToken", "confirmation"],
+        "properties": {
+          "approvalToken": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096,
+            "writeOnly": true
+          },
+          "confirmation": {
+            "type": "string",
+            "const": "START NEW LEDGER"
           }
         }
       },

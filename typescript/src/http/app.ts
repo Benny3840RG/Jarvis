@@ -98,6 +98,7 @@ import {
   loadOwnerDecisionManifest,
   OwnerDecisionService,
 } from "../ownerGate/ownerDecisionService.js";
+import { createGitHubSubjectProbe } from "../ownerGate/gitHubSubjectProbe.js";
 import { jarvisDataFile } from "../persistence/jarvisDataPaths.js";
 import { resolveHttpAppConfig, type HttpAppConfig } from "./config.js";
 import {
@@ -208,6 +209,31 @@ function selectMemoryStore<T>(
   if (injected !== undefined) return injected;
   if (!usesEnvironment) return make.inMemory();
   return providerName === "convex" ? make.convex() : make.json();
+}
+
+function createDefaultOwnerDecisions(
+  usesEnvironment: boolean,
+  config: HttpAppConfig,
+): OwnerDecisionService {
+  const manifest = loadOwnerDecisionManifest();
+  const token = process.env.JARVIS_OWNER_DECISIONS_GITHUB_TOKEN?.trim();
+  return new OwnerDecisionService({
+    manifest,
+    // Outside a real runtime nothing is written to disk and nothing leaves the
+    // process: no ledger file, and no live check, so nothing can be approved.
+    ledger: usesEnvironment
+      ? new JsonLinesOwnerDecisionLedger(jarvisDataFile("jarvis-owner-decisions.jsonl"))
+      : new InMemoryOwnerDecisionLedger({ started: false }),
+    approvalConfigured: () => config.currentApprovalToken !== undefined,
+    ...(usesEnvironment
+      ? {
+          subjectProbe: createGitHubSubjectProbe({
+            repository: manifest.repository,
+            ...(token ? { token } : {}),
+          }),
+        }
+      : {}),
+  });
 }
 
 export async function createJarvisHttpApp(
@@ -469,15 +495,7 @@ export async function createJarvisHttpApp(
           ? createDangerZoneFromEnv(providerName)
           : createInactiveDangerZone(providerName)),
       ownerDecisions:
-        options.ownerDecisions ??
-        new OwnerDecisionService({
-          manifest: loadOwnerDecisionManifest(),
-          // Outside a real runtime nothing is written to disk.
-          ledger: usesEnvironment
-            ? new JsonLinesOwnerDecisionLedger(jarvisDataFile("jarvis-owner-decisions.jsonl"))
-            : new InMemoryOwnerDecisionLedger(),
-          approvalConfigured: () => config.currentApprovalToken !== undefined,
-        }),
+        options.ownerDecisions ?? createDefaultOwnerDecisions(usesEnvironment, config),
       voiceSessionRegistry:
         options.voiceSessionRegistry ??
         new VoiceSessionRegistry({
