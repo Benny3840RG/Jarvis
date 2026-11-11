@@ -84,6 +84,7 @@ const isoDate = z
 const projectSchema = z.object({
   id: z.string(),
   clientId: z.string(),
+  propertyId: z.string().optional(),
   title: z.string(),
   status: z.enum(["lead", "quoted", "active", "on_hold", "done"]),
   notes: z.string().optional(),
