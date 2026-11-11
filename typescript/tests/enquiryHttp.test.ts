@@ -80,6 +80,15 @@ async function createClient(app: NestFastifyApplication): Promise<string> {
   return created.json<{ data: { id: string } }>().data.id;
 }
 
+async function createProperty(app: NestFastifyApplication, clientId: string): Promise<string> {
+  const created = await inject(app, "POST", "/api/v1/properties", {
+    headers: AUTH,
+    payload: { clientId, address: "12 Wattle Road, Emerald" },
+  });
+  assert.equal(created.statusCode, 201);
+  return created.json<{ data: { id: string } }>().data.id;
+}
+
 describe("enquiry HTTP boundary", () => {
   it("requires authentication", async () => {
     const app = await makeApp();
@@ -89,11 +98,12 @@ describe("enquiry HTTP boundary", () => {
   it("creates, replays, filters, updates, closes, and converts an enquiry", async () => {
     const app = await makeApp();
     const clientId = await createClient(app);
+    const propertyId = await createProperty(app, clientId);
     const created = await inject(app, "POST", "/api/v1/enquiries", {
       headers: AUTH,
       payload: {
         clientId,
-        propertyId: "p1",
+        propertyId,
         source: "phone",
         requestedWork: "Prune trees near fence",
         duplicateKey: "phone-123",
@@ -136,7 +146,7 @@ describe("enquiry HTTP boundary", () => {
     const conversion = converted.json<{ data: EnquiryConversionResult }>().data;
     assert.equal(conversion.enquiry.status, "converted");
     assert.equal(conversion.project.clientId, clientId);
-    assert.equal(conversion.project.propertyId, "p1");
+    assert.equal(conversion.project.propertyId, propertyId);
     const conversionReplay = await inject(
       app,
       "POST",

@@ -18,6 +18,8 @@ import {
 } from "../clients/clientReferenceLock.js";
 import type { Enquiry, EnquiryConversionResult, EnquiryStore } from "../enquiries/enquiry.js";
 import type { ProjectStore } from "../projects/project.js";
+import type { PropertyStore } from "../properties/property.js";
+import { confirmPropertyOwnedByClient } from "../properties/propertyReference.js";
 import {
   parseCloseEnquiry,
   parseConvertEnquiry,
@@ -26,7 +28,12 @@ import {
   parseUpdateEnquiry,
 } from "./enquiryRequest.js";
 import { JarvisProblem } from "./problemDetails.js";
-import { HTTP_CLIENT_STORE, HTTP_ENQUIRY_STORE, HTTP_PROJECT_STORE } from "./tokens.js";
+import {
+  HTTP_CLIENT_STORE,
+  HTTP_ENQUIRY_STORE,
+  HTTP_PROJECT_STORE,
+  HTTP_PROPERTY_STORE,
+} from "./tokens.js";
 
 function invalid(detail: string): JarvisProblem {
   return new JarvisProblem(
@@ -65,6 +72,7 @@ export class EnquiryController {
     @Inject(HTTP_ENQUIRY_STORE) private readonly enquiries: EnquiryStore,
     @Inject(HTTP_PROJECT_STORE) private readonly projects: ProjectStore,
     @Inject(HTTP_CLIENT_STORE) private readonly clients: ClientStore,
+    @Inject(HTTP_PROPERTY_STORE) private readonly properties: PropertyStore,
   ) {}
 
   @Get()
@@ -99,7 +107,12 @@ export class EnquiryController {
     })();
     try {
       return await withClientReferenceLock(
-        async () => enquiryResponse(await this.enquiries.add(input)),
+        async () => {
+          if (input.propertyId !== undefined) {
+            await confirmPropertyOwnedByClient(this.properties, input.propertyId, input.clientId);
+          }
+          return enquiryResponse(await this.enquiries.add(input));
+        },
         { clients: this.clients, clientId: input.clientId },
       );
     } catch (error: unknown) {
@@ -133,8 +146,16 @@ export class EnquiryController {
     })();
     let enquiry: Enquiry | null;
     try {
-      enquiry = await this.enquiries.update(enquiryId, input);
+      enquiry = await withClientReferenceLock(async () => {
+        if (typeof input.propertyId === "string") {
+          const current = await this.enquiries.get(enquiryId);
+          if (!current) return null;
+          await confirmPropertyOwnedByClient(this.properties, input.propertyId, current.clientId);
+        }
+        return this.enquiries.update(enquiryId, input);
+      });
     } catch (error: unknown) {
+      if (error instanceof JarvisProblem) throw error;
       if (error instanceof Error && /open|empty|requires|must be|must not/.test(error.message))
         throw invalid(error.message);
       throw operationFailed();
@@ -179,6 +200,12 @@ export class EnquiryController {
       result = await withClientReferenceLock(async () => {
         const enquiry = await this.enquiries.get(enquiryId);
         if (enquiry) await confirmReferencedClient(this.clients, enquiry.clientId);
+        // The new job copies the enquiry's property, so an open enquiry with a
+        // missing or foreign property is refused rather than converted. A
+        // replay of an earlier conversion creates nothing and is not re-checked.
+        if (enquiry?.status === "open" && enquiry.propertyId !== undefined) {
+          await confirmPropertyOwnedByClient(this.properties, enquiry.propertyId, enquiry.clientId);
+        }
         return this.enquiries.convertToProject(enquiryId, this.projects, input);
       });
     } catch (error: unknown) {

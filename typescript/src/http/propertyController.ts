@@ -14,10 +14,21 @@ import {
 
 import type { ClientStore } from "../clients/client.js";
 import { withClientReferenceLock } from "../clients/clientReferenceLock.js";
+import type { EnquiryStore } from "../enquiries/enquiry.js";
+import type { ProjectStore } from "../projects/project.js";
 import type { Property, PropertyStore } from "../properties/property.js";
+import {
+  findPropertyReferences,
+  propertyStillReferenced,
+} from "../properties/propertyReference.js";
 import { parseCreateProperty, parseUpdateProperty } from "./propertyRequest.js";
 import { JarvisProblem } from "./problemDetails.js";
-import { HTTP_CLIENT_STORE, HTTP_PROPERTY_STORE } from "./tokens.js";
+import {
+  HTTP_CLIENT_STORE,
+  HTTP_ENQUIRY_STORE,
+  HTTP_PROJECT_STORE,
+  HTTP_PROPERTY_STORE,
+} from "./tokens.js";
 
 function invalid(detail: string): JarvisProblem {
   return new JarvisProblem(
@@ -55,7 +66,18 @@ export class PropertyController {
   constructor(
     @Inject(HTTP_PROPERTY_STORE) private readonly properties: PropertyStore,
     @Inject(HTTP_CLIENT_STORE) private readonly clients: ClientStore,
+    @Inject(HTTP_PROJECT_STORE) private readonly projects: ProjectStore,
+    @Inject(HTTP_ENQUIRY_STORE) private readonly enquiries: EnquiryStore,
   ) {}
+
+  /** Refuse while a job or enquiry still points at the property. */
+  private async assertUnreferenced(propertyId: string): Promise<void> {
+    const kinds = await findPropertyReferences(propertyId, {
+      enquiries: this.enquiries,
+      projects: this.projects,
+    });
+    if (kinds.length > 0) throw propertyStillReferenced(kinds);
+  }
 
   @Get()
   async list(@Query("clientId") clientId?: string) {
@@ -116,7 +138,16 @@ export class PropertyController {
     let property: Property | null;
     try {
       property = await withClientReferenceLock(
-        () => this.properties.update(propertyId, input),
+        async () => {
+          // Moving a property to another client would leave its jobs and
+          // enquiries pointing at a property their client no longer owns.
+          if (input.clientId !== undefined) {
+            const current = await this.properties.get(propertyId);
+            if (!current) return null;
+            if (current.clientId !== input.clientId) await this.assertUnreferenced(propertyId);
+          }
+          return this.properties.update(propertyId, input);
+        },
         input.clientId === undefined
           ? undefined
           : { clients: this.clients, clientId: input.clientId },
@@ -135,8 +166,12 @@ export class PropertyController {
   async remove(@Param("propertyId") propertyId: string) {
     let property: Property | null;
     try {
-      property = await this.properties.remove(propertyId);
-    } catch {
+      property = await withClientReferenceLock(async () => {
+        await this.assertUnreferenced(propertyId);
+        return this.properties.remove(propertyId);
+      });
+    } catch (error: unknown) {
+      if (error instanceof JarvisProblem) throw error;
       throw operationFailed();
     }
     if (!property) throw notFound();
