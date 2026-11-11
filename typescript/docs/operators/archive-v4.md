@@ -260,8 +260,11 @@ step. `npm run commission:local-v1-recovery` drives that restart step: it reads
 `JARVIS_LV1_ISOLATED_CONVEX_URL` (a loopback backend, refused if it is the
 configured `CONVEX_URL` or a cloud host; DNS names beginning with `127.` are not loopback literals), `JARVIS_DELIVERY_RUNTIME_TOKEN`, the
 restored `JARVIS_LV1_JSON_DIR`, and the representative ids, runs the proof, and
-writes a dated evidence file (default `~/lv1-01/restart-proof-<sha>.md`) with
-the quote body sha256. An absent optional `CONVEX_URL` is recorded as N/A;
+writes an evidence file named for the source SHA (default
+`~/lv1-01/restart-proof-<sha>.md`) with the quote body sha256. The evidence
+writer runs on Linux only, and the output path is checked before the proof
+starts: an existing file, or a path inside live or restored data, is refused
+before any process is launched. An absent optional `CONVEX_URL` is recorded as N/A;
 a failed refusal check cannot pass the proof. Configured Convex-hosted targets
 are refused by the same existing harness guard and count as a successful refusal
 probe, never as permission to contact that deployment. `JARVIS_LV1_LIVE_DIR` overrides

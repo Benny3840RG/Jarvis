@@ -21,7 +21,10 @@ import { redactSecret } from "./convexSmoke.js";
  * `npm run commission:local-v1-recovery`
  *
  * Runs the host restart proof on an isolated self-hosted convex-local-backend
- * (Stage 8 / LV1-09), writes a dated evidence file, and prints a result table.
+ * (Stage 8 / LV1-09), writes an evidence file named for the source SHA, and
+ * prints a result table. The evidence writer is Linux-only: it needs
+ * /proc/self/fd to pin each output directory. The output path is checked
+ * before the proof runs, so a bad path fails before any process is started.
  * Exits non-zero on any failure. Evidence, not acceptance — it clears no gate.
  * An absent optional CONVEX_URL is recorded as N/A, never as a passed refusal.
  * Evidence must be outside live/restored JSON data and use a new file path;
@@ -122,11 +125,20 @@ function evidencePath(environment: NodeJS.ProcessEnv, sha: string): string {
   return path.join(os.homedir(), "lv1-01", `restart-proof-${sha}.md`);
 }
 
-export async function writeRecoveryEvidence(
+// Opens a directory for path traversal only, so a search-only ancestor (for
+// example a 0711 /home) does not need to be readable. Not in fs.constants.
+const O_PATH = 0o10000000;
+const DIRECTORY_FLAGS = O_PATH | constants.O_DIRECTORY;
+
+/**
+ * Checks everything about the evidence path that can be known before the
+ * proof runs, and returns the canonical target. The write repeats the
+ * containment checks; this only moves avoidable failures ahead of the proof.
+ */
+export async function assertRecoveryEvidencePath(
   outPath: string,
-  evidence: string,
   config: LocalV1RestartProofConfig,
-): Promise<void> {
+): Promise<string> {
   const target = await canonicalRecoveryPath(outPath);
   for (const directory of [config.liveDirectory, config.jsonDirectory]) {
     const protectedRoot = await canonicalRecoveryPath(directory);
@@ -143,27 +155,33 @@ export async function writeRecoveryEvidence(
   if (process.platform !== "linux") {
     throw new Error("Recovery evidence output requires Linux directory-handle containment.");
   }
+  try {
+    await fs.lstat(target);
+  } catch (error: unknown) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") return target;
+    throw error;
+  }
+  throw new Error("Recovery evidence output already exists; existing files are never replaced.");
+}
+
+export async function writeRecoveryEvidence(
+  outPath: string,
+  evidence: string,
+  config: LocalV1RestartProofConfig,
+): Promise<void> {
+  const target = await assertRecoveryEvidencePath(outPath, config);
   const parent = path.dirname(target);
-  let directory = await fs.open(
-    path.parse(parent).root,
-    constants.O_RDONLY | constants.O_DIRECTORY,
-  );
+  let directory = await fs.open(path.parse(parent).root, DIRECTORY_FLAGS);
   try {
     for (const component of parent.split(path.sep).filter(Boolean)) {
       const child = path.join("/proc/self/fd", String(directory.fd), component);
       let next: fs.FileHandle;
       try {
-        next = await fs.open(
-          child,
-          constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW,
-        );
+        next = await fs.open(child, DIRECTORY_FLAGS | constants.O_NOFOLLOW);
       } catch (error: unknown) {
         if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
         await fs.mkdir(child, { mode: 0o700 });
-        next = await fs.open(
-          child,
-          constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW,
-        );
+        next = await fs.open(child, DIRECTORY_FLAGS | constants.O_NOFOLLOW);
       }
       await directory.close();
       directory = next;
@@ -192,9 +210,10 @@ async function main(): Promise<void> {
   loadLocalEnvironment();
   const sha = sourceSha();
   const config = configFromEnvironment(process.env, sha);
+  const outPath = evidencePath(process.env, sha);
+  await assertRecoveryEvidencePath(outPath, config);
   const record = await runLocalV1RestartProof(config);
   const evidence = renderLocalV1RestartProofEvidence(record);
-  const outPath = evidencePath(process.env, sha);
   console.log(evidence);
   await writeRecoveryEvidence(outPath, evidence, config);
   console.log("");

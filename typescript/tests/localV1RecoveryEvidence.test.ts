@@ -173,6 +173,60 @@ test("driver rejects a quote that changes across the restart even when the runne
   }
 });
 
+test("driver names an unparseable configured CONVEX_URL instead of a raw TypeError", async () => {
+  const { runLocalV1RestartProof, LocalV1RecoveryDriverError } =
+    await import("../src/backup/v4/localV1RecoveryDriver.js");
+  const fixture = await driverFixture();
+  try {
+    let calls = 0;
+    await assert.rejects(
+      () =>
+        runLocalV1RestartProof(
+          { ...fixture.config, configuredConvexUrl: "not a url" },
+          {
+            restartRunner: async () => {
+              calls += 1;
+              return fixture.result;
+            },
+          },
+        ),
+      (error: unknown) =>
+        error instanceof LocalV1RecoveryDriverError &&
+        /could not parse the configured CONVEX_URL/.test(error.message),
+    );
+    assert.equal(calls, 0);
+  } finally {
+    await fixture.cleanup();
+  }
+});
+
+test("a failed live-directory re-check keeps the original runner failure as the cause", async (t) => {
+  if (process.getuid?.() === 0) return t.skip("root ignores directory permissions");
+  const fs = await import("node:fs/promises");
+  const { runLocalV1RestartProof, LocalV1RecoveryDriverError } =
+    await import("../src/backup/v4/localV1RecoveryDriver.js");
+  const fixture = await driverFixture();
+  try {
+    await assert.rejects(
+      () =>
+        runLocalV1RestartProof(fixture.config, {
+          restartRunner: async () => {
+            await fs.chmod(fixture.config.liveDirectory, 0o000);
+            throw new Error("isolated backend unreachable");
+          },
+        }),
+      (error: unknown) =>
+        error instanceof LocalV1RecoveryDriverError &&
+        /could not re-check the live data directory/.test(error.message) &&
+        error.cause instanceof Error &&
+        error.cause.message === "isolated backend unreachable",
+    );
+  } finally {
+    await fs.chmod(fixture.config.liveDirectory, 0o700).catch(() => undefined);
+    await fixture.cleanup();
+  }
+});
+
 test("driver refuses dangling JSON-directory links into live data before any runner call", async () => {
   const fs = await import("node:fs/promises");
   const path = await import("node:path");

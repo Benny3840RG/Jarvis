@@ -281,7 +281,18 @@ export async function runLocalV1RestartProof(
   }
   if (config.configuredConvexUrl !== undefined) {
     const configured = config.configuredConvexUrl.trim();
-    if (configured.length > 0 && endpointOf(isolated) === endpointOf(new URL(configured))) {
+    let configuredUrl: URL | null = null;
+    if (configured.length > 0) {
+      try {
+        configuredUrl = new URL(configured);
+      } catch (error: unknown) {
+        throw new LocalV1RecoveryDriverError(
+          "Local V1 recovery driver could not parse the configured CONVEX_URL.",
+          { cause: error },
+        );
+      }
+    }
+    if (configuredUrl !== null && endpointOf(isolated) === endpointOf(configuredUrl)) {
       throw new LocalV1RecoveryDriverError(
         "Local V1 recovery driver refuses the configured CONVEX_URL as the isolated target.",
       );
@@ -335,7 +346,16 @@ export async function runLocalV1RestartProof(
       liveDirectoryUnchanged,
     };
   } catch (error: unknown) {
-    const after = await localV1LiveDirectoryDigest(config.liveDirectory);
+    let after: string;
+    try {
+      after = await localV1LiveDirectoryDigest(config.liveDirectory);
+    } catch {
+      // Keep the failure that brought us here; the digest error would hide it.
+      throw new LocalV1RecoveryDriverError(
+        "Local V1 recovery driver failed and could not re-check the live data directory.",
+        { cause: error },
+      );
+    }
     if (after !== before) {
       throw new LocalV1RecoveryDriverError(
         "Local V1 recovery driver changed the live data directory.",

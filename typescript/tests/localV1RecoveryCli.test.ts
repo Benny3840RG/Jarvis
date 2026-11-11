@@ -4,7 +4,11 @@ import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 
-import { configFromEnvironment, writeRecoveryEvidence } from "../src/tools/runLocalV1Recovery.js";
+import {
+  assertRecoveryEvidencePath,
+  configFromEnvironment,
+  writeRecoveryEvidence,
+} from "../src/tools/runLocalV1Recovery.js";
 
 const environment = {
   JARVIS_LV1_ISOLATED_CONVEX_URL: "http://127.0.0.1:3210",
@@ -59,7 +63,10 @@ test("evidence writes refuse protected trees, symlink aliases and existing files
     assert.deepEqual(await fs.readdir(isolated), []);
     const target = path.join(root, "evidence", "proof.md");
     await writeRecoveryEvidence(target, "first", config);
-    await assert.rejects(() => writeRecoveryEvidence(target, "replacement", config), /EEXIST/);
+    await assert.rejects(
+      () => writeRecoveryEvidence(target, "replacement", config),
+      /already exists; existing files are never replaced/,
+    );
     assert.equal(await fs.readFile(target, "utf8"), "first\n");
   } finally {
     await fs.rm(root, { recursive: true, force: true });
@@ -172,6 +179,65 @@ test("replacing an opened output parent with a live-data symlink fails closed", 
     assert.deepEqual(await fs.readdir(isolated), []);
   } finally {
     t.mock.restoreAll();
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
+test("evidence path problems are reported before the proof would run", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "lv1-evidence-preflight-"));
+  try {
+    const live = path.join(root, "live");
+    const isolated = path.join(root, "isolated");
+    await fs.mkdir(live);
+    await fs.mkdir(isolated);
+    const config = {
+      ...configFromEnvironment(environment, "fixture"),
+      liveDirectory: live,
+      jsonDirectory: isolated,
+    };
+    await assert.rejects(
+      () => assertRecoveryEvidencePath(path.join(live, "proof.md"), config),
+      /protected data directory/,
+    );
+    const existing = path.join(root, "existing.md");
+    await fs.writeFile(existing, "earlier run\n");
+    await assert.rejects(
+      () => assertRecoveryEvidencePath(existing, config),
+      /already exists; existing files are never replaced/,
+    );
+    assert.equal(await fs.readFile(existing, "utf8"), "earlier run\n");
+    const fresh = path.join(root, "new", "proof.md");
+    assert.equal(
+      await assertRecoveryEvidencePath(fresh, config),
+      path.join(await fs.realpath(root), "new", "proof.md"),
+    );
+    assert.deepEqual((await fs.readdir(root)).sort(), ["existing.md", "isolated", "live"]);
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
+test("evidence is written beneath a search-only ancestor directory", async (t) => {
+  if (process.getuid?.() === 0) return t.skip("root ignores directory permissions");
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "lv1-evidence-search-only-"));
+  const gate = path.join(root, "gate");
+  try {
+    const live = path.join(root, "live");
+    const isolated = path.join(root, "isolated");
+    await fs.mkdir(live);
+    await fs.mkdir(isolated);
+    await fs.mkdir(path.join(gate, "out"), { recursive: true });
+    await fs.chmod(gate, 0o300);
+    const config = {
+      ...configFromEnvironment(environment, "fixture"),
+      liveDirectory: live,
+      jsonDirectory: isolated,
+    };
+    const target = path.join(gate, "out", "proof.md");
+    await writeRecoveryEvidence(target, "evidence", config);
+    assert.equal(await fs.readFile(target, "utf8"), "evidence\n");
+  } finally {
+    await fs.chmod(gate, 0o700).catch(() => undefined);
     await fs.rm(root, { recursive: true, force: true });
   }
 });
