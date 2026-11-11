@@ -150,6 +150,29 @@ test("loopback gate rejects 127-prefixed DNS names before invoking the runner", 
   }
 });
 
+test("driver rejects a quote that changes across the restart even when the runner reports recovery", async () => {
+  const { runLocalV1RestartProof } = await import("../src/backup/v4/localV1RecoveryDriver.js");
+  const fixture = await driverFixture();
+  try {
+    await assert.rejects(
+      () =>
+        runLocalV1RestartProof(fixture.config, {
+          restartRunner: async () => ({
+            ...fixture.result,
+            second: { ...fixture.result.second, quoteBody: "a different quote" },
+          }),
+        }),
+      /different quote after the restart/,
+    );
+    const record = await runLocalV1RestartProof(fixture.config, {
+      restartRunner: async () => fixture.result,
+    });
+    assert.equal(localV1RestartProofPassed(record), true);
+  } finally {
+    await fixture.cleanup();
+  }
+});
+
 test("driver refuses dangling JSON-directory links into live data before any runner call", async () => {
   const fs = await import("node:fs/promises");
   const path = await import("node:path");

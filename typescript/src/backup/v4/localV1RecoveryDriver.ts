@@ -309,6 +309,13 @@ export async function runLocalV1RestartProof(
         "Local V1 recovery driver did not recover the quote GET from the isolated backend.",
       );
     }
+    // Do not rely on the runner's flag alone: the quote read after the
+    // restart must be byte-identical to the one before it.
+    if (result.first.quoteBody !== result.second.quoteBody) {
+      throw new LocalV1RecoveryDriverError(
+        "Local V1 recovery driver read a different quote after the restart.",
+      );
+    }
     const after = await localV1LiveDirectoryDigest(config.liveDirectory);
     const liveDirectoryUnchanged = after === before;
     if (!liveDirectoryUnchanged) {
