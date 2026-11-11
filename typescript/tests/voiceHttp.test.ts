@@ -103,6 +103,9 @@ describe("voice HTTP boundary", () => {
       ["trailer", "Jarvis stop the ramp", []],
       ["trailer", "Jarvis raise the winch", ["I won't raise the winch"]],
       ["client", "Jarvis I'd send the quote", []],
+      ["client", "Jarvis, I'd send the quote", []],
+      ["client", "Jarvis I'll send the quote", []],
+      ["client", "Jarvis I've sent the quote", []],
       ["trailer", "Jarvis we've put the ramp down", []],
       ["trailer", "Jarvis the winch can go up", []],
       ["trailer", "Jarvis the winch could go up", []],
@@ -120,6 +123,22 @@ describe("voice HTTP boundary", () => {
       assert.equal(confirm.json().dispatch.decision, "confirmation-not-pending", transcript);
       assert.equal(confirm.json().pending, null, transcript);
     }
+  });
+
+  it("keeps a wake-prefixed explicit quote request on the existing confirmation path", async () => {
+    const app = await makeApp();
+    const sessionId = await openSession(app, "client");
+    const request = await utter(app, sessionId, {
+      transcript: "Jarvis, can you send the quote?",
+      isFinal: true,
+    });
+    assert.equal(request.statusCode, 200);
+    assert.equal(request.json().dispatch.decision, "awaiting-confirmation");
+    assert.equal(request.json().dispatch.command.id, "client.send-quote");
+    const confirm = await utter(app, sessionId, { transcript: "confirm", isFinal: true });
+    assert.equal(confirm.json().dispatch.decision, "proposed");
+    assert.equal(confirm.json().dispatch.command.id, "client.send-quote");
+    assert.equal(confirm.json().pending, null);
   });
 
   it("withholds inferred winch with a cancel alternative and an out-of-profile lights request", async () => {
