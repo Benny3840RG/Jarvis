@@ -20,14 +20,14 @@ WS-D matrix and must be demonstrated before the spec is treated as true.
 PR #780 delivered the decision logic as pure reducers behind injected ports. The
 relevant facts for this tranche:
 
-| Port / rule | Where | What it proves today | What it cannot prove |
-| --- | --- | --- | --- |
-| `EgressEnforcer` / `BrokerEnforcer` | `typescript/src/security/tcpCheck/enforcer.ts` | Order of checks: ledger begin, abort, fence, gate from a fresh clock and policy read, abort, connect | That a socket was or was not opened; it runs in the caller's process |
-| `Connector` | `enforcer.ts`, `tcpCheckProvider.ts` (`notCommissionedConnector`) | The default connector refuses | Anything about a real connect |
-| `LedgerPort` + reducer | `singleUseLedger.ts` | absent → `consuming` → `settled`; replay never returns `fresh` | Atomicity or durability: the only store is in memory |
-| `FenceChecker` | `enforcer.ts` | A superseded token is refused when the check runs | That the token is still live when the syscall runs |
-| Admission reducer | `admission.ts` | One slot per owner; never-refunded 60 s history; `uncertain` holds the slot; only a signal resolves it | That the signal reflects a real socket |
-| Gate | `gate.ts` | Table anchor, expiry, epoch, digest, target, freshness | That the clock it was given is trustworthy |
+| Port / rule                         | Where                                                             | What it proves today                                                                                   | What it cannot prove                                                 |
+| ----------------------------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------- |
+| `EgressEnforcer` / `BrokerEnforcer` | `typescript/src/security/tcpCheck/enforcer.ts`                    | Order of checks: ledger begin, abort, fence, gate from a fresh clock and policy read, abort, connect   | That a socket was or was not opened; it runs in the caller's process |
+| `Connector`                         | `enforcer.ts`, `tcpCheckProvider.ts` (`notCommissionedConnector`) | The default connector refuses                                                                          | Anything about a real connect                                        |
+| `LedgerPort` + reducer              | `singleUseLedger.ts`                                              | absent → `consuming` → `settled`; replay never returns `fresh`                                         | Atomicity or durability: the only store is in memory                 |
+| `FenceChecker`                      | `enforcer.ts`                                                     | A superseded token is refused when the check runs                                                      | That the token is still live when the syscall runs                   |
+| Admission reducer                   | `admission.ts`                                                    | One slot per owner; never-refunded 60 s history; `uncertain` holds the slot; only a signal resolves it | That the signal reflects a real socket                               |
+| Gate                                | `gate.ts`                                                         | Table anchor, expiry, epoch, digest, target, freshness                                                 | That the clock it was given is trustworthy                           |
 
 So obligations 1–5 hold **in the reducers**. None holds at a real boundary yet,
 because no real boundary exists. The three specifications below supply one each.
@@ -97,9 +97,9 @@ userspace has to succeed for it to take effect.
   2. delete the element from the kernel set;
   3. read the kernel set back and confirm the pair is absent;
   4. only then advance the policy epoch and activate the new policy.
-  If step 2 or 3 fails, try flushing the whole set. If that also fails, wait `T_live`
-  from the last successful refresh and read back again. Activation never precedes a
-  confirmed absence.
+     If step 2 or 3 fails, try flushing the whole set. If that also fails, wait `T_live`
+     from the last successful refresh and read back again. Activation never precedes a
+     confirmed absence.
 - **Widening (add a target):** activate the policy in the store first, then add the
   element. The kernel never admits a pair the active policy does not contain.
 
@@ -165,26 +165,26 @@ callable only with the broker's credential, so the worker cannot grant itself.
 
 Proposed phases, extending today's two (`consuming`, `settled`):
 
-| Phase | Written | Meaning |
-| --- | --- | --- |
-| `granted` | by `grantConnect` | The sole right exists; no connect call has been made |
-| `connecting` | by the broker, **durably, immediately before the connect call** | A socket may exist |
-| `settled(outcome)` | by the broker after the socket is destroyed | Outcome observed and recorded |
-| `retired-unknown` | by broker recovery (B3) | Effect ended; outcome can never be known |
+| Phase              | Written                                                         | Meaning                                              |
+| ------------------ | --------------------------------------------------------------- | ---------------------------------------------------- |
+| `granted`          | by `grantConnect`                                               | The sole right exists; no connect call has been made |
+| `connecting`       | by the broker, **durably, immediately before the connect call** | A socket may exist                                   |
+| `settled(outcome)` | by the broker after the socket is destroyed                     | Outcome observed and recorded                        |
+| `retired-unknown`  | by broker recovery (B3)                                         | Effect ended; outcome can never be known             |
 
 Today's `consuming` maps to `granted` plus `connecting`. Splitting it is what lets
 recovery tell "provably no socket" from "a socket may have existed".
 
 ### B2. What a retry returns
 
-| Stored state when the retry arrives | Returned | New connect? |
-| --- | --- | --- |
-| no row, checks pass | fresh grant | yes, once |
-| no row, a check fails | the typed rejection; `refused` is settled so later retries replay it | no |
-| `granted` or `connecting` | `effect_uncertain` | no |
-| `settled(outcome)` | `replayed` with the stored outcome | no |
-| `retired-unknown` | `effect_uncertain`, permanently | no |
-| store unreachable or the call throws | `effect_uncertain`; slot and barrier retained; reported blocked | no |
+| Stored state when the retry arrives  | Returned                                                             | New connect? |
+| ------------------------------------ | -------------------------------------------------------------------- | ------------ |
+| no row, checks pass                  | fresh grant                                                          | yes, once    |
+| no row, a check fails                | the typed rejection; `refused` is settled so later retries replay it | no           |
+| `granted` or `connecting`            | `effect_uncertain`                                                   | no           |
+| `settled(outcome)`                   | `replayed` with the stored outcome                                   | no           |
+| `retired-unknown`                    | `effect_uncertain`, permanently                                      | no           |
+| store unreachable or the call throws | `effect_uncertain`; slot and barrier retained; reported blocked      | no           |
 
 This covers duplicate delivery, a lost response, a broker restart and a delayed
 replay. A new check always needs a new stage and a new approval.
@@ -217,8 +217,8 @@ exits, so a paused old broker still holds it and a new one cannot start.
 **Elapsed time alone never releases anything.** If the store is unreachable, the
 broker cannot start, or the lock cannot be taken, the slot and barrier stay held and
 the attempt is reported blocked. This is the eventual-resolution guarantee, stated
-under its assumptions: *the host eventually runs a broker that can take the lock and
-reach the store.* There is no fixed time bound.
+under its assumptions: _the host eventually runs a broker that can take the lock and
+reach the store._ There is no fixed time bound.
 
 ### B4. Retirement
 
@@ -231,13 +231,13 @@ decided, keep them all.
 
 ### C1. Which clock decides what
 
-| Decision | Clock | Starts / compared against | On restart or loss of trust |
-| --- | --- | --- | --- |
-| Capability expiry (`expiresAtMs`) | **Store** time, inside `grantConnect` | Set by the store at `reserved → started`: start time + 15 000 ms lease | Issued and checked by the same clock, so no cross-process skew. A row carries its own expiry; restart changes nothing |
-| Connect deadline (5 000 ms) | **Broker monotonic** clock | Starts when the broker makes the connect call, immediately after the durable `connecting` record | Lost with the process; the attempt becomes case 3 in B3, never a `timed-out` |
-| Rate window | **Store** time | The `startedAtMs` written at `reserved → started` | History is durable. If store time is earlier than the newest record, refuse (`rate_limited`) until it is later |
-| Table freshness | Store time at reservation and grant; broker wall clock at its gate; renewer wall clock before each refresh | Snapshot date read from the anchor-verified table | Any party that cannot trust its clock denies. The renewer then stops refreshing, so the kernel denies too |
-| Kernel element lifetime | Kernel timer | Last successful refresh | Flushed on boot and on resume |
+| Decision                          | Clock                                                                                                      | Starts / compared against                                                                        | On restart or loss of trust                                                                                           |
+| --------------------------------- | ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
+| Capability expiry (`expiresAtMs`) | **Store** time, inside `grantConnect`                                                                      | Set by the store at `reserved → started`: start time + 15 000 ms lease                           | Issued and checked by the same clock, so no cross-process skew. A row carries its own expiry; restart changes nothing |
+| Connect deadline (5 000 ms)       | **Broker monotonic** clock                                                                                 | Starts when the broker makes the connect call, immediately after the durable `connecting` record | Lost with the process; the attempt becomes case 3 in B3, never a `timed-out`                                          |
+| Rate window                       | **Store** time                                                                                             | The `startedAtMs` written at `reserved → started`                                                | History is durable. If store time is earlier than the newest record, refuse (`rate_limited`) until it is later        |
+| Table freshness                   | Store time at reservation and grant; broker wall clock at its gate; renewer wall clock before each refresh | Snapshot date read from the anchor-verified table                                                | Any party that cannot trust its clock denies. The renewer then stops refreshing, so the kernel denies too             |
+| Kernel element lifetime           | Kernel timer                                                                                               | Last successful refresh                                                                          | Flushed on boot and on resume                                                                                         |
 
 **Clock trust rule for the broker and renewer.** At start, and before each decision,
 the wall clock must be no earlier than the table's snapshot date and no earlier than
@@ -295,30 +295,30 @@ not be in the special-use table or the gate will refuse it; choosing and reviewi
 that synthetic address is an owner decision (item 3). No real third-party target is
 used anywhere in this matrix.
 
-| # | Case | Obl. | Expected at the egress boundary | Expected in the store |
-| --- | --- | --- | --- | --- |
-| D1 | Worker paused before `reserved → started`; recovery supersedes its fence; policy narrows; worker resumes | 1, 3 | 0 SYN; no accept count | No ledger row; attempt released by fenced cleanup |
-| D2 | Worker paused after `started`, before sending the claim; target removed; worker resumes | 1, 3 | 0 SYN; pair absent from the kernel set | `refused` settled with `policy_changed`; `never-admitted` |
-| D3 | Broker paused between its gate and the connect call; target removed and confirmed absent; broker resumes | 1 | Connect rejected by the kernel; reject counter +1; 0 SYN on the wire | `connecting`, then `settled(error)`; slot released on that record |
-| D4 | Control plane killed while a target is live; nothing publishes a deny | 1 | After `T_live`, connect rejected; reject counter +1 | Attempt refused or settled `error`; never `connected` |
-| D5 | Narrowing where element deletion fails | 1 | Pair still present until flush or expiry | Epoch **not** advanced until readback shows absence |
-| D6 | Freshness bound passes while a reservation is held | 1, 5 | 0 SYN; element not refreshed | `refused`, `policy_changed` |
-| D7 | Capability expires before the grant | 5 | 0 SYN | `refused`, `expired` |
-| D8 | Same claim delivered twice at once | 2 | Exactly 1 SYN | One row; second caller gets `effect_uncertain` or `replayed` |
-| D9 | Response lost after `settled`; worker retries | 2 | No further SYN | `replayed` with the stored outcome |
-| D10 | Broker killed after `granted`, before `connecting`; new broker starts | 2, 3, 4 | 0 SYN | Row settled `refused`; `never-admitted`; slot released |
-| D11 | Broker killed after `connecting`, socket open; new broker starts | 2, 3, 4 | 1 SYN total; no reconnect | `retired-unknown`; slot released; caller sees `effect_uncertain` |
-| D12 | As D11, but the old broker is only paused (not dead) | 3, 4 | No second SYN | New broker cannot take the lock; slot **held**; reported blocked however long it lasts |
-| D13 | Store unreachable during finalize | 4 | 1 SYN | Row stays `connecting`; slot held; blocked; resolves only once the store returns |
-| D14 | Wall clock stepped forward and back while an element is live | 5 | Element lifetime unchanged | Clock-trust rule denies when time is earlier than the newest record |
-| D15 | Host suspended with a live element, then resumed | 1, 5 | Set flushed before the broker runs; 0 SYN to the old pair | No grant issued until the renewer re-adds the pair |
-| D16 | Eleven starts in 60 s, then one more at exactly 60 000 ms after the first | 5 | 10 SYN, then 1 more | Eleventh refused `rate_limited`; the later one admitted |
-| D17 | Deadline fires on a silent target | 5 | 1 SYN; socket destroyed at 5 s | `settled(timed-out)` written by the same instance |
-| D18 | Worker's own wait expires while the broker is still connecting | 5 | 1 SYN | Worker reports blocked; store later shows the real outcome |
-| D19 | Worker process connects directly to an allowlisted target | 1 | Rejected by the kernel; reject counter +1; 0 SYN | No ledger row |
-| D20 | Straggler worker tries to commit a result after recovery marked the attempt `uncertain` | 3 | No SYN | Commit refused on the superseded fence; state unchanged |
-| D21 | Port 0, 65536, `"80"`, 80.5 | 5 | 0 SYN | Rejected before any reservation; no history entry |
-| D22 | Broker started with no rule set loaded | 1 | 0 SYN | Broker refuses to start; all attempts blocked |
+| #   | Case                                                                                                     | Obl.    | Expected at the egress boundary                                      | Expected in the store                                                                  |
+| --- | -------------------------------------------------------------------------------------------------------- | ------- | -------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| D1  | Worker paused before `reserved → started`; recovery supersedes its fence; policy narrows; worker resumes | 1, 3    | 0 SYN; no accept count                                               | No ledger row; attempt released by fenced cleanup                                      |
+| D2  | Worker paused after `started`, before sending the claim; target removed; worker resumes                  | 1, 3    | 0 SYN; pair absent from the kernel set                               | `refused` settled with `policy_changed`; `never-admitted`                              |
+| D3  | Broker paused between its gate and the connect call; target removed and confirmed absent; broker resumes | 1       | Connect rejected by the kernel; reject counter +1; 0 SYN on the wire | `connecting`, then `settled(error)`; slot released on that record                      |
+| D4  | Control plane killed while a target is live; nothing publishes a deny                                    | 1       | After `T_live`, connect rejected; reject counter +1                  | Attempt refused or settled `error`; never `connected`                                  |
+| D5  | Narrowing where element deletion fails                                                                   | 1       | Pair still present until flush or expiry                             | Epoch **not** advanced until readback shows absence                                    |
+| D6  | Freshness bound passes while a reservation is held                                                       | 1, 5    | 0 SYN; element not refreshed                                         | `refused`, `policy_changed`                                                            |
+| D7  | Capability expires before the grant                                                                      | 5       | 0 SYN                                                                | `refused`, `expired`                                                                   |
+| D8  | Same claim delivered twice at once                                                                       | 2       | Exactly 1 SYN                                                        | One row; second caller gets `effect_uncertain` or `replayed`                           |
+| D9  | Response lost after `settled`; worker retries                                                            | 2       | No further SYN                                                       | `replayed` with the stored outcome                                                     |
+| D10 | Broker killed after `granted`, before `connecting`; new broker starts                                    | 2, 3, 4 | 0 SYN                                                                | Row settled `refused`; `never-admitted`; slot released                                 |
+| D11 | Broker killed after `connecting`, socket open; new broker starts                                         | 2, 3, 4 | 1 SYN total; no reconnect                                            | `retired-unknown`; slot released; caller sees `effect_uncertain`                       |
+| D12 | As D11, but the old broker is only paused (not dead)                                                     | 3, 4    | No second SYN                                                        | New broker cannot take the lock; slot **held**; reported blocked however long it lasts |
+| D13 | Store unreachable during finalize                                                                        | 4       | 1 SYN                                                                | Row stays `connecting`; slot held; blocked; resolves only once the store returns       |
+| D14 | Wall clock stepped forward and back while an element is live                                             | 5       | Element lifetime unchanged                                           | Clock-trust rule denies when time is earlier than the newest record                    |
+| D15 | Host suspended with a live element, then resumed                                                         | 1, 5    | Set flushed before the broker runs; 0 SYN to the old pair            | No grant issued until the renewer re-adds the pair                                     |
+| D16 | Eleven starts in 60 s, then one more at exactly 60 000 ms after the first                                | 5       | 10 SYN, then 1 more                                                  | Eleventh refused `rate_limited`; the later one admitted                                |
+| D17 | Deadline fires on a silent target                                                                        | 5       | 1 SYN; socket destroyed at 5 s                                       | `settled(timed-out)` written by the same instance                                      |
+| D18 | Worker's own wait expires while the broker is still connecting                                           | 5       | 1 SYN                                                                | Worker reports blocked; store later shows the real outcome                             |
+| D19 | Worker process connects directly to an allowlisted target                                                | 1       | Rejected by the kernel; reject counter +1; 0 SYN                     | No ledger row                                                                          |
+| D20 | Straggler worker tries to commit a result after recovery marked the attempt `uncertain`                  | 3       | No SYN                                                               | Commit refused on the superseded fence; state unchanged                                |
+| D21 | Port 0, 65536, `"80"`, 80.5                                                                              | 5       | 0 SYN                                                                | Rejected before any reservation; no history entry                                      |
+| D22 | Broker started with no rule set loaded                                                                   | 1       | 0 SYN                                                                | Broker refuses to start; all attempts blocked                                          |
 
 A case passes only if both columns are observed. Any `connected` that the packet
 capture does not support, or any SYN the store cannot account for, fails the run.
@@ -330,13 +330,13 @@ explicit sign-off.
 
 ## Obligation coverage
 
-| Obligation (#779) | Specified in | Demonstrated by |
-| --- | --- | --- |
-| 1 — freshness and revocation timing, independent deny path | A2–A5 | D1–D6, D15, D19, D22 |
-| 2 — durable single use at the egress boundary | B1, B2, B4 | D8–D11 |
-| 3 — effect boundary rejects superseded capabilities | A6, B3 | D1–D3, D10–D12, D20 |
-| 4 — eventual resolution under named assumptions | B3 | D10–D13 |
-| 5 — deadline origin, timeout versus unknown, port range, window | C1–C4 | D6, D7, D14–D18, D21 |
+| Obligation (#779)                                               | Specified in | Demonstrated by      |
+| --------------------------------------------------------------- | ------------ | -------------------- |
+| 1 — freshness and revocation timing, independent deny path      | A2–A5        | D1–D6, D15, D19, D22 |
+| 2 — durable single use at the egress boundary                   | B1, B2, B4   | D8–D11               |
+| 3 — effect boundary rejects superseded capabilities             | A6, B3       | D1–D3, D10–D12, D20  |
+| 4 — eventual resolution under named assumptions                 | B3           | D10–D13              |
+| 5 — deadline origin, timeout versus unknown, port range, window | C1–C4        | D6, D7, D14–D18, D21 |
 
 No obligation box on #779 should be ticked from this document. Each is ticked only
 when implemented and covered by its matrix cases.
