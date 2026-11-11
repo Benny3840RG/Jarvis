@@ -21,7 +21,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function revisionFrom(subject: OwnerDecisionSubject, body: unknown): string | null {
   if (!isRecord(body)) return null;
-  if (subject.kind === "issue") {
+  if (subject.kind === "issue" || subject.kind === "comment") {
     return typeof body.updated_at === "string" ? body.updated_at : null;
   }
   const holder = subject.kind === "pull-request" ? body.head : body.commit;
@@ -39,7 +39,9 @@ export function createGitHubSubjectProbe(
         ? `${base}/pulls/${subject.number}`
         : subject.kind === "issue"
           ? `${base}/issues/${subject.number}`
-          : `${base}/branches/${encodeURIComponent(subject.name)}`;
+          : subject.kind === "comment"
+            ? `${base}/issues/comments/${subject.id}`
+            : `${base}/branches/${encodeURIComponent(subject.name)}`;
     try {
       const response = await request(url, {
         headers: {

@@ -7644,7 +7644,7 @@
       "post": {
         "operationId": "recordOwnerDecision",
         "summary": "Record the owner's decision on one card",
-        "description": "Records approve, request-changes or reject for one card. Requires the service token (or the OIDC owner) and, separately, the approval token in the body. The server re-checks everything at click time: the card's digest must equal expectedDigest (409 if the card changed), the request must not have expired, approval needs a READY card with no missing prerequisite or unmet dependency, a high-risk card needs its own typed confirmation phrase, and before an approval is recorded every subject of the card (pull request head, issue last-updated time, branch head) is checked live; a changed subject is refused with 409 and one that cannot be checked with 503. An approval whose execution is still indeterminate cannot be withdrawn until the outcome is reported. A repeat of the same idempotencyKey and request returns the original record with replayed true; the same key with a different request is refused. Recording a decision appends one hash-chained audit record. It executes nothing: ToolAction approval, CI, review, credential and deployment gates remain authoritative for the work itself.",
+        "description": "Records approve, request-changes or reject for one card. Requires the service token (or the OIDC owner) and, separately, the approval token in the body. The server re-checks everything at click time: the card's digest must equal expectedDigest (409 if the card changed), the request must not have expired, approval needs a READY card with no missing prerequisite or unmet dependency, a high-risk card needs its own typed confirmation phrase, and before an approval is recorded every subject and every piece of evidence on the card (pull request head, issue or comment last-updated time, branch head) is checked live; anything changed is refused with 409 and anything that cannot be checked, including deleted evidence, with 503. An approval whose execution is still indeterminate cannot be withdrawn until the outcome is reported. A repeat of the same idempotencyKey and request returns the original record with replayed true; the same key with a different request is refused. Recording a decision appends one hash-chained audit record. It executes nothing: ToolAction approval, CI, review, credential and deployment gates remain authoritative for the work itself.",
         "tags": ["Owner Decisions"],
         "parameters": [
           {
@@ -7721,7 +7721,7 @@
       "post": {
         "operationId": "reportOwnerDecisionExecution",
         "summary": "Report what happened when approved work was carried out",
-        "description": "Appends an execution report (executed, failed or indeterminate) to an APPROVED card so the queue can show the result. The work itself is done elsewhere through its own governed path; this endpoint runs nothing. An indeterminate report may later be resolved; executed and failed are final for that approval. Refused with 503 whenever the queue is read-only. Idempotent on idempotencyKey.",
+        "description": "Appends an execution report (executed, failed or indeterminate) to an APPROVED card so the queue can show the result. The work itself is done elsewhere through its own governed path; this endpoint runs nothing. An indeterminate report may later be resolved, including after the request has expired; executed and failed are final for that approval. Refused with 503 whenever the queue is read-only. Idempotent on idempotencyKey.",
         "tags": ["Owner Decisions"],
         "parameters": [
           {
@@ -15197,7 +15197,7 @@
         "properties": {
           "kind": {
             "type": "string",
-            "enum": ["pull-request", "issue", "branch"]
+            "enum": ["pull-request", "issue", "branch", "comment"]
           },
           "number": {
             "type": "integer",
@@ -15205,6 +15205,16 @@
           },
           "name": {
             "type": "string"
+          },
+          "id": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Comment id."
+          },
+          "on": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "The issue or pull request a comment is on."
           },
           "revision": {
             "type": "string"
@@ -15286,17 +15296,17 @@
           },
           "evidence": {
             "type": "array",
+            "description": "Proof, each pinned to a revision. An empty list makes the card NOT_READY.",
             "items": {
               "type": "object",
               "additionalProperties": false,
-              "required": ["label", "url"],
+              "required": ["label", "pin"],
               "properties": {
                 "label": {
                   "type": "string"
                 },
-                "url": {
-                  "type": "string",
-                  "format": "uri"
+                "pin": {
+                  "$ref": "#/components/schemas/OwnerDecisionSubject"
                 }
               }
             }
@@ -15319,7 +15329,14 @@
       "OwnerDecisionCard": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["entry", "actionDigest", "status", "blockedBy", "supersededDecisions"],
+        "required": [
+          "entry",
+          "actionDigest",
+          "status",
+          "blockedBy",
+          "links",
+          "supersededDecisions"
+        ],
         "properties": {
           "entry": {
             "$ref": "#/components/schemas/OwnerDecisionEntry"
@@ -15344,6 +15361,54 @@
             "type": "array",
             "items": {
               "type": "string"
+            }
+          },
+          "links": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["subjects", "evidence"],
+            "description": "Where each subject and each piece of proof can be read, derived from its pin.",
+            "properties": {
+              "subjects": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["label", "url", "revision"],
+                  "properties": {
+                    "label": {
+                      "type": "string"
+                    },
+                    "url": {
+                      "type": "string",
+                      "format": "uri"
+                    },
+                    "revision": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "evidence": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["label", "url", "revision"],
+                  "properties": {
+                    "label": {
+                      "type": "string"
+                    },
+                    "url": {
+                      "type": "string",
+                      "format": "uri"
+                    },
+                    "revision": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
             }
           },
           "confirmationPhrase": {

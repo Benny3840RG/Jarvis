@@ -27,15 +27,28 @@
       "evidence": [
         {
           "label": "Commissioning evidence and gaps (ledger comment on #697)",
-          "url": "https://github.com/Benny3840RG/Jarvis/issues/697#issuecomment-6243177909"
+          "pin": {
+            "kind": "comment",
+            "id": 6243177909,
+            "on": 697,
+            "revision": "2026-10-17T23:38:03Z"
+          }
         },
         {
           "label": "Issue #294",
-          "url": "https://github.com/Benny3840RG/Jarvis/issues/294"
+          "pin": {
+            "kind": "issue",
+            "number": 294,
+            "revision": "2026-10-17T23:38:10Z"
+          }
         },
         {
           "label": "Issue #297",
-          "url": "https://github.com/Benny3840RG/Jarvis/issues/297"
+          "pin": {
+            "kind": "issue",
+            "number": 297,
+            "revision": "2026-10-17T23:38:10Z"
+          }
         }
       ],
       "missingPrerequisites": [
@@ -67,11 +80,20 @@
       "evidence": [
         {
           "label": "Pull request #765",
-          "url": "https://github.com/Benny3840RG/Jarvis/pull/765"
+          "pin": {
+            "kind": "pull-request",
+            "number": 765,
+            "revision": "8b59c61a400477091598b3436dbe21848d9883e7"
+          }
         },
         {
           "label": "Independent review of this exact commit: pass, no findings",
-          "url": "https://github.com/Benny3840RG/Jarvis/pull/765#issuecomment-6808894057"
+          "pin": {
+            "kind": "comment",
+            "id": 6808894057,
+            "on": 765,
+            "revision": "2026-11-11T22:45:02Z"
+          }
         }
       ],
       "missingPrerequisites": [],
@@ -98,11 +120,19 @@
       "evidence": [
         {
           "label": "Issue #697",
-          "url": "https://github.com/Benny3840RG/Jarvis/issues/697"
+          "pin": {
+            "kind": "issue",
+            "number": 697,
+            "revision": "2026-11-10T12:37:40Z"
+          }
         },
         {
           "label": "Pull request #765",
-          "url": "https://github.com/Benny3840RG/Jarvis/pull/765"
+          "pin": {
+            "kind": "pull-request",
+            "number": 765,
+            "revision": "8b59c61a400477091598b3436dbe21848d9883e7"
+          }
         }
       ],
       "missingPrerequisites": ["The recovery driver is not merged."],
@@ -129,11 +159,19 @@
       "evidence": [
         {
           "label": "Issue #567",
-          "url": "https://github.com/Benny3840RG/Jarvis/issues/567"
+          "pin": {
+            "kind": "issue",
+            "number": 567,
+            "revision": "2026-11-10T12:45:52Z"
+          }
         },
         {
           "label": "Issue #697",
-          "url": "https://github.com/Benny3840RG/Jarvis/issues/697"
+          "pin": {
+            "kind": "issue",
+            "number": 697,
+            "revision": "2026-11-10T12:37:40Z"
+          }
         }
       ],
       "missingPrerequisites": [],
@@ -160,7 +198,11 @@
       "evidence": [
         {
           "label": "Issue #567",
-          "url": "https://github.com/Benny3840RG/Jarvis/issues/567"
+          "pin": {
+            "kind": "issue",
+            "number": 567,
+            "revision": "2026-11-10T12:45:52Z"
+          }
         }
       ],
       "missingPrerequisites": [
@@ -191,7 +233,11 @@
       "evidence": [
         {
           "label": "Issue #697",
-          "url": "https://github.com/Benny3840RG/Jarvis/issues/697"
+          "pin": {
+            "kind": "issue",
+            "number": 697,
+            "revision": "2026-11-10T12:37:40Z"
+          }
         }
       ],
       "missingPrerequisites": [
@@ -220,11 +266,19 @@
       "evidence": [
         {
           "label": "Pull request #800",
-          "url": "https://github.com/Benny3840RG/Jarvis/pull/800"
+          "pin": {
+            "kind": "pull-request",
+            "number": 800,
+            "revision": "68b8cb190e3e258411b4290c2bee531c432f454c"
+          }
         },
         {
           "label": "Issue #779",
-          "url": "https://github.com/Benny3840RG/Jarvis/issues/779"
+          "pin": {
+            "kind": "issue",
+            "number": 779,
+            "revision": "2026-11-09T14:07:38Z"
+          }
         }
       ],
       "missingPrerequisites": ["An independent review of this pull request has not been done."],
@@ -256,11 +310,19 @@
       "evidence": [
         {
           "label": "Pull request #800",
-          "url": "https://github.com/Benny3840RG/Jarvis/pull/800"
+          "pin": {
+            "kind": "pull-request",
+            "number": 800,
+            "revision": "68b8cb190e3e258411b4290c2bee531c432f454c"
+          }
         },
         {
           "label": "Issue #779",
-          "url": "https://github.com/Benny3840RG/Jarvis/issues/779"
+          "pin": {
+            "kind": "issue",
+            "number": 779,
+            "revision": "2026-11-09T14:07:38Z"
+          }
         }
       ],
       "missingPrerequisites": [],
@@ -292,11 +354,19 @@
       "evidence": [
         {
           "label": "Pull request #800",
-          "url": "https://github.com/Benny3840RG/Jarvis/pull/800"
+          "pin": {
+            "kind": "pull-request",
+            "number": 800,
+            "revision": "68b8cb190e3e258411b4290c2bee531c432f454c"
+          }
         },
         {
           "label": "Issue #779",
-          "url": "https://github.com/Benny3840RG/Jarvis/issues/779"
+          "pin": {
+            "kind": "issue",
+            "number": 779,
+            "revision": "2026-11-09T14:07:38Z"
+          }
         }
       ],
       "missingPrerequisites": [],
@@ -328,11 +398,19 @@
       "evidence": [
         {
           "label": "Pull request #800",
-          "url": "https://github.com/Benny3840RG/Jarvis/pull/800"
+          "pin": {
+            "kind": "pull-request",
+            "number": 800,
+            "revision": "68b8cb190e3e258411b4290c2bee531c432f454c"
+          }
         },
         {
           "label": "Issue #779",
-          "url": "https://github.com/Benny3840RG/Jarvis/issues/779"
+          "pin": {
+            "kind": "issue",
+            "number": 779,
+            "revision": "2026-11-09T14:07:38Z"
+          }
         }
       ],
       "missingPrerequisites": [],
@@ -359,11 +437,19 @@
       "evidence": [
         {
           "label": "Pull request #800",
-          "url": "https://github.com/Benny3840RG/Jarvis/pull/800"
+          "pin": {
+            "kind": "pull-request",
+            "number": 800,
+            "revision": "68b8cb190e3e258411b4290c2bee531c432f454c"
+          }
         },
         {
           "label": "Issue #779",
-          "url": "https://github.com/Benny3840RG/Jarvis/issues/779"
+          "pin": {
+            "kind": "issue",
+            "number": 779,
+            "revision": "2026-11-09T14:07:38Z"
+          }
         }
       ],
       "missingPrerequisites": [
@@ -393,7 +479,11 @@
       "evidence": [
         {
           "label": "Issue #779",
-          "url": "https://github.com/Benny3840RG/Jarvis/issues/779"
+          "pin": {
+            "kind": "issue",
+            "number": 779,
+            "revision": "2026-11-09T14:07:38Z"
+          }
         }
       ],
       "missingPrerequisites": ["No passing adversarial evidence run exists."],
@@ -430,7 +520,11 @@
       "evidence": [
         {
           "label": "Issue #697",
-          "url": "https://github.com/Benny3840RG/Jarvis/issues/697"
+          "pin": {
+            "kind": "issue",
+            "number": 697,
+            "revision": "2026-11-10T12:37:40Z"
+          }
         }
       ],
       "missingPrerequisites": [
@@ -464,7 +558,11 @@
       "evidence": [
         {
           "label": "Issue #306",
-          "url": "https://github.com/Benny3840RG/Jarvis/issues/306"
+          "pin": {
+            "kind": "issue",
+            "number": 306,
+            "revision": "2026-10-06T12:08:21Z"
+          }
         }
       ],
       "missingPrerequisites": [
@@ -497,7 +595,11 @@
       "evidence": [
         {
           "label": "Issue #307",
-          "url": "https://github.com/Benny3840RG/Jarvis/issues/307"
+          "pin": {
+            "kind": "issue",
+            "number": 307,
+            "revision": "2026-10-31T05:29:26Z"
+          }
         }
       ],
       "missingPrerequisites": [
@@ -530,7 +632,11 @@
       "evidence": [
         {
           "label": "Issue #324",
-          "url": "https://github.com/Benny3840RG/Jarvis/issues/324"
+          "pin": {
+            "kind": "issue",
+            "number": 324,
+            "revision": "2026-10-06T12:23:17Z"
+          }
         }
       ],
       "missingPrerequisites": [

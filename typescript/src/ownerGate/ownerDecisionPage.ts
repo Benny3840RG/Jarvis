@@ -101,18 +101,19 @@ const SCRIPT = `
         row(details, "Exact scope", entry.scope);
         row(details, "Environment", entry.environment);
         if (entry.risk === "high") row(details, "Risk", el("span", "High: " + entry.highRiskKind + ". Needs its own typed confirmation.", "risk"));
-        row(details, "Bound to", bullets(entry.subjects.map((subject) => (subject.kind === "branch" ? "branch " + subject.name : (subject.kind === "issue" ? "issue #" : "pull request #") + subject.number) + (subject.kind === "issue" ? " as last updated " : " at ") + subject.revision)));
-        row(details, "Undo", entry.rollback);
-        row(details, "Expires", entry.expiresAt);
-        row(details, "Evidence", bullets(entry.evidence.map((item) => {
+        const linkList = (items) => bullets(items.map((item) => {
           const li = el("li");
           const link = el("a", item.label);
           link.href = item.url;
           link.rel = "noreferrer noopener";
           link.target = "_blank";
-          li.append(link);
+          li.append(link, " (pinned at " + item.revision + ")");
           return li;
-        })));
+        }));
+        row(details, "Bound to", linkList(card.links.subjects));
+        row(details, "Undo", entry.rollback);
+        row(details, "Expires", entry.expiresAt);
+        row(details, "Evidence", card.links.evidence.length > 0 ? linkList(card.links.evidence) : "None attached.");
         if (card.blockedBy.length > 0) row(details, "Still missing", bullets(card.blockedBy));
         if (card.decision) row(details, "Your decision", card.decision.choice + " at " + card.decision.recordedAt + (card.decision.note ? " (" + card.decision.note + ")" : ""));
         if (card.execution) row(details, "Execution", (card.execution.status === "indeterminate" ? "UNRESOLVED: it is not known whether this ran" : card.execution.status) + " at " + card.execution.recordedAt + (card.execution.reference ? " (" + card.execution.reference + ")" : ""));

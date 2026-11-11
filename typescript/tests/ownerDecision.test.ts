@@ -36,7 +36,7 @@ function rawEntry(id: string, overrides: Record<string, unknown> = {}): Record<s
     risk: "standard",
     subjects: [SUBJECT],
     dependsOn: [],
-    evidence: [{ label: "Issue", url: "https://github.com/example/repo/issues/1" }],
+    evidence: [{ label: "Issue", pin: SUBJECT }],
     missingPrerequisites: [],
     rollback: "Undo the thing.",
     expiresAt: "2026-12-01T00:00:00.000Z",
@@ -124,9 +124,16 @@ test("a malformed manifest is rejected whole", () => {
     ],
     ["production at standard risk", { environment: "production" }],
     ["high risk without a kind", { risk: "high" }],
+    ["evidence given as a bare link", { evidence: [{ label: "x", url: "https://evil.example/" }] }],
     [
-      "evidence outside the repository",
-      { evidence: [{ label: "x", url: "https://evil.example/" }] },
+      "evidence pinned to a branch",
+      {
+        evidence: [{ label: "x", pin: { kind: "branch", name: "main", revision: "a".repeat(40) } }],
+      },
+    ],
+    [
+      "comment without its issue",
+      { evidence: [{ label: "x", pin: { kind: "comment", id: 5, revision: REVISION } }] },
     ],
     ["unknown dependency", { dependsOn: ["missing"] }],
     ["self dependency", { dependsOn: ["a"] }],
@@ -287,6 +294,53 @@ test("an approval lapses when the request expires before execution", async () =>
   );
 });
 
+test("an execution left unresolved can still be resolved after the request expires", async () => {
+  for (const outcome of ["executed", "failed"] as const) {
+    const manifest = manifestOf(rawEntry("a"));
+    const { service, advance } = serviceOf(manifest);
+    const expectedDigest = digestOf(manifest, "a");
+    const report = (status: "executed" | "failed" | "indeterminate") =>
+      service.reportExecution({
+        decisionId: "a",
+        expectedDigest,
+        status,
+        idempotencyKey: key(),
+        actor: "operator",
+      });
+    await service.decide({
+      decisionId: "a",
+      expectedDigest,
+      choice: "approve",
+      idempotencyKey: key(),
+      actor: "owner",
+    });
+    await report("indeterminate");
+    advance(30 * 24 * 60 * 60 * 1000);
+    const waiting = (await service.inspect()).cards[0]!;
+    assert.equal(waiting.status, "EXPIRED");
+    assert.equal(waiting.execution?.status, "indeterminate");
+    const resolved = await report(outcome);
+    assert.equal(resolved.card.status, outcome === "executed" ? "EXECUTED" : "EXPIRED");
+    assert.equal(resolved.card.execution?.status, outcome);
+    // Resolved once; an expired approval admits nothing further.
+    await assert.rejects(
+      () => report("executed"),
+      refusal(outcome === "executed" ? "already-executed" : "not-approved"),
+    );
+    await assert.rejects(
+      () =>
+        service.decide({
+          decisionId: "a",
+          expectedDigest,
+          choice: "approve",
+          idempotencyKey: key(),
+          actor: "owner",
+        }),
+      refusal(outcome === "executed" ? "already-decided" : "expired"),
+    );
+  }
+});
+
 test("missing evidence and unmet dependencies block approval but not rejection", async () => {
   const manifest = manifestOf(
     rawEntry("a", { missingPrerequisites: ["No evidence run exists."] }),
@@ -403,6 +457,49 @@ test("every subject of a card is checked, and one changed subject refuses the ap
   );
   assert.deepEqual(asked, ["issue", "pull-request"]);
   assert.equal((await ledger.read()).length, 0);
+});
+
+test("changed, deleted or missing proof blocks approval", async () => {
+  const proof = { kind: "comment", id: 55, on: 1, revision: "2026-11-03T00:00:00Z" } as const;
+  const manifest = manifestOf(
+    rawEntry("a", { evidence: [{ label: "Review comment", pin: proof }] }),
+    rawEntry("bare", { evidence: [] }),
+  );
+  const request = {
+    decisionId: "a",
+    expectedDigest: digestOf(manifest, "a"),
+    choice: "approve" as const,
+    actor: "owner",
+  };
+  for (const [name, answer, code] of [
+    ["edited", "2026-11-04T00:00:00Z", "subject-changed"],
+    ["deleted or unreachable", null, "unavailable"],
+  ] as const) {
+    const { service, ledger } = serviceOf(manifest, {
+      subjectProbe: async (subject) => (subject.kind === "comment" ? answer : subject.revision),
+    });
+    await assert.rejects(
+      () => service.decide({ ...request, idempotencyKey: key() }),
+      (error: unknown) =>
+        error instanceof OwnerDecisionRefusal &&
+        error.code === code &&
+        /comment 55 on #1/.test(error.message),
+      name,
+    );
+    assert.equal((await ledger.read()).length, 0, name);
+  }
+  const { service } = serviceOf(manifest);
+  const cards = (await service.inspect()).cards;
+  assert.equal(
+    cards[0]!.links.evidence[0]!.url,
+    "https://github.com/example/repo/issues/1#issuecomment-55",
+  );
+  assert.equal(cards[1]!.status, "NOT_READY");
+  assert.deepEqual(cards[1]!.blockedBy, ["No evidence is attached to this card."]);
+  assert.equal(
+    (await service.decide({ ...request, idempotencyKey: key() })).card.status,
+    "APPROVED",
+  );
 });
 
 test("revoked approval authority makes the queue read-only for every write", async () => {
@@ -696,6 +793,51 @@ test("a record written just before a crash, ahead of the checkpoint, is kept", a
       queue.cards.map((card) => card.status),
       ["APPROVED", "APPROVED"],
     );
+  } finally {
+    await fs.rm(world.root, { recursive: true, force: true });
+  }
+});
+
+test("repeated interrupted appends never wedge a valid ledger", async () => {
+  const world = await fileWorld();
+  try {
+    await world.open().startLedger();
+    const genesis = await fs.readFile(world.checkpoint, "utf8");
+    // Each append "crashes" before its checkpoint lands: put the old one back.
+    await world.decide("a");
+    await fs.writeFile(world.checkpoint, genesis);
+    assert.equal((await world.open().inspect()).ledgerState, "ready");
+    const beforeSecond = world.open();
+    await world.decide("b", beforeSecond);
+    const afterFirstCatchUp = JSON.parse(await fs.readFile(world.checkpoint, "utf8")) as {
+      count: number;
+    };
+    assert.equal(afterFirstCatchUp.count, 2);
+    // Simulate the second crash: the checkpoint is the caught-up one (count 1).
+    const records = (await fs.readFile(world.file, "utf8")).trimEnd().split("\n");
+    const first = JSON.parse(records[0]!) as { hash: string };
+    await fs.writeFile(world.checkpoint, JSON.stringify({ count: 1, hash: first.hash }));
+    const queue = await world.open().inspect();
+    assert.equal(queue.ledgerState, "ready");
+    assert.deepEqual(
+      queue.cards.map((card) => card.status),
+      ["APPROVED", "APPROVED"],
+    );
+  } finally {
+    await fs.rm(world.root, { recursive: true, force: true });
+  }
+});
+
+test("a ledger start interrupted before its checkpoint can be resumed", async () => {
+  const world = await fileWorld();
+  try {
+    await fs.mkdir(path.dirname(world.file), { recursive: true });
+    await fs.writeFile(world.file, "", { mode: 0o600 });
+    const service = world.open();
+    assert.equal((await service.inspect()).ledgerState, "not-started");
+    await service.startLedger();
+    assert.equal((await service.inspect()).ledgerState, "ready");
+    assert.equal((await world.decide("a", service)).card.status, "APPROVED");
   } finally {
     await fs.rm(world.root, { recursive: true, force: true });
   }

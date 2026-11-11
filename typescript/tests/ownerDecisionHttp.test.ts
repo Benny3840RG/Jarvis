@@ -58,7 +58,9 @@ const MANIFEST = parseOwnerDecisionManifest({
       risk: "standard",
       subjects: [{ kind: "issue", number: 1, revision: "2026-11-01T00:00:00Z" }],
       dependsOn: [],
-      evidence: [{ label: "Issue", url: "https://github.com/example/repo/issues/1" }],
+      evidence: [
+        { label: "Issue", pin: { kind: "issue", number: 1, revision: "2026-11-01T00:00:00Z" } },
+      ],
       missingPrerequisites: [],
       rollback: "Reopen the issue.",
       expiresAt: "2999-01-01T00:00:00.000Z",
@@ -75,7 +77,12 @@ const MANIFEST = parseOwnerDecisionManifest({
       highRiskKind: "remote-exposure",
       subjects: [{ kind: "pull-request", number: 2, revision: "b".repeat(40) }],
       dependsOn: [],
-      evidence: [],
+      evidence: [
+        {
+          label: "Review",
+          pin: { kind: "comment", id: 9, on: 2, revision: "2026-11-01T00:00:00Z" },
+        },
+      ],
       missingPrerequisites: [],
       rollback: "Rebind to loopback.",
       expiresAt: "2999-01-01T00:00:00.000Z",

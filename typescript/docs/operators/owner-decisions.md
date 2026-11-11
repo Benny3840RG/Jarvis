@@ -33,7 +33,9 @@ request. Each entry names:
   comment or edit on the issue (new evidence, a changed requirement) makes the
   card stale;
 - the proposed action, consequence, scope, environment and how to undo it;
-- evidence links, which must point into this repository on GitHub;
+- `evidence`: each piece of proof as a label and a pin (an issue, a pull
+  request, or a specific comment with its last-updated time). The link shown on
+  the card is derived from the pin. A card with no evidence is `NOT_READY`;
 - `missingPrerequisites`: what is still missing before the owner can usefully
   decide. A card with anything here is `NOT_READY`, so missing commissioning
   evidence is never presented as waiting on the owner;
@@ -73,11 +75,11 @@ showed:
 4. For a high-risk card (production deployment, remote exposure, hardware
    actuation, destructive action, customer-facing send): a typed confirmation
    of the form `APPROVE <card id>`. There is no approve-all.
-5. For an approval, every subject live against GitHub: the pull request head,
-   the issue's last-updated time, the branch head. If any has changed the
-   approval is refused; if any cannot be checked (GitHub unreachable, rate
-   limited) the approval is also refused. Reject and Request changes do not
-   need the live check.
+5. For an approval, every subject and every piece of evidence live against
+   GitHub: the pull request head, the issue's or comment's last-updated time,
+   the branch head. If any has changed the approval is refused; if any cannot
+   be checked (deleted evidence, GitHub unreachable, rate limited) the approval
+   is also refused. Reject and Request changes do not need the live check.
 6. The idempotency key. A double click repeats the same key and returns the
    first record; nothing is written twice. A second, different decision on a
    settled card is refused.
@@ -86,7 +88,9 @@ An approval can be withdrawn with Reject or Request changes until it is
 executed, with one exception: while an execution is reported `indeterminate`
 the approval cannot be withdrawn, because the work may already have happened.
 Report the real outcome first. An execution report stays on the card after a
-later rejection.
+later rejection. An `indeterminate` execution can still be resolved to
+`executed` or `failed` after the request has expired; nothing else can be
+recorded against an expired approval.
 
 The live check reads public GitHub endpoints for the repository named in the
 manifest and sends nothing but the request. Set
@@ -114,7 +118,10 @@ read-only, shows no recorded decisions and records nothing when:
 - either file is not a regular file with mode `0600`, or is a symlink.
 
 A ledger that is exactly one record ahead of its checkpoint is accepted: that
-is what a crash between the append and the checkpoint write leaves behind.
+is what a crash between the append and the checkpoint write leaves behind. The
+next write brings the checkpoint level before appending, so repeated crashes
+cannot leave it further behind. An empty ledger file with no checkpoint is a
+start that was interrupted; "Start a new ledger" completes it.
 
 ### Starting the ledger, and restoring a backup
 

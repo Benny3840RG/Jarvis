@@ -18,6 +18,7 @@ import {
   LEDGER_GENESIS_HASH,
   ownerDecisionRecordHash,
   parseOwnerDecisionManifest,
+  pinsOf,
   subjectLabel,
   type OwnerDecisionCard,
   type OwnerDecisionChoice,
@@ -170,7 +171,9 @@ export class JsonLinesOwnerDecisionLedger implements OwnerDecisionLedger {
       this.readPrivate(this.filePath),
       this.readCheckpoint(),
     ]);
-    if (raw === null && checkpoint === null) {
+    // An empty ledger file with no checkpoint is a start that was interrupted
+    // after creating the file. Nothing was ever recorded; start() resumes it.
+    if ((raw === null || raw === "") && checkpoint === null) {
       throw new OwnerDecisionLedgerError(
         "not-started",
         "No decision ledger exists in this data directory.",
@@ -224,6 +227,16 @@ export class JsonLinesOwnerDecisionLedger implements OwnerDecisionLedger {
   }
 
   async append(record: OwnerDecisionRecord): Promise<void> {
+    // If an earlier append died before its checkpoint was written, the file is
+    // one valid record ahead. Bring the checkpoint level first; otherwise a
+    // second interruption would leave it two behind, which read() refuses.
+    const existing = await this.read();
+    const last = existing.at(-1);
+    await this.writeCheckpoint(
+      last === undefined
+        ? { count: 0, hash: LEDGER_GENESIS_HASH }
+        : { count: existing.length, hash: last.hash },
+    );
     const handle = await this.openPrivate(this.filePath, constants.O_WRONLY | constants.O_APPEND);
     try {
       await handle.writeFile(`${JSON.stringify(record)}\n`, "utf8");
@@ -236,21 +249,26 @@ export class JsonLinesOwnerDecisionLedger implements OwnerDecisionLedger {
 
   async start(): Promise<void> {
     await fs.mkdir(path.dirname(this.filePath), { recursive: true });
-    for (const existing of [this.filePath, this.checkpointPath]) {
-      if ((await fs.lstat(existing).catch(() => null)) !== null) {
-        throw new Error("A decision ledger file already exists; it is never replaced.");
-      }
+    if ((await fs.lstat(this.checkpointPath).catch(() => null)) !== null) {
+      throw new Error("A decision ledger checkpoint already exists; it is never replaced.");
     }
-    const handle = await fs.open(
-      this.filePath,
-      constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW,
-      0o600,
-    );
-    try {
-      await handle.chmod(0o600);
-      await handle.sync();
-    } finally {
-      await handle.close();
+    // Resume a start that created the empty file and died before the checkpoint.
+    const leftover = await this.readPrivate(this.filePath);
+    if (leftover !== null && leftover !== "") {
+      throw new Error("A decision ledger already exists; it is never replaced.");
+    }
+    if (leftover === null) {
+      const handle = await fs.open(
+        this.filePath,
+        constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW,
+        0o600,
+      );
+      try {
+        await handle.chmod(0o600);
+        await handle.sync();
+      } finally {
+        await handle.close();
+      }
     }
     await this.writeCheckpoint({ count: 0, hash: LEDGER_GENESIS_HASH });
   }
@@ -500,9 +518,9 @@ export class OwnerDecisionService {
     return { card: updated, recordId: record.recordId, replayed: false };
   }
 
-  /** Every subject must still be at the revision the card was written against. */
+  /** Every subject and every piece of proof must be exactly as the card pinned it. */
   private async assertSubjectsUnchanged(card: OwnerDecisionCard): Promise<void> {
-    for (const subject of card.entry.subjects) {
+    for (const subject of pinsOf(card.entry)) {
       const live = this.subjectProbe === undefined ? null : await this.subjectProbe(subject);
       if (live === null) {
         throw new OwnerDecisionRefusal(
@@ -626,7 +644,13 @@ export class OwnerDecisionService {
           "An execution result is already final for this approval.",
         );
       }
-      if (card.status !== "APPROVED") {
+      // An unresolved execution can always be resolved, even after the request
+      // expired: the work may have run while the approval was still valid.
+      const resolvesUnknown =
+        card.status === "EXPIRED" &&
+        card.decision?.choice === "approve" &&
+        card.execution?.status === "indeterminate";
+      if (card.status !== "APPROVED" && !resolvesUnknown) {
         throw new OwnerDecisionRefusal(
           "not-approved",
           `Execution can only be reported for an approved decision; this card is ${card.status}.`,

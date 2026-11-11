@@ -39,7 +39,11 @@ export type HighRiskKind = (typeof HIGH_RISK_KINDS)[number];
 export const EXECUTION_STATUSES = ["executed", "failed", "indeterminate"] as const;
 export type OwnerExecutionStatus = (typeof EXECUTION_STATUSES)[number];
 
-export type OwnerDecisionEvidence = Readonly<{ label: string; url: string }>;
+/**
+ * One piece of proof, pinned like a subject so an edited or deleted proof
+ * cannot be approved against. Its link is derived from the pin, never typed.
+ */
+export type OwnerDecisionEvidence = Readonly<{ label: string; pin: OwnerDecisionSubject }>;
 
 /**
  * One thing a decision is about, pinned to the exact revision the card was
@@ -51,11 +55,34 @@ export type OwnerDecisionSubject = Readonly<
   | { kind: "pull-request"; number: number; revision: string }
   | { kind: "issue"; number: number; revision: string }
   | { kind: "branch"; name: string; revision: string }
+  /** A comment on issue or pull request `on`, pinned to its last-updated time. */
+  | { kind: "comment"; id: number; on: number; revision: string }
 >;
 
 export function subjectLabel(subject: OwnerDecisionSubject): string {
   if (subject.kind === "branch") return `branch ${subject.name}`;
+  if (subject.kind === "comment") return `comment ${subject.id} on #${subject.on}`;
   return `${subject.kind === "issue" ? "issue" : "pull request"} #${subject.number}`;
+}
+
+/** The page a subject or proof lives at. */
+export function subjectUrl(repository: string, subject: OwnerDecisionSubject): string {
+  const base = `https://github.com/${repository}`;
+  if (subject.kind === "branch") return `${base}/tree/${subject.name}`;
+  if (subject.kind === "pull-request") return `${base}/pull/${subject.number}`;
+  if (subject.kind === "issue") return `${base}/issues/${subject.number}`;
+  return `${base}/issues/${subject.on}#issuecomment-${subject.id}`;
+}
+
+/** Everything that must be unchanged for a card to be approved: subjects and proof. */
+export function pinsOf(entry: OwnerDecisionEntry): OwnerDecisionSubject[] {
+  const seen = new Set<string>();
+  return [...entry.subjects, ...entry.evidence.map((item) => item.pin)].filter((pin) => {
+    const key = JSON.stringify(pin);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 export type OwnerDecisionEntry = Readonly<{
@@ -124,13 +151,15 @@ const ISO_SECONDS_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
 
 function parseSubject(raw: unknown, field: string): OwnerDecisionSubject {
   if (!isRecord(raw)) throw new OwnerDecisionManifestError(`${field} must be an object.`);
-  const kind = oneOf(raw.kind, ["pull-request", "issue", "branch"] as const, `${field}.kind`);
+  const kind = oneOf(
+    raw.kind,
+    ["pull-request", "issue", "branch", "comment"] as const,
+    `${field}.kind`,
+  );
   const revision = text(raw.revision, `${field}.revision`, 40);
-  if (kind === "issue") {
+  if (kind === "issue" || kind === "comment") {
     if (!ISO_SECONDS_PATTERN.test(revision) || !Number.isFinite(Date.parse(revision))) {
-      throw new OwnerDecisionManifestError(
-        `${field}.revision must be the issue's last-updated time.`,
-      );
+      throw new OwnerDecisionManifestError(`${field}.revision must be a last-updated time.`);
     }
   } else if (!SHA_PATTERN.test(revision)) {
     throw new OwnerDecisionManifestError(`${field}.revision must be a full commit SHA.`);
@@ -143,6 +172,16 @@ function parseSubject(raw: unknown, field: string): OwnerDecisionSubject {
     }
     return { kind, name, revision };
   }
+  const positive = (value: unknown, name: string): number => {
+    if (!Number.isInteger(value) || (value as number) <= 0) {
+      throw new OwnerDecisionManifestError(`${field}.${name} must be a positive integer.`);
+    }
+    return value as number;
+  };
+  if (kind === "comment") {
+    exactKeys(raw, ["kind", "id", "on", "revision"], field);
+    return { kind, id: positive(raw.id, "id"), on: positive(raw.on, "on"), revision };
+  }
   exactKeys(raw, ["kind", "number", "revision"], field);
   if (!Number.isInteger(raw.number) || (raw.number as number) <= 0) {
     throw new OwnerDecisionManifestError(`${field}.number must be a positive integer.`);
@@ -150,7 +189,7 @@ function parseSubject(raw: unknown, field: string): OwnerDecisionSubject {
   return { kind, number: raw.number as number, revision };
 }
 
-function parseEntry(raw: unknown, repository: string, index: number): OwnerDecisionEntry {
+function parseEntry(raw: unknown, index: number): OwnerDecisionEntry {
   const field = `decisions[${index}]`;
   if (!isRecord(raw)) throw new OwnerDecisionManifestError(`${field} must be an object.`);
   exactKeys(
@@ -212,12 +251,12 @@ function parseEntry(raw: unknown, repository: string, index: number): OwnerDecis
     const evidenceField = `${field}.evidence[${evidenceIndex}]`;
     if (!isRecord(item))
       throw new OwnerDecisionManifestError(`${evidenceField} must be an object.`);
-    exactKeys(item, ["label", "url"], evidenceField);
-    const url = text(item.url, `${evidenceField}.url`, 400);
-    if (!url.startsWith(`https://github.com/${repository}/`)) {
-      throw new OwnerDecisionManifestError(`${evidenceField}.url must point into ${repository}.`);
+    exactKeys(item, ["label", "pin"], evidenceField);
+    const pin = parseSubject(item.pin, `${evidenceField}.pin`);
+    if (pin.kind === "branch") {
+      throw new OwnerDecisionManifestError(`${evidenceField}.pin cannot be a branch.`);
     }
-    return { label: text(item.label, `${evidenceField}.label`, 200), url };
+    return { label: text(item.label, `${evidenceField}.label`, 200), pin };
   });
   const expiresAt = text(raw.expiresAt, `${field}.expiresAt`, 40);
   if (!Number.isFinite(Date.parse(expiresAt)) || new Date(expiresAt).toISOString() !== expiresAt) {
@@ -254,7 +293,7 @@ export function parseOwnerDecisionManifest(raw: unknown): OwnerDecisionManifest 
   if (!Array.isArray(raw.decisions)) {
     throw new OwnerDecisionManifestError("decisions must be a list.");
   }
-  const decisions = raw.decisions.map((entry, index) => parseEntry(entry, repository, index));
+  const decisions = raw.decisions.map((entry, index) => parseEntry(entry, index));
   const ids = new Set<string>();
   for (const entry of decisions) {
     if (ids.has(entry.id)) throw new OwnerDecisionManifestError(`Duplicate decision ${entry.id}.`);
@@ -352,6 +391,11 @@ export type OwnerDecisionCard = Readonly<{
   status: OwnerDecisionStatus;
   /** Plain reasons the card is not ready or cannot be approved now. */
   blockedBy: readonly string[];
+  /** Where each subject and each piece of proof can be read. */
+  links: Readonly<{
+    subjects: readonly Readonly<{ label: string; url: string; revision: string }>[];
+    evidence: readonly Readonly<{ label: string; url: string; revision: string }>[];
+  }>;
   /** Present only for high-risk cards. */
   confirmationPhrase?: string;
   decision?: Readonly<{
@@ -397,6 +441,7 @@ export function deriveOwnerDecisionCards(
     const expired = nowMs > Date.parse(entry.expiresAt);
 
     const blockedBy = [...entry.missingPrerequisites];
+    if (entry.evidence.length === 0) blockedBy.push("No evidence is attached to this card.");
     for (const dependencyId of entry.dependsOn) {
       const dependency = derive(byId.get(dependencyId)!);
       if (dependency.status !== "APPROVED" && dependency.status !== "EXECUTED") {
@@ -418,6 +463,18 @@ export function deriveOwnerDecisionCards(
       actionDigest,
       status,
       blockedBy,
+      links: {
+        subjects: entry.subjects.map((subject) => ({
+          label: subjectLabel(subject),
+          url: subjectUrl(manifest.repository, subject),
+          revision: subject.revision,
+        })),
+        evidence: entry.evidence.map((item) => ({
+          label: item.label,
+          url: subjectUrl(manifest.repository, item.pin),
+          revision: item.pin.revision,
+        })),
+      },
       ...(entry.risk === "high" ? { confirmationPhrase: confirmationPhrase(entry) } : {}),
       ...(lastDecision?.decision === undefined
         ? {}

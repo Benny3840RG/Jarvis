@@ -31,11 +31,16 @@ test("the probe reads each kind of subject from its own read-only endpoint", asy
     [`${BASE}/pulls/7`]: { body: { head: { sha: "a".repeat(40) } } },
     [`${BASE}/issues/3`]: { body: { updated_at: "2026-11-01T00:00:00Z" } },
     [`${BASE}/branches/main`]: { body: { commit: { sha: "b".repeat(40) } } },
+    [`${BASE}/issues/comments/55`]: { body: { updated_at: "2026-11-02T00:00:00Z" } },
   });
   const probe = createGitHubSubjectProbe({ repository: "example/repo", fetch: fetcher });
   assert.equal(await probe({ kind: "pull-request", number: 7, revision: "x" }), "a".repeat(40));
   assert.equal(await probe({ kind: "issue", number: 3, revision: "x" }), "2026-11-01T00:00:00Z");
   assert.equal(await probe({ kind: "branch", name: "main", revision: "x" }), "b".repeat(40));
+  assert.equal(
+    await probe({ kind: "comment", id: 55, on: 3, revision: "x" }),
+    "2026-11-02T00:00:00Z",
+  );
   for (const call of calls) {
     assert.equal(call.headers.authorization, undefined);
     assert.equal(call.redirect, "error");
