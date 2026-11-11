@@ -80,6 +80,15 @@ async function createClient(app: NestFastifyApplication): Promise<string> {
   return created.json<{ data: { id: string } }>().data.id;
 }
 
+async function createProperty(app: NestFastifyApplication, clientId: string): Promise<string> {
+  const created = await inject(app, "POST", "/api/v1/properties", {
+    headers: AUTH,
+    payload: { clientId, address: "12 Wattle Road, Emerald" },
+  });
+  assert.equal(created.statusCode, 201);
+  return created.json<{ data: { id: string } }>().data.id;
+}
+
 describe("project HTTP boundary", () => {
   it("requires authentication", async () => {
     const app = await makeApp();
@@ -89,17 +98,18 @@ describe("project HTTP boundary", () => {
   it("creates, lists, gets, updates, and deletes a project", async () => {
     const app = await makeApp();
     const clientId = await createClient(app);
+    const propertyId = await createProperty(app, clientId);
 
     const created = await inject(app, "POST", "/api/v1/projects", {
       headers: AUTH,
-      payload: { clientId, propertyId: "p1", title: "Deck rebuild", status: "active" },
+      payload: { clientId, propertyId, title: "Deck rebuild", status: "active" },
     });
     assert.equal(created.statusCode, 201);
     const project = created.json<{ data: Project }>().data;
     assert.equal(project.title, "Deck rebuild");
     assert.equal(project.status, "active");
     assert.equal(project.clientId, clientId);
-    assert.equal(project.propertyId, "p1");
+    assert.equal(project.propertyId, propertyId);
 
     assert.equal(
       (await inject(app, "GET", "/api/v1/projects", { headers: AUTH })).json<{ count: number }>()

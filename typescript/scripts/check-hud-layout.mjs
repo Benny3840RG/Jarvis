@@ -752,6 +752,42 @@ async function runScenario(cdp, html, fixtureName, viewport, outputDir) {
   }
 }
 
+/**
+ * Retries browser start-up only. A cold runner can take longer than one CDP
+ * timeout to answer its first command; the layout scenarios themselves are
+ * never retried, so a real regression still fails on its first run.
+ */
+export async function startWithRetry(start, { attempts = 3, onRetry } = {}) {
+  let lastError;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      return await start(attempt);
+    } catch (error) {
+      lastError = error;
+      if (attempt < attempts) onRetry?.(error, attempt);
+    }
+  }
+  throw lastError;
+}
+
+/** One failed start-up attempt, with a bounded tail of that attempt's stderr. */
+export function startupFailureRecord(attempt, error, stderr) {
+  return {
+    attempt,
+    error: error instanceof Error ? error.message : String(error),
+    stderr: String(stderr ?? "").slice(-4000),
+  };
+}
+
+async function stopBrowser(child) {
+  if (!child?.pid || child.exitCode !== null || child.signalCode !== null) return;
+  const stopped = new Promise((resolve) => child.once("exit", resolve));
+  child.kill("SIGTERM");
+  const timer = setTimeout(() => child.kill("SIGKILL"), 3000);
+  await stopped;
+  clearTimeout(timer);
+}
+
 async function main() {
   const options = parseArgs(process.argv.slice(2));
   const html = await readFile(options.html);
@@ -768,31 +804,49 @@ async function main() {
   const profile = await mkdtemp(join(tmpdir(), "jarvis-hud-layout-"));
   let child;
   let stderr = "";
+  const startupFailures = [];
   try {
     const executable = await chromePath();
     // Keep the browser's normal sandbox. A restricted host that cannot launch
     // Chrome is a failed prerequisite, never a reason to report a passing gate.
-    child = spawn(
-      executable,
-      [
-        "--headless=new",
-        "--remote-debugging-pipe",
-        "--no-first-run",
-        "--no-default-browser-check",
-        "--disable-background-networking",
-        "--disable-component-update",
-        "--disable-sync",
-        "--metrics-recording-only",
-        `--user-data-dir=${profile}`,
-        "about:blank",
-      ],
-      { stdio: ["ignore", "ignore", "pipe", "pipe", "pipe"] },
+    const { cdp, browser } = await startWithRetry(
+      async (attempt) => {
+        stderr = "";
+        child = spawn(
+          executable,
+          [
+            "--headless=new",
+            "--remote-debugging-pipe",
+            "--no-first-run",
+            "--no-default-browser-check",
+            "--disable-background-networking",
+            "--disable-component-update",
+            "--disable-sync",
+            "--metrics-recording-only",
+            `--user-data-dir=${join(profile, `attempt-${attempt}`)}`,
+            "about:blank",
+          ],
+          { stdio: ["ignore", "ignore", "pipe", "pipe", "pipe"] },
+        );
+        child.stderr.on("data", (data) => {
+          stderr = (stderr + data.toString()).slice(-12000);
+        });
+        const started = new Cdp(child);
+        try {
+          return { cdp: started, browser: await started.send("Browser.getVersion") };
+        } catch (error) {
+          await stopBrowser(child);
+          // The next attempt resets stderr, so keep this attempt's diagnostics.
+          startupFailures.push(startupFailureRecord(attempt, error, stderr));
+          throw error;
+        }
+      },
+      {
+        onRetry: (error, attempt) =>
+          console.error(`Browser start-up attempt ${attempt} failed (${error.message}); retrying`),
+      },
     );
-    child.stderr.on("data", (data) => {
-      stderr = (stderr + data.toString()).slice(-12000);
-    });
-    const cdp = new Cdp(child);
-    evidence.browser = await cdp.send("Browser.getVersion");
+    evidence.browser = browser;
     for (const viewport of viewports) {
       for (const fixture of ["empty", "populated"]) {
         const result = await runScenario(cdp, html, fixture, viewport, options.outputDir);
@@ -811,13 +865,9 @@ async function main() {
     if (stderr) evidence.browserStderr = stderr;
     throw error;
   } finally {
-    if (child?.pid && child.exitCode === null && child.signalCode === null) {
-      const stopped = new Promise((resolve) => child.once("exit", resolve));
-      child.kill("SIGTERM");
-      const timer = setTimeout(() => child.kill("SIGKILL"), 3000);
-      await stopped;
-      clearTimeout(timer);
-    }
+    await stopBrowser(child);
+    // Recorded on success too, so a pass that needed a retry stays visible.
+    if (startupFailures.length) evidence.browserStartupFailures = startupFailures;
     if (options.outputDir)
       await writeFile(
         join(options.outputDir, "results.json"),

@@ -14,9 +14,11 @@ import {
 import type { ClientStore } from "../clients/client.js";
 import { withClientReferenceLock } from "../clients/clientReferenceLock.js";
 import type { Project, ProjectStore } from "../projects/project.js";
+import type { PropertyStore } from "../properties/property.js";
+import { confirmPropertyOwnedByClient } from "../properties/propertyReference.js";
 import { JarvisProblem } from "./problemDetails.js";
 import { parseCreateProject, parseUpdateProject } from "./projectRequest.js";
-import { HTTP_CLIENT_STORE, HTTP_PROJECT_STORE } from "./tokens.js";
+import { HTTP_CLIENT_STORE, HTTP_PROJECT_STORE, HTTP_PROPERTY_STORE } from "./tokens.js";
 
 function invalid(detail: string): JarvisProblem {
   return new JarvisProblem(
@@ -54,6 +56,7 @@ export class ProjectController {
   constructor(
     @Inject(HTTP_PROJECT_STORE) private readonly projects: ProjectStore,
     @Inject(HTTP_CLIENT_STORE) private readonly clients: ClientStore,
+    @Inject(HTTP_PROPERTY_STORE) private readonly properties: PropertyStore,
   ) {}
 
   @Get()
@@ -78,7 +81,12 @@ export class ProjectController {
     })();
     try {
       return await withClientReferenceLock(
-        async () => projectResponse(await this.projects.add(input)),
+        async () => {
+          if (input.propertyId !== undefined) {
+            await confirmPropertyOwnedByClient(this.properties, input.propertyId, input.clientId);
+          }
+          return projectResponse(await this.projects.add(input));
+        },
         { clients: this.clients, clientId: input.clientId },
       );
     } catch (error: unknown) {
@@ -113,7 +121,25 @@ export class ProjectController {
     let project: Project | null;
     try {
       project = await withClientReferenceLock(
-        () => this.projects.update(projectId, input),
+        async () => {
+          // A write that changes the client or the property must leave the job
+          // with a property its client owns. Other updates do not re-check, so
+          // a historical mismatch stays readable and editable until corrected.
+          if (input.clientId !== undefined || typeof input.propertyId === "string") {
+            const current = await this.projects.get(projectId);
+            if (!current) return null;
+            const propertyId =
+              input.propertyId === undefined ? current.propertyId : input.propertyId;
+            if (typeof propertyId === "string") {
+              await confirmPropertyOwnedByClient(
+                this.properties,
+                propertyId,
+                input.clientId ?? current.clientId,
+              );
+            }
+          }
+          return this.projects.update(projectId, input);
+        },
         input.clientId === undefined
           ? undefined
           : { clients: this.clients, clientId: input.clientId },

@@ -69,7 +69,12 @@ describe("client reference lock", () => {
       new InMemoryQuoteStore(),
       null,
     );
-    const enquiriesHttp = new EnquiryController(enquiries, new InMemoryProjectStore(), clients);
+    const enquiriesHttp = new EnquiryController(
+      enquiries,
+      new InMemoryProjectStore(),
+      clients,
+      new InMemoryPropertyStore(),
+    );
 
     const removal = clientsHttp.remove(client.id);
     for (let attempt = 0; attempt < 50 && !scanned; attempt += 1) await delay(5);
@@ -117,7 +122,12 @@ describe("client reference lock", () => {
       new InMemoryQuoteStore(),
       null,
     );
-    const enquiriesHttp = new EnquiryController(enquiries, new InMemoryProjectStore(), clients);
+    const enquiriesHttp = new EnquiryController(
+      enquiries,
+      new InMemoryProjectStore(),
+      clients,
+      new InMemoryPropertyStore(),
+    );
 
     const creating = enquiriesHttp.create({
       clientId: client.id,
