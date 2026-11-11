@@ -32,10 +32,10 @@
 import {
   VOICE_COMMANDS,
   VOICE_PROFILES,
-  normalizeUtterance,
   type VoiceCommand,
   type VoiceProfile,
 } from "./voiceCommands.js";
+import { splitVoiceWakeWord } from "./voiceSafeWrite.js";
 
 export type InterpretInput = Readonly<{
   /** The transcript to interpret. */
@@ -302,13 +302,14 @@ function sig(commandId: string, profile: VoiceProfile, ...patterns: Pattern[]): 
 }
 
 /**
- * Normalise then strip apostrophes so "what's"→"whats", "don't"→"dont". Also
- * reports whether the utterance is compound — two requests joined by a connector
- * word or a comma. The comma must be read here, before punctuation is stripped
- * for tokenisation, so "crawler forward, lights on" is still seen as compound.
+ * Strip only an accepted leading wake prefix, then strip apostrophes so
+ * "what's"→"whats", "don't"→"dont". The shared wake splitter also normalises
+ * whitespace and punctuation; the session still owns wake authorisation and
+ * records the actual transcript. A comma after the wake word is a separator,
+ * while a comma in the command still marks a compound request.
  */
 function tokenize(raw: string): { tokens: readonly string[]; joined: string; compound: boolean } {
-  const normalized = normalizeUtterance(raw).replace(/['’]/g, "");
+  const normalized = splitVoiceWakeWord(raw).rest.replace(/['’]/g, "");
   const hasComma = normalized.includes(",");
   const tokens = normalized
     .split(/[^a-z0-9]+/)

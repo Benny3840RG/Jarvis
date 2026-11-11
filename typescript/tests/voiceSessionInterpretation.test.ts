@@ -34,6 +34,29 @@ const stubQueries: VoiceQueryProvider = {
 };
 
 describe("voice session — natural-language interpretation behind confirmation", () => {
+  it("does not arm a raw wake-prefixed quote report or dispatch it on later confirm", async () => {
+    const s = make({ profile: "client" });
+    const transcript = "Jarvis I'd send the quote";
+    const out = await s.handle({ transcript, isFinal: true, wakeAuthorized: true, now: 1 });
+    assert.equal(out.decision, "unrecognized");
+    assert.equal(s.pending(), undefined);
+    assert.equal(s.history()[0]?.normalizedTranscript, "jarvis i'd send the quote");
+    const confirmed = await s.handle({ transcript: "confirm", isFinal: true, now: 2 });
+    assert.equal(confirmed.decision, "confirmation-not-pending");
+  });
+
+  it("does not infer a raw request without wake authorisation", async () => {
+    const s = make({ profile: "client" });
+    const out = await s.handle({
+      transcript: "Jarvis, can you send the quote?",
+      isFinal: true,
+      wakeAuthorized: false,
+      now: 1,
+    });
+    assert.equal(out.decision, "unrecognized");
+    assert.equal(s.pending(), undefined);
+  });
+
   it("does not dispatch after unsafe interpreted speech and a later confirm", async () => {
     let actuations = 0;
     const provider: VoiceActuationProvider = {
