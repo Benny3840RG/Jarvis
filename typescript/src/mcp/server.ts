@@ -401,7 +401,12 @@ const inboxSourceReportSchema = z.object({
 
 const inboxItemSchema = z.object({
   itemId: z.string(),
-  kind: z.enum(["reminder-overdue", "maintenance-overdue", "maintenance-due-soon"]),
+  kind: z.enum([
+    "reminder-overdue",
+    "reminder-due-soon",
+    "maintenance-overdue",
+    "maintenance-due-soon",
+  ]),
   severity: z.enum(["critical", "high", "elevated", "normal", "informational"]),
   title: z.string(),
   explanation: z.string(),

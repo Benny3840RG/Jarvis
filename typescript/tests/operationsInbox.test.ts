@@ -67,6 +67,54 @@ describe("buildOperationsInbox", () => {
     assert.equal(inbox.items[0]?.severity, "normal");
   });
 
+  it("classifies reminders due now as overdue and those coming due in 24 hours as due-soon", async () => {
+    const upcoming = reminder({ id: "future", dueAt: NOW + 60_000 });
+    const atBoundary = reminder({ id: "boundary", dueAt: NOW + 24 * 60 * 60 * 1000 });
+    const inbox = await buildOperationsInbox({
+      now: NOW,
+      listReminders: async () => [
+        reminder({ id: "due-now", dueAt: NOW }),
+        upcoming,
+        atBoundary,
+        reminder({ id: "outside-window", dueAt: NOW + 24 * 60 * 60 * 1000 + 1 }),
+        reminder({ id: "undated", dueAt: undefined }),
+      ],
+      listAssets: async () => [],
+    });
+
+    assert.deepEqual(
+      inbox.items.map(({ itemId, kind, status, actionRequired }) => ({
+        itemId,
+        kind,
+        status,
+        actionRequired,
+      })),
+      [
+        {
+          itemId: "reminder-overdue:due-now",
+          kind: "reminder-overdue",
+          status: "overdue",
+          actionRequired: true,
+        },
+        {
+          itemId: "reminder-due-soon:future",
+          kind: "reminder-due-soon",
+          status: "due-soon",
+          actionRequired: false,
+        },
+        {
+          itemId: "reminder-due-soon:boundary",
+          kind: "reminder-due-soon",
+          status: "due-soon",
+          actionRequired: false,
+        },
+      ],
+    );
+    assert.equal(inbox.items[1]?.dueAt, new Date(NOW + 60_000).toISOString());
+    assert.equal(inbox.items[2]?.dueAt, new Date(NOW + 24 * 60 * 60 * 1000).toISOString());
+    assert.equal(inbox.sources.find(({ source }) => source === "reminders")?.status, "available");
+  });
+
   it("one source's failure is reported as unavailable without failing the whole inbox", async () => {
     const inbox = await buildOperationsInbox({
       now: NOW,

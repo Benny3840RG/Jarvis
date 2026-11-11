@@ -70,6 +70,58 @@ describe("MCP operations inbox inspection (read-only)", () => {
     assert.deepEqual(paths, ["/api/v1/operations/inbox"]);
   });
 
+  it("declares and returns reminders due soon through the existing MCP output contract", async () => {
+    const upcoming = {
+      ...INBOX.items[0],
+      itemId: "reminder-due-soon:reminder-1",
+      kind: "reminder-due-soon",
+      severity: "normal",
+      title: "Call supplier",
+      explanation: "Reminder falls due 2026-07-31T12:00:00.000Z.",
+      sourceSubsystem: "reminders",
+      sourceRecordId: "reminder-1",
+      dueAt: "2026-07-31T12:00:00.000Z",
+      status: "due-soon",
+      actionRequired: false,
+    };
+    const inbox = { ...INBOX, items: [upcoming] };
+    const fetchImpl = (async () => Response.json({ data: inbox })) as typeof fetch;
+    const apiClient = new JarvisApiClient(
+      { baseUrl: new URL("https://jarvis.example/"), serviceToken: "operations-inbox-test" },
+      fetchImpl,
+    );
+    const server = createJarvisMcpServer(apiClient);
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: "operations-inbox-due-soon-test", version: "0.1.0" });
+
+    await server.connect(serverTransport);
+    await client.connect(clientTransport);
+    try {
+      const catalogue = await client.listTools();
+      const tool = catalogue.tools.find((entry) => entry.name === "get_operations_inbox");
+      assert.ok(tool);
+      const output = tool.outputSchema as {
+        properties?: {
+          inbox?: {
+            properties?: { items?: { items?: { properties?: { kind?: { enum?: string[] } } } } };
+          };
+        };
+      };
+      assert.deepEqual(output.properties?.inbox?.properties?.items?.items?.properties?.kind?.enum, [
+        "reminder-overdue",
+        "reminder-due-soon",
+        "maintenance-overdue",
+        "maintenance-due-soon",
+      ]);
+      const result = await client.callTool({ name: "get_operations_inbox", arguments: {} });
+      assert.equal(result.isError, undefined);
+      assert.deepEqual(result.structuredContent, { inbox });
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
   it("exposes the operations inbox as a read-only MCP tool with no mutation counterpart", async () => {
     const fetchImpl = (async () => Response.json({ data: INBOX })) as typeof fetch;
     const apiClient = new JarvisApiClient(

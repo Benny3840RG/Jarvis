@@ -24,6 +24,12 @@ Answers: what genuinely needs the operator's attention right now, and why?
 `reminders` and `maintenance` reuse the exact domain reads `src/briefs/brief.ts` already uses — there is no
 second query path for either.
 
+Reminders with a due time at or before `now` appear as `reminder-overdue` (action required).
+Future reminders due within the next 24 hours, including the exact 24-hour boundary, appear as
+`reminder-due-soon` (advance notice only, no action required). This matches the daily brief's
+24-hour upcoming window. Undated reminders and those due more than 24 hours away are omitted.
+The inbox never changes, completes, or deletes a reminder; the underlying reminder remains authoritative.
+
 ### Severity
 
 Five levels, most to least urgent: `critical > high > elevated > normal > informational`. Within one
