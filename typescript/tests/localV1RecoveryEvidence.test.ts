@@ -354,6 +354,52 @@ test("runner paths stay pinned when live and JSON directory names are swapped", 
   }
 });
 
+test("driver pins the canonical JSON inode if its requested alias is replaced before open", async (t) => {
+  const { default: fs } = await import("node:fs/promises");
+  const path = await import("node:path");
+  const { runLocalV1RestartProof } = await import("../src/backup/v4/localV1RecoveryDriver.js");
+  const fixture = await driverFixture();
+  const alias = path.join(fixture.root, "json-alias");
+  const unrelated = path.join(fixture.root, "unrelated");
+  try {
+    await fs.mkdir(unrelated);
+    await fs.writeFile(path.join(fixture.config.jsonDirectory, "intended"), "isolated");
+    await fs.writeFile(path.join(unrelated, "wrong"), "unrelated");
+    await fs.symlink(fixture.config.jsonDirectory, alias);
+    const originalRealpath = fs.realpath;
+    let swapped = false;
+    t.mock.method(fs, "realpath", async (...args: Parameters<typeof fs.realpath>) => {
+      const resolved = await originalRealpath(...args);
+      if (!swapped && args[0] === alias) {
+        swapped = true;
+        await fs.unlink(alias);
+        await fs.symlink(unrelated, alias);
+      }
+      return resolved;
+    });
+    let calls = 0;
+    await assert.rejects(
+      () =>
+        runLocalV1RestartProof(
+          { ...fixture.config, jsonDirectory: alias },
+          {
+            restartRunner: async () => {
+              calls += 1;
+              return fixture.result;
+            },
+          },
+        ),
+      /directory path changed during the restart proof/,
+    );
+    assert.equal(swapped, true);
+    assert.equal(calls, 0);
+    assert.deepEqual(await fs.readdir(unrelated), ["wrong"]);
+  } finally {
+    t.mock.restoreAll();
+    await fixture.cleanup();
+  }
+});
+
 test("configured cloud rejection is accepted only for the configured-target probe", async () => {
   const { runLocalV1RestartProof } = await import("../src/backup/v4/localV1RecoveryDriver.js");
   const { readRestartedProcess } = await import("../src/backup/v4/localV1ProcessRestart.js");

@@ -169,40 +169,84 @@ export async function writeRecoveryEvidence(
   evidence: string,
   config: LocalV1RestartProofConfig,
 ): Promise<void> {
-  const target = await assertRecoveryEvidencePath(outPath, config);
-  const parent = path.dirname(target);
-  let directory = await fs.open(path.parse(parent).root, DIRECTORY_FLAGS);
+  // Keep the protected inodes open before pathname validation. A rename can
+  // otherwise move a protected directory into the output tree during traversal.
+  const protectedDirectories: fs.FileHandle[] = [];
   try {
-    for (const component of parent.split(path.sep).filter(Boolean)) {
-      const child = path.join("/proc/self/fd", String(directory.fd), component);
-      let next: fs.FileHandle;
-      try {
-        next = await fs.open(child, DIRECTORY_FLAGS | constants.O_NOFOLLOW);
-      } catch (error: unknown) {
-        if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
-        await fs.mkdir(child, { mode: 0o700 });
-        next = await fs.open(child, DIRECTORY_FLAGS | constants.O_NOFOLLOW);
+    for (const protectedPath of [config.liveDirectory, config.jsonDirectory]) {
+      const canonical = await canonicalRecoveryPath(protectedPath);
+      const intended = await fs.stat(canonical, { bigint: true });
+      const handle = await fs.open(canonical, DIRECTORY_FLAGS | constants.O_NOFOLLOW);
+      protectedDirectories.push(handle);
+      const [opened, current] = await Promise.all([
+        handle.stat({ bigint: true }),
+        fs.stat(protectedPath, { bigint: true }),
+      ]);
+      if (
+        !opened.isDirectory() ||
+        intended.dev !== opened.dev ||
+        intended.ino !== opened.ino ||
+        current.dev !== opened.dev ||
+        current.ino !== opened.ino
+      ) {
+        throw new Error("Recovery evidence protected data directory changed before creation.");
       }
-      await directory.close();
-      directory = next;
     }
-    // Never truncate an existing archive, evidence file, symlink or hardlink.
-    const file = await fs.open(
-      path.join("/proc/self/fd", String(directory.fd), path.basename(target)),
-      constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW,
-      0o600,
+    const protectedIds = await Promise.all(
+      protectedDirectories.map((handle) => handle.stat({ bigint: true })),
     );
+    const assertUnprotected = async (handle: fs.FileHandle): Promise<void> => {
+      const opened = await handle.stat({ bigint: true });
+      if (protectedIds.some((root) => root.dev === opened.dev && root.ino === opened.ino)) {
+        throw new Error("Recovery evidence output must be outside every protected data directory.");
+      }
+    };
+
+    const target = await assertRecoveryEvidencePath(outPath, config);
+    const parent = path.dirname(target);
+    let directory = await fs.open(path.parse(parent).root, DIRECTORY_FLAGS | constants.O_NOFOLLOW);
     try {
-      await file.writeFile(`${evidence}\n`, { encoding: "utf8" });
+      await assertUnprotected(directory);
+      for (const component of parent.split(path.sep).filter(Boolean)) {
+        const child = path.join("/proc/self/fd", String(directory.fd), component);
+        let next: fs.FileHandle;
+        try {
+          next = await fs.open(child, DIRECTORY_FLAGS | constants.O_NOFOLLOW);
+        } catch (error: unknown) {
+          if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
+          await fs.mkdir(child, { mode: 0o700 });
+          next = await fs.open(child, DIRECTORY_FLAGS | constants.O_NOFOLLOW);
+        }
+        try {
+          await assertUnprotected(next);
+        } catch (error: unknown) {
+          await next.close();
+          throw error;
+        }
+        await directory.close();
+        directory = next;
+      }
+      await assertUnprotected(directory);
+      // Never truncate an existing archive, evidence file, symlink or hardlink.
+      const file = await fs.open(
+        path.join("/proc/self/fd", String(directory.fd), path.basename(target)),
+        constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW,
+        0o600,
+      );
+      try {
+        await file.writeFile(`${evidence}\n`, { encoding: "utf8" });
+      } finally {
+        await file.close();
+      }
+      const [expected, actual] = await Promise.all([directory.stat(), fs.lstat(parent)]);
+      if (!actual.isDirectory() || expected.dev !== actual.dev || expected.ino !== actual.ino) {
+        throw new Error("Recovery evidence output parent changed during creation.");
+      }
     } finally {
-      await file.close();
-    }
-    const [expected, actual] = await Promise.all([directory.stat(), fs.lstat(parent)]);
-    if (!actual.isDirectory() || expected.dev !== actual.dev || expected.ino !== actual.ino) {
-      throw new Error("Recovery evidence output parent changed during creation.");
+      await directory.close();
     }
   } finally {
-    await directory.close();
+    await Promise.all(protectedDirectories.map((handle) => handle.close()));
   }
 }
 

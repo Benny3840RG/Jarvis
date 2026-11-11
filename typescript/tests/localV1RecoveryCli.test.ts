@@ -183,6 +183,42 @@ test("replacing an opened output parent with a live-data symlink fails closed", 
   }
 });
 
+test("renaming the protected live inode into the evidence parent during traversal is refused", async (t) => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "lv1-evidence-inode-race-"));
+  try {
+    const live = path.join(root, "live");
+    const isolated = path.join(root, "isolated");
+    const output = path.join(root, "evidence");
+    await fs.mkdir(live);
+    await fs.mkdir(isolated);
+    const config = {
+      ...configFromEnvironment(environment, "fixture"),
+      liveDirectory: live,
+      jsonDirectory: isolated,
+    };
+    const originalOpen = fs.open;
+    let swapped = false;
+    t.mock.method(fs, "open", async (...args: Parameters<typeof fs.open>) => {
+      if (!swapped && args[0] === path.parse(output).root) {
+        swapped = true;
+        await fs.rename(live, output);
+        await fs.mkdir(live);
+      }
+      return originalOpen(...args);
+    });
+    await assert.rejects(
+      () => writeRecoveryEvidence(path.join(output, "proof.md"), "secret", config),
+      /protected data directory/,
+    );
+    assert.equal(swapped, true);
+    assert.deepEqual(await fs.readdir(output), []);
+    assert.deepEqual(await fs.readdir(live), []);
+  } finally {
+    t.mock.restoreAll();
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
 test("evidence path problems are reported before the proof would run", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "lv1-evidence-preflight-"));
   try {

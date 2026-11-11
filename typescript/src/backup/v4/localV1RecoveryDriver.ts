@@ -249,14 +249,30 @@ function isWithin(parent: string, child: string): boolean {
   );
 }
 
-type PinnedDirectory = { handle: fs.FileHandle; path: string };
+type PinnedDirectory = { handle: fs.FileHandle; path: string; canonical: string };
 
 // Linux /proc paths keep the opened inode, including in a child process. The
 // parent holds both descriptors until the proof and its digest checks finish.
-async function pinDirectory(candidate: string): Promise<PinnedDirectory> {
-  await canonicalRecoveryPath(candidate); // Preserve dangling-link refusal.
-  const handle = await fs.open(candidate, 0o10000000 | constants.O_DIRECTORY);
-  return { handle, path: `/proc/${process.pid}/fd/${handle.fd}` };
+async function pinDirectory(candidate: string, canonical: string): Promise<PinnedDirectory> {
+  const intended = await fs.stat(canonical, { bigint: true });
+  const handle = await fs.open(
+    canonical,
+    0o10000000 | constants.O_DIRECTORY | constants.O_NOFOLLOW,
+  );
+  try {
+    const opened = await handle.stat({ bigint: true });
+    if (!intended.isDirectory() || intended.dev !== opened.dev || intended.ino !== opened.ino) {
+      throw new LocalV1RecoveryDriverError(
+        "Local V1 recovery driver directory path changed during the restart proof.",
+      );
+    }
+    const pinned = { handle, path: `/proc/${process.pid}/fd/${handle.fd}`, canonical };
+    await Promise.all([assertPinnedPath(candidate, pinned), assertPinnedPath(canonical, pinned)]);
+    return pinned;
+  } catch (error: unknown) {
+    await handle.close();
+    throw error;
+  }
 }
 
 async function assertPinnedPath(candidate: string, pinned: PinnedDirectory): Promise<void> {
@@ -291,9 +307,9 @@ async function pinSeparateDataDirectories(
       "Local V1 recovery driver refuses a JSON directory that overlaps live data.",
     );
   }
-  const live = await pinDirectory(config.liveDirectory);
+  const live = await pinDirectory(config.liveDirectory, requestedLive);
   try {
-    const json = await pinDirectory(config.jsonDirectory);
+    const json = await pinDirectory(config.jsonDirectory, requestedJson);
     try {
       const [livePath, jsonPath] = await Promise.all([
         fs.realpath(live.path),
@@ -306,7 +322,9 @@ async function pinSeparateDataDirectories(
       }
       await Promise.all([
         assertPinnedPath(config.liveDirectory, live),
+        assertPinnedPath(live.canonical, live),
         assertPinnedPath(config.jsonDirectory, json),
+        assertPinnedPath(json.canonical, json),
       ]);
       return { live, json };
     } catch (error: unknown) {
