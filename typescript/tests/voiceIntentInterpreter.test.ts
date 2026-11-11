@@ -56,6 +56,56 @@ describe("intent interpreter — understands natural phrasing", () => {
 });
 
 describe("intent interpreter — fails closed", () => {
+  it("does not bind an explicit target to the active profile", () => {
+    for (const [profile, transcript] of [
+      ["workshop", "turn the trailer lights on"],
+      ["trailer", "turn the workshop lights on"],
+      ["trailer", "turn the crawler lights on"],
+    ] as const) {
+      assert.notEqual(interpretIntent({ profile, transcript }).status, "proposed", transcript);
+    }
+    for (const profile of ["workshop", "trailer"] as const) {
+      const unqualified = interpretIntent({ profile, transcript: "turn the lights on" });
+      assert.equal(unqualified.status, "proposed", profile);
+      if (unqualified.status === "proposed")
+        assert.equal(unqualified.commandId, `${profile}.lights-on`);
+    }
+  });
+
+  it("withholds retrospective actuator reports and actuator questions", () => {
+    for (const [profile, transcript] of [
+      ["trailer", "the winch went up"],
+      ["trailer", "I already raised the winch up"],
+      ["trailer", "did the winch go up?"],
+      ["workshop", "I turned the lights on"],
+      ["workshop", "are the lights on?"],
+      ["workshop", "someone left the compressor on"],
+      ["crawler", "the crawler moved forward"],
+      ["client", "I already sent the quote"],
+      ["client", "we sent the quote"],
+      ["client", "did you send the quote"],
+      ["client", "should I send the quote"],
+      ["trailer", "I put the winch up"],
+      ["trailer", "should the winch go up"],
+    ] as const) {
+      assert.notEqual(interpretIntent({ profile, transcript }).status, "proposed", transcript);
+    }
+    assert.equal(
+      interpretIntent({ profile: "client", transcript: "any unpaid invoices?" }).status,
+      "proposed",
+    );
+    for (const [profile, transcript] of [
+      ["trailer", "winch up please"],
+      ["trailer", "put the winch up would ya"],
+      ["trailer", "can you put the winch up?"],
+      ["workshop", "chuck the compressor on"],
+      ["client", "can you send the quote?"],
+      ["client", "I need to send the quote"],
+    ] as const) {
+      assert.equal(interpretIntent({ profile, transcript }).status, "proposed", transcript);
+    }
+  });
+
   it("withholds declarative actuator states while retaining commands", () => {
     for (const [transcript, profile] of [
       ["the winch is up", "trailer"],

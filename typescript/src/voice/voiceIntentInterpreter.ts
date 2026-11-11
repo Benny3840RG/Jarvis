@@ -31,6 +31,7 @@
 
 import {
   VOICE_COMMANDS,
+  VOICE_PROFILES,
   normalizeUtterance,
   type VoiceCommand,
   type VoiceProfile,
@@ -403,12 +404,86 @@ function isGuarded(command: VoiceCommand): boolean {
   return command.kind === "actuate" || command.criticality === "critical";
 }
 
+/** A spoken target is evidence, not a hint that may be rebound to session context. */
+function namesOtherProfile(tokens: readonly string[], profile: VoiceProfile): boolean {
+  return VOICE_PROFILES.some((name) => name !== profile && tokens.includes(name));
+}
+
+const GUARDED_REPORT_OR_QUESTION_TOKENS: ReadonlySet<string> = new Set([
+  "already",
+  "previously",
+  "earlier",
+  "yesterday",
+  "went",
+  "goes",
+  "moved",
+  "turned",
+  "raised",
+  "lowered",
+  "sent",
+  "left",
+  "been",
+  "had",
+  "did",
+  "does",
+  "will",
+  "should",
+  "why",
+  "when",
+  "whether",
+]);
+
+function guardedReportOrQuestion(tokens: readonly string[]): boolean {
+  if (
+    tokens.some(
+      (token) =>
+        ["is", "are", "was", "were", "has", "have"].includes(token) ||
+        GUARDED_REPORT_OR_QUESTION_TOKENS.has(token),
+    )
+  )
+    return true;
+  if (["can", "could", "would"].includes(tokens[0] ?? "") && tokens[1] !== "you") return true;
+  if (["i", "we", "he", "she", "they", "someone", "somebody"].includes(tokens[0] ?? "")) {
+    // A subject-led statement about an action is a report unless the speaker
+    // explicitly expresses a request. This includes ambiguous past-tense "put".
+    return !["want", "need", "like", "id"].includes(tokens[1] ?? "");
+  }
+  return false;
+}
+
+function guardedQuestionIsRequest(tokens: readonly string[]): boolean {
+  return (
+    (["can", "could", "would"].includes(tokens[0] ?? "") && tokens[1] === "you") ||
+    [
+      "put",
+      "turn",
+      "raise",
+      "lower",
+      "send",
+      "chuck",
+      "start",
+      "stop",
+      "deploy",
+      "stow",
+      "lift",
+      "move",
+      "switch",
+      "kill",
+      "back",
+      "reverse",
+    ].includes(tokens[0] ?? "")
+  );
+}
+
 function proposalFor(
   tokens: readonly string[],
   profile: VoiceProfile,
   fuzzy: boolean,
   compound: boolean,
 ): InterpretedIntent {
+  if (namesOtherProfile(tokens, profile)) {
+    return { status: "no-intent", rationale: "explicit target differs from active profile" };
+  }
   const ranked = bestCandidate(profile, tokens, fuzzy);
   if (ranked.length === 0) {
     return { status: "no-intent", rationale: "no catalog signal matched in the active profile" };
@@ -431,12 +506,13 @@ function proposalFor(
     }
   }
 
-  // A copular state description is not a request to operate equipment.
+  // A state report or question is not a request to operate equipment. Keep
+  // read-only queries such as unpaid invoices available.
   if (
-    tokens.some((token) => ["is", "are", "was", "were", "has", "have"].includes(token)) &&
+    guardedReportOrQuestion(tokens) &&
     ranked.some((candidate) => isGuarded(COMMAND_BY_ID.get(candidate.commandId)!))
   ) {
-    return { status: "no-intent", rationale: "guarded state description withheld" };
+    return { status: "no-intent", rationale: "guarded report or question withheld" };
   }
 
   // A recorder-stop phrase also contains the crawler-stop signal; its single
@@ -517,6 +593,15 @@ export function interpretIntent(input: InterpretInput): InterpretedIntent {
   const primaryTokens = tokenize(input.transcript);
   const primary = resolveProposal(primaryTokens.tokens, input.profile, primaryTokens.compound);
 
+  if (
+    primary.status === "proposed" &&
+    input.transcript.trim().endsWith("?") &&
+    isGuarded(COMMAND_BY_ID.get(primary.commandId)!) &&
+    !guardedQuestionIsRequest(primaryTokens.tokens)
+  ) {
+    return { status: "no-intent", rationale: "guarded question withheld" };
+  }
+
   const alternatives = input.alternatives ?? [];
   if (alternatives.length === 0 || primary.status !== "proposed") {
     return primary;
@@ -527,6 +612,13 @@ export function interpretIntent(input: InterpretInput): InterpretedIntent {
   const conflicting = new Set<string>([primary.commandId]);
   for (const alternative of alternatives) {
     const altTokens = tokenize(alternative);
+    if (namesOtherProfile(altTokens.tokens, input.profile)) {
+      return {
+        status: "needs-clarification",
+        candidates: Object.freeze([primary.commandId]),
+        rationale: "recogniser alternative names another profile",
+      };
+    }
     // A negated/retracted alternative ("don't winch up") means the recogniser is
     // unsure whether the speaker negated the command. If the negated clause still
     // references a catalog command, fail closed rather than trust the primary.

@@ -34,6 +34,55 @@ const stubQueries: VoiceQueryProvider = {
 };
 
 describe("voice session — natural-language interpretation behind confirmation", () => {
+  it("rejects a cancel alternative before arming an inferred actuator command", async () => {
+    let actuations = 0;
+    const provider: VoiceActuationProvider = {
+      statusOf: () => "available",
+      async actuate(input) {
+        actuations += 1;
+        return { status: "actuated", target: input.target };
+      },
+    };
+    const s = make({ profile: "trailer", provider });
+    const out = await s.handle({
+      transcript: "raise the winch",
+      alternatives: ["cancel"],
+      isFinal: true,
+      wakeAuthorized: true,
+      now: 1,
+    });
+    assert.equal(out.decision, "ambiguous");
+    assert.equal(s.pending(), undefined);
+    const confirmed = await s.handle({ transcript: "confirm", isFinal: true, now: 2 });
+    assert.equal(confirmed.decision, "confirmation-not-pending");
+    assert.equal(actuations, 0);
+  });
+
+  it("does not arm out-of-profile lights, reports, or actuator questions", async () => {
+    let actuations = 0;
+    const provider: VoiceActuationProvider = {
+      statusOf: () => "available",
+      async actuate(input) {
+        actuations += 1;
+        return { status: "actuated", target: input.target };
+      },
+    };
+    for (const [profile, transcript] of [
+      ["workshop", "turn the trailer lights on"],
+      ["trailer", "turn the workshop lights on"],
+      ["trailer", "the winch went up"],
+      ["trailer", "did the winch go up?"],
+    ] as const) {
+      const s = make({ profile, provider });
+      const out = await s.handle({ transcript, isFinal: true, wakeAuthorized: true, now: 1 });
+      assert.notEqual(out.decision, "awaiting-confirmation", transcript);
+      assert.equal(s.pending(), undefined, transcript);
+      const confirmed = await s.handle({ transcript: "confirm", isFinal: true, now: 2 });
+      assert.equal(confirmed.decision, "confirmation-not-pending", transcript);
+    }
+    assert.equal(actuations, 0);
+  });
+
   it("does not arm confirmation for declarative actuator states", async () => {
     for (const [transcript, profile] of [
       ["the winch is up", "trailer"],

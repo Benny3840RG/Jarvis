@@ -304,6 +304,15 @@ export class VoiceSession {
       if (intent.status === "proposed") {
         const command = COMMAND_BY_ID.get(intent.commandId);
         if (command) {
+          // A control hypothesis cannot be ignored just because the top
+          // hypothesis needed inference instead of an exact catalog match.
+          const controlAlternatives = controlAlternativeCandidates(input.alternatives);
+          if (controlAlternatives.length > 0) {
+            const candidates = Object.freeze([command.id, ...controlAlternatives].sort());
+            this.#invalidatePending();
+            this.#record(now, normalizedTranscript, "ambiguous");
+            return { decision: "ambiguous", candidates };
+          }
           // Inferred intent always waits for an explicit confirmation — it is
           // never dispatched here, whatever the command's own criticality.
           this.#invalidatePending();

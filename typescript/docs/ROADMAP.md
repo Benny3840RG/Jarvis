@@ -1,5 +1,20 @@
 # Jarvis TypeScript Roadmap
 
+## PR #786 voice inference safety repair (2026-11-11)
+
+- Inferred final, wake-authorised commands now reject a recogniser control
+  alternative before arming confirmation. A later `confirm` has no pending action.
+- Explicit crawler, workshop, trailer, or client wording cannot be rebound to
+  another active profile. Unqualified lights still use the current profile.
+- Retrospective equipment reports and actuator questions do not produce inferred
+  commands. Read-only unpaid-invoice questions remain available.
+- The prior ambiguous-actuator repair (`094ed3cb`) remains in this candidate;
+  canonical exact matching, single-use TTL, and absent hardware are unchanged.
+
+Next: publish the isolated repair for independent Claude review after GitHub
+head and branch ownership can be verified; obtain exact-head CI and Benny's
+separate merge decision. Host commissioning and real hardware proof remain open.
+
 ## Offline file-permission education (#777)
 
 The existing `security:interpret` ToolAction now accepts `file-mode` alongside
