@@ -264,7 +264,10 @@ writes an evidence file named for the source SHA (default
 `~/lv1-01/restart-proof-<sha>.md`) with the quote body sha256. The evidence
 writer runs on Linux only, and the output path is checked before the proof
 starts: an existing file, or a path inside live or restored data, is refused
-before any process is launched. An absent optional `CONVEX_URL` is recorded as N/A;
+before any process is launched. The writer re-checks after writing that the
+output directory has not been moved under live or restored data, and removes the
+file if it has. It cannot detect a move made after that last check, so do not
+rename or relocate the evidence directory while the proof runs. An absent optional `CONVEX_URL` is recorded as N/A;
 a failed refusal check cannot pass the proof. Configured Convex-hosted targets
 are refused by the same existing harness guard and count as a successful refusal
 probe, never as permission to contact that deployment. `JARVIS_LV1_LIVE_DIR` overrides

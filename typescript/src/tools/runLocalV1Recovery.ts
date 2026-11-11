@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { constants } from "node:fs";
+import { constants, type BigIntStats } from "node:fs";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -213,10 +213,17 @@ export async function writeRecoveryEvidence(
           await assertUnprotected(current);
           // Built by hand: path.join would fold the ".." away.
           const above = await fs.open(`/proc/self/fd/${current.fd}/..`, DIRECTORY_FLAGS);
-          const [here, up] = await Promise.all([
-            current.stat({ bigint: true }),
-            above.stat({ bigint: true }),
-          ]);
+          let here: BigIntStats;
+          let up: BigIntStats;
+          try {
+            [here, up] = await Promise.all([
+              current.stat({ bigint: true }),
+              above.stat({ bigint: true }),
+            ]);
+          } catch (error: unknown) {
+            await above.close();
+            throw error;
+          }
           if (current !== handle) await current.close();
           current = above;
           if (here.dev === up.dev && here.ino === up.ino) return;
@@ -259,10 +266,11 @@ export async function writeRecoveryEvidence(
         constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW,
         0o600,
       );
-      try {
-        // The file exists but is still empty. Re-check where the pinned parent
-        // now sits before any evidence is written, and remove the empty file
-        // if the parent moved under protected data or away from its path.
+      // Checked while the file is still empty, and again after the write. A
+      // failed check removes the file; if it cannot be removed, say so. The
+      // writer cannot detect a rename that happens after the last check, so
+      // the evidence parent must not be relocated while the proof runs.
+      const assertParentInPlace = async (): Promise<void> => {
         try {
           await assertNoProtectedAncestor(directory);
           const [expected, actual] = await Promise.all([directory.stat(), fs.lstat(parent)]);
@@ -270,10 +278,22 @@ export async function writeRecoveryEvidence(
             throw new Error("Recovery evidence output parent changed during creation.");
           }
         } catch (error: unknown) {
-          await fs.unlink(created).catch(() => undefined);
+          try {
+            await fs.unlink(created);
+          } catch (cleanup: unknown) {
+            const reason = error instanceof Error ? error.message : String(error);
+            throw new Error(
+              `Recovery evidence file could not be removed after a failed containment check: ${reason}`,
+              { cause: cleanup },
+            );
+          }
           throw error;
         }
+      };
+      try {
+        await assertParentInPlace();
         await file.writeFile(`${evidence}\n`, { encoding: "utf8" });
+        await assertParentInPlace();
       } finally {
         await file.close();
       }

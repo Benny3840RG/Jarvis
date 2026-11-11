@@ -233,7 +233,7 @@ test("moving the opened output parent beneath live data leaves no evidence there
       liveDirectory: live,
       jsonDirectory: isolated,
     };
-    for (const moment of ["before-create", "after-create"] as const) {
+    for (const moment of ["before-create", "after-create", "after-write"] as const) {
       const originalOpen = fs.open;
       let moved = false;
       t.mock.method(fs, "open", async (...args: Parameters<typeof fs.open>) => {
@@ -253,6 +253,13 @@ test("moving the opened output parent beneath live data leaves no evidence there
         }
         const handle = await originalOpen(...args);
         if (!moved && moment === "after-create" && name === "proof.md") await move();
+        if (!moved && moment === "after-write" && name === "proof.md") {
+          const write = handle.writeFile.bind(handle);
+          handle.writeFile = async (...writeArgs: Parameters<typeof write>) => {
+            await write(...writeArgs);
+            await move();
+          };
+        }
         return handle;
       });
       await assert.rejects(
@@ -268,6 +275,49 @@ test("moving the opened output parent beneath live data leaves no evidence there
       await fs.rename(path.join(live, "nested"), path.join(root, "spare"));
       await fs.rm(path.join(root, "spare"), { recursive: true });
     }
+  } finally {
+    t.mock.restoreAll();
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
+test("a failed ancestor check closes the ancestor handle it opened", async (t) => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "lv1-evidence-ancestor-leak-"));
+  try {
+    const live = path.join(root, "live");
+    const isolated = path.join(root, "isolated");
+    const output = path.join(root, "evidence");
+    await fs.mkdir(live);
+    await fs.mkdir(isolated);
+    await fs.mkdir(output);
+    const config = {
+      ...configFromEnvironment(environment, "fixture"),
+      liveDirectory: live,
+      jsonDirectory: isolated,
+    };
+    const originalOpen = fs.open;
+    let closed: boolean | undefined;
+    t.mock.method(fs, "open", async (...args: Parameters<typeof fs.open>) => {
+      const handle = await originalOpen(...args);
+      if (closed === undefined && String(args[0]).endsWith("/..")) {
+        closed = false;
+        handle.stat = (async () => {
+          throw new Error("injected ancestor stat failure");
+        }) as typeof handle.stat;
+        const close = handle.close.bind(handle);
+        handle.close = async () => {
+          closed = true;
+          await close();
+        };
+      }
+      return handle;
+    });
+    await assert.rejects(
+      () => writeRecoveryEvidence(path.join(output, "proof.md"), "secret", config),
+      /injected ancestor stat failure/,
+    );
+    assert.equal(closed, true);
+    assert.deepEqual(await fs.readdir(output), []);
   } finally {
     t.mock.restoreAll();
     await fs.rm(root, { recursive: true, force: true });
