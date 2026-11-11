@@ -2,6 +2,11 @@
 
 ## PR #786 voice inference safety repair (2026-11-11)
 
+- Raw wake-prefixed declarative speech now uses the same accepted-prefix
+  normalization as the HTTP voice boundary before intent interpretation.
+  `Jarvis I'd send the quote` leaves no pending proposal, and a later `confirm`
+  cannot dispatch it; the session keeps the actual transcript in history.
+  Direct `can you` requests still enter the existing spoken-confirmation path.
 - Modal equipment statements (`can`, `could`, `may`, `might`, `would`, `should`)
   now leave no inferred pending action, including when the modal follows the
   equipment noun. Direct imperative and polite `can/could/would you` requests

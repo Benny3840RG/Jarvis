@@ -402,6 +402,38 @@ describe("intent interpreter — adversarial regressions", () => {
       assert.notEqual(interpretIntent({ profile: "client", transcript }).status, "proposed");
     }
   });
+  it("withholds wake-prefixed quote reports while allowing an explicit request", () => {
+    for (const transcript of [
+      "Jarvis I'd send the quote",
+      "Jarvis, I'd send the quote",
+      "Jarvis I'll send the quote",
+      "Jarvis I've sent the quote",
+    ]) {
+      assert.notEqual(
+        interpretIntent({ profile: "client", transcript }).status,
+        "proposed",
+        transcript,
+      );
+    }
+    const request = interpretIntent({
+      profile: "client",
+      transcript: "Jarvis, can you send the quote?",
+    });
+    assert.equal(request.status, "proposed");
+    if (request.status === "proposed") assert.equal(request.commandId, "client.send-quote");
+    assert.notEqual(
+      interpretIntent({ profile: "client", transcript: "please Jarvis can you send the quote" })
+        .status,
+      "proposed",
+      "a non-leading Jarvis token is not a wake prefix",
+    );
+    const query = interpretIntent({
+      profile: "client",
+      transcript: "Jarvis, any invoices that haven't been paid?",
+    });
+    assert.equal(query.status, "proposed");
+    if (query.status === "proposed") assert.equal(query.commandId, "client.unpaid-invoices");
+  });
   it("does not propose a command from an explicitly negated utterance", () => {
     assert.notEqual(
       interpretIntent({ transcript: "no winch up", profile: "trailer" }).status,

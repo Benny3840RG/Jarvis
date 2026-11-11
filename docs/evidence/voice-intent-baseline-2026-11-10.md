@@ -12,7 +12,7 @@
 | Dataset version | 2026-11-10.1 |
 | `src/voice/voiceParser.ts` SHA-256 | `6ff04f3af0b5e75188b231cc997f0113607b42d692e44e8d2efa6901cca7d7ea` |
 | `src/voice/voiceCommands.ts` SHA-256 | `8978ae1306b6f3d49fc67adbcd73f5dd3b2466ae6bde067237a76aeae92a22a4` |
-| `src/voice/voiceIntentInterpreter.ts` SHA-256 | `528b6b2b3761f9ccd8a0602a1cc960918d6872780bfea95f43f1abe4440958e4` |
+| `src/voice/voiceIntentInterpreter.ts` SHA-256 | `bdc8e5dc6b745666234c333bc279903c35e785e020bc8b5c629f4ea50f252f4f` |
 | `tests/support/voiceIntentDataset.ts` SHA-256 | `dea4d8e61b0c8150da8671a99eaac44d95bceee709784f309895d5d430681f40` |
 | `tests/support/voiceIntentScoring.ts` SHA-256 | `bcdeefca2797059dc4323e9025898302d88cc4b15bf7dd810fafde96cb531cef` |
 | `tests/support/voiceIntentInterpreterScoring.ts` SHA-256 | `d767fddc86af3b931bf7ae3c0bd8e1d154a76821a8c209323b08673d34ee7902` |
