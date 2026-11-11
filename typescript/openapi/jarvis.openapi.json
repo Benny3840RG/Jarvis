@@ -314,7 +314,7 @@
       "post": {
         "operationId": "dispatchVoiceUtterance",
         "summary": "Dispatch a voice utterance",
-        "description": "Submits a recognised utterance to the session and returns the authoritative dispatch decision. Final-only dispatch and whole-utterance matching apply. A propose decision never stages or approves a governed action; staging and approval remain on the governed tool-actions path. Authentication is deployment-conditional: a local-serve loopback bind may omit Bearer authentication for same-origin HUD use; non-loopback binds retain the configured service-token/OIDC requirement.",
+        "description": "Submits a recognised utterance to the session and returns the authoritative dispatch decision. Final-only dispatch and whole-utterance matching apply. Wake-authorised natural-language inference fails closed on compound requests even when only one action is recognised, conflicting or negated recogniser alternatives, explicit out-of-profile targets including possessive or plural forms, and non-request actuator reports or questions. An inferred command requires single-use spoken confirmation before dispatch; a propose decision never approves a governed action, and safe-write staging remains on the governed tool-actions path. Authentication is deployment-conditional: a local-serve loopback bind may omit Bearer authentication for same-origin HUD use; non-loopback binds retain the configured service-token/OIDC requirement.",
         "tags": ["Voice"],
         "security": [{ "serviceToken": [] }, {}],
         "x-jarvis-auth": {
@@ -8009,8 +8009,29 @@
           "expiresAt": {
             "type": "integer",
             "description": "When an armed confirmation lapses."
+          },
+          "inferred": {
+            "type": "boolean",
+            "enum": [true],
+            "description": "Present and true only on an awaiting-confirmation decision whose command was inferred from natural language by the intent interpreter rather than matched as an exact phrase. An inferred command is never dispatched directly: it always waits for an explicit spoken confirmation."
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "description": "Interpreter confidence (0..1) for an inferred awaiting-confirmation decision. Advisory only; it never substitutes for the spoken confirmation."
           }
-        }
+        },
+        "allOf": [
+          {
+            "if": { "properties": { "inferred": {} }, "required": ["inferred"] },
+            "then": {
+              "required": ["confidence"],
+              "properties": { "decision": { "const": "awaiting-confirmation" }, "confidence": {} }
+            },
+            "else": { "not": { "properties": { "confidence": {} }, "required": ["confidence"] } }
+          }
+        ]
       },
       "VoiceDispatchResponse": {
         "type": "object",

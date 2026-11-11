@@ -101,6 +101,7 @@ export class VoiceController {
     const dispatch = await session.handle({
       transcript: prepared.transcript,
       isFinal: parsed.isFinal,
+      wakeAuthorized: prepared.wakeAuthorized,
       ...(prepared.alternatives ? { alternatives: prepared.alternatives } : {}),
     });
     if (dispatch.decision !== "proposed") {
