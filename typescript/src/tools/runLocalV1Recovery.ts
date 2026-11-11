@@ -237,25 +237,69 @@ export async function writeRecoveryEvidence(
     const target = await assertRecoveryEvidencePath(outPath, config);
     const parent = path.dirname(target);
     let directory = await fs.open(path.parse(parent).root, DIRECTORY_FLAGS | constants.O_NOFOLLOW);
+    // Directories this call created, with the pinned parent each was made in.
+    // If the write is refused they are removed again, deepest first, so a
+    // refusal leaves nothing behind even if a parent was moved under protected
+    // data in the meantime.
+    const createdDirectories: {
+      parent: fs.FileHandle;
+      name: string;
+      dev: bigint;
+      ino: bigint;
+    }[] = [];
+    const removeCreatedDirectories = async (reason: unknown): Promise<never> => {
+      try {
+        for (const made of [...createdDirectories].reverse()) {
+          const entry = path.join("/proc/self/fd", String(made.parent.fd), made.name);
+          const current = await fs.lstat(entry, { bigint: true });
+          if (current.dev !== made.dev || current.ino !== made.ino) {
+            throw new Error("A directory created for the evidence file was replaced.");
+          }
+          await fs.rmdir(entry);
+        }
+      } catch (cleanup: unknown) {
+        const text = reason instanceof Error ? reason.message : String(reason);
+        throw new Error(
+          `Recovery evidence directories could not be removed after a failure: ${text}`,
+          { cause: cleanup },
+        );
+      }
+      throw reason;
+    };
     try {
       await assertUnprotected(directory);
       for (const component of parent.split(path.sep).filter(Boolean)) {
         const child = path.join("/proc/self/fd", String(directory.fd), component);
         let next: fs.FileHandle;
+        let made = false;
         try {
           next = await fs.open(child, DIRECTORY_FLAGS | constants.O_NOFOLLOW);
         } catch (error: unknown) {
           if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
+          await assertNoProtectedAncestor(directory);
           await fs.mkdir(child, { mode: 0o700 });
+          made = true;
           next = await fs.open(child, DIRECTORY_FLAGS | constants.O_NOFOLLOW);
         }
         try {
-          await assertUnprotected(next);
+          if (made) {
+            const stat = await next.stat({ bigint: true });
+            createdDirectories.push({
+              parent: directory,
+              name: component,
+              dev: stat.dev,
+              ino: stat.ino,
+            });
+            await assertNoProtectedAncestor(next);
+          } else {
+            await assertUnprotected(next);
+          }
         } catch (error: unknown) {
           await next.close();
           throw error;
         }
-        await directory.close();
+        // A parent that had a directory created in it stays open for rollback.
+        if (!made) await directory.close();
         directory = next;
       }
       await assertNoProtectedAncestor(directory);
@@ -306,8 +350,11 @@ export async function writeRecoveryEvidence(
       } finally {
         await file.close();
       }
+    } catch (error: unknown) {
+      await removeCreatedDirectories(error);
     } finally {
-      await directory.close();
+      const open = new Set([directory, ...createdDirectories.map((made) => made.parent)]);
+      await Promise.all([...open].map((handle) => handle.close()));
     }
   } finally {
     await Promise.all(protectedDirectories.map((handle) => handle.close()));

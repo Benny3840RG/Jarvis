@@ -324,6 +324,76 @@ test("a failed ancestor check closes the ancestor handle it opened", async (t) =
   }
 });
 
+test("a refused write leaves no newly created directory beneath live data", async (t) => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "lv1-evidence-mkdir-race-"));
+  try {
+    const live = path.join(root, "live");
+    const isolated = path.join(root, "isolated");
+    const output = path.join(root, "evidence");
+    await Promise.all([fs.mkdir(live), fs.mkdir(isolated), fs.mkdir(output)]);
+    const config = {
+      ...configFromEnvironment(environment, "fixture"),
+      liveDirectory: live,
+      jsonDirectory: isolated,
+    };
+    const originalMkdir = fs.mkdir;
+    let moved = false;
+    t.mock.method(fs, "mkdir", async (...args: Parameters<typeof fs.mkdir>) => {
+      if (!moved && path.basename(String(args[0])) === "new") {
+        moved = true;
+        await fs.rename(output, path.join(live, "nested"));
+        await originalMkdir(output);
+      }
+      return originalMkdir(...args);
+    });
+    await assert.rejects(
+      () => writeRecoveryEvidence(path.join(output, "new", "deeper", "proof.md"), "secret", config),
+      /outside every protected data directory/,
+    );
+    assert.equal(moved, true);
+    assert.deepEqual(await fs.readdir(path.join(live, "nested")), []);
+    assert.deepEqual(await fs.readdir(output), []);
+  } finally {
+    t.mock.restoreAll();
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
+test("a later refusal removes every directory the writer created", async (t) => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "lv1-evidence-rollback-"));
+  try {
+    const live = path.join(root, "live");
+    const isolated = path.join(root, "isolated");
+    const output = path.join(root, "evidence");
+    await Promise.all([fs.mkdir(live), fs.mkdir(isolated), fs.mkdir(output)]);
+    const config = {
+      ...configFromEnvironment(environment, "fixture"),
+      liveDirectory: live,
+      jsonDirectory: isolated,
+    };
+    const originalOpen = fs.open;
+    let moved = false;
+    t.mock.method(fs, "open", async (...args: Parameters<typeof fs.open>) => {
+      const handle = await originalOpen(...args);
+      if (!moved && path.basename(String(args[0])) === "proof.md") {
+        moved = true;
+        await fs.rename(output, path.join(live, "nested"));
+        await fs.mkdir(output);
+      }
+      return handle;
+    });
+    await assert.rejects(
+      () => writeRecoveryEvidence(path.join(output, "a", "b", "proof.md"), "secret", config),
+      /outside every protected data directory/,
+    );
+    assert.equal(moved, true);
+    assert.deepEqual(await fs.readdir(path.join(live, "nested")), []);
+  } finally {
+    t.mock.restoreAll();
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
 test("a failed write removes the partial evidence file", async (t) => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "lv1-evidence-partial-"));
   try {
