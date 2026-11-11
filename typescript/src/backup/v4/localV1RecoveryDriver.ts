@@ -1,3 +1,4 @@
+import { lookup } from "node:dns/promises";
 import { constants } from "node:fs";
 import fs from "node:fs/promises";
 import { isIP } from "node:net";
@@ -95,6 +96,8 @@ export type RestartRunner = (request: RestartedProcessRequest) => Promise<Restar
 export type LocalV1RestartProofDeps = {
   /** Defaults to the real `readRestartedProcess`. Injected in tests. */
   restartRunner?: RestartRunner;
+  /** Defaults to the OS resolver. Injected in tests to avoid external DNS. */
+  resolveHostAddresses?: (host: string) => Promise<readonly string[]>;
 };
 
 /**
@@ -130,12 +133,72 @@ function isLoopbackHost(host: string): boolean {
   );
 }
 
+function normaliseHost(hostname: string): string {
+  let host = hostname.toLowerCase();
+  if (host.startsWith("[") && host.endsWith("]")) host = host.slice(1, -1);
+  while (host.endsWith(".")) host = host.slice(0, -1);
+  if (isIP(host) === 6) {
+    // URL canonicalises expanded IPv6 and IPv4-mapped IPv6 to one spelling.
+    host = new URL(`http://[${host}]`).hostname.slice(1, -1);
+  }
+  return host;
+}
+
+function isLoopbackAlias(hostname: string): boolean {
+  const host = normaliseHost(hostname);
+  return (
+    isLoopbackHost(host) || (isIP(host) === 6 && /^::ffff:7f[0-9a-f]{2}:[0-9a-f]{1,4}$/.test(host))
+  );
+}
+
+function portOf(url: URL): string {
+  return url.port !== "" ? url.port : url.protocol === "https:" ? "443" : "80";
+}
+
+async function configuredSharesIsolatedEndpoint(
+  configured: URL,
+  isolated: URL,
+  resolveHostAddresses: (host: string) => Promise<readonly string[]>,
+): Promise<boolean> {
+  if (portOf(configured) !== portOf(isolated)) return false;
+  const configuredHost = normaliseHost(configured.hostname);
+  if (isLoopbackAlias(configuredHost)) return true;
+  if (isIP(configuredHost) !== 0) return false;
+
+  // A same-port DNS name may include loopback after a non-loopback answer.
+  // Resolve every answer without making a request to either backend.
+  let timeout: NodeJS.Timeout | undefined;
+  let addresses: readonly string[];
+  try {
+    addresses = await Promise.race([
+      resolveHostAddresses(configuredHost),
+      new Promise<never>((_resolve, reject) => {
+        timeout = setTimeout(() => reject(new Error("resolution timed out")), 1_000);
+      }),
+    ]);
+    if (
+      addresses.length === 0 ||
+      addresses.length > 64 ||
+      addresses.some((address) => isIP(address) === 0)
+    ) {
+      throw new Error("resolution returned no usable addresses");
+    }
+  } catch (error: unknown) {
+    throw new LocalV1RecoveryDriverError(
+      "Local V1 recovery driver could not resolve the configured CONVEX_URL.",
+      { cause: error },
+    );
+  } finally {
+    if (timeout !== undefined) clearTimeout(timeout);
+  }
+  return addresses.some(isLoopbackAlias);
+}
+
 /** host:port with the scheme's default port filled in. Never carries a token. */
 function endpointOf(url: URL): string {
   let host = url.hostname.toLowerCase();
   if (host.startsWith("[") && host.endsWith("]")) host = host.slice(1, -1);
-  const port = url.port !== "" ? url.port : url.protocol === "https:" ? "443" : "80";
-  return `${host}:${port}`;
+  return `${host}:${portOf(url)}`;
 }
 
 function assertIsolatedTarget(config: LocalV1RestartProofConfig): URL {
@@ -371,7 +434,15 @@ export async function runLocalV1RestartProof(
         );
       }
     }
-    if (configuredUrl !== null && endpointOf(isolated) === endpointOf(configuredUrl)) {
+    if (
+      configuredUrl !== null &&
+      (await configuredSharesIsolatedEndpoint(
+        configuredUrl,
+        isolated,
+        deps.resolveHostAddresses ??
+          (async (host) => (await lookup(host, { all: true })).map(({ address }) => address)),
+      ))
+    ) {
       throw new LocalV1RecoveryDriverError(
         "Local V1 recovery driver refuses the configured CONVEX_URL as the isolated target.",
       );

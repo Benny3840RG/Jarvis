@@ -226,6 +226,110 @@ describe("Local V1 recovery driver — restart proof", () => {
     );
   });
 
+  it("refuses configured loopback aliases at the same port before invoking the runner", async () => {
+    const { config } = await baseConfig();
+    const port = new URL(config.isolatedConvexUrl).port;
+    const aliases = [
+      [`http://localhost:${port}`, `http://127.0.0.1:${port}`],
+      [`http://127.0.0.1:${port}`, `http://localhost:${port}`],
+      [`http://[::1]:${port}`, `http://127.0.0.1:${port}`],
+      [`http://127.0.0.1:${port}`, `http://[::1]:${port}`],
+      [`http://[0:0:0:0:0:0:0:1]:${port}`, `http://[::1]:${port}`],
+      [`http://[::ffff:127.0.0.1]:${port}`, `http://127.0.0.1:${port}`],
+      [`http://[0:0:0:0:0:ffff:7f00:1]:${port}`, `http://127.0.0.1:${port}`],
+      [`http://127.0.0.2:${port}`, `http://127.0.0.1:${port}`],
+      [`http://localhost.:${port}`, `http://127.0.0.1:${port}`],
+    ] as const;
+    for (const [configuredConvexUrl, isolatedConvexUrl] of aliases) {
+      let runnerCalls = 0;
+      await assert.rejects(
+        () =>
+          runLocalV1RestartProof(
+            { ...config, configuredConvexUrl, isolatedConvexUrl },
+            {
+              restartRunner: async () => {
+                runnerCalls += 1;
+                throw new Error("runner should not be called");
+              },
+            },
+          ),
+        /refuses the configured CONVEX_URL/,
+        `${configuredConvexUrl} must be refused against ${isolatedConvexUrl}`,
+      );
+      assert.equal(runnerCalls, 0);
+    }
+  });
+
+  it("checks every resolved configured address before invoking the runner", async () => {
+    const { config } = await baseConfig();
+    const port = new URL(config.isolatedConvexUrl).port;
+    let runnerCalls = 0;
+    let resolvedHost = "";
+    await assert.rejects(
+      () =>
+        runLocalV1RestartProof(
+          { ...config, configuredConvexUrl: `http://configured.local:${port}` },
+          {
+            resolveHostAddresses: async (host) => {
+              resolvedHost = host;
+              return ["192.0.2.10", "::1"];
+            },
+            restartRunner: async () => {
+              runnerCalls += 1;
+              throw new Error("runner should not be called");
+            },
+          },
+        ),
+      /refuses the configured CONVEX_URL/,
+    );
+    assert.equal(resolvedHost, "configured.local");
+    assert.equal(runnerCalls, 0);
+  });
+
+  it("fails closed when a same-port configured host cannot be resolved", async () => {
+    const { config } = await baseConfig();
+    const port = new URL(config.isolatedConvexUrl).port;
+    let runnerCalls = 0;
+    await assert.rejects(
+      () =>
+        runLocalV1RestartProof(
+          { ...config, configuredConvexUrl: `http://configured.local:${port}` },
+          {
+            resolveHostAddresses: async () => {
+              throw new Error("lookup failed");
+            },
+            restartRunner: async () => {
+              runnerCalls += 1;
+              throw new Error("runner should not be called");
+            },
+          },
+        ),
+      /could not resolve the configured CONVEX_URL/,
+    );
+    assert.equal(runnerCalls, 0);
+  });
+
+  it("times out an unresolved same-port configured host before invoking the runner", async () => {
+    const { config } = await baseConfig();
+    const port = new URL(config.isolatedConvexUrl).port;
+    let runnerCalls = 0;
+    await assert.rejects(
+      () =>
+        runLocalV1RestartProof(
+          { ...config, configuredConvexUrl: `http://configured.local:${port}` },
+          {
+            resolveHostAddresses: async () => new Promise<readonly string[]>(() => {}),
+            restartRunner: async () => {
+              runnerCalls += 1;
+              throw new Error("runner should not be called");
+            },
+          },
+        ),
+      /could not resolve the configured CONVEX_URL/,
+    );
+    assert.equal(runnerCalls, 0);
+  });
+
   it("fails closed when the restart runner throws, leaving the live directory unchanged", async () => {
     const { config, liveDirectory } = await baseConfig();
     await assert.rejects(
