@@ -48,7 +48,8 @@ import { redactSecret } from "./convexSmoke.js";
  *   CONVEX_URL                       the configured deployment, refused as a target
  *   JARVIS_SERVICE_TOKEN             overrides the restart harness service token
  *   JARVIS_LV1_LIVE_DIR              live data directory (default: JARVIS_DATA_DIR)
- *   JARVIS_LV1_EVIDENCE_FILE         evidence output path (default: ~/lv1-01/restart-proof-<sha>.md)
+ *   JARVIS_LV1_EVIDENCE_FILE         evidence output path (default: ~/lv1-01/restart-proof-<sha>.md);
+ *                                    its directory must already exist
  */
 
 function loadLocalEnvironment(): void {
@@ -130,6 +131,9 @@ function evidencePath(environment: NodeJS.ProcessEnv, sha: string): string {
 const O_PATH = 0o10000000;
 const DIRECTORY_FLAGS = O_PATH | constants.O_DIRECTORY;
 
+const MISSING_EVIDENCE_DIRECTORY =
+  "Recovery evidence output directory must already exist; create it before running the proof.";
+
 /**
  * Checks everything about the evidence path that can be known before the
  * proof runs, and returns the canonical target. The write repeats the
@@ -155,13 +159,19 @@ export async function assertRecoveryEvidencePath(
   if (process.platform !== "linux") {
     throw new Error("Recovery evidence output requires Linux directory-handle containment.");
   }
-  try {
-    await fs.lstat(target);
-  } catch (error: unknown) {
-    if (error instanceof Error && "code" in error && error.code === "ENOENT") return target;
+  const existing = await fs.lstat(target).catch((error: unknown) => {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") return null;
     throw error;
+  });
+  if (existing !== null) {
+    throw new Error("Recovery evidence output already exists; existing files are never replaced.");
   }
-  throw new Error("Recovery evidence output already exists; existing files are never replaced.");
+  // The writer never creates directories: a directory it made could end up
+  // inside protected data if a parent were moved, and could not be removed
+  // safely afterwards. The operator creates the evidence directory first.
+  const parent = await fs.stat(path.dirname(target)).catch(() => null);
+  if (parent?.isDirectory() !== true) throw new Error(MISSING_EVIDENCE_DIRECTORY);
+  return target;
 }
 
 export async function writeRecoveryEvidence(
@@ -237,69 +247,26 @@ export async function writeRecoveryEvidence(
     const target = await assertRecoveryEvidencePath(outPath, config);
     const parent = path.dirname(target);
     let directory = await fs.open(path.parse(parent).root, DIRECTORY_FLAGS | constants.O_NOFOLLOW);
-    // Directories this call created, with the pinned parent each was made in.
-    // If the write is refused they are removed again, deepest first, so a
-    // refusal leaves nothing behind even if a parent was moved under protected
-    // data in the meantime.
-    const createdDirectories: {
-      parent: fs.FileHandle;
-      name: string;
-      dev: bigint;
-      ino: bigint;
-    }[] = [];
-    const removeCreatedDirectories = async (reason: unknown): Promise<never> => {
-      try {
-        for (const made of [...createdDirectories].reverse()) {
-          const entry = path.join("/proc/self/fd", String(made.parent.fd), made.name);
-          const current = await fs.lstat(entry, { bigint: true });
-          if (current.dev !== made.dev || current.ino !== made.ino) {
-            throw new Error("A directory created for the evidence file was replaced.");
-          }
-          await fs.rmdir(entry);
-        }
-      } catch (cleanup: unknown) {
-        const text = reason instanceof Error ? reason.message : String(reason);
-        throw new Error(
-          `Recovery evidence directories could not be removed after a failure: ${text}`,
-          { cause: cleanup },
-        );
-      }
-      throw reason;
-    };
     try {
       await assertUnprotected(directory);
       for (const component of parent.split(path.sep).filter(Boolean)) {
         const child = path.join("/proc/self/fd", String(directory.fd), component);
         let next: fs.FileHandle;
-        let made = false;
         try {
           next = await fs.open(child, DIRECTORY_FLAGS | constants.O_NOFOLLOW);
         } catch (error: unknown) {
-          if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
-          await assertNoProtectedAncestor(directory);
-          await fs.mkdir(child, { mode: 0o700 });
-          made = true;
-          next = await fs.open(child, DIRECTORY_FLAGS | constants.O_NOFOLLOW);
+          if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+            throw new Error(MISSING_EVIDENCE_DIRECTORY, { cause: error });
+          }
+          throw error;
         }
         try {
-          if (made) {
-            const stat = await next.stat({ bigint: true });
-            createdDirectories.push({
-              parent: directory,
-              name: component,
-              dev: stat.dev,
-              ino: stat.ino,
-            });
-            await assertNoProtectedAncestor(next);
-          } else {
-            await assertUnprotected(next);
-          }
+          await assertUnprotected(next);
         } catch (error: unknown) {
           await next.close();
           throw error;
         }
-        // A parent that had a directory created in it stays open for rollback.
-        if (!made) await directory.close();
+        await directory.close();
         directory = next;
       }
       await assertNoProtectedAncestor(directory);
@@ -350,11 +317,8 @@ export async function writeRecoveryEvidence(
       } finally {
         await file.close();
       }
-    } catch (error: unknown) {
-      await removeCreatedDirectories(error);
     } finally {
-      const open = new Set([directory, ...createdDirectories.map((made) => made.parent)]);
-      await Promise.all([...open].map((handle) => handle.close()));
+      await directory.close();
     }
   } finally {
     await Promise.all(protectedDirectories.map((handle) => handle.close()));

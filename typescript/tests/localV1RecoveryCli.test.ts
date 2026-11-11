@@ -62,6 +62,7 @@ test("evidence writes refuse protected trees, symlink aliases and existing files
     assert.deepEqual(await fs.readdir(live), []);
     assert.deepEqual(await fs.readdir(isolated), []);
     const target = path.join(root, "evidence", "proof.md");
+    await fs.mkdir(path.join(root, "evidence"));
     await writeRecoveryEvidence(target, "first", config);
     await assert.rejects(
       () => writeRecoveryEvidence(target, "replacement", config),
@@ -109,12 +110,11 @@ test("evidence writes refuse dangling links into protected trees without a raw E
   }
 });
 
-test("replacing a newly created output parent with a live-data symlink cannot redirect evidence", async (t) => {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), "lv1-evidence-race-"));
+test("a missing evidence directory is refused and nothing is created", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "lv1-evidence-missing-"));
   try {
     const live = path.join(root, "live");
     const isolated = path.join(root, "isolated");
-    const output = path.join(root, "evidence");
     await fs.mkdir(live);
     await fs.mkdir(isolated);
     const config = {
@@ -122,23 +122,48 @@ test("replacing a newly created output parent with a live-data symlink cannot re
       liveDirectory: live,
       jsonDirectory: isolated,
     };
-    const originalMkdir = fs.mkdir;
-    let replaced = false;
-    t.mock.method(fs, "mkdir", async (...args: Parameters<typeof fs.mkdir>) => {
-      const result = await originalMkdir(...args);
-      if (!replaced && path.basename(String(args[0])) === "evidence") {
-        replaced = true;
-        await fs.rename(output, path.join(root, "moved-evidence"));
-        await fs.symlink(live, output);
-      }
-      return result;
+    for (const target of [
+      path.join(root, "evidence", "proof.md"),
+      path.join(root, "evidence", "deeper", "proof.md"),
+    ]) {
+      await assert.rejects(
+        () => assertRecoveryEvidencePath(target, config),
+        /directory must already exist/,
+      );
+      await assert.rejects(
+        () => writeRecoveryEvidence(target, "secret", config),
+        /directory must already exist/,
+      );
+    }
+    assert.deepEqual((await fs.readdir(root)).sort(), ["isolated", "live"]);
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
+test("an evidence directory removed after the path check is not recreated", async (t) => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "lv1-evidence-vanish-"));
+  try {
+    const live = path.join(root, "live");
+    const isolated = path.join(root, "isolated");
+    const output = path.join(root, "evidence");
+    await Promise.all([fs.mkdir(live), fs.mkdir(isolated), fs.mkdir(output)]);
+    const config = {
+      ...configFromEnvironment(environment, "fixture"),
+      liveDirectory: live,
+      jsonDirectory: isolated,
+    };
+    const originalOpen = fs.open;
+    t.mock.method(fs, "open", async (...args: Parameters<typeof fs.open>) => {
+      if (path.basename(String(args[0])) === "evidence") await fs.rm(output, { recursive: true });
+      return originalOpen(...args);
     });
-    await assert.rejects(() =>
-      writeRecoveryEvidence(path.join(output, "proof.md"), "secret", config),
+    await assert.rejects(
+      () => writeRecoveryEvidence(path.join(output, "proof.md"), "secret", config),
+      /directory must already exist/,
     );
-    assert.equal(replaced, true);
-    assert.deepEqual(await fs.readdir(live), []);
-    assert.deepEqual(await fs.readdir(isolated), []);
+    t.mock.restoreAll();
+    assert.deepEqual((await fs.readdir(root)).sort(), ["isolated", "live"]);
   } finally {
     t.mock.restoreAll();
     await fs.rm(root, { recursive: true, force: true });
@@ -191,6 +216,7 @@ test("renaming the protected live inode into the evidence parent during traversa
     const output = path.join(root, "evidence");
     await fs.mkdir(live);
     await fs.mkdir(isolated);
+    await fs.mkdir(output);
     const config = {
       ...configFromEnvironment(environment, "fixture"),
       liveDirectory: live,
@@ -201,6 +227,7 @@ test("renaming the protected live inode into the evidence parent during traversa
     t.mock.method(fs, "open", async (...args: Parameters<typeof fs.open>) => {
       if (!swapped && args[0] === path.parse(output).root) {
         swapped = true;
+        await fs.rmdir(output);
         await fs.rename(live, output);
         await fs.mkdir(live);
       }
@@ -324,76 +351,6 @@ test("a failed ancestor check closes the ancestor handle it opened", async (t) =
   }
 });
 
-test("a refused write leaves no newly created directory beneath live data", async (t) => {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), "lv1-evidence-mkdir-race-"));
-  try {
-    const live = path.join(root, "live");
-    const isolated = path.join(root, "isolated");
-    const output = path.join(root, "evidence");
-    await Promise.all([fs.mkdir(live), fs.mkdir(isolated), fs.mkdir(output)]);
-    const config = {
-      ...configFromEnvironment(environment, "fixture"),
-      liveDirectory: live,
-      jsonDirectory: isolated,
-    };
-    const originalMkdir = fs.mkdir;
-    let moved = false;
-    t.mock.method(fs, "mkdir", async (...args: Parameters<typeof fs.mkdir>) => {
-      if (!moved && path.basename(String(args[0])) === "new") {
-        moved = true;
-        await fs.rename(output, path.join(live, "nested"));
-        await originalMkdir(output);
-      }
-      return originalMkdir(...args);
-    });
-    await assert.rejects(
-      () => writeRecoveryEvidence(path.join(output, "new", "deeper", "proof.md"), "secret", config),
-      /outside every protected data directory/,
-    );
-    assert.equal(moved, true);
-    assert.deepEqual(await fs.readdir(path.join(live, "nested")), []);
-    assert.deepEqual(await fs.readdir(output), []);
-  } finally {
-    t.mock.restoreAll();
-    await fs.rm(root, { recursive: true, force: true });
-  }
-});
-
-test("a later refusal removes every directory the writer created", async (t) => {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), "lv1-evidence-rollback-"));
-  try {
-    const live = path.join(root, "live");
-    const isolated = path.join(root, "isolated");
-    const output = path.join(root, "evidence");
-    await Promise.all([fs.mkdir(live), fs.mkdir(isolated), fs.mkdir(output)]);
-    const config = {
-      ...configFromEnvironment(environment, "fixture"),
-      liveDirectory: live,
-      jsonDirectory: isolated,
-    };
-    const originalOpen = fs.open;
-    let moved = false;
-    t.mock.method(fs, "open", async (...args: Parameters<typeof fs.open>) => {
-      const handle = await originalOpen(...args);
-      if (!moved && path.basename(String(args[0])) === "proof.md") {
-        moved = true;
-        await fs.rename(output, path.join(live, "nested"));
-        await fs.mkdir(output);
-      }
-      return handle;
-    });
-    await assert.rejects(
-      () => writeRecoveryEvidence(path.join(output, "a", "b", "proof.md"), "secret", config),
-      /outside every protected data directory/,
-    );
-    assert.equal(moved, true);
-    assert.deepEqual(await fs.readdir(path.join(live, "nested")), []);
-  } finally {
-    t.mock.restoreAll();
-    await fs.rm(root, { recursive: true, force: true });
-  }
-});
-
 test("a failed write removes the partial evidence file", async (t) => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "lv1-evidence-partial-"));
   try {
@@ -496,10 +453,14 @@ test("evidence path problems are reported before the proof would run", async () 
       /already exists; existing files are never replaced/,
     );
     assert.equal(await fs.readFile(existing, "utf8"), "earlier run\n");
-    const fresh = path.join(root, "new", "proof.md");
+    const fresh = path.join(root, "proof.md");
     assert.equal(
       await assertRecoveryEvidencePath(fresh, config),
-      path.join(await fs.realpath(root), "new", "proof.md"),
+      path.join(await fs.realpath(root), "proof.md"),
+    );
+    await assert.rejects(
+      () => assertRecoveryEvidencePath(path.join(root, "new", "proof.md"), config),
+      /directory must already exist/,
     );
     assert.deepEqual((await fs.readdir(root)).sort(), ["existing.md", "isolated", "live"]);
   } finally {

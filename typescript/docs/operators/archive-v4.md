@@ -264,7 +264,9 @@ writes an evidence file named for the source SHA (default
 `~/lv1-01/restart-proof-<sha>.md`) with the quote body sha256. The evidence
 writer runs on Linux only, and the output path is checked before the proof
 starts: an existing file, or a path inside live or restored data, is refused
-before any process is launched. The writer re-checks after writing that the
+before any process is launched. The evidence directory must already exist
+(`mkdir -p ~/lv1-01` for the default path); the writer never creates
+directories, so a refused write leaves nothing behind. The writer re-checks after writing that the
 output directory has not been moved under live or restored data, and removes the
 file if it has. It cannot detect a move made after that last check, so do not
 rename or relocate the evidence directory while the proof runs. An absent optional `CONVEX_URL` is recorded as N/A;
