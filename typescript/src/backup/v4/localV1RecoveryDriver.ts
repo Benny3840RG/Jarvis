@@ -1,3 +1,4 @@
+import { constants } from "node:fs";
 import fs from "node:fs/promises";
 import { isIP } from "node:net";
 import path from "node:path";
@@ -248,13 +249,73 @@ function isWithin(parent: string, child: string): boolean {
   );
 }
 
-async function assertSeparateDataDirectories(config: LocalV1RestartProofConfig): Promise<void> {
-  const live = await canonicalRecoveryPath(config.liveDirectory);
-  const json = await canonicalRecoveryPath(config.jsonDirectory);
-  if (isWithin(live, json) || isWithin(json, live)) {
+type PinnedDirectory = { handle: fs.FileHandle; path: string };
+
+// Linux /proc paths keep the opened inode, including in a child process. The
+// parent holds both descriptors until the proof and its digest checks finish.
+async function pinDirectory(candidate: string): Promise<PinnedDirectory> {
+  await canonicalRecoveryPath(candidate); // Preserve dangling-link refusal.
+  const handle = await fs.open(candidate, 0o10000000 | constants.O_DIRECTORY);
+  return { handle, path: `/proc/${process.pid}/fd/${handle.fd}` };
+}
+
+async function assertPinnedPath(candidate: string, pinned: PinnedDirectory): Promise<void> {
+  try {
+    const [current, opened] = await Promise.all([
+      fs.stat(candidate, { bigint: true }),
+      pinned.handle.stat({ bigint: true }),
+    ]);
+    if (current.isDirectory() && current.dev === opened.dev && current.ino === opened.ino) return;
+  } catch {
+    // A removed path is also a changed path.
+  }
+  throw new LocalV1RecoveryDriverError(
+    "Local V1 recovery driver directory path changed during the restart proof.",
+  );
+}
+
+async function pinSeparateDataDirectories(
+  config: LocalV1RestartProofConfig,
+): Promise<{ live: PinnedDirectory; json: PinnedDirectory }> {
+  if (process.platform !== "linux") {
+    throw new LocalV1RecoveryDriverError(
+      "Local V1 recovery driver requires Linux directory-handle containment.",
+    );
+  }
+  const [requestedLive, requestedJson] = await Promise.all([
+    canonicalRecoveryPath(config.liveDirectory),
+    canonicalRecoveryPath(config.jsonDirectory),
+  ]);
+  if (isWithin(requestedLive, requestedJson) || isWithin(requestedJson, requestedLive)) {
     throw new LocalV1RecoveryDriverError(
       "Local V1 recovery driver refuses a JSON directory that overlaps live data.",
     );
+  }
+  const live = await pinDirectory(config.liveDirectory);
+  try {
+    const json = await pinDirectory(config.jsonDirectory);
+    try {
+      const [livePath, jsonPath] = await Promise.all([
+        fs.realpath(live.path),
+        fs.realpath(json.path),
+      ]);
+      if (isWithin(livePath, jsonPath) || isWithin(jsonPath, livePath)) {
+        throw new LocalV1RecoveryDriverError(
+          "Local V1 recovery driver refuses a JSON directory that overlaps live data.",
+        );
+      }
+      await Promise.all([
+        assertPinnedPath(config.liveDirectory, live),
+        assertPinnedPath(config.jsonDirectory, json),
+      ]);
+      return { live, json };
+    } catch (error: unknown) {
+      await json.handle.close();
+      throw error;
+    }
+  } catch (error: unknown) {
+    await live.handle.close();
+    throw error;
   }
 }
 
@@ -299,70 +360,87 @@ export async function runLocalV1RestartProof(
     }
   }
 
-  await assertSeparateDataDirectories(config);
-  const before = await localV1LiveDirectoryDigest(config.liveDirectory);
+  const pinned = await pinSeparateDataDirectories(config);
   try {
-    const configuredUrlRefused = await proveConfiguredUrlRefused(config, runner);
-    const result = await runner({
-      jsonDirectory: config.jsonDirectory,
-      liveDirectory: config.liveDirectory,
-      clientId: config.ids.clientId,
-      taskId: config.ids.taskId,
-      buildId: config.ids.buildId,
-      quoteId: config.ids.quoteId,
-      configuredConvexUrl: config.configuredConvexUrl,
-      isolatedConvexUrl: config.isolatedConvexUrl,
-      deliveryRuntimeToken: config.deliveryRuntimeToken,
-      serviceToken: config.serviceToken,
-    });
-    if (!result.quoteRecovered) {
-      throw new LocalV1RecoveryDriverError(
-        "Local V1 recovery driver did not recover the quote GET from the isolated backend.",
-      );
-    }
-    // Do not rely on the runner's flag alone: the quote read after the
-    // restart must be byte-identical to the one before it.
-    if (result.first.quoteBody !== result.second.quoteBody) {
-      throw new LocalV1RecoveryDriverError(
-        "Local V1 recovery driver read a different quote after the restart.",
-      );
-    }
-    const after = await localV1LiveDirectoryDigest(config.liveDirectory);
-    const liveDirectoryUnchanged = after === before;
-    if (!liveDirectoryUnchanged) {
-      throw new LocalV1RecoveryDriverError(
-        "Local V1 recovery driver changed the live data directory.",
-      );
-    }
-    return {
-      sourceSha: config.sourceSha.trim(),
-      isolatedEndpoint: endpointOf(isolated),
-      configuredUrlRefused,
-      quoteRecovered: result.quoteRecovered,
-      quoteBodySha256: sha256Hex(result.first.quoteBody),
-      clientMatched: result.first.clientBody === result.second.clientBody,
-      taskMatched: result.first.taskBody === result.second.taskBody,
-      buildMatched: result.first.buildBody === result.second.buildBody,
-      liveDirectoryUnchanged,
-    };
-  } catch (error: unknown) {
-    let after: string;
+    const before = await localV1LiveDirectoryDigest(pinned.live.path);
     try {
-      after = await localV1LiveDirectoryDigest(config.liveDirectory);
-    } catch {
-      // Keep the failure that brought us here; the digest error would hide it.
-      throw new LocalV1RecoveryDriverError(
-        "Local V1 recovery driver failed and could not re-check the live data directory.",
-        { cause: error },
-      );
+      const pinnedConfig = {
+        ...config,
+        liveDirectory: pinned.live.path,
+        jsonDirectory: pinned.json.path,
+      };
+      const configuredUrlRefused = await proveConfiguredUrlRefused(pinnedConfig, runner);
+      await Promise.all([
+        assertPinnedPath(config.liveDirectory, pinned.live),
+        assertPinnedPath(config.jsonDirectory, pinned.json),
+      ]);
+      const result = await runner({
+        jsonDirectory: pinned.json.path,
+        liveDirectory: pinned.live.path,
+        clientId: config.ids.clientId,
+        taskId: config.ids.taskId,
+        buildId: config.ids.buildId,
+        quoteId: config.ids.quoteId,
+        configuredConvexUrl: config.configuredConvexUrl,
+        isolatedConvexUrl: config.isolatedConvexUrl,
+        deliveryRuntimeToken: config.deliveryRuntimeToken,
+        serviceToken: config.serviceToken,
+      });
+      if (!result.quoteRecovered) {
+        throw new LocalV1RecoveryDriverError(
+          "Local V1 recovery driver did not recover the quote GET from the isolated backend.",
+        );
+      }
+      // Do not rely on the runner's flag alone: the quote read after the
+      // restart must be byte-identical to the one before it.
+      if (result.first.quoteBody !== result.second.quoteBody) {
+        throw new LocalV1RecoveryDriverError(
+          "Local V1 recovery driver read a different quote after the restart.",
+        );
+      }
+      const after = await localV1LiveDirectoryDigest(pinned.live.path);
+      const liveDirectoryUnchanged = after === before;
+      if (!liveDirectoryUnchanged) {
+        throw new LocalV1RecoveryDriverError(
+          "Local V1 recovery driver changed the live data directory.",
+        );
+      }
+      await Promise.all([
+        assertPinnedPath(config.liveDirectory, pinned.live),
+        assertPinnedPath(config.jsonDirectory, pinned.json),
+      ]);
+      return {
+        sourceSha: config.sourceSha.trim(),
+        isolatedEndpoint: endpointOf(isolated),
+        configuredUrlRefused,
+        quoteRecovered: result.quoteRecovered,
+        quoteBodySha256: sha256Hex(result.first.quoteBody),
+        clientMatched: result.first.clientBody === result.second.clientBody,
+        taskMatched: result.first.taskBody === result.second.taskBody,
+        buildMatched: result.first.buildBody === result.second.buildBody,
+        liveDirectoryUnchanged,
+      };
+    } catch (error: unknown) {
+      let after: string;
+      try {
+        after = await localV1LiveDirectoryDigest(pinned.live.path);
+      } catch {
+        // Keep the failure that brought us here; the digest error would hide it.
+        throw new LocalV1RecoveryDriverError(
+          "Local V1 recovery driver failed and could not re-check the live data directory.",
+          { cause: error },
+        );
+      }
+      if (after !== before) {
+        throw new LocalV1RecoveryDriverError(
+          "Local V1 recovery driver changed the live data directory.",
+          { cause: error },
+        );
+      }
+      throw error;
     }
-    if (after !== before) {
-      throw new LocalV1RecoveryDriverError(
-        "Local V1 recovery driver changed the live data directory.",
-        { cause: error },
-      );
-    }
-    throw error;
+  } finally {
+    await Promise.all([pinned.live.handle.close(), pinned.json.handle.close()]);
   }
 }
 

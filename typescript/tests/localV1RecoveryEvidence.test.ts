@@ -53,6 +53,8 @@ test("driver records absent configured URL as N/A without claiming a refusal", a
   const { runLocalV1RestartProof } = await import("../src/backup/v4/localV1RecoveryDriver.js");
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "lv1-proof-record-"));
   try {
+    await fs.mkdir(path.join(root, "isolated"));
+    await fs.mkdir(path.join(root, "live"));
     const body = {
       clientBody: "client",
       taskBody: "task",
@@ -305,6 +307,48 @@ test("driver refuses equal, nested and symlink-aliased JSON/live roots before an
       );
       assert.equal(calls, 0);
     }
+  } finally {
+    await fixture.cleanup();
+  }
+});
+
+test("runner paths stay pinned when live and JSON directory names are swapped", async () => {
+  const fs = await import("node:fs/promises");
+  const path = await import("node:path");
+  const { runLocalV1RestartProof } = await import("../src/backup/v4/localV1RecoveryDriver.js");
+  const fixture = await driverFixture();
+  const originalLive = path.join(fixture.root, "original-live");
+  const originalJson = path.join(fixture.root, "original-json");
+  try {
+    await fs.writeFile(path.join(fixture.config.liveDirectory, "sentinel"), "live");
+    await assert.rejects(
+      () =>
+        runLocalV1RestartProof(fixture.config, {
+          restartRunner: async (request) => {
+            assert.equal(
+              await fs.readFile(path.join(request.liveDirectory, "sentinel"), "utf8"),
+              "live",
+            );
+            await fs.rename(fixture.config.liveDirectory, originalLive);
+            await fs.rename(fixture.config.jsonDirectory, originalJson);
+            await fs.mkdir(fixture.config.liveDirectory);
+            await fs.symlink(fixture.config.liveDirectory, fixture.config.jsonDirectory);
+            await fs.writeFile(path.join(request.jsonDirectory, "runner-marker"), "isolated");
+            assert.equal(
+              await fs.readFile(path.join(request.liveDirectory, "sentinel"), "utf8"),
+              "live",
+            );
+            return fixture.result;
+          },
+        }),
+      /directory path changed during the restart proof/,
+    );
+    assert.equal(await fs.readFile(path.join(originalJson, "runner-marker"), "utf8"), "isolated");
+    await assert.rejects(() => fs.stat(path.join(originalLive, "runner-marker")), /ENOENT/);
+    await assert.rejects(
+      () => fs.stat(path.join(fixture.config.liveDirectory, "runner-marker")),
+      /ENOENT/,
+    );
   } finally {
     await fixture.cleanup();
   }
