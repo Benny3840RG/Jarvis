@@ -29,8 +29,11 @@ relevant facts for this tranche:
 | Admission reducer                   | `admission.ts`                                                    | One slot per owner; never-refunded 60 s history; `uncertain` holds the slot; only a signal resolves it | That the signal reflects a real socket                               |
 | Gate                                | `gate.ts`                                                         | Table anchor, expiry, epoch, digest, target, freshness                                                 | That the clock it was given is trustworthy                           |
 
-So obligations 1–5 hold **in the reducers**. None holds at a real boundary yet,
-because no real boundary exists. The three specifications below supply one each.
+The reducers model parts of the decision logic only. **None of obligations 1–5 is
+established today**: there is no real connector and no kernel gate, the ledger is an
+in-memory reducer, the production provider wiring returns `null`, and no clock is
+trusted. Each obligation stays unestablished until the boundary specified below
+exists and its matrix cases have been observed.
 
 ## WS-A — Egress enforcer (obligations 1 and 3)
 
@@ -71,9 +74,20 @@ Two layers. The second is the enforcement point of record; the first is not.
 
 `tcpcheck_guarded` is the durable record of what the capability has ever been
 allowed to reach. Its contents are kept in a root-owned file loaded with the rule
-set, and mirrored in the store. A pair is added to it, and read back, **before** the
-policy that first contains the pair is activated (A4). The broker refuses to start
-unless the kernel set contains every pair the store lists. Removing a pair from it
+set, and mirrored in the store. Before the policy that first contains a pair is
+activated (A4), three things must have happened in this order: the pair is written
+to the root-owned file and the file and its directory are synced to disk; the pair
+is added to the kernel set; the kernel set is read back and contains it. A crash at
+any later point therefore reloads a file that already holds the pair. The broker
+refuses to start unless the kernel set contains every pair the store lists.
+
+**The worker does not run without the guard.** The worker has general outbound
+access, so a boot with no rule set, or with an older guarded set, would leave former
+targets reachable. The Jarvis service unit is therefore ordered after, and requires,
+a root-owned unit that loads the rule set and verifies by readback that
+`tcpcheck_guarded` contains every pair in the root-owned file. If that unit fails,
+the Jarvis service does not start. This couples the service's startup to the rule
+set and is part of owner decision 5. Removing a pair from it
 is never automatic; it is a separate owner action.
 
 **Scope of the claim, stated plainly.** This prevents any process other than the
@@ -118,8 +132,8 @@ userspace has to succeed for it to take effect.
      confirmed absence. While deletion is failing (D5) the pair can still be in the
      kernel set, but step 1 already stops every new grant and every new `connecting`
      record for it.
-- **Widening (add a target):** add the pair to `tcpcheck_guarded` and read it back;
-  then activate the policy in the store; then add the element to `tcpcheck_live`. The
+- **Widening (add a target):** persist the pair in the guarded file, add it to
+  `tcpcheck_guarded` and read it back (A2); then activate the policy in the store; then add the element to `tcpcheck_live`. The
   kernel never admits a pair the active policy does not contain, and no pair becomes
   reachable by the broker before it is denied to everyone else.
 
@@ -143,8 +157,10 @@ This is a **requirement to demonstrate**, not a result.
   step does not extend them. **VERIFY** (D14).
 - Across a host suspend, kernel timers may not advance. A resume hook flushes
   `tcpcheck_live` before the broker is allowed to run. **VERIFY** (D15).
-- The rule set is loaded before the broker starts and the broker refuses to start if
-  it cannot read back the expected rules. A boot with no rule set means no broker.
+- The rule set is loaded before the broker **and before the worker** start. The
+  broker refuses to start if it cannot read back the expected rules, and the Jarvis
+  service unit does not start unless the guard unit succeeded (A2). A boot with no
+  rule set means no broker and no worker.
 
 ### A6. Superseded capabilities at the effect boundary (obligation 3)
 
@@ -183,10 +199,11 @@ transaction it:
 1. reads the claim key through an index, by equality;
 2. if a row exists, returns it unchanged (never `fresh`);
 3. otherwise checks that the owner's admission record is `started` under the
-   presented fence token and that the claim key recorded on that admission record
-   equals the presented one. (Today the admission record holds the attempt id, the
-   fence token and the policy epoch, but no claim key; WS-B adds it, written once at
-   `reserved → started`.) If either fails it returns the typed rejection and **inserts nothing**: without a
+   presented fence token and that the claim binding stored for that attempt equals
+   the presented claim's. (The binding exists today as `ClaimBindingRecord`, keyed by
+   attempt id and written with the reservation, in `tcpCheckProvider.ts`; its only
+   store today is in memory. WS-B makes it a Convex table read in this
+   transaction.) If either fails it returns the typed rejection and **inserts nothing**: without a
    matching `started` record no later call can be granted either, so there is
    nothing to retire;
 4. then checks that the policy epoch and digest match the active policy, that no
@@ -204,9 +221,10 @@ the same transaction, so two concurrent calls for one claim key cannot both obse
 "no row" and both commit. **VERIFY** (D8): under concurrent delivery the store ends
 with exactly one row and exactly one caller received a fresh grant.
 
-**Expiry comparison.** A capability is valid while `now ≤ expiresAtMs` and expired
-when `now > expiresAtMs`, the comparison `gate.ts` makes today. `grantConnect`,
-`markConnecting` and the broker's gate all use it.
+**Expiry comparison.** `gate.ts` today treats a capability as valid while
+`now ≤ expiresAtMs` and expired when `now > expiresAtMs`. The store mutations keep
+that direction but apply the guard margin from C1: `grantConnect` and
+`markConnecting` refuse when `now > expiresAtMs − T_guard`.
 
 Only the caller that receives a freshly inserted `granted` row may proceed. The mutation is
 callable only with the broker's credential, so the worker cannot grant itself.
@@ -222,7 +240,7 @@ own clock.
 In a single transaction it:
 
 1. loads the row and requires phase `granted`, written by the calling instance;
-2. re-checks, **by the store's clock**, that `now ≤ expiresAtMs`, that the fence
+2. re-checks, **by the store's clock**, that `now ≤ expiresAtMs − T_guard` (C1), that the fence
    token is still current, that the policy epoch and digest still match the active
    policy, and that no narrowing is pending for the pair;
 3. if every check passes, moves the row to `connecting`; if one fails, settles the
@@ -285,15 +303,16 @@ recovery tell "provably no socket" from "a socket may have existed".
 
 ### B2. What a retry returns
 
-| Stored state when the retry arrives                                   | Returned                                                                                  | New connect? |
-| --------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- | ------------ |
-| no row, checks pass                                                   | fresh grant                                                                               | yes, once    |
-| no row, no matching `started` admission record (B1 step 3)            | the typed rejection; no row is written; a retry is evaluated again and fails the same way | no           |
-| no row, a policy, pending-narrowing or expiry check fails (B1 step 4) | the typed rejection; `refused` is settled so later retries replay it                      | no           |
-| `granted` or `connecting`                                             | `effect_uncertain`                                                                        | no           |
-| `settled(outcome)`                                                    | `replayed` with the stored outcome                                                        | no           |
-| `retired-unknown`                                                     | `effect_uncertain`, permanently                                                           | no           |
-| store unreachable or the call throws                                  | `effect_uncertain`; slot and barrier retained; reported blocked                           | no           |
+| Stored state when the retry arrives                                         | Returned                                                                                  | New connect? |
+| --------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- | ------------ |
+| no row, checks pass                                                         | fresh grant                                                                               | yes, once    |
+| no row, no matching `started` admission record (B1 step 3)                  | the typed rejection; no row is written; a retry is evaluated again and fails the same way | no           |
+| no row, admission `started` or `uncertain`, claim never granted (B3 case 4) | `retireUngranted` settles `refused`; later retries replay it                              | no           |
+| no row, a policy, pending-narrowing or expiry check fails (B1 step 4)       | the typed rejection; `refused` is settled so later retries replay it                      | no           |
+| `granted` or `connecting`                                                   | `effect_uncertain`                                                                        | no           |
+| `settled(outcome)`                                                          | `replayed` with the stored outcome                                                        | no           |
+| `retired-unknown`                                                           | `effect_uncertain`, permanently                                                           | no           |
+| store unreachable or the call throws                                        | `effect_uncertain`; slot and barrier retained; reported blocked                           | no           |
 
 This covers duplicate delivery, a lost response, a broker restart and a delayed
 replay. A new check always needs a new stage and a new approval.
@@ -315,6 +334,19 @@ Only these durable records release the slot or clear a narrowing barrier:
    `retired-unknown` and signals `socket-closed`. The slot is released; the answer to
    the caller stays `effect_uncertain` forever.
 
+4. **Never granted** — the admission record is `started` (or `uncertain` after
+   recovery) and **no ledger row exists** for its claim key. This happens when the
+   worker died before sending the claim, or the broker died or lost the store before
+   `grantConnect` committed. No socket can exist without a grant. The broker (the
+   running instance, or a new one at start) calls `retireUngranted`: one transaction
+   that reads the claim key and, only if there is still no row, inserts it settled
+   as `refused` with reason `fence_superseded`, then signals `never-admitted`. If a
+   grant committed first, the transaction finds the row and changes nothing, and
+   cases 1–3 apply. Serialisability makes this safe without the death proof: a late
+   `grantConnect` for the same key finds the refused row and returns it.
+
+A refusal written by `grantConnect` itself (B1 step 5) also signals `never-admitted`.
+
 Case 3 is where "network outcome unknown" and "effect proven quiescent" stay
 separate: liveness is resolved without inventing a network result.
 
@@ -330,8 +362,16 @@ closed, so a child or any other process holding an inherited or duplicated
 descriptor keeps it locked after the broker dies. The proof therefore also requires:
 the lock file is opened close-on-exec; the broker starts no child process and passes
 no descriptor to anyone (the import-boundary test in A2 covers `node:child_process`
-for the broker's entry point as well); and the lock file's directory is writable only
-by root and `jarvis-egress`. A surviving descriptor is fail-closed: the new broker
+for the broker's entry point as well).
+
+Every instance must lock the **same inode**, or a newer lock proves nothing: if the
+pathname could be replaced, a paused old broker would keep its lock on the old file
+while a new one locked the new file. So the lock file is created once by root, in a
+directory owned by root that `jarvis-egress` cannot write, rename or unlink in; the
+broker opens it read-only (an advisory lock does not need write access). The file's
+device and inode numbers are recorded in the store when it is created. After taking
+the lock, each instance compares the numbers of its open descriptor, and of the
+pathname, with the stored ones and refuses to start on any difference (D30). A surviving descriptor is fail-closed: the new broker
 cannot take the lock, the slot stays held and the attempt is reported blocked.
 **VERIFY** (D29).
 
@@ -345,8 +385,8 @@ under its assumptions: _the host eventually runs a broker that can take the lock
 
 Ledger rows are never deleted, reopened or expired. A claim key that has ever been
 granted is retired for good. `grantConnect` inserts a row, granted or refused, only
-for the claim key recorded on a `started` admission record (B1, step 3), and each
-`started` record carries exactly one claim key. Row growth is therefore bounded by the number of
+for a claim whose binding matches a `started` admission record (B1, step 3), and
+each attempt has exactly one binding, hence one claim key. Row growth is therefore bounded by the number of
 `started` records, which the rate limit caps at ten per owner per minute. A call that
 fails step 3 leaves no row. Whether to archive very old rows is an owner decision; until
 decided, keep them all.
@@ -373,9 +413,15 @@ store time is never allowed to go backwards:
   A server clock that steps back therefore cannot make an expired lease live again
   or a stale table fresh again: decisions continue from the high-water mark. Time
   then appears frozen until the real clock passes the mark, which only denies;
-- the renewer writes a heartbeat mutation on every cycle (`T_live / 3`), so while the
-  capability is in use the high-water mark trails real store time by at most one
-  cycle;
+- the renewer writes a heartbeat mutation on every cycle (`T_live / 3`), which keeps
+  the high-water mark moving while the capability is in use;
+- the high-water mark only records times a mutation actually saw. A backward step
+  that happens **between** two mutations is invisible to it: the clock can pass a
+  cutoff and step back below it before anything is written. Every cutoff is
+  therefore compared with a guard margin, `T_guard` (proposal: **2 000 ms**): a
+  capability is treated as expired when `now > expiresAtMs − T_guard`, and a table as
+  stale `T_guard` before its bound. This shortens the usable lease by `T_guard` and
+  makes the decision correct for any unseen backward step of up to `T_guard`;
 - the broker and the renewer do **not** decide freshness or expiry on their own wall
   clocks. Each obtains `now` from the store with the decision it is making (the
   renewer from its heartbeat, the broker from `grantConnect` / `markConnecting`) and
@@ -386,8 +432,12 @@ store time is never allowed to go backwards:
   reports blocked. This detects a wrong host clock; it never grants anything.
 
 **Named assumptions.** That a Convex mutation reads server time, not the caller's
-(**VERIFY**), and that the store's clock is not behind true time by more than the
-freshness bound can tolerate. If the high-water mark is ever pushed far into the
+(**VERIFY**); that the store's clock is not behind true time by more than the
+freshness bound can tolerate; and that the store's clock never steps backwards by
+more than `T_guard` without a mutation having observed the later time. **The
+exact-expiry guarantee is proved only under that last assumption.** A larger unseen
+step is outside what this design can detect, because nothing in it has a second
+trusted time source; whether that is acceptable is owner decision 8. If the high-water mark is ever pushed far into the
 future by a bad clock, everything is denied until an owner resets it; there is no
 automatic recovery, by design.
 
@@ -479,8 +529,12 @@ used anywhere in this matrix.
 | D25 | Narrowing recorded as pending, kernel deletion not yet done (or failing); a claim for that pair is presented; separately, a broker holding a `granted` row for it resumes | 1, 3 | 0 SYN; pair may still be in the kernel set; counters unchanged | `grantConnect` and `markConnecting` both refuse; `refused`, `policy_changed`; epoch not advanced |
 | D26 | Target removed and the narrowing activated; worker process connects directly to the former target | 1 | Rejected by the kernel through `tcpcheck_guarded`; reject counter +1; 0 SYN | No ledger row |
 | D27 | Broker stopped at a test hook after its second monotonic read, held past `expiresAtMs`, pair still allowed; broker resumes | 5 | Under decision 7a: connect rejected by the kernel; reject counter +1; 0 SYN. Under 7b: one late attempt is expected and is recorded as the accepted residual | 7a: `connecting`, then `settled(error)`. 7b: the real outcome is settled |
-| D28 | Store server clock stepped back to a time later than the newest record but earlier than a lease expiry or freshness cutoff it had already passed | 5 | 0 SYN; element not refreshed | `now` stays at `timeHighWaterMs`; `refused`, `expired` or `policy_changed` |
+| D28 | A mutation is committed after a lease expiry (or freshness cutoff) has passed, so `timeHighWaterMs` is beyond it; the store server clock is then stepped back to before the cutoff but later than the newest record | 5 | 0 SYN; element not refreshed | `now` stays at `timeHighWaterMs`; `refused`, `expired` or `policy_changed` |
+| D31 | No mutation is committed across the cutoff: the store server clock passes a lease expiry unseen, then steps back by less than `T_guard`; a claim is presented | 5 | 0 SYN | `refused`, `expired`, by the guard margin. A step larger than `T_guard` is outside the named assumption and is not claimed |
 | D29 | Broker killed while another process holds a duplicate of its lock descriptor; new broker starts | 4 | No second attempt | New broker cannot take the lock; slot held; blocked until the descriptor closes, then B3 applies |
+| D30 | Broker paused while holding the lock; the lock pathname is replaced with a new file (attempted as `jarvis-egress`, then forced as root in the harness); new broker starts | 4 | No second attempt | As `jarvis-egress` the replacement fails. After the forced replacement the new broker sees a different inode from the stored one and refuses to start; slot held; nothing retired |
+| D32 | Broker killed after `reserved → started`, before `grantConnect` commits; separately, worker killed before sending the claim; store then recovers | 3, 4 | 0 SYN | `retireUngranted` settles `refused`, `fence_superseded`; `never-admitted`; slot and barrier released |
+| D33 | Host crashes after a widening is activated, then reboots; worker connects directly to the new target; separately, boot with the rule set failing to load | 1 | Reboot: rejected through `tcpcheck_guarded`; reject counter +1; 0 SYN. Failed load: the Jarvis service does not start; 0 SYN | Guarded file already holds the pair; no ledger row |
 
 **The D4 probe.** A compliant broker never reaches the kernel once the control plane
 has failed: it cannot commit `markConnecting`. The kernel deny is therefore
@@ -503,13 +557,13 @@ explicit sign-off.
 
 ## Obligation coverage
 
-| Obligation (#779)                                               | Specified in                                                                 | Demonstrated by                          |
-| --------------------------------------------------------------- | ---------------------------------------------------------------------------- | ---------------------------------------- |
-| 1 — freshness and revocation timing, independent deny path      | A2–A5                                                                        | D1–D6, D15, D19, D22, D25, D26           |
-| 2 — durable single use at the egress boundary                   | B1, B2, B4                                                                   | D8–D11                                   |
-| 3 — effect boundary rejects superseded capabilities             | A6, B1a, B3                                                                  | D1–D3, D10–D12, D20, D23–D25             |
-| 4 — eventual resolution under named assumptions                 | B3                                                                           | D10–D13, D29                             |
-| 5 — deadline origin, timeout versus unknown, port range, window | B1a, C1–C4 (expiry at the egress boundary **not yet specified**: decision 7) | D6, D7, D14–D18, D21, D23, D24, D27, D28 |
+| Obligation (#779)                                               | Specified in                                                                 | Demonstrated by                               |
+| --------------------------------------------------------------- | ---------------------------------------------------------------------------- | --------------------------------------------- |
+| 1 — freshness and revocation timing, independent deny path      | A2–A5                                                                        | D1–D6, D15, D19, D22, D25, D26, D33           |
+| 2 — durable single use at the egress boundary                   | B1, B2, B4                                                                   | D8–D11                                        |
+| 3 — effect boundary rejects superseded capabilities             | A6, B1a, B3                                                                  | D1–D3, D10–D12, D20, D23–D25, D32             |
+| 4 — eventual resolution under named assumptions                 | B3                                                                           | D10–D13, D29, D30, D32                        |
+| 5 — deadline origin, timeout versus unknown, port range, window | B1a, C1–C4 (expiry at the egress boundary **not yet specified**: decision 7) | D6, D7, D14–D18, D21, D23, D24, D27, D28, D31 |
 
 No obligation box on #779 should be ticked from this document. Each is ticked only
 when implemented and covered by its matrix cases.
@@ -526,16 +580,20 @@ when implemented and covered by its matrix cases.
    outside the special-use table and never routed off the machine.
 4. **`T_live`.** Confirm 30 s as the worst-case teardown delay when the control
    plane has failed, or set another value.
-5. **Root-owned components.** The rule set, the renewer and the resume hook need
-   root on the host. Confirm that is acceptable for a development-only capability.
+5. **Root-owned components.** The rule set, the renewer, the resume hook, the lock
+   file and the guard unit need root on the host, and the Jarvis service would no
+   longer start if the guard unit fails (A2). Confirm that is acceptable for a
+   development-only capability.
 6. **Ledger retention.** Keep every row indefinitely, or define an archive rule.
 7. **Lease enforcement at the syscall (blocks obligation 5).** Choose 7a (enforce
    the lease in the kernel; recommended; needs its own specification) or 7b (accept
    the residual in B1a, which amends the locked scope). Also confirm `T_call` at
    1 000 ms or set another value.
-8. **Clock tolerance and reset.** Confirm 5 000 ms as the allowed difference between
-   a component's clock and store time, and that resetting `timeHighWaterMs` is an
-   owner-only action.
+8. **Clock tolerance, guard margin and reset.** Confirm 5 000 ms as the allowed
+   difference between a component's clock and store time, and `T_guard` at 2 000 ms.
+   Accept that exact expiry is proved only if the store's clock never steps back
+   unseen by more than `T_guard` (C1), or require a second trusted time source.
+   Confirm that resetting `timeHighWaterMs` is an owner-only action.
 
 ## Gates
 
