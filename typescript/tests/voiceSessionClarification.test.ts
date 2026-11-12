@@ -16,6 +16,15 @@ function session(provider: VoiceActuationProvider = new AbsentHardwareProvider()
   });
 }
 
+function profileSession(profile: "crawler" | "workshop" | "trailer" | "client") {
+  return new VoiceSession({
+    profile,
+    provider: new AbsentHardwareProvider(),
+    interpretNaturalLanguage: true,
+    confirmationTtlMs: 1_000,
+  });
+}
+
 async function say(s: VoiceSession, transcript: string, now: number, alternatives?: string[]) {
   return s.handle({ transcript, isFinal: true, wakeAuthorized: true, now, alternatives });
 }
@@ -30,6 +39,79 @@ async function offered(s: VoiceSession) {
 }
 
 describe("voice session — bounded clarification", () => {
+  it("does not replace a spoken opposite command with an offered command", async () => {
+    const cases = [
+      ["trailer", "winch up and turn the trailer lights on", "lower the winch"],
+      ["trailer", "winch up and turn the trailer lights on", "bring the winch down"],
+      [
+        "workshop",
+        "start the compressor and turn the workshop lights on",
+        "shut the compressor down",
+      ],
+      ["workshop", "start the compressor and turn the workshop lights on", "kill the compressor"],
+      ["crawler", offer, "kill the lights off now"],
+    ] as const;
+    for (const [profile, first, reply] of cases) {
+      const s = profileSession(profile);
+      assert.equal((await say(s, first, 0)).decision, "ambiguous", first);
+      assert.equal((await say(s, reply, 1)).decision, "unrecognized", reply);
+      assert.equal(s.pending(), undefined, reply);
+      assert.equal((await say(s, "confirm", 2)).decision, "confirmation-not-pending", reply);
+    }
+  });
+
+  it("does not arm a report or question that names an offered command", async () => {
+    for (const reply of [
+      "i'll send the quote",
+      "i'd send the quote",
+      "did you send the quote",
+      "i already sent the quote so draft a reminder",
+    ]) {
+      const s = profileSession("client");
+      assert.equal((await say(s, "send the quote or draft the quote", 0)).decision, "ambiguous");
+      assert.equal((await say(s, reply, 1)).decision, "unrecognized", reply);
+      assert.equal(s.pending(), undefined, reply);
+      assert.equal((await say(s, "confirm", 2)).decision, "confirmation-not-pending", reply);
+    }
+    const crawler = session();
+    await offered(crawler);
+    assert.equal((await say(crawler, "i went forward already", 1)).decision, "unrecognized");
+    assert.equal(crawler.pending(), undefined);
+  });
+
+  it("rejects an alternative that proposes an opposite or reports the offered action", async () => {
+    for (const alternative of ["lower the winch", "i'd winch up"]) {
+      const s = profileSession("trailer");
+      assert.equal(
+        (await say(s, "winch up and turn the trailer lights on", 0)).decision,
+        "ambiguous",
+      );
+      assert.notEqual(
+        (await say(s, "raise the winch", 1, [alternative])).decision,
+        "awaiting-confirmation",
+      );
+      assert.equal(s.pending(), undefined);
+      assert.equal((await say(s, "confirm", 2)).decision, "confirmation-not-pending");
+    }
+  });
+
+  it("lets an expired offer fall through to a fresh guarded request", async () => {
+    const s = profileSession("client");
+    assert.equal((await say(s, "send the quote or draft the quote", 0)).decision, "ambiguous");
+    const fresh = await say(s, "can you send the quote", 5_000);
+    assert.equal(fresh.decision, "awaiting-confirmation");
+    assert.equal(s.pending()?.command.id, "client.send-quote");
+    assert.equal((await say(s, "first", 5_001)).decision, "unrecognized");
+  });
+
+  it("does not arm a first-turn offer when ASR includes a control hypothesis", async () => {
+    for (const alternative of ["confirm", "cancel"]) {
+      const s = session();
+      assert.equal((await say(s, offer, 0, [alternative])).decision, "ambiguous");
+      assert.equal((await say(s, "first", 1)).decision, "unrecognized");
+      assert.equal(s.pending(), undefined);
+    }
+  });
   it("resolves only an offered choice into single-use spoken confirmation", async () => {
     let actuations = 0;
     const provider: VoiceActuationProvider = {
