@@ -15,7 +15,7 @@ function missing(error: unknown): boolean {
   return error instanceof Error && "code" in error && error.code === "ENOENT";
 }
 
-async function readPrivate(filePath: string): Promise<Buffer | null> {
+export async function readLocalV1LedgerFileNoFollow(filePath: string): Promise<Buffer | null> {
   let handle: fs.FileHandle;
   try {
     handle = await fs.open(filePath, constants.O_RDONLY | constants.O_NOFOLLOW);
@@ -69,10 +69,11 @@ async function validate(ledger: Buffer, checkpoint: Buffer): Promise<number> {
 }
 
 async function readPair(directory: string): Promise<{ ledger: Buffer; checkpoint: Buffer } | null> {
-  const [ledger, checkpoint] = await Promise.all([
-    readPrivate(path.join(directory, LOCAL_V1_LEDGER_FILE)),
-    readPrivate(path.join(directory, LOCAL_V1_CHECKPOINT_FILE)),
-  ]);
+  // The writer appends the ledger before updating its checkpoint, so read the checkpoint first.
+  const checkpoint = await readLocalV1LedgerFileNoFollow(
+    path.join(directory, LOCAL_V1_CHECKPOINT_FILE),
+  );
+  const ledger = await readLocalV1LedgerFileNoFollow(path.join(directory, LOCAL_V1_LEDGER_FILE));
   if (ledger === null && checkpoint === null) return null;
   if (ledger === null || checkpoint === null) {
     throw new Error("Owner decision ledger and checkpoint must both be present.");

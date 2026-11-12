@@ -139,7 +139,11 @@ This is deliberate. A new Local V1 capture records whether the ledger was
 present or absent. When present, it copies the exact ledger and checkpoint bytes
 into the capture directory and binds their SHA-256 digests and ledger record
 count into `archive.json`. Verification checks those values, the hash chain and
-the checkpoint. A Local V1 restore writes both files with mode `0600` into its
+the checkpoint. The capture caller supplies the ledger directory explicitly;
+the runtime uses `JARVIS_DATA_DIR` through `jarvisDataFile`, independently of
+the clients register location. The isolated proof accepts later source appends
+when the captured ledger remains an exact byte prefix and the restored files
+match the capture. A Local V1 restore writes both files with mode `0600` into its
 new isolated JSON directory only when neither target file exists. It refuses
 an existing ledger or checkpoint and never merges histories. An absent capture
 restores neither file, so the queue remains unstarted until the owner explicitly

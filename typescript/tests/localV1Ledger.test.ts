@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, it } from "node:test";
+import { afterEach, it, mock } from "node:test";
 
 import {
   LEDGER_GENESIS_HASH,
@@ -43,6 +43,27 @@ it("captures absent explicitly and restores no ledger", async () => {
     () => new JsonLinesOwnerDecisionLedger(path.join(target, LOCAL_V1_LEDGER_FILE)).read(),
     /No decision ledger/,
   );
+});
+
+it("reads the checkpoint before the ledger during capture", async () => {
+  const root = await scratch();
+  const source = path.join(root, "source");
+  const capture = path.join(root, "capture");
+  await Promise.all([fs.mkdir(source), fs.mkdir(capture)]);
+  await new JsonLinesOwnerDecisionLedger(path.join(source, LOCAL_V1_LEDGER_FILE)).start();
+  const opened: string[] = [];
+  const originalOpen = fs.open.bind(fs);
+  mock.method(fs, "open", async (...args: Parameters<typeof fs.open>) => {
+    const file = String(args[0]);
+    if (path.dirname(file) === source) opened.push(path.basename(file));
+    return originalOpen(...args);
+  });
+  try {
+    await captureLocalV1Ledger(source, capture);
+  } finally {
+    mock.restoreAll();
+  }
+  assert.deepEqual(opened.slice(0, 2), [LOCAL_V1_CHECKPOINT_FILE, LOCAL_V1_LEDGER_FILE]);
 });
 
 it("preserves exact bytes and checks digest, chain, checkpoint, and count", async () => {

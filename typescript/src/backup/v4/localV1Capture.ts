@@ -91,6 +91,8 @@ export type LocalV1CaptureRequest = {
   /** Directory created by this capture. Must not already exist. */
   outputDirectory: string;
   businessPaths: BusinessPaths;
+  /** Directory containing the authoritative owner decision ledger and checkpoint. */
+  ownerDecisionLedgerDirectory: string;
   /** Injected client. This function never constructs one from `CONVEX_URL`. */
   client: LocalV1Client;
   serviceToken: string;
@@ -191,6 +193,7 @@ function assertContained(root: string, target: string): void {
 function liveRoots(request: LocalV1CaptureRequest): string[] {
   const roots = new Set<string>([
     path.resolve(JARVIS_DATA_DIR),
+    path.resolve(request.ownerDecisionLedgerDirectory),
     ...(request.forbiddenWriteRoots ?? []).map((root) => path.resolve(root)),
   ]);
   for (const filePath of Object.values(request.businessPaths)) {
@@ -498,7 +501,7 @@ export async function captureLocalV1Archive(
     }
     owned = { lexical: output, physical: landed, dev: createdStat.dev, ino: createdStat.ino };
     archive.manifest.localV1OwnerDecisionLedger = await captureLocalV1Ledger(
-      path.dirname(request.businessPaths.clients),
+      request.ownerDecisionLedgerDirectory,
       output,
     );
     const blobDir = path.join(output, LOCAL_V1_BLOB_DIR);

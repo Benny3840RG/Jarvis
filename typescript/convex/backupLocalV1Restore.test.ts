@@ -487,6 +487,7 @@ it("restores a partial capture into scratch JSON and an empty convex-test, then 
   try {
     await captureLocalV1Archive({
       outputDirectory: capturedDir,
+      ownerDecisionLedgerDirectory: live,
       businessPaths: businessFiles(live),
       client: source as never,
       serviceToken,
@@ -775,7 +776,6 @@ it("restores a partial capture into scratch JSON and an empty convex-test, then 
       taskId: stateDoc.tasks[0]?.id ?? "",
       buildId: buildDoc.builds[0]?.id ?? "",
       quoteId: seeded.quote.aggregate.quoteId,
-      // eslint-disable-next-line @convex-dev/no-process-env -- Exercise the host process environment in this off-host backup test, not Convex function env.
       configuredConvexUrl: process.env.CONVEX_URL,
     });
     expect(restarted.quoteRecovered).toBe(false);
@@ -816,6 +816,7 @@ it("restores a deleted task receipt as a tombstone and still refuses an inconsis
   try {
     await captureLocalV1Archive({
       outputDirectory: capturedDir,
+      ownerDecisionLedgerDirectory: live,
       businessPaths: businessFiles(live),
       client: {
         query: seeded.t.query.bind(seeded.t),
@@ -937,6 +938,7 @@ it("normalises a foreign owner on a tombstoned receipt and quote so replay stays
   try {
     await captureLocalV1Archive({
       outputDirectory: capturedDir,
+      ownerDecisionLedgerDirectory: live,
       businessPaths: businessFiles(live),
       client: {
         query: seeded.t.query.bind(seeded.t),
@@ -1067,6 +1069,7 @@ it("refuses a mismatched direct-create fingerprint and an untombstoned receipt w
     const capturedDir = path.join(root, "mismatch");
     await captureLocalV1Archive({
       outputDirectory: capturedDir,
+      ownerDecisionLedgerDirectory: live,
       businessPaths: businessFiles(live),
       client: {
         query: mismatched.t.query.bind(mismatched.t),
@@ -1114,6 +1117,7 @@ it("refuses a mismatched direct-create fingerprint and an untombstoned receipt w
     const legacyDir = path.join(root, "legacy");
     await captureLocalV1Archive({
       outputDirectory: legacyDir,
+      ownerDecisionLedgerDirectory: legacyLive,
       businessPaths: businessFiles(legacyLive),
       client: {
         query: legacy.t.query.bind(legacy.t),
@@ -1162,6 +1166,7 @@ it("fails closed on a missing PDF, a live target, an executable approval, and a 
   try {
     await captureLocalV1Archive({
       outputDirectory: capturedDir,
+      ownerDecisionLedgerDirectory: live,
       businessPaths: businessFiles(live),
       client: {
         query: seeded.t.query.bind(seeded.t),

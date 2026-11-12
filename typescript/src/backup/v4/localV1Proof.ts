@@ -21,6 +21,7 @@ import { RESTORE_IN_PROGRESS_MARKER, RESTORE_MARKER } from "./restore.js";
 import {
   LOCAL_V1_CHECKPOINT_FILE,
   LOCAL_V1_LEDGER_FILE,
+  readLocalV1LedgerFileNoFollow,
   verifyLocalV1Ledger,
 } from "./localV1Ledger.js";
 import { assertLedgerIntact } from "../../ownerGate/ownerDecision.js";
@@ -328,10 +329,21 @@ async function assertOwnerDecisions(
     for (const name of [LOCAL_V1_LEDGER_FILE, LOCAL_V1_CHECKPOINT_FILE]) {
       const captured = await fs.readFile(path.join(capture, name));
       const restored = await fs.readFile(path.join(target, name));
-      const original = await fs.readFile(path.join(source, name));
-      if (!captured.equals(restored) || !captured.equals(original)) {
+      if (!captured.equals(restored)) {
         throw new LocalV1ProofError("Local V1 proof ledger bytes differ after restore.");
       }
+    }
+    const capturedLedger = await fs.readFile(path.join(capture, LOCAL_V1_LEDGER_FILE));
+    const sourceLedger = await readLocalV1LedgerFileNoFollow(
+      path.join(source, LOCAL_V1_LEDGER_FILE),
+    );
+    if (
+      sourceLedger === null ||
+      !sourceLedger.subarray(0, capturedLedger.length).equals(capturedLedger)
+    ) {
+      throw new LocalV1ProofError(
+        "Local V1 proof source ledger no longer contains the captured prefix.",
+      );
     }
     assertLedgerIntact(await new JsonLinesOwnerDecisionLedger(file).read());
   } else {
@@ -356,11 +368,11 @@ async function assertOwnerDecisions(
       approvalConfigured: () => false,
       clock: () => Date.parse(archive.manifest.createdAt),
     });
-  const sourceQueue = await service(source).inspect();
+  const capturedQueue = await service(capture).inspect();
   const targetQueue = await service(target).inspect();
   if (
-    sourceQueue.ledgerState !== targetQueue.ledgerState ||
-    JSON.stringify(sourceQueue.cards.map(({ entry, status }) => [entry.id, status])) !==
+    capturedQueue.ledgerState !== targetQueue.ledgerState ||
+    JSON.stringify(capturedQueue.cards.map(({ entry, status }) => [entry.id, status])) !==
       JSON.stringify(targetQueue.cards.map(({ entry, status }) => [entry.id, status]))
   ) {
     throw new LocalV1ProofError("Local V1 proof restored different owner decision card statuses.");

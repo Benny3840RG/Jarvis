@@ -365,6 +365,45 @@ async function digestTree(dir: string): Promise<Map<string, string>> {
 }
 
 describe("Local V1 partial capture", () => {
+  it("captures the explicit ledger directory when clients live elsewhere", async () => {
+    const root = await scratch();
+    const business = path.join(root, "business");
+    const ledgerDirectory = path.join(root, "ledger");
+    const output = path.join(root, "capture");
+    const { mkdir } = await import("node:fs/promises");
+    await Promise.all([mkdir(business), mkdir(ledgerDirectory)]);
+    await writeBusiness(business);
+    const ledgerPath = path.join(ledgerDirectory, LOCAL_V1_LEDGER_FILE);
+    await new JsonLinesOwnerDecisionLedger(ledgerPath).start();
+    const sourceBytes = await readFile(ledgerPath);
+    const captured = await captureLocalV1Archive({
+      outputDirectory: output,
+      ownerDecisionLedgerDirectory: ledgerDirectory,
+      businessPaths: businessPaths(business),
+      client: scriptedClient().client,
+      serviceToken: SERVICE,
+      approvalToken: APPROVAL,
+      convexUrl: ENDPOINT,
+      capturedAt: AT,
+    });
+    assert.equal(captured.archive.manifest.localV1OwnerDecisionLedger?.state, "present");
+    assert.deepEqual(await readFile(path.join(output, LOCAL_V1_LEDGER_FILE)), sourceBytes);
+    await assert.rejects(
+      () =>
+        captureLocalV1Archive({
+          outputDirectory: path.join(ledgerDirectory, "nested"),
+          ownerDecisionLedgerDirectory: ledgerDirectory,
+          businessPaths: businessPaths(business),
+          client: scriptedClient().client,
+          serviceToken: SERVICE,
+          approvalToken: APPROVAL,
+          convexUrl: ENDPOINT,
+          capturedAt: AT,
+        }),
+      /overlaps a live data path/,
+    );
+  });
+
   it("captures every live store and leaves completeness partial", async () => {
     const root = await scratch();
     const live = path.join(root, "live");
@@ -376,6 +415,7 @@ describe("Local V1 partial capture", () => {
     const scripted = scriptedClient();
     const captured = await captureLocalV1Archive({
       outputDirectory: path.join(root, "out"),
+      ownerDecisionLedgerDirectory: live,
       businessPaths: businessPaths(live),
       client: scripted.client,
       serviceToken: SERVICE,
@@ -462,7 +502,7 @@ describe("Local V1 partial capture", () => {
     );
   });
 
-  it("captures, verifies, restores and proves recorded owner decisions without tokens", async () => {
+  it("proves captured owner decisions after a valid source append", async () => {
     const root = await scratch();
     const live = path.join(root, "live");
     const output = path.join(root, "capture");
@@ -493,6 +533,7 @@ describe("Local V1 partial capture", () => {
     const checkpointBefore = await readFile(`${file}.checkpoint.json`);
     const captured = await captureLocalV1Archive({
       outputDirectory: output,
+      ownerDecisionLedgerDirectory: live,
       businessPaths: businessPaths(live),
       client: scriptedClient().client,
       serviceToken: SERVICE,
@@ -520,6 +561,17 @@ describe("Local V1 partial capture", () => {
     }
     assert.deepEqual(await readFile(file), ledgerBefore);
     assert.deepEqual(await readFile(`${file}.checkpoint.json`), checkpointBefore);
+    const nextCard = (await sourceService.inspect()).cards.find(
+      ({ entry }) => entry.id !== card.entry.id,
+    );
+    assert.ok(nextCard);
+    await sourceService.decide({
+      decisionId: nextCard.entry.id,
+      expectedDigest: nextCard.actionDigest,
+      choice: "reject",
+      idempotencyKey: "fixture-decision-after-capture",
+      actor: "fixture-owner",
+    });
     const restore = {
       captureDirectory: output,
       jsonDirectory: target,
@@ -555,13 +607,92 @@ describe("Local V1 partial capture", () => {
           clock: () => AT.getTime(),
         }).inspect()
       ).cards.map((entry) => entry.status),
-      (await sourceService.inspect()).cards.map((entry) => entry.status),
+      (
+        await new OwnerDecisionService({
+          manifest,
+          ledger: new JsonLinesOwnerDecisionLedger(path.join(output, LOCAL_V1_LEDGER_FILE)),
+          approvalConfigured: () => true,
+          clock: () => AT.getTime(),
+        }).inspect()
+      ).cards.map((entry) => entry.status),
     );
     await writeFile(
       path.join(output, LOCAL_V1_LEDGER_FILE),
       ledgerBefore.subarray(0, ledgerBefore.length - 1),
     );
     await assert.rejects(() => readArchiveV4File(captured.archivePath), /ledger|digest/);
+  });
+
+  it("refuses proof when an earlier source ledger byte changes", async () => {
+    const root = await scratch();
+    const live = path.join(root, "live");
+    const output = path.join(root, "capture");
+    const { mkdir } = await import("node:fs/promises");
+    await mkdir(live);
+    await writeBusiness(live);
+    const file = path.join(live, LOCAL_V1_LEDGER_FILE);
+    const ledger = new JsonLinesOwnerDecisionLedger(file);
+    await ledger.start();
+    const service = new OwnerDecisionService({
+      manifest: loadOwnerDecisionManifest(),
+      ledger,
+      approvalConfigured: () => true,
+      clock: () => AT.getTime(),
+    });
+    const card = (await service.inspect()).cards[0];
+    assert.ok(card);
+    await service.decide({
+      decisionId: card.entry.id,
+      expectedDigest: card.actionDigest,
+      choice: "reject",
+      idempotencyKey: "fixture-altered-prefix",
+      actor: "fixture-owner",
+    });
+    await captureLocalV1Archive({
+      outputDirectory: output,
+      ownerDecisionLedgerDirectory: live,
+      businessPaths: businessPaths(live),
+      client: scriptedClient().client,
+      serviceToken: SERVICE,
+      approvalToken: APPROVAL,
+      convexUrl: ENDPOINT,
+      capturedAt: AT,
+    });
+    const original = await readFile(file);
+    const altered = Buffer.from(original);
+    altered[0] = altered[0] === 123 ? 91 : 123;
+    await writeFile(file, altered);
+    const prove = (jsonDirectory: string) =>
+      proveLocalV1Recovery({
+        restore: {
+          captureDirectory: output,
+          jsonDirectory,
+          client: { action: async () => ({ tasks: [], reminders: [], builds: [], pdfs: [] }) },
+          serviceToken: SERVICE,
+          approvalToken: APPROVAL,
+          convexUrl: ENDPOINT,
+          now: AT.getTime(),
+          liveDataDir: live,
+        },
+        liveDirectory: live,
+        readIsolated: async () => ({
+          clientId: "client-1",
+          taskId: "task-1",
+          buildId: "build-1",
+          quoteId: "cq-1",
+        }),
+      });
+    await assert.rejects(
+      () => prove(path.join(root, "restored")),
+      /source ledger no longer contains the captured prefix/,
+    );
+    const { rename, symlink } = await import("node:fs/promises");
+    await rename(file, path.join(live, "old-ledger"));
+    await symlink(path.join(output, LOCAL_V1_LEDGER_FILE), file);
+    await assert.rejects(
+      () => prove(path.join(root, "restored-symlink")),
+      /could not be opened safely/,
+    );
   });
 
   it("distinguishes absent ledgers from older archives that never captured a ledger", async () => {
@@ -573,6 +704,7 @@ describe("Local V1 partial capture", () => {
     const output = path.join(root, "capture");
     const captured = await captureLocalV1Archive({
       outputDirectory: output,
+      ownerDecisionLedgerDirectory: live,
       businessPaths: businessPaths(live),
       client: scriptedClient().client,
       serviceToken: SERVICE,
@@ -632,6 +764,7 @@ describe("Local V1 partial capture", () => {
       () =>
         captureLocalV1Archive({
           outputDirectory: output,
+          ownerDecisionLedgerDirectory: live,
           businessPaths: businessPaths(live),
           client: corrupt.client,
           serviceToken: SERVICE,
@@ -656,6 +789,7 @@ describe("Local V1 partial capture", () => {
         () =>
           captureLocalV1Archive({
             outputDirectory: output,
+            ownerDecisionLedgerDirectory: live,
             businessPaths: businessPaths(live),
             client: scripted.client,
             serviceToken: SERVICE,
@@ -672,6 +806,7 @@ describe("Local V1 partial capture", () => {
       () =>
         captureLocalV1Archive({
           outputDirectory: output,
+          ownerDecisionLedgerDirectory: live,
           businessPaths: businessPaths(live),
           client: failed.client,
           serviceToken: SERVICE,
@@ -700,6 +835,7 @@ describe("Local V1 partial capture", () => {
         () =>
           captureLocalV1Archive({
             outputDirectory: path.join(root, "out"),
+            ownerDecisionLedgerDirectory: live,
             businessPaths: businessPaths(live),
             client: scripted.client,
             serviceToken: SERVICE,
@@ -716,6 +852,7 @@ describe("Local V1 partial capture", () => {
         () =>
           captureLocalV1Archive({
             outputDirectory: path.join(live, "out"),
+            ownerDecisionLedgerDirectory: live,
             businessPaths: businessPaths(live),
             client: nested.client,
             serviceToken: SERVICE,
@@ -748,6 +885,7 @@ describe("Local V1 partial capture", () => {
       () =>
         captureLocalV1Archive({
           outputDirectory: path.join(alias, "out"),
+          ownerDecisionLedgerDirectory: business,
           businessPaths: businessPaths(business),
           client: scripted.client,
           serviceToken: SERVICE,
@@ -782,6 +920,7 @@ describe("Local V1 partial capture", () => {
         () =>
           captureLocalV1Archive({
             outputDirectory: path.join(alias, probe),
+            ownerDecisionLedgerDirectory: business,
             businessPaths: businessPaths(business),
             client: scripted.client,
             serviceToken: SERVICE,

@@ -223,6 +223,9 @@ decision ledger. For `present`, the capture directory carries byte-identical
 `jarvis-owner-decisions.jsonl.checkpoint.json` files. The archive manifest binds
 the ledger SHA-256, checkpoint SHA-256, and record count. Capture opens source
 files read-only without following symbolic links and refuses a damaged ledger.
+The capture caller supplies the ledger directory explicitly as
+`ownerDecisionLedgerDirectory`; for the runtime this is `JARVIS_DATA_DIR`,
+the directory used by `jarvisDataFile`, even if business JSON files live elsewhere.
 Verification rechecks the digests, record count, hash chain and checkpoint.
 The isolated restore creates both files with mode `0600` only in a new JSON
 directory with neither file already present; it refuses overwrite or merge.
@@ -231,7 +234,9 @@ a damaged checkpoint-only state that the owner decision service refuses.
 For `absent`, restore creates neither file. Older archives with no ledger section
 remain readable and restore as before, reporting `not-captured` rather than
 `absent`. Neither case silently starts a new ledger. Decisions made after capture
-and all approval or service tokens remain outside the archive.
+and all approval or service tokens remain outside the archive. The isolated proof
+compares restored ledger and checkpoint bytes with the capture and accepts later
+source ledger appends while requiring the captured bytes to remain its prefix.
 
 Business JSON stays in the checkout that started the process: `typescript/data/`
 holds `jarvis-clients.json`, properties, projects, the flat quote register,
