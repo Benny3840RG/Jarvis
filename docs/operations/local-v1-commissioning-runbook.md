@@ -417,23 +417,23 @@ makes it.
 
 ## Quick status map to #697 definition of done
 
-| DoD item                                       | Stage | Owner-only / host-side?                                                                                           |
-| ---------------------------------------------- | ----- | ----------------------------------------------------------------------------------------------------------------- |
-| maintained checks + OpenAPI lint               | 1     | provable off-host (✅ green on `ee3340e`)                                                                         |
-| known-good runtime locked                      | 0 + 2 | host                                                                                                              |
-| HUD + MCP usable on dev persistence            | 2     | host                                                                                                              |
-| #567 voice commissioning                       | 3     | host (real mic)                                                                                                   |
-| voice read queries authoritative               | —     | ✅ merged tests                                                                                                   |
-| safe voice writes reuse paths                  | —     | ✅ merged tests                                                                                                   |
-| #294 + #297 Outlook                            | 4     | host (live mailbox)                                                                                               |
-| golden workflow end to end                     | 5     | host                                                                                                              |
-| home + Google Home commissioned                | 6     | host (pinned devices)                                                                                             |
-| workshop daily-driver                          | 7     | host                                                                                                              |
-| dataset recoverable (isolated restore)         | 8     | host (isolated backend); **BLOCKED — no operator command, off-host tests only (8a), host end-to-end NOT YET MET** |
-| restart preserves state, hardware fails closed | 8 + 3 | host                                                                                                              |
-| dogfood, no blocker                            | 9     | host                                                                                                              |
-| independent review, no blocker                 | 10    | owner                                                                                                             |
-| exact SHA + evidence + runbook recorded        | 10    | owner                                                                                                             |
+| DoD item                                       | Stage | Owner-only / host-side?                                                                                                                                                         |
+| ---------------------------------------------- | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| maintained checks + OpenAPI lint               | 1     | provable off-host (✅ green on `ee3340e`)                                                                                                                                       |
+| known-good runtime locked                      | 0 + 2 | host                                                                                                                                                                            |
+| HUD + MCP usable on dev persistence            | 2     | host                                                                                                                                                                            |
+| #567 voice commissioning                       | 3     | host (real mic)                                                                                                                                                                 |
+| voice read queries authoritative               | —     | ✅ merged tests                                                                                                                                                                 |
+| safe voice writes reuse paths                  | —     | ✅ merged tests                                                                                                                                                                 |
+| #294 + #297 Outlook                            | 4     | host (live mailbox)                                                                                                                                                             |
+| golden workflow end to end                     | 5     | host                                                                                                                                                                            |
+| home + Google Home commissioned                | 6     | host (pinned devices)                                                                                                                                                           |
+| workshop daily-driver                          | 7     | host                                                                                                                                                                            |
+| dataset recoverable (isolated restore)         | 8     | host (isolated backend); **BLOCKED — restart step has a command (`commission:local-v1-recovery`), capture and restore still need a manual driver, host end-to-end NOT YET MET** |
+| restart preserves state, hardware fails closed | 8 + 3 | host                                                                                                                                                                            |
+| dogfood, no blocker                            | 9     | host                                                                                                                                                                            |
+| independent review, no blocker                 | 10    | owner                                                                                                                                                                           |
+| exact SHA + evidence + runbook recorded        | 10    | owner                                                                                                                                                                           |
 
 ## Out of Local V1 scope (do not let these block)
 

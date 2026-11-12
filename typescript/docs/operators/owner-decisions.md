@@ -81,8 +81,24 @@ yourself only after it prints "Stored and verified".
 
 An existing token that contains other characters (for example `#` or `$`) is still
 valid for Jarvis, but an unquoted `#` starts a comment in a `.env` file and would
-silently shorten it. Add such a token by hand in an editor, single-quoted, and run
-only the digest comparison from the block.
+silently shorten it. Add such a token by hand in an editor, as one line
+`JARVIS_APPROVAL_TOKEN='...'` (single-quoted; this does not work for a token that
+itself contains a single quote), then confirm what the runtime will load with this
+separate check. It asks for the token again at a hidden prompt and compares
+digests only:
+
+```sh
+( set -eu
+  cd ~/Jarvis/typescript
+  chmod 600 .env.local
+  [ "$(grep -c '^JARVIS_APPROVAL_TOKEN=' .env.local)" = 1 ] || { echo "Expected exactly one entry."; exit 1; }
+  read -rs -p "Approval token, to compare: " T; echo
+  WANT=$(printf %s "$T" | sha256sum | cut -d' ' -f1)
+  GOT=$(node --env-file=.env.local -e 'process.stdout.write(require("node:crypto").createHash("sha256").update(process.env.JARVIS_APPROVAL_TOKEN ?? "").digest("hex"))')
+  [ "$WANT" = "$GOT" ] || { echo "Mismatch: fix .env.local before restarting."; exit 1; }
+  echo "Verified. Now run: systemctl --user restart jarvis.service"
+)
+```
 
 A generated token then has to be copied once into a password manager, because the
 page asks for it on every decision: open `.env.local` in an editor to read it; do
