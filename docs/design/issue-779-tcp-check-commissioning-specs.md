@@ -67,10 +67,13 @@ Two layers. The second is the enforcement point of record; the first is not.
      destinations. The broker therefore has no general network access;
    - a second set `tcpcheck_guarded`, with **no** timeouts, holding every pair that
      is or has ever been in a reviewed allowlist. Pairs are only ever added to it;
-   - for **every other user** on the host: reject new TCP connections to any pair in
-     `tcpcheck_guarded`. A worker that tries to connect directly to a target is
-     refused by the kernel whatever its code does, **both while the target is
-     allowlisted and after it has been removed**.
+   - for **every other user** on the host: reject **every** TCP packet to any pair
+     in `tcpcheck_guarded`, whatever the connection state. A worker that tries to
+     connect directly to a target is refused by the kernel whatever its code does,
+     **both while the target is allowlisted and after it has been removed**. Because
+     the rule is not limited to new connections, a connection some other process had
+     already opened to that pair before the pair was guarded stops passing traffic
+     as soon as the pair is added.
 
 `tcpcheck_guarded` is the durable record of what the capability has ever been
 allowed to reach. Its contents are kept in a root-owned file loaded with the rule
@@ -315,7 +318,13 @@ recovery tell "provably no socket" from "a socket may have existed".
 | store unreachable or the call throws                                        | `effect_uncertain`; slot and barrier retained; reported blocked                           | no           |
 
 This covers duplicate delivery, a lost response, a broker restart and a delayed
-replay. A new check always needs a new stage and a new approval.
+replay. A new check always needs a new stage and a new approval. That later
+check is not blocked by the retired key: the claim key includes the action
+fingerprint, which `tcpCheckTool.ts` builds from the effect fingerprint **and the
+staged action's id**, so each staged action has its own key even for the same
+address and port. The implementation must keep that property; D9 checks that a
+retry of one action replays, and D34 that a newly staged action for the same target
+gets a fresh grant.
 
 ### B3. The evidence that releases an `uncertain` slot
 
@@ -535,6 +544,8 @@ used anywhere in this matrix.
 | D30 | Broker paused while holding the lock; the lock pathname is replaced with a new file (attempted as `jarvis-egress`, then forced as root in the harness); new broker starts | 4 | No second attempt | As `jarvis-egress` the replacement fails. After the forced replacement the new broker sees a different inode from the stored one and refuses to start; slot held; nothing retired |
 | D32 | Broker killed after `reserved → started`, before `grantConnect` commits; separately, worker killed before sending the claim; store then recovers | 3, 4 | 0 SYN | `retireUngranted` settles `refused`, `fence_superseded`; `never-admitted`; slot and barrier released |
 | D33 | Host crashes after a widening is activated, then reboots; worker connects directly to the new target; separately, boot with the rule set failing to load | 1 | Reboot: rejected through `tcpcheck_guarded`; reject counter +1; 0 SYN. Failed load: the Jarvis service does not start; 0 SYN | Guarded file already holds the pair; no ledger row |
+| D34 | A check is settled; a new action for the same address and port is staged and approved | 2 | 1 further attempt | A second row under a different claim key; the first row unchanged |
+| D35 | A non-broker process holds an open connection to a pair; the pair is then added to `tcpcheck_guarded` | 1 | Further packets on that connection rejected; reject counter increases | No ledger row |
 
 **The D4 probe.** A compliant broker never reaches the kernel once the control plane
 has failed: it cannot commit `markConnecting`. The kernel deny is therefore
@@ -559,8 +570,8 @@ explicit sign-off.
 
 | Obligation (#779)                                               | Specified in                                                                 | Demonstrated by                               |
 | --------------------------------------------------------------- | ---------------------------------------------------------------------------- | --------------------------------------------- |
-| 1 — freshness and revocation timing, independent deny path      | A2–A5                                                                        | D1–D6, D15, D19, D22, D25, D26, D33           |
-| 2 — durable single use at the egress boundary                   | B1, B2, B4                                                                   | D8–D11                                        |
+| 1 — freshness and revocation timing, independent deny path      | A2–A5                                                                        | D1–D6, D15, D19, D22, D25, D26, D33, D35      |
+| 2 — durable single use at the egress boundary                   | B1, B2, B4                                                                   | D8–D11, D34                                   |
 | 3 — effect boundary rejects superseded capabilities             | A6, B1a, B3                                                                  | D1–D3, D10–D12, D20, D23–D25, D32             |
 | 4 — eventual resolution under named assumptions                 | B3                                                                           | D10–D13, D29, D30, D32                        |
 | 5 — deadline origin, timeout versus unknown, port range, window | B1a, C1–C4 (expiry at the egress boundary **not yet specified**: decision 7) | D6, D7, D14–D18, D21, D23, D24, D27, D28, D31 |
