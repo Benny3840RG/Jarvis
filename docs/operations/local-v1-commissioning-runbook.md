@@ -11,15 +11,14 @@ workflow), 7 (workshop), 9 (dogfood), and 10 (release) — are operator procedur
 run through supported interfaces (MCP / HUD / HTTP / voice) rather than a single
 command, and where a dedicated operator doc exists the stage cites it (Stage 3 →
 `typescript/docs/operators/voice.md`). **Stage 8 (recovery + restart) is the exception and is not
-turnkey:** the Local V1 recovery proof has no operator command today — only an
-off-host test invocation plus a manual host procedure — so Stage 8 is marked
-BLOCKED until a `commission:local-v1-recovery` wrapper is built and reviewed (a
-separate code change, out of scope for this doc).
+turnkey:** only its restart step has an operator command
+(`commission:local-v1-recovery`); capture and isolated restore are still a manual
+host procedure, and the host run needs owner authorisation.
 
 **What this is not:** a merge or deploy authority. Per
 `docs/operations/dual-agent-coordination.md`, merge, deployment and
 commissioning sign-off are the owner's alone. A green command here is
-*evidence to read*, never an automatic completion. "Implemented/configured does
+_evidence to read_, never an automatic completion. "Implemented/configured does
 not mean commissioned."
 
 Record every stage's result (command, host, candidate SHA, raw output or a path
@@ -31,7 +30,7 @@ customer-shaped data must never be committed). Capture files written with mode
 
 ## Stage 0 — Candidate lock (LV1-01, execution step 1)
 
-Freeze one exact SHA. Everything below is evidence *for that SHA only*; a new
+Freeze one exact SHA. Everything below is evidence _for that SHA only_; a new
 commit or base change invalidates all prior stage evidence.
 
 ```sh
@@ -93,13 +92,13 @@ MCP initialize, tools/list).
 Required environment (shell or ignored `.env.local`, **never** a command
 argument):
 
-| Variable | Value |
-| --- | --- |
-| `PERSISTENCE_PROVIDER` | `convex` |
-| `CONVEX_DEPLOYMENT` | `dev:<slug>` (an unquoted trailing `# comment` is stripped; `dev:slug#note` glued is refused) |
-| `CONVEX_URL` | loopback, or exactly `https://<slug>.convex.cloud` for that dev slug |
-| `JARVIS_SERVICE_TOKEN` | ≥ 32 characters (a short/placeholder token is rejected) |
-| `JARVIS_TIMEZONE` | your local IANA zone (e.g. `Australia/Sydney`) — drives brief/reminder display |
+| Variable               | Value                                                                                         |
+| ---------------------- | --------------------------------------------------------------------------------------------- |
+| `PERSISTENCE_PROVIDER` | `convex`                                                                                      |
+| `CONVEX_DEPLOYMENT`    | `dev:<slug>` (an unquoted trailing `# comment` is stripped; `dev:slug#note` glued is refused) |
+| `CONVEX_URL`           | loopback, or exactly `https://<slug>.convex.cloud` for that dev slug                          |
+| `JARVIS_SERVICE_TOKEN` | ≥ 32 characters (a short/placeholder token is rejected)                                       |
+| `JARVIS_TIMEZONE`      | your local IANA zone (e.g. `Australia/Sydney`) — drives brief/reminder display                |
 
 ```sh
 # HTTP first (binds 127.0.0.1:3000 by default), then MCP (proxies to HTTP), then the HUD preview.
@@ -109,7 +108,7 @@ npm run start:preview    # open the HUD on the loopback address it prints
 ```
 
 Usability checks (loopback only — the HUD snapshot and voice routes are
-loopback-public *only* on the preview bind; off-loopback they still require the
+loopback-public _only_ on the preview bind; off-loopback they still require the
 service token):
 
 ```sh
@@ -179,7 +178,7 @@ or absent hardware reports success.
 One disposable, **non-customer** quote send + reconciliation. Follow
 `docs/operations/outlook-quote-commissioning.md` — the guardrails there
 (recipient allowlist, canonical-mailbox client-contact refusal, dev-only
-deployment, loopback API) run *before* anything is created. Do not shortcut them.
+deployment, loopback API) run _before_ anything is created. Do not shortcut them.
 
 With Jarvis HTTP listening on loopback and reconciliation enabled, from `typescript/`:
 
@@ -278,14 +277,39 @@ and fail closed (already covered by Stage 3 step 6 and the absent-hardware tests
 
 ## Stage 8 — Recovery + restart (LV1-09, DoD items 11 & 12)
 
-**Status: BLOCKED — no single operator command exists for this stage.** The
-capture → restore → reread code and the restart harness exist and pass off-host,
-but there is **no** `commission:local-v1-recovery` (or equivalent) script:
-`captureLocalV1Archive`, `restoreLocalV1Archive`, `proveLocalV1Recovery` and
-`readRestartedProcess` are invoked only from tests, not from `package.json` or
-`src/tools/`. The realistic end-to-end restart on realistic data is **NOT YET
-MET** and must be repeated on this host against an **isolated self-hosted
-convex-local-backend** (never the shared dev deployment).
+**Status: BLOCKED on owner authorisation, and only partly packaged.** The restart
+step has an operator command since PR #765: `npm run commission:local-v1-recovery`
+(`typescript/src/tools/runLocalV1Recovery.ts`). Capture, isolated restore and
+reread still have **no** packaged command: `captureLocalV1Archive`,
+`restoreLocalV1Archive` and `proveLocalV1Recovery` are invoked only from tests, so
+a host run still needs a small driver for those steps. The realistic end-to-end
+restart on realistic data is **NOT YET MET** and must be repeated on this host
+against an **isolated self-hosted convex-local-backend** (never the shared dev
+deployment). Running it is an owner decision (decision queue card
+`recovery-isolated-proof`).
+
+### Preparation checked on the Lenovo (13 Nov 2026, read-only)
+
+Nothing below ran the proof, started a backend, or read or wrote live data.
+
+- Evidence directory `~/lv1-01` exists (mode 0700). The driver never creates it.
+- An earlier isolated backend installation is present at `~/lv1-01/convex-local/`
+  (binary `bin/convex-local-backend`). It is not running. Its data directory holds
+  the October run and must not be reused as the "empty" restore target: start the
+  proof from a fresh data directory.
+- No listener is bound on the usual isolated port `127.0.0.1:3210`.
+- The off-host proof in 8a passes on `main` `e1bf803b` (see 8a).
+- The owner decision ledger is **not** yet part of the Local V1 archive on `main`.
+  A pull request that adds it is in review; run the host proof after that change is
+  merged, so the proof covers the ledger.
+
+Inputs the restart command needs, all supplied by the operator at run time and
+none stored in the repository: `JARVIS_LV1_ISOLATED_CONVEX_URL` (loopback only),
+`JARVIS_DELIVERY_RUNTIME_TOKEN`, `JARVIS_LV1_JSON_DIR` (the restored JSON
+directory), and one restored id each for `JARVIS_LV1_CLIENT_ID`,
+`JARVIS_LV1_TASK_ID`, `JARVIS_LV1_BUILD_ID` and `JARVIS_LV1_QUOTE_ID`. Optional:
+`JARVIS_LV1_LIVE_DIR`, `JARVIS_LV1_EVIDENCE_FILE` (a new file; an existing one is
+refused).
 
 ### 8a. Off-host proof (exact command, verified)
 
@@ -304,7 +328,7 @@ second HTTP app" and "compares quote GET across two isolated processes when the
 delivery token is set". This is harness-level evidence on synthetic data, **not**
 the realistic host end-to-end proof in 8b.
 
-### 8b. Host end-to-end restart (manual — no wrapper exists yet)
+### 8b. Host end-to-end restart (capture and restore are still manual)
 
 Key rules (from `typescript/docs/operators/archive-v4.md` and the gap analysis):
 
@@ -333,12 +357,11 @@ the isolated self-hosted backend (not `CONVEX_URL`), and `restoreLocalV1Archive`
 populates it. (Off-host, the same function takes a `convex-test` in-memory client
 instead — which is exactly why 8a is harness-only and not the host proof.) Then
 repeat the restart step so a restarted `src/http/main.ts` serves matching
-client/task/build **and quote** GETs. Because these functions have no CLI entry
-today, this currently needs a small driver script to wire that client and
-sequence the steps; packaging it as a reviewed `commission:local-v1-recovery`
-command — with exact setup, invocation, expected-output, evidence-capture and
-teardown — is the smallest way to make this stage turnkey, and is tracked as
-follow-up, not done here.
+client/task/build **and quote** GETs. `npm run commission:local-v1-recovery` now performs that restart step. Capture
+and restore still have no CLI entry, so they need a small driver script to wire
+the isolated client and sequence the steps; packaging them as a reviewed command
+with exact setup, invocation, expected output, evidence capture and teardown is
+tracked as follow-up, not done here.
 
 Prior evidence: quote GET across a real restart is **PROVEN** at `2d34a741`
 (host `~/lv1-01/restart-proof.md`, quote sha256 `c7fd9977…dbb8`, with
@@ -394,23 +417,23 @@ makes it.
 
 ## Quick status map to #697 definition of done
 
-| DoD item | Stage | Owner-only / host-side? |
-| --- | --- | --- |
-| maintained checks + OpenAPI lint | 1 | provable off-host (✅ green on `ee3340e`) |
-| known-good runtime locked | 0 + 2 | host |
-| HUD + MCP usable on dev persistence | 2 | host |
-| #567 voice commissioning | 3 | host (real mic) |
-| voice read queries authoritative | — | ✅ merged tests |
-| safe voice writes reuse paths | — | ✅ merged tests |
-| #294 + #297 Outlook | 4 | host (live mailbox) |
-| golden workflow end to end | 5 | host |
-| home + Google Home commissioned | 6 | host (pinned devices) |
-| workshop daily-driver | 7 | host |
-| dataset recoverable (isolated restore) | 8 | host (isolated backend); **BLOCKED — no operator command, off-host tests only (8a), host end-to-end NOT YET MET** |
-| restart preserves state, hardware fails closed | 8 + 3 | host |
-| dogfood, no blocker | 9 | host |
-| independent review, no blocker | 10 | owner |
-| exact SHA + evidence + runbook recorded | 10 | owner |
+| DoD item                                       | Stage | Owner-only / host-side?                                                                                           |
+| ---------------------------------------------- | ----- | ----------------------------------------------------------------------------------------------------------------- |
+| maintained checks + OpenAPI lint               | 1     | provable off-host (✅ green on `ee3340e`)                                                                         |
+| known-good runtime locked                      | 0 + 2 | host                                                                                                              |
+| HUD + MCP usable on dev persistence            | 2     | host                                                                                                              |
+| #567 voice commissioning                       | 3     | host (real mic)                                                                                                   |
+| voice read queries authoritative               | —     | ✅ merged tests                                                                                                   |
+| safe voice writes reuse paths                  | —     | ✅ merged tests                                                                                                   |
+| #294 + #297 Outlook                            | 4     | host (live mailbox)                                                                                               |
+| golden workflow end to end                     | 5     | host                                                                                                              |
+| home + Google Home commissioned                | 6     | host (pinned devices)                                                                                             |
+| workshop daily-driver                          | 7     | host                                                                                                              |
+| dataset recoverable (isolated restore)         | 8     | host (isolated backend); **BLOCKED — no operator command, off-host tests only (8a), host end-to-end NOT YET MET** |
+| restart preserves state, hardware fails closed | 8 + 3 | host                                                                                                              |
+| dogfood, no blocker                            | 9     | host                                                                                                              |
+| independent review, no blocker                 | 10    | owner                                                                                                             |
+| exact SHA + evidence + runbook recorded        | 10    | owner                                                                                                             |
 
 ## Out of Local V1 scope (do not let these block)
 
