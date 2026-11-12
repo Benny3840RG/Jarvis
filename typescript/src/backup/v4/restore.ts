@@ -97,6 +97,7 @@ export function archiveFingerprint(archive: ArchiveV4): string {
     contractVersion: archive.manifest.contractVersion,
     createdAt: archive.manifest.createdAt,
     groups: archive.manifest.groups.map((entry) => [entry.group, entry.checksum]),
+    localV1OwnerDecisionLedger: archive.manifest.localV1OwnerDecisionLedger,
   });
   return `sha256:${createHash("sha256").update(canonical).digest("hex")}`;
 }

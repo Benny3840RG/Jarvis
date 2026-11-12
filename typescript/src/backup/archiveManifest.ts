@@ -139,6 +139,11 @@ export type ArchiveBlobIndexEntry = {
   byteLength: number;
 };
 
+/** Optional for archives created before Local V1 captured owner decisions. */
+export type LocalV1OwnerDecisionLedger =
+  | { state: "absent" }
+  | { state: "present"; ledgerSha256: string; checkpointSha256: string; recordCount: number };
+
 export type ArchiveManifest = {
   contractVersion: typeof V4_CONTRACT_VERSION;
   createdAt: string;
@@ -151,6 +156,7 @@ export type ArchiveManifest = {
   dependencies: ArchiveDependency[];
   exclusions: ArchiveExclusion[];
   blobs: ArchiveBlobIndexEntry[];
+  localV1OwnerDecisionLedger?: LocalV1OwnerDecisionLedger;
   /**
    * References the source itself could not resolve. Does not affect
    * `completeness`, which describes group coverage, not the source's own
@@ -269,6 +275,7 @@ export type BuildManifestInput = {
   dependencies?: ArchiveDependency[];
   exclusions?: ArchiveExclusion[];
   blobs?: ArchiveBlobIndexEntry[];
+  localV1OwnerDecisionLedger?: LocalV1OwnerDecisionLedger;
   unresolvedReferences?: ArchiveUnresolvedReference[];
   /**
    * Evidence from a completed isolated restore. Omitted by a plain capture,
@@ -300,6 +307,9 @@ export function buildManifest(input: BuildManifestInput): ArchiveManifest {
     dependencies,
     exclusions: input.exclusions ?? [],
     blobs: input.blobs ?? [],
+    ...(input.localV1OwnerDecisionLedger === undefined
+      ? {}
+      : { localV1OwnerDecisionLedger: input.localV1OwnerDecisionLedger }),
     unresolvedReferences: sortUnresolvedReferences(input.unresolvedReferences ?? []),
     verification,
     completeness: deriveCompleteness(present, dependencies, verification),
@@ -401,6 +411,23 @@ function parseBlob(value: unknown, index: number): ArchiveBlobIndexEntry {
   };
 }
 
+function parseLocalV1OwnerDecisionLedger(value: unknown): LocalV1OwnerDecisionLedger {
+  const field = "manifest.localV1OwnerDecisionLedger";
+  if (!isRecord(value)) fail(`${field} must be an object.`);
+  if (value.state === "absent") {
+    assertNoUnknownKeys(value, ["state"], field);
+    return { state: "absent" };
+  }
+  if (value.state !== "present") fail(`${field}.state must be present or absent.`);
+  assertNoUnknownKeys(value, ["state", "ledgerSha256", "checkpointSha256", "recordCount"], field);
+  return {
+    state: "present",
+    ledgerSha256: digest(value.ledgerSha256, `${field}.ledgerSha256`),
+    checkpointSha256: digest(value.checkpointSha256, `${field}.checkpointSha256`),
+    recordCount: nonNegativeInteger(value.recordCount, `${field}.recordCount`),
+  };
+}
+
 function parseUnresolvedReference(value: unknown, index: number): ArchiveUnresolvedReference {
   const field = `manifest.unresolvedReferences[${index}]`;
   if (!isRecord(value)) fail(`${field} must be an object.`);
@@ -476,6 +503,7 @@ export function parseManifest(value: unknown): ArchiveManifest {
       "dependencies",
       "exclusions",
       "blobs",
+      "localV1OwnerDecisionLedger",
       "unresolvedReferences",
       "verification",
       "completeness",
@@ -498,6 +526,10 @@ export function parseManifest(value: unknown): ArchiveManifest {
   const dependencies = array(value.dependencies, "manifest.dependencies").map(parseDependency);
   const exclusions = array(value.exclusions, "manifest.exclusions").map(parseExclusion);
   const blobs = array(value.blobs, "manifest.blobs").map(parseBlob);
+  const localV1OwnerDecisionLedger =
+    value.localV1OwnerDecisionLedger === undefined
+      ? undefined
+      : parseLocalV1OwnerDecisionLedger(value.localV1OwnerDecisionLedger);
   const unresolvedReferences = array(
     value.unresolvedReferences,
     "manifest.unresolvedReferences",
@@ -549,6 +581,7 @@ export function parseManifest(value: unknown): ArchiveManifest {
     dependencies,
     exclusions,
     blobs,
+    ...(localV1OwnerDecisionLedger === undefined ? {} : { localV1OwnerDecisionLedger }),
     unresolvedReferences: sortUnresolvedReferences(unresolvedReferences),
     verification,
     completeness,

@@ -15,6 +15,7 @@ import {
   LOCAL_V1_S6_FILE,
 } from "./localV1Capture.js";
 import { LOCAL_V1_RECEIPT_CAPTURE_VERSION, LOCAL_V1_RECEIPT_TABLES } from "./localV1Receipts.js";
+import { restoreLocalV1Ledger, verifyLocalV1Ledger } from "./localV1Ledger.js";
 import { restoreArchiveV4 } from "./restore.js";
 import { S6_CAPTURE_VERSION, S6_TABLES } from "./s6MutableQuotes.js";
 
@@ -64,6 +65,7 @@ export type LocalV1RestoreResult = {
   jsonDirectory: string;
   archive: ArchiveV4;
   maps: LocalV1RestoreMaps;
+  ledger: "not-captured" | "absent" | "present";
 };
 
 const restoreLocalV1Action = makeFunctionReference<
@@ -283,6 +285,7 @@ export async function restoreLocalV1Archive(
   const destination = await assertJsonDestination(request);
   const capture = path.resolve(request.captureDirectory);
   const archive = await readArchiveV4File(path.join(capture, LOCAL_V1_ARCHIVE_FILE));
+  await verifyLocalV1Ledger(capture, archive.manifest.localV1OwnerDecisionLedger);
   if (archive.manifest.completeness !== "partial") {
     throw new LocalV1RestoreError("Local V1 restore refuses an archive that is not partial.");
   }
@@ -359,6 +362,11 @@ export async function restoreLocalV1Archive(
     now: () => new Date(request.now),
   });
   try {
+    const ledger = await restoreLocalV1Ledger(
+      capture,
+      destination,
+      archive.manifest.localV1OwnerDecisionLedger,
+    );
     const maps = await request.client.action(restoreLocalV1Action, {
       serviceToken: request.serviceToken,
       approvalToken: request.approvalToken,
@@ -366,7 +374,7 @@ export async function restoreLocalV1Archive(
       payloadJson,
       blobs,
     });
-    return { jsonDirectory: destination, archive, maps };
+    return { jsonDirectory: destination, archive, maps, ledger };
   } catch (error: unknown) {
     await fs.rm(destination, { recursive: true, force: true });
     throw error;

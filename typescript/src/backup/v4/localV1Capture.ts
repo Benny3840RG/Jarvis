@@ -28,6 +28,7 @@ import {
 import { S4_MAX_PAYLOAD_BYTES } from "./convexCapture.js";
 import type { JsonCapture } from "./jsonSource.js";
 import { LOCAL_V1_RECEIPT_CAPTURE_VERSION, LOCAL_V1_RECEIPT_TABLES } from "./localV1Receipts.js";
+import { captureLocalV1Ledger, verifyLocalV1Ledger } from "./localV1Ledger.js";
 import { S6_CAPTURE_VERSION, S6_TABLES, s6BusinessChecksum } from "./s6MutableQuotes.js";
 
 export const LOCAL_V1_ARCHIVE_FILE = "archive.json";
@@ -375,9 +376,9 @@ async function fileDigest(filePath: string): Promise<string> {
  * PDF bytes are read by a follow-up action that does not write. `completeness`
  * stays `partial`.
  *
- * Reads finish before the output directory is created. The only writes are
- * files inside that new directory. A failed source throws and leaves no
- * directory.
+ * Business and Convex reads finish before output creation. Ledger files are
+ * opened read-only without following links, then validated before the archive
+ * is written. A failed source leaves no output directory.
  */
 export async function captureLocalV1Archive(
   request: LocalV1CaptureRequest,
@@ -496,6 +497,10 @@ export async function captureLocalV1Archive(
       );
     }
     owned = { lexical: output, physical: landed, dev: createdStat.dev, ino: createdStat.ino };
+    archive.manifest.localV1OwnerDecisionLedger = await captureLocalV1Ledger(
+      path.dirname(request.businessPaths.clients),
+      output,
+    );
     const blobDir = path.join(output, LOCAL_V1_BLOB_DIR);
     assertContained(output, blobDir);
     await fs.mkdir(blobDir);
@@ -518,6 +523,7 @@ export async function captureLocalV1Archive(
     );
     await writeArchiveV4File(archivePath, archive);
     const reread = await readArchiveV4File(archivePath);
+    await verifyLocalV1Ledger(output, reread.manifest.localV1OwnerDecisionLedger);
     if (reread.manifest.completeness !== "partial") {
       throw new LocalV1CaptureError("Local V1 capture must stay partial.");
     }
