@@ -92,6 +92,14 @@ import {
   createInactiveDangerZone,
   type DangerZoneService,
 } from "../settings/dangerZone/service.js";
+import {
+  InMemoryOwnerDecisionLedger,
+  JsonLinesOwnerDecisionLedger,
+  loadOwnerDecisionManifest,
+  OwnerDecisionService,
+} from "../ownerGate/ownerDecisionService.js";
+import { createGitHubSubjectProbe } from "../ownerGate/gitHubSubjectProbe.js";
+import { jarvisDataFile } from "../persistence/jarvisDataPaths.js";
 import { resolveHttpAppConfig, type HttpAppConfig } from "./config.js";
 import {
   registerHttpRateLimit,
@@ -153,6 +161,8 @@ export type CreateJarvisHttpAppOptions = (
   activityEventReader?: ActivityEventReader | null;
   developmentLiveWorkSource?: DevelopmentLiveWorkSource | null;
   dangerZone?: DangerZoneService;
+  /** Owner decision queue (#801). Defaults to the reviewed manifest. */
+  ownerDecisions?: OwnerDecisionService;
   /**
    * The voice session registry (#567). Defaults to one backed by the
    * absent-hardware provider — no hardware adapter ships in main. Tests inject
@@ -199,6 +209,31 @@ function selectMemoryStore<T>(
   if (injected !== undefined) return injected;
   if (!usesEnvironment) return make.inMemory();
   return providerName === "convex" ? make.convex() : make.json();
+}
+
+function createDefaultOwnerDecisions(
+  usesEnvironment: boolean,
+  config: HttpAppConfig,
+): OwnerDecisionService {
+  const manifest = loadOwnerDecisionManifest();
+  const token = process.env.JARVIS_OWNER_DECISIONS_GITHUB_TOKEN?.trim();
+  return new OwnerDecisionService({
+    manifest,
+    // Outside a real runtime nothing is written to disk and nothing leaves the
+    // process: no ledger file, and no live check, so nothing can be approved.
+    ledger: usesEnvironment
+      ? new JsonLinesOwnerDecisionLedger(jarvisDataFile("jarvis-owner-decisions.jsonl"))
+      : new InMemoryOwnerDecisionLedger({ started: false }),
+    approvalConfigured: () => config.currentApprovalToken !== undefined,
+    ...(usesEnvironment
+      ? {
+          subjectProbe: createGitHubSubjectProbe({
+            repository: manifest.repository,
+            ...(token ? { token } : {}),
+          }),
+        }
+      : {}),
+  });
 }
 
 export async function createJarvisHttpApp(
@@ -459,6 +494,8 @@ export async function createJarvisHttpApp(
         (usesEnvironment
           ? createDangerZoneFromEnv(providerName)
           : createInactiveDangerZone(providerName)),
+      ownerDecisions:
+        options.ownerDecisions ?? createDefaultOwnerDecisions(usesEnvironment, config),
       voiceSessionRegistry:
         options.voiceSessionRegistry ??
         new VoiceSessionRegistry({
