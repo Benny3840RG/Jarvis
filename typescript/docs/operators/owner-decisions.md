@@ -22,6 +22,60 @@ work out through its own governed path reports the result with
 or `indeterminate`), and the card shows it. `indeterminate` stays visible until
 a later report resolves it.
 
+## First-time setup on a runtime
+
+Nothing can be recorded until the runtime has an approval token and a started
+ledger. Both steps are the owner's; neither is done by an agent.
+
+### 1. Configure the approval token
+
+The HTTP process reads `JARVIS_APPROVAL_TOKEN` from its environment (on the Lenovo,
+`typescript/.env.local`, which is git-ignored and mode 0600). Rules enforced by
+`src/http/config.ts`: at least 32 characters, no whitespace. It must be a
+different secret from `JARVIS_SERVICE_TOKEN`.
+
+This is the **same** approval secret that governed ToolAction approvals use
+(`tool-action-approval.md`). When `PERSISTENCE_PROVIDER=convex`, the Convex
+deployment holds its own copy and verifies it independently, so:
+
+- if an approval token already exists for this deployment, put that same value in
+  `.env.local`; do not invent a second one, or ToolAction approvals over HTTP
+  would be refused by Convex;
+- if none exists yet, generate one and set it in both places.
+
+Configuring it on the HTTP process has one effect beyond this queue: the ToolAction
+approve route stops reporting approvals as unavailable. Staging, approval and
+execution rules for ToolActions are otherwise unchanged.
+
+To add it without the value appearing on screen, in shell history or in a log:
+
+```sh
+cd ~/Jarvis/typescript
+umask 077
+# Existing token: paste it at the hidden prompt.
+read -rs -p "Approval token: " T && printf 'JARVIS_APPROVAL_TOKEN=%s\n' "$T" >> .env.local; unset T; echo
+# No token yet: generate one straight into the file instead of the line above.
+# printf 'JARVIS_APPROVAL_TOKEN=%s\n' "$(openssl rand -hex 32)" >> .env.local
+grep -c '^JARVIS_APPROVAL_TOKEN=' .env.local   # must print 1
+systemctl --user restart jarvis.service
+```
+
+A generated token then has to be copied once into a password manager, because the
+page asks for it on every decision: open `.env.local` in an editor to read it; do
+not `cat` it into a terminal that is being recorded or shared. Never commit it,
+paste it into an issue or chat, or give it to an agent.
+
+Check: `/settings/owner-decisions` no longer gives "No approval token is
+configured on this runtime" as the reason the queue is read-only. Until the ledger
+is started it will give the missing ledger as the reason instead.
+
+### 2. Start the ledger
+
+On the page, use "Start a new ledger": the service token, the approval token and
+the typed phrase `START NEW LEDGER`. Do this once per runtime, and only if there is
+genuinely no earlier ledger to restore (see "Starting the ledger, and restoring a
+backup" below).
+
 ## The manifest
 
 The cards come from `src/ownerGate/ownerDecisionManifest.json`, a reviewed file
