@@ -29,6 +29,7 @@ import {
   type VoiceProfile,
 } from "./voiceCommands.js";
 import type { VoiceActuationProvider } from "./voiceHardware.js";
+import { resolveClarification } from "./voiceDialogueResolver.js";
 import { interpretIntent } from "./voiceIntentInterpreter.js";
 import { parseUtterance } from "./voiceParser.js";
 import type { VoiceQueryProvider } from "./voiceQuery.js";
@@ -92,6 +93,12 @@ export type VoiceHistoryEntry = Readonly<{
 export type PendingConfirmation = Readonly<{
   command: VoiceCommand;
   issuedAt: number;
+  expiresAt: number;
+}>;
+
+type PendingClarification = Readonly<{
+  candidates: readonly string[];
+  profile: VoiceProfile;
   expiresAt: number;
 }>;
 
@@ -179,6 +186,7 @@ export class VoiceSession {
   readonly #interpret: boolean;
   readonly #history: VoiceHistoryEntry[] = [];
   #pending: PendingConfirmation | undefined;
+  #clarification: PendingClarification | undefined;
 
   constructor(options: VoiceSessionOptions) {
     this.#profile = options.profile;
@@ -251,9 +259,11 @@ export class VoiceSession {
     }
 
     if (intent === "confirm") {
+      this.#clarification = undefined;
       return this.#handleConfirm(now, normalized);
     }
     if (intent === "cancel") {
+      this.#clarification = undefined;
       return this.#handleCancel(now, normalized);
     }
 
@@ -266,11 +276,13 @@ export class VoiceSession {
 
     switch (outcome.status) {
       case "empty":
+        this.#clarification = undefined;
         this.#record(now, normalized, "empty");
         return { decision: "empty" };
       case "no-match":
         return this.#handleNoMatch(now, outcome.normalizedTranscript, input);
       case "ambiguous":
+        this.#clarification = undefined;
         this.#record(now, outcome.normalizedTranscript, "ambiguous");
         return { decision: "ambiguous", candidates: outcome.candidates };
       case "recognized":
@@ -294,6 +306,69 @@ export class VoiceSession {
     normalizedTranscript: string,
     input: VoiceSessionInput,
   ): VoiceDispatch {
+    const clarification = this.#clarification;
+    if (clarification) {
+      // A clarification gets exactly one final follow-up. Consume it before
+      // resolving so an unrelated or unsafe reply cannot leave an old choice.
+      this.#clarification = undefined;
+      if (
+        now < clarification.expiresAt &&
+        clarification.profile === this.#profile &&
+        input.wakeAuthorized === true
+      ) {
+        const controls = controlAlternativeCandidates(input.alternatives);
+        if (controls.length > 0) {
+          this.#record(now, normalizedTranscript, "ambiguous");
+          return { decision: "ambiguous", candidates: controls };
+        }
+        const resolution = resolveClarification({
+          reply: input.transcript,
+          candidates: clarification.candidates,
+          profile: this.#profile,
+          isFinal: true,
+        });
+        if (resolution.status === "cancelled") {
+          this.#record(now, normalizedTranscript, "cancel");
+          return { decision: "confirmation-not-pending" };
+        }
+        if (resolution.status === "resolved") {
+          const alternativesAgree = (input.alternatives ?? []).every((alternative) => {
+            const other = resolveClarification({
+              reply: alternative,
+              candidates: clarification.candidates,
+              profile: this.#profile,
+              isFinal: true,
+            });
+            return other.status === "resolved" && other.commandId === resolution.commandId;
+          });
+          if (!alternativesAgree) {
+            this.#record(now, normalizedTranscript, "ambiguous");
+            return { decision: "ambiguous", candidates: clarification.candidates };
+          }
+          const command = COMMAND_BY_ID.get(resolution.commandId);
+          if (
+            command &&
+            clarification.candidates.includes(command.id) &&
+            command.profile === this.#profile
+          ) {
+            const expiresAt = now + this.#confirmationTtlMs;
+            this.#pending = { command, issuedAt: now, expiresAt };
+            this.#record(now, normalizedTranscript, "clarified", command.id);
+            return {
+              decision: "awaiting-confirmation",
+              command,
+              expiresAt,
+              inferred: true,
+              confidence: resolution.confidence,
+            };
+          }
+        }
+        this.#record(now, normalizedTranscript, "unrecognized");
+        return { decision: "unrecognized", normalizedTranscript };
+      }
+      this.#record(now, normalizedTranscript, "unrecognized");
+      return { decision: "unrecognized", normalizedTranscript };
+    }
     if (this.#interpret && input.wakeAuthorized === true) {
       const intent = interpretIntent({
         transcript: input.transcript,
@@ -329,6 +404,20 @@ export class VoiceSession {
         }
       } else if (intent.status === "needs-clarification") {
         this.#invalidatePending();
+        const candidates = intent.candidates;
+        if (
+          candidates.length > 0 &&
+          candidates.length <= VOICE_COMMANDS.length &&
+          new Set(candidates).size === candidates.length &&
+          candidates.every((id) => COMMAND_BY_ID.get(id)?.profile === this.#profile) &&
+          controlAlternativeCandidates(input.alternatives).length === 0
+        ) {
+          this.#clarification = {
+            candidates: Object.freeze([...candidates]),
+            profile: this.#profile,
+            expiresAt: now + this.#confirmationTtlMs,
+          };
+        }
         this.#record(now, normalizedTranscript, "ambiguous");
         return { decision: "ambiguous", candidates: intent.candidates };
       }
@@ -449,6 +538,7 @@ export class VoiceSession {
 
   #invalidatePending(): void {
     this.#pending = undefined;
+    this.#clarification = undefined;
   }
 
   #record(at: number, normalizedTranscript: string, outcome: string, commandId?: string): void {
