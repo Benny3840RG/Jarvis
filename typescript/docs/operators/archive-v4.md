@@ -256,7 +256,33 @@ restore, field fidelity, quote sha256 equality, and tombstoned replay refusal,
 and the restart step failed because the child was not given the delivery
 token. The harness now passes that token. Full end-to-end recovery on
 realistic data stays **NOT YET MET** until the host repeats that restart
-step. This gate does not write the live data
+step. `npm run commission:local-v1-recovery` drives that restart step: it reads
+`JARVIS_LV1_ISOLATED_CONVEX_URL` (a loopback backend, refused if it is the
+configured `CONVEX_URL` or a cloud host; DNS names beginning with `127.` are not loopback literals), `JARVIS_DELIVERY_RUNTIME_TOKEN`, the
+restored `JARVIS_LV1_JSON_DIR`, and the representative ids, runs the proof, and
+writes an evidence file named for the source SHA (default
+`~/lv1-01/restart-proof-<sha>.md`) with the quote body sha256. The evidence
+writer runs on Linux only, and the output path is checked before the proof
+starts: an existing file, or a path inside live or restored data, is refused
+before any process is launched. The evidence directory must already exist
+(`mkdir -p ~/lv1-01` for the default path); the writer never creates
+directories, so a refused write leaves nothing behind. The writer re-checks after writing that the
+output directory has not been moved under live or restored data, and removes the
+file if it has. It cannot detect a move made after that last check, so do not
+rename or relocate the evidence directory while the proof runs. An absent optional `CONVEX_URL` is recorded as N/A;
+a failed refusal check cannot pass the proof. Configured Convex-hosted targets
+are refused by the same existing harness guard and count as a successful refusal
+probe, never as permission to contact that deployment. `JARVIS_LV1_LIVE_DIR` overrides
+the live directory; otherwise the environment-loaded `JARVIS_DATA_DIR` is used.
+Live and restored JSON roots must be physically separate: equality, containment
+and symlink aliases are rejected before invoking the restart runner.
+Evidence output must be a new file outside the live and restored JSON directories
+(including symlink aliases); existing files are never overwritten. Set
+`JARVIS_LV1_EVIDENCE_FILE` to choose a fresh output path for repeat runs.
+It automates only the restart proof; capture, restore,
+reread, and the Convex-function rollback assertions stay operator steps, listed
+unchecked in that file. The driver clears no gate — it is evidence, not
+acceptance. This gate does not write the live data
 directory and it does not construct a client from the configured `CONVEX_URL`.
 `completeness` stays `partial`. `assertRecoverable` still throws. This is not
 a recovery.

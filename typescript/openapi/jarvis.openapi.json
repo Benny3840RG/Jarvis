@@ -58,6 +58,10 @@
     {
       "name": "Settings",
       "description": "Operator settings. Danger zone wraps existing CLI and runbook actions that revoke previous tokens or quarantine local JSON. It does not delete Convex owner data."
+    },
+    {
+      "name": "Owner Decisions",
+      "description": "The owner decision queue: every owner-gated decision as one card bound to exact subject revisions, an action digest, an environment and an expiry. Recording a decision writes an audit record only. It executes nothing and replaces no existing approval, review or deployment gate."
     }
   ],
   "x-jarvis-architecture": {
@@ -3364,6 +3368,9 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
           "422": {
             "$ref": "#/components/responses/UnprocessableEntity"
           },
@@ -3410,6 +3417,9 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
@@ -7482,6 +7492,302 @@
           "422": { "$ref": "#/components/responses/UnprocessableEntity" },
           "429": { "$ref": "#/components/responses/TooManyRequests" },
           "500": { "$ref": "#/components/responses/InternalServerError" }
+        }
+      }
+    },
+    "/settings/owner-decisions": {
+      "get": {
+        "operationId": "getOwnerDecisionsPage",
+        "summary": "Open the loopback owner decisions page",
+        "description": "Serves the owner decision queue page on a loopback bind only. The page is public (no Bearer token) and contains no token and no decision data; it reads the queue from /api/v1/owner-decisions. Recording a decision needs the service token and the approval token, which the operator types into fields that are never written to browser storage. Non-loopback binds do not serve the page.",
+        "tags": ["System"],
+        "security": [],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Loopback owner decisions HTML shell.",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/api/v1/owner-decisions": {
+      "get": {
+        "operationId": "listOwnerDecisions",
+        "summary": "Read the owner decision queue",
+        "description": "Returns every owner-gated decision from the reviewed manifest with its derived status (NOT_READY, READY, APPROVED, REJECTED, CHANGES_REQUESTED, EXPIRED, EXECUTED), what is still missing, and any recorded decision and execution report. Read-only. decisionsAvailable is false, with the reason, when nothing can be recorded: no approval token is configured, no ledger has been started on this runtime, or the ledger failed its integrity check. Authentication is deployment-conditional: a local-serve loopback bind may omit Bearer authentication for the same-origin page; non-loopback binds retain the configured service-token/OIDC requirement.",
+        "tags": ["Owner Decisions"],
+        "security": [
+          {
+            "serviceToken": []
+          },
+          {}
+        ],
+        "x-jarvis-auth": {
+          "mode": "service-token-or-local-loopback",
+          "anonymousScope": "local-serve-loopback-only"
+        },
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The owner decision queue.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OwnerDecisionQueueResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
+    "/api/v1/owner-decisions/ledger": {
+      "post": {
+        "operationId": "startOwnerDecisionLedger",
+        "summary": "Start a new, empty decision ledger",
+        "description": "Starts the decision ledger on a runtime that has none. Deliberate and confirmed, because a data directory restored from a backup also has no ledger: starting a new one there would hide every earlier decision, so the ledger and its checkpoint should be restored instead. Requires the service token (or the OIDC owner), the approval token and the exact confirmation START NEW LEDGER. Refused with 409 when a ledger with any record, or a checkpoint, already exists; an existing ledger is never replaced. The one exception is an empty ledger file with no checkpoint, which is what an interrupted start leaves behind: the start is then completed.",
+        "tags": ["Owner Decisions"],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": false
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OwnerDecisionLedgerStartRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The ledger was started. Returns the queue as it now stands.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OwnerDecisionQueueResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/owner-decisions/{decisionId}/decisions": {
+      "post": {
+        "operationId": "recordOwnerDecision",
+        "summary": "Record the owner's decision on one card",
+        "description": "Records approve, request-changes or reject for one card. Requires the service token (or the OIDC owner) and, separately, the approval token in the body. The server re-checks everything at click time: the card's digest must equal expectedDigest (409 if the card changed), the request must not have expired, approval needs a READY card with no missing prerequisite or unmet dependency, a high-risk card needs its own typed confirmation phrase, and before an approval is recorded every subject and every piece of evidence on the card (pull request head, issue or comment last-updated time, branch head) is checked live; anything changed is refused with 409 and anything that cannot be checked, including deleted evidence, with 503. An approval whose execution is still indeterminate cannot be withdrawn until the outcome is reported. A repeat of the same idempotencyKey and request returns the original record with replayed true; the same key with a different request is refused. Recording a decision appends one hash-chained audit record. It executes nothing: ToolAction approval, CI, review, credential and deployment gates remain authoritative for the work itself.",
+        "tags": ["Owner Decisions"],
+        "parameters": [
+          {
+            "name": "decisionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+              "maxLength": 80
+            }
+          }
+        ],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OwnerDecisionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The decision was recorded, or was already recorded by this idempotency key.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OwnerDecisionRecordedResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/ProblemResponse"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/owner-decisions/{decisionId}/executions": {
+      "post": {
+        "operationId": "reportOwnerDecisionExecution",
+        "summary": "Report what happened when approved work was carried out",
+        "description": "Appends an execution report (executed, failed or indeterminate) to an APPROVED card so the queue can show the result. The work itself is done elsewhere through its own governed path; this endpoint runs nothing. An indeterminate report may later be resolved, including after the request has expired; executed and failed are final for that approval. Refused with 503 whenever the queue is read-only. Idempotent on idempotencyKey.",
+        "tags": ["Owner Decisions"],
+        "parameters": [
+          {
+            "name": "decisionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+              "maxLength": 80
+            }
+          }
+        ],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OwnerDecisionExecutionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The execution report was recorded, or was already recorded by this idempotency key.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OwnerDecisionRecordedResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
         }
       }
     }
@@ -14881,6 +15187,520 @@
           "quarantinedPaths": { "type": "array", "items": { "type": "string" } },
           "overlap": { "type": ["string", "null"], "enum": ["off", null] },
           "audit": { "$ref": "#/components/schemas/DangerZoneAuditRecord" }
+        }
+      },
+      "OwnerDecisionPullRequestPin": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "number", "revision"],
+        "description": "A pull request pinned to its head commit.",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "pull-request"
+          },
+          "number": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "revision": {
+            "type": "string"
+          }
+        }
+      },
+      "OwnerDecisionIssuePin": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "number", "revision"],
+        "description": "An issue pinned to its last-updated time.",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "issue"
+          },
+          "number": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "revision": {
+            "type": "string"
+          }
+        }
+      },
+      "OwnerDecisionBranchPin": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "name", "revision"],
+        "description": "A branch pinned to its head commit.",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "branch"
+          },
+          "name": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "string"
+          }
+        }
+      },
+      "OwnerDecisionCommentPin": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "id", "on", "revision"],
+        "description": "A comment (id) on issue or pull request (on), pinned to its last-updated time.",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "comment"
+          },
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "on": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "revision": {
+            "type": "string"
+          }
+        }
+      },
+      "OwnerDecisionSubject": {
+        "description": "One thing a decision is about, pinned to the revision the card was written against.",
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/OwnerDecisionPullRequestPin"
+          },
+          {
+            "$ref": "#/components/schemas/OwnerDecisionIssuePin"
+          },
+          {
+            "$ref": "#/components/schemas/OwnerDecisionBranchPin"
+          },
+          {
+            "$ref": "#/components/schemas/OwnerDecisionCommentPin"
+          }
+        ]
+      },
+      "OwnerDecisionEvidencePin": {
+        "description": "What a piece of proof is pinned to. A branch cannot be proof.",
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/OwnerDecisionPullRequestPin"
+          },
+          {
+            "$ref": "#/components/schemas/OwnerDecisionIssuePin"
+          },
+          {
+            "$ref": "#/components/schemas/OwnerDecisionCommentPin"
+          }
+        ]
+      },
+      "OwnerDecisionEntry": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "title",
+          "issues",
+          "proposedAction",
+          "consequence",
+          "scope",
+          "environment",
+          "risk",
+          "subjects",
+          "dependsOn",
+          "evidence",
+          "missingPrerequisites",
+          "rollback",
+          "expiresAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "issues": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "proposedAction": {
+            "type": "string"
+          },
+          "consequence": {
+            "type": "string"
+          },
+          "scope": {
+            "type": "string"
+          },
+          "environment": {
+            "type": "string",
+            "enum": ["repository", "development", "production"]
+          },
+          "risk": {
+            "type": "string",
+            "enum": ["standard", "high"]
+          },
+          "highRiskKind": {
+            "type": "string",
+            "enum": [
+              "production-deployment",
+              "remote-exposure",
+              "hardware-actuation",
+              "destructive",
+              "customer-send"
+            ]
+          },
+          "subjects": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "$ref": "#/components/schemas/OwnerDecisionSubject"
+            }
+          },
+          "dependsOn": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "evidence": {
+            "type": "array",
+            "description": "Proof, each pinned to a revision. An empty list makes the card NOT_READY.",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["label", "pin"],
+              "properties": {
+                "label": {
+                  "type": "string"
+                },
+                "pin": {
+                  "$ref": "#/components/schemas/OwnerDecisionEvidencePin"
+                }
+              }
+            }
+          },
+          "missingPrerequisites": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "rollback": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "OwnerDecisionCard": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "entry",
+          "actionDigest",
+          "status",
+          "blockedBy",
+          "links",
+          "supersededDecisions"
+        ],
+        "properties": {
+          "entry": {
+            "$ref": "#/components/schemas/OwnerDecisionEntry"
+          },
+          "actionDigest": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "NOT_READY",
+              "READY",
+              "APPROVED",
+              "REJECTED",
+              "CHANGES_REQUESTED",
+              "EXPIRED",
+              "EXECUTED"
+            ]
+          },
+          "blockedBy": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "links": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["subjects", "evidence"],
+            "description": "Where each subject and each piece of proof can be read, derived from its pin.",
+            "properties": {
+              "subjects": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["label", "url", "revision"],
+                  "properties": {
+                    "label": {
+                      "type": "string"
+                    },
+                    "url": {
+                      "type": "string",
+                      "format": "uri"
+                    },
+                    "revision": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "evidence": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["label", "url", "revision"],
+                  "properties": {
+                    "label": {
+                      "type": "string"
+                    },
+                    "url": {
+                      "type": "string",
+                      "format": "uri"
+                    },
+                    "revision": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "confirmationPhrase": {
+            "type": "string",
+            "description": "Present only on high-risk cards: the exact phrase approval must carry."
+          },
+          "decision": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["choice", "recordedAt", "actor"],
+            "properties": {
+              "choice": {
+                "type": "string",
+                "enum": ["approve", "request-changes", "reject"]
+              },
+              "recordedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "actor": {
+                "type": "string"
+              },
+              "note": {
+                "type": "string"
+              }
+            }
+          },
+          "execution": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["status", "recordedAt"],
+            "description": "The latest execution report for the most recent approval. It stays on the card after a later rejection.",
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": ["executed", "failed", "indeterminate"]
+              },
+              "recordedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "reference": {
+                "type": "string"
+              }
+            }
+          },
+          "supersededDecisions": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "OwnerDecisionQueueResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["data"],
+        "properties": {
+          "data": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "repository",
+              "generatedAt",
+              "decisionsAvailable",
+              "ledgerState",
+              "subjectVerification",
+              "cards",
+              "excluded"
+            ],
+            "properties": {
+              "repository": {
+                "type": "string"
+              },
+              "generatedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "decisionsAvailable": {
+                "type": "boolean"
+              },
+              "unavailableReason": {
+                "type": "string"
+              },
+              "ledgerState": {
+                "type": "string",
+                "enum": ["ready", "not-started", "damaged"]
+              },
+              "subjectVerification": {
+                "type": "string",
+                "enum": ["none", "live-probe"],
+                "description": "none means no live check is available and every approval is refused."
+              },
+              "cards": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/OwnerDecisionCard"
+                }
+              },
+              "excluded": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["issue", "reason"],
+                  "properties": {
+                    "issue": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "reason": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "OwnerDecisionLedgerStartRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["approvalToken", "confirmation"],
+        "properties": {
+          "approvalToken": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096,
+            "writeOnly": true
+          },
+          "confirmation": {
+            "type": "string",
+            "const": "START NEW LEDGER"
+          }
+        }
+      },
+      "OwnerDecisionRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["expectedDigest", "decision", "idempotencyKey", "approvalToken"],
+        "properties": {
+          "expectedDigest": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "decision": {
+            "type": "string",
+            "enum": ["approve", "request-changes", "reject"]
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9._:-]{8,100}$"
+          },
+          "approvalToken": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096,
+            "writeOnly": true
+          },
+          "confirmation": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 1000
+          }
+        }
+      },
+      "OwnerDecisionExecutionRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["expectedDigest", "status", "idempotencyKey"],
+        "properties": {
+          "expectedDigest": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["executed", "failed", "indeterminate"]
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9._:-]{8,100}$"
+          },
+          "reference": {
+            "type": "string",
+            "maxLength": 400
+          }
+        }
+      },
+      "OwnerDecisionRecordedResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["data"],
+        "properties": {
+          "data": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["card", "recordId", "replayed"],
+            "properties": {
+              "card": {
+                "$ref": "#/components/schemas/OwnerDecisionCard"
+              },
+              "recordId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "replayed": {
+                "type": "boolean"
+              }
+            }
+          }
         }
       }
     }

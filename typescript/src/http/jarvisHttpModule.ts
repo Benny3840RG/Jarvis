@@ -39,6 +39,8 @@ import type { OidcVerifier } from "./oidcVerifier.js";
 import type { DangerZoneService } from "../settings/dangerZone/service.js";
 import { ActivityTimelineController } from "./activityTimelineController.js";
 import { DangerZoneController } from "./dangerZoneController.js";
+import { OwnerDecisionController } from "./ownerDecisionController.js";
+import type { OwnerDecisionService } from "../ownerGate/ownerDecisionService.js";
 import { DevelopmentLiveWorkController } from "./developmentLiveWorkController.js";
 import { BusinessSettingsController } from "./businessSettingsController.js";
 import { EnquiryController } from "./enquiryController.js";
@@ -98,6 +100,7 @@ import {
   HTTP_ACTIVITY_EVENTS,
   HTTP_DEVELOPMENT_LIVE_WORK,
   HTTP_DANGER_ZONE,
+  HTTP_OWNER_DECISIONS,
   HTTP_MEMORY_CHANGE_SETS,
   HTTP_PERSISTENCE,
   HTTP_PROVIDER_NAME,
@@ -141,6 +144,7 @@ export type JarvisHttpModuleOptions = {
   developmentLiveWorkSource: DevelopmentLiveWorkSource | null;
   credentials: CredentialsRuntime;
   dangerZone: DangerZoneService;
+  ownerDecisions: OwnerDecisionService;
   voiceSessionRegistry: VoiceSessionRegistry;
 };
 
@@ -182,6 +186,7 @@ export class JarvisHttpModule {
         ActivityTimelineController,
         DevelopmentLiveWorkController,
         DangerZoneController,
+        OwnerDecisionController,
         VoiceController,
       ],
       providers: [
@@ -215,6 +220,7 @@ export class JarvisHttpModule {
           useValue: options.developmentLiveWorkSource,
         },
         { provide: HTTP_DANGER_ZONE, useValue: options.dangerZone },
+        { provide: HTTP_OWNER_DECISIONS, useValue: options.ownerDecisions },
         { provide: HTTP_PROVIDER_NAME, useValue: options.providerName },
         {
           provide: PersistenceSettingsService,
