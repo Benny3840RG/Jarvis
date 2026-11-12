@@ -100,16 +100,19 @@ export async function captureLocalV1Ledger(
 }
 
 /** Re-checks archive bytes and the canonical ledger invariants. */
-export async function verifyLocalV1Ledger(
+async function verifiedCapture(
   captureDirectory: string,
   state: LocalV1OwnerDecisionLedger | undefined,
-): Promise<"not-captured" | "absent" | "present"> {
-  if (state === undefined) return "not-captured";
+): Promise<
+  | { status: "not-captured" | "absent"; pair: null }
+  | { status: "present"; pair: { ledger: Buffer; checkpoint: Buffer } }
+> {
+  if (state === undefined) return { status: "not-captured", pair: null };
   const pair = await readPair(captureDirectory);
   if (state.state === "absent") {
     if (pair !== null)
       throw new Error("An absent owner decision ledger has unexpected captured files.");
-    return "absent";
+    return { status: "absent", pair: null };
   }
   if (pair === null) throw new Error("Captured owner decision ledger and checkpoint are missing.");
   if (
@@ -125,7 +128,14 @@ export async function verifyLocalV1Ledger(
     throw new Error(
       "Captured owner decision ledger record count does not match the archive manifest.",
     );
-  return "present";
+  return { status: "present", pair };
+}
+
+export async function verifyLocalV1Ledger(
+  captureDirectory: string,
+  state: LocalV1OwnerDecisionLedger | undefined,
+): Promise<"not-captured" | "absent" | "present"> {
+  return (await verifiedCapture(captureDirectory, state)).status;
 }
 
 /** Writes checkpoint first: interruption can leave only a damaged checkpoint, never a valid shorter history. */
@@ -134,7 +144,7 @@ export async function restoreLocalV1Ledger(
   targetDirectory: string,
   state: LocalV1OwnerDecisionLedger | undefined,
 ): Promise<"not-captured" | "absent" | "present"> {
-  const status = await verifyLocalV1Ledger(captureDirectory, state);
+  const verified = await verifiedCapture(captureDirectory, state);
   const ledgerPath = path.join(targetDirectory, LOCAL_V1_LEDGER_FILE);
   const checkpointPath = path.join(targetDirectory, LOCAL_V1_CHECKPOINT_FILE);
   for (const file of [ledgerPath, checkpointPath]) {
@@ -149,10 +159,8 @@ export async function restoreLocalV1Ledger(
     )
       throw new Error(`Target owner decision ledger file already exists: ${path.basename(file)}.`);
   }
-  if (status !== "present") return status;
-  const pair = await readPair(captureDirectory);
-  if (pair === null) throw new Error("Captured owner decision ledger is missing.");
-  await writeExclusive(checkpointPath, pair.checkpoint);
-  await writeExclusive(ledgerPath, pair.ledger);
+  if (verified.status !== "present") return verified.status;
+  await writeExclusive(checkpointPath, verified.pair.checkpoint);
+  await writeExclusive(ledgerPath, verified.pair.ledger);
   return "present";
 }
