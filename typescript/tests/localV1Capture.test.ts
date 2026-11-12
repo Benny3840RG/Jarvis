@@ -557,6 +557,11 @@ describe("Local V1 partial capture", () => {
       ).cards.map((entry) => entry.status),
       (await sourceService.inspect()).cards.map((entry) => entry.status),
     );
+    await writeFile(
+      path.join(output, LOCAL_V1_LEDGER_FILE),
+      ledgerBefore.subarray(0, ledgerBefore.length - 1),
+    );
+    await assert.rejects(() => readArchiveV4File(captured.archivePath), /ledger|digest/);
   });
 
   it("distinguishes absent ledgers from older archives that never captured a ledger", async () => {

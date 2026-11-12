@@ -17,6 +17,7 @@ import {
 } from "../archiveManifest.js";
 import { StrictBackupError } from "../strictValues.js";
 import { overLimitAdvice, resolveMaxArchiveBytes } from "./limits.js";
+import { verifyLocalV1Ledger } from "./localV1Ledger.js";
 import { businessUnresolvedReferences, type BusinessRecordsPayload } from "./businessSource.js";
 import { memoryUnresolvedReferences } from "./jsonSource.js";
 import type { CoreGroupPayload, JsonCapture, MemoryGroupPayload } from "./jsonSource.js";
@@ -309,5 +310,9 @@ export async function readArchiveV4File(
       `Archive is not valid JSON: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
-  return parseArchiveV4(parsed);
+  const archive = parseArchiveV4(parsed);
+  if (archive.manifest.localV1OwnerDecisionLedger !== undefined) {
+    await verifyLocalV1Ledger(path.dirname(target), archive.manifest.localV1OwnerDecisionLedger);
+  }
+  return archive;
 }

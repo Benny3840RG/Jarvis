@@ -28,7 +28,7 @@ import {
 import { S4_MAX_PAYLOAD_BYTES } from "./convexCapture.js";
 import type { JsonCapture } from "./jsonSource.js";
 import { LOCAL_V1_RECEIPT_CAPTURE_VERSION, LOCAL_V1_RECEIPT_TABLES } from "./localV1Receipts.js";
-import { captureLocalV1Ledger, verifyLocalV1Ledger } from "./localV1Ledger.js";
+import { captureLocalV1Ledger } from "./localV1Ledger.js";
 import { S6_CAPTURE_VERSION, S6_TABLES, s6BusinessChecksum } from "./s6MutableQuotes.js";
 
 export const LOCAL_V1_ARCHIVE_FILE = "archive.json";
@@ -523,7 +523,6 @@ export async function captureLocalV1Archive(
     );
     await writeArchiveV4File(archivePath, archive);
     const reread = await readArchiveV4File(archivePath);
-    await verifyLocalV1Ledger(output, reread.manifest.localV1OwnerDecisionLedger);
     if (reread.manifest.completeness !== "partial") {
       throw new LocalV1CaptureError("Local V1 capture must stay partial.");
     }
