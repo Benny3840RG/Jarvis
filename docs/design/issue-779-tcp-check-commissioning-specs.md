@@ -78,10 +78,14 @@ Two layers. The second is the enforcement point of record; the first is not.
 `tcpcheck_guarded` is the durable record of what the capability has ever been
 allowed to reach. Its contents are kept in a root-owned file loaded with the rule
 set, and mirrored in the store. Before the policy that first contains a pair is
-activated (A4), three things must have happened in this order: the pair is written
-to the root-owned file and the file and its directory are synced to disk; the pair
-is added to the kernel set; the kernel set is read back and contains it. A crash at
-any later point therefore reloads a file that already holds the pair. The broker
+activated (A4), four things must have happened in this order: the pair is added to
+the store's historical-pair list, which is append-only, and read back from the
+store; the pair is written to the root-owned file and the file and its directory
+are synced to disk; the pair is added to the kernel set; the kernel set is read back
+and contains it. If any of the four fails, the policy is not activated. The store
+is written first so that it is never behind the file: a crash at any later point
+leaves a store that already lists the pair, and the guard unit below then refuses
+a file or kernel set that lacks it. The broker
 refuses to start unless the kernel set contains every pair the store lists.
 
 **The worker does not run without the guard.** The worker has general outbound
@@ -132,10 +136,21 @@ element` followed by `add element … timeout T_live` when it is present. The
   to the store **only while holding that lock**, by the root control-plane
   component, and the lock is kept through the kernel deletion and readback. A
   refresh therefore either finishes before the narrowing commits, and is then
-  deleted by it, or starts after and sees the pending narrowing. If the lock cannot
-  be taken within `T_ctl` (proposal: **2 000 ms**) because the renewer is stopped,
-  the control plane kills the renewer, which releases the lock, and proceeds. A
-  stopped renewer cannot refresh, so the wait itself extends nothing.
+  deleted by it, or starts after and sees the pending narrowing.
+- **The lock covers whatever actually submits the update.** If the renewer submits
+  the batch itself, in process, its own descriptor is enough. If it runs a separate
+  `nft` process, that process **inherits the lock descriptor** (it is deliberately
+  not close-on-exec here, unlike the broker's lock), so the lock stays held until
+  the updater has exited, even if the renewer that started it is dead. The renewer
+  and any updater it starts run in one control group.
+- **Holding the lock is the only proof.** The narrowing procedure commits nothing
+  until it holds `tcpcheck_ctl` itself. If it cannot take the lock within `T_ctl`
+  (proposal: **2 000 ms**), the control plane kills the renewer's whole control
+  group and keeps waiting for the lock. Killing is not treated as proof that no
+  update is in flight: only acquiring the lock is, because it cannot be acquired
+  while any updater still holds the descriptor. If the lock is never acquired, the
+  narrowing stays blocked and is reported so. Meanwhile nothing can refresh either,
+  so the element only ages and is gone within `T_live` of its last refresh.
 - If the renewer crashes, hangs, loses the store, or cannot decide, it stops
   refreshing. The elements then expire in the kernel and the broker's connects are
   rejected. "Set the policy to deny" is therefore the **absence** of an action, which
@@ -160,8 +175,9 @@ element` followed by `add element … timeout T_live` when it is present. The
      confirmed absence. While deletion is failing (D5) the pair can still be in the
      kernel set, but step 1 already stops every new grant and every new `connecting`
      record for it.
-- **Widening (add a target):** persist the pair in the guarded file, add it to
-  `tcpcheck_guarded` and read it back (A2); then activate the policy in the store; then add the element to `tcpcheck_live`. The
+- **Widening (add a target):** record the pair in the store's historical list and
+  read it back, persist it in the guarded file, add it to `tcpcheck_guarded` and
+  read that back (A2, in that order); then activate the policy in the store; then add the element to `tcpcheck_live`. The
   kernel never admits a pair the active policy does not contain, and no pair becomes
   reachable by the broker before it is denied to everyone else.
 
@@ -256,7 +272,10 @@ and never changed afterwards. WS-B replaces the provider's own clock with one st
 mutation, `bindClaim`, called after the reservation and before `started`. In a
 single transaction it requires the reservation to be live under the presented fence,
 sets `expiresAtMs = now + lease` on the store's clock, computes the binding over the
-claim fields including that value, stores it, and returns the expiry. The worker
+claim fields including that value, stores the binding **together with the claim
+key** (`computeClaimKey` over the same fields), and returns the expiry. The stored
+claim key is what lets recovery find or retire an attempt whose claim never reached
+the broker; the binding alone is a one-way hash and cannot yield it. The worker
 freezes its claim with the returned value; it cannot choose or alter it, because any
 other value fails the binding comparison in `grantConnect`. `reserved → started`
 does not touch the expiry. The lease therefore runs from `bindClaim`, slightly
@@ -388,8 +407,9 @@ Only these durable records release the slot or clear a narrowing barrier:
    recovery) and **no ledger row exists** for its claim key. This happens when the
    worker died before sending the claim, or the broker died or lost the store before
    `grantConnect` committed. No socket can exist without a grant. The broker (the
-   running instance, or a new one at start) calls `retireUngranted`: one transaction
-   that reads the claim key and, only if there is still no row, inserts it settled
+   running instance, or a new one at start) calls `retireUngranted` with the attempt
+   id: one transaction that reads the claim key stored by `bindClaim` (B1), looks
+   that key up and, only if there is still no row, inserts it settled
    as `refused` with reason `fence_superseded`, then signals `never-admitted`. If a
    grant committed first, the transaction finds the row and changes nothing, and
    cases 1–3 apply. Serialisability makes this safe without the death proof: a late
@@ -527,8 +547,13 @@ ports that passed all four.
 3. it destroyed the socket;
 4. it committed `settled(timed-out)`.
 
-Anything short of that is `effect_uncertain`: the broker died, the commit failed,
-the store was unreachable, or the reply to the worker was lost. A worker-side timer
+Anything short of that is `effect_uncertain`: the broker died, the commit failed, or
+the store was unreachable. `effect_uncertain` is reserved for an absent or
+untrusted durable result.
+
+A lost reply is different. If `settled(timed-out)` committed and only the reply to
+the worker was lost, the outcome is known: the caller lacks the answer for a moment,
+and a retry replays the committed `timed-out` (B2, D9). Likewise a worker-side timer
 expiring while waiting for the broker is **not** a timeout result; it is reported
 blocked and the stored status is read on retry.
 
@@ -593,14 +618,15 @@ used anywhere in this matrix.
 | D31 | No mutation is committed across the cutoff: the store server clock passes a lease expiry unseen, then steps back by less than `T_guard`; a claim is presented | 5 | 0 SYN | `refused`, `expired`, by the guard margin. A step larger than `T_guard` is outside the named assumption and is not claimed |
 | D29 | Broker killed while another process holds a duplicate of its lock descriptor; new broker starts | 4 | No second attempt | New broker cannot take the lock; slot held; blocked until the descriptor closes, then B3 applies |
 | D30 | Broker paused while holding the lock; the lock pathname is replaced with a new file (attempted as `jarvis-egress`, then forced as root in the harness); new broker starts | 4 | No second attempt | As `jarvis-egress` the replacement fails. After the forced replacement the new broker sees a different inode from the stored one and refuses to start; slot held; nothing retired |
-| D32 | Broker killed after `reserved → started`, before `grantConnect` commits; separately, worker killed before sending the claim; store then recovers | 3, 4 | 0 SYN | `retireUngranted` settles `refused`, `fence_superseded`; `never-admitted`; slot and barrier released |
+| D32 | Broker killed after `reserved → started`, before `grantConnect` commits; separately, worker killed before sending the claim; store then recovers | 3, 4 | 0 SYN | In both variants `retireUngranted` finds the claim key stored by `bindClaim` (the broker never received the claim in the second) and settles `refused`, `fence_superseded`; `never-admitted`; slot and barrier released |
 | D33 | Host crashes after a widening is activated, then reboots; worker connects directly to the new target; separately, boot with the rule set failing to load | 1 | Reboot: rejected through `tcpcheck_guarded`; reject counter +1; 0 SYN. Failed load: the Jarvis service does not start; 0 SYN | Guarded file already holds the pair; no ledger row |
 | D34 | A check is settled; a new action for the same address and port is staged and approved | 2 | 1 further attempt | A second row under a different claim key; the first row unchanged |
 | D35 | A non-broker process holds an open connection to a pair; the pair is then added to `tcpcheck_guarded` | 1 | Further packets on that connection rejected; reject counter increases | No ledger row |
 | D36 | Broker paused after the `connecting` commit; admission recovery runs for that owner; broker resumes within `T_call`, pair live | 3 | 1 attempt, by the capability whose fence is still current | Recovery left the fence unchanged and reported the slot held; the row settles with the real outcome. Reversed order (recovery first): `markConnecting` refuses `fence_superseded`; 0 SYN |
 | D37 | The root-owned guarded file is restored to an older version missing a former target that the store still lists; host boots | 1 | The Jarvis service does not start; 0 SYN to the former target | Guard unit reports the mismatch; no ledger row |
 | D38 | A healthy allowlisted target is kept live for more than two `T_live`, with a check at the start and one after `2 × T_live` | 1 | Both attempts accepted; the pair is present in every readback throughout | Two rows under different claim keys, both settled with the real outcome |
-| D39 | Renewer stopped after its store read while holding `tcpcheck_ctl`; a narrowing is requested; kernel deletion is made to fail | 1 | No refresh after the narrowing commit; the pair's remaining lifetime only falls and it is gone within `T_live` of the last refresh | Narrowing committed only after the lock was taken (renewer killed after `T_ctl`); epoch not advanced until absence is read back |
+| D39 | Renewer stopped after its store read while holding `tcpcheck_ctl`; in a second variant the stop is inside its spawned updater, before the batch is submitted, and the renewer itself is killed; a narrowing is requested; kernel deletion is made to fail | 1 | No refresh after the narrowing commit; the pair's remaining lifetime only falls and it is gone within `T_live` of the last refresh | Narrowing committed only after the lock was actually acquired (control group killed after `T_ctl`); while a stopped updater still holds the descriptor the narrowing stays blocked and nothing is committed; epoch not advanced until absence is read back |
+| D40 | During a widening the store's historical-pair write is made to fail; separately, it succeeds, the host crashes after activation, and an older guarded file is restored before boot | 1 | First variant: pair never live; 0 SYN. Second: the Jarvis service does not start; 0 SYN to the target | First: policy not activated. Second: store lists the pair, guard unit reports the file mismatch |
 
 **The D4 probe.** A compliant broker never reaches the kernel once the control plane
 has failed: it cannot commit `markConnecting`. The kernel deny is therefore
@@ -625,7 +651,7 @@ explicit sign-off.
 
 | Obligation (#779)                                               | Specified in                                                                 | Demonstrated by                                   |
 | --------------------------------------------------------------- | ---------------------------------------------------------------------------- | ------------------------------------------------- |
-| 1 — freshness and revocation timing, independent deny path      | A2–A5                                                                        | D1–D6, D15, D19, D22, D25, D26, D33, D35, D37–D39 |
+| 1 — freshness and revocation timing, independent deny path      | A2–A5                                                                        | D1–D6, D15, D19, D22, D25, D26, D33, D35, D37–D40 |
 | 2 — durable single use at the egress boundary                   | B1, B2, B4                                                                   | D8–D11, D34                                       |
 | 3 — effect boundary rejects superseded capabilities             | A6, B1a, B3                                                                  | D1–D3, D10–D12, D20, D23–D25, D32, D36            |
 | 4 — eventual resolution under named assumptions                 | B3                                                                           | D10–D13, D29, D30, D32                            |
