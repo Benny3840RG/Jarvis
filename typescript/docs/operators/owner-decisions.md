@@ -43,27 +43,52 @@ deployment holds its own copy and verifies it independently, so:
   would be refused by Convex;
 - if none exists yet, generate one and set it in both places.
 
-Configuring it on the HTTP process has one effect beyond this queue: the ToolAction
-approve route stops reporting approvals as unavailable. Staging, approval and
-execution rules for ToolActions are otherwise unchanged.
+Configuring it on the HTTP process has an effect beyond this queue: the ToolAction
+approve and revoke routes (`POST .../tool-actions/{actionId}/approve` and
+`.../revoke`) stop failing at their missing-token check. Each still requires the
+token on the request, and the ToolAction state rules and Convex's own verification
+are unchanged.
 
-To add it without the value appearing on screen, in shell history or in a log:
+The block below adds the token without the value appearing on screen, in shell
+history, in the process list or in a log. It refuses to add a second entry, checks
+the length, ends the file with a newline first, stores the value single-quoted (so
+the systemd `EnvironmentFile` reader and Node's `.env` reader both take it
+literally), and then confirms that the value the runtime will load is the value
+you entered, comparing digests only. It restarts nothing: restart the service
+yourself only after it prints "Stored and verified".
 
 ```sh
-cd ~/Jarvis/typescript
-umask 077
-# Existing token: paste it at the hidden prompt.
-read -rs -p "Approval token: " T && printf 'JARVIS_APPROVAL_TOKEN=%s\n' "$T" >> .env.local; unset T; echo
-# No token yet: generate one straight into the file instead of the line above.
-# printf 'JARVIS_APPROVAL_TOKEN=%s\n' "$(openssl rand -hex 32)" >> .env.local
-grep -c '^JARVIS_APPROVAL_TOKEN=' .env.local   # must print 1
-systemctl --user restart jarvis.service
+( set -eu
+  cd ~/Jarvis/typescript
+  chmod 600 .env.local
+  if grep -q '^JARVIS_APPROVAL_TOKEN=' .env.local; then
+    echo "Already set. Edit that one line in an editor; do not add a second."; exit 1
+  fi
+  read -rs -p "Approval token (press Enter to generate a new one): " T; echo
+  [ -n "$T" ] || T=$(openssl rand -hex 32)
+  case "$T" in *[!A-Za-z0-9._~+/=-]*)
+    echo "Refused: this block only handles letters, digits and . _ ~ + / = -"; exit 1 ;;
+  esac
+  [ "${#T}" -ge 32 ] || { echo "Refused: shorter than 32 characters."; exit 1; }
+  [ -z "$(tail -c1 .env.local)" ] || echo >> .env.local
+  printf "JARVIS_APPROVAL_TOKEN='%s'\n" "$T" >> .env.local
+  WANT=$(printf %s "$T" | sha256sum | cut -d' ' -f1)
+  GOT=$(node --env-file=.env.local -e 'process.stdout.write(require("node:crypto").createHash("sha256").update(process.env.JARVIS_APPROVAL_TOKEN ?? "").digest("hex"))')
+  [ "$WANT" = "$GOT" ] || { echo "Mismatch: fix .env.local before restarting."; exit 1; }
+  echo "Stored and verified. Now run: systemctl --user restart jarvis.service"
+)
 ```
+
+An existing token that contains other characters (for example `#` or `$`) is still
+valid for Jarvis, but an unquoted `#` starts a comment in a `.env` file and would
+silently shorten it. Add such a token by hand in an editor, single-quoted, and run
+only the digest comparison from the block.
 
 A generated token then has to be copied once into a password manager, because the
 page asks for it on every decision: open `.env.local` in an editor to read it; do
 not `cat` it into a terminal that is being recorded or shared. Never commit it,
-paste it into an issue or chat, or give it to an agent.
+paste it into an issue or chat, or give it to an agent. If the token is new, set
+the same value in the Convex deployment too.
 
 Check: `/settings/owner-decisions` no longer gives "No approval token is
 configured on this runtime" as the reason the queue is read-only. Until the ledger

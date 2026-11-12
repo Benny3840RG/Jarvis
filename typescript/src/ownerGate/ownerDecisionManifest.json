@@ -557,7 +557,7 @@
       "title": "tcp-check decision 8: accept the bounded clock assumption",
       "issues": [779],
       "proposedAction": "Confirm 5 000 ms as the allowed difference between a component's clock and store time, T_guard at 2 000 ms, and that exact expiry is proved only if the store's clock never steps back unseen by more than T_guard. Confirm that resetting the time high-water mark is an owner-only action.",
-      "consequence": "Expiry is checked two seconds early, shortening the usable lease to 13 seconds. A backward clock step larger than two seconds that no write observed is outside what the design can detect. Rejecting this card means requiring a second trusted time source.",
+      "consequence": "Expiry is checked two seconds early, shortening the usable lease to 13 seconds. A backward clock step larger than two seconds that no write observed is outside what the design can detect. Rejecting this card means one of two things, to be stated in the note: different values for the tolerance or the guard margin, or a requirement for a second trusted time source.",
       "scope": "Planning decision only. It changes the specification a builder works from; it authorises no code, no host change and no target.",
       "environment": "development",
       "risk": "standard",
@@ -602,7 +602,7 @@
         }
       ],
       "missingPrerequisites": [],
-      "rollback": "Record a requirement for a second time source; the time specification is amended before it is built.",
+      "rollback": "Record different values, or a requirement for a second time source; the time specification is amended before it is built.",
       "expiresAt": "2026-12-12T00:00:00.000Z"
     },
     {
