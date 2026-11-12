@@ -133,8 +133,9 @@ them. The design does not rely on that atomicity. It relies on three facts:
   the connect call.
 - Once the grant exists, recovery can no longer treat the attempt as `reserved`. It
   becomes `uncertain` and holds the slot until the broker supplies evidence (B3). A
-  paused broker that resumes and connects late is still the single executor for that
-  owner.
+  paused broker that resumes is still the single executor for that owner, but it
+  cannot connect on a stale grant: the `connecting` transition re-checks the fence,
+  the policy and the expiry (B1a), and the kernel set must still contain the pair.
 
 **Decisive test (locked on #779):** a paused worker holding an old capability cannot
 resume and open a socket after the policy narrows. It is refused three ways: the
@@ -163,14 +164,58 @@ transaction it:
 Only the caller that receives a freshly inserted `granted` row may proceed. The mutation is
 callable only with the broker's credential, so the worker cannot grant itself.
 
+### B1a. The `connecting` transition re-checks the grant
+
+A grant is not a standing right to connect. A broker can be paused, descheduled or
+slow between `granted` and the connect call, so the expiry is checked again at the
+last durable step before the socket, and the remaining gap is bounded on the broker's
+own clock.
+
+`markConnecting` is one Convex mutation, callable only with the broker's credential.
+In a single transaction it:
+
+1. loads the row and requires phase `granted`, written by the calling instance;
+2. re-checks, **by the store's clock**, that `now < expiresAtMs`, that the fence
+   token is still current, and that the policy epoch and digest still match the
+   active policy;
+3. if every check passes, moves the row to `connecting`; if one fails, settles the
+   row as `refused` with the typed reason (`expired`, `fence_superseded` or
+   `policy_changed`) and signals `never-admitted`. No connect call is made.
+
+Between that commit and the syscall the broker applies a monotonic bound,
+`T_call` (proposal: **1 000 ms**):
+
+- it reads its monotonic clock immediately **before** sending `markConnecting`;
+- it reads it again immediately before the connect call, after the commit returned;
+- if more than `T_call` has elapsed, it makes no connect call. The same instance,
+  which knows it opened no socket, commits `settled(refused)` with reason `expired`.
+  A process pause advances the monotonic clock, so a paused broker fails this check
+  when it resumes. A host suspend is covered separately: the resume hook flushes the
+  kernel set before the broker runs (A5).
+
+**What expiry therefore bounds.** `expiresAtMs` bounds the **start** of the connect,
+not its end: no connect call starts later than `expiresAtMs + T_call` by more than
+the residual described below. The connect itself may then run for up to its own
+5 000 ms deadline (C1).
+
+**Residual, stated rather than hidden.** No userspace check is atomic with the
+syscall. A pause that lands exactly between the second monotonic read and the
+connect call is not caught by `T_call`. In that window the grant is still single-use
+and still held by the single executor, and the kernel set still decides: a pair
+narrowed or left unrefreshed meanwhile is rejected by the kernel (D3, D4). What the
+residual can permit is a connect to a **still-allowed** pair later than
+`expiresAtMs + T_call`. Whether that is acceptable, or whether the lease must also be
+enforced in the kernel (a per-grant element with its own timeout), is owner
+decision 7.
+
 Proposed phases, extending today's two (`consuming`, `settled`):
 
-| Phase              | Written                                                         | Meaning                                              |
-| ------------------ | --------------------------------------------------------------- | ---------------------------------------------------- |
-| `granted`          | by `grantConnect`                                               | The sole right exists; no connect call has been made |
-| `connecting`       | by the broker, **durably, immediately before the connect call** | A socket may exist                                   |
-| `settled(outcome)` | by the broker after the socket is destroyed                     | Outcome observed and recorded                        |
-| `retired-unknown`  | by broker recovery (B3)                                         | Effect ended; outcome can never be known             |
+| Phase              | Written                                                                            | Meaning                                              |
+| ------------------ | ---------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| `granted`          | by `grantConnect`                                                                  | The sole right exists; no connect call has been made |
+| `connecting`       | by `markConnecting` (B1a), **durably, immediately before the connect call**        | A socket may exist                                   |
+| `settled(outcome)` | by the broker after the socket is destroyed, or after it declined to connect (B1a) | Outcome observed and recorded                        |
+| `retired-unknown`  | by broker recovery (B3)                                                            | Effect ended; outcome can never be known             |
 
 Today's `consuming` maps to `granted` plus `connecting`. Splitting it is what lets
 recovery tell "provably no socket" from "a socket may have existed".
@@ -194,7 +239,8 @@ replay. A new check always needs a new stage and a new approval.
 Only these durable records release the slot or clear a narrowing barrier:
 
 1. **`settled(outcome)`** — the broker saw the socket end and recorded it. Signal:
-   `socket-closed`, with a known outcome.
+   `socket-closed`, with a known outcome. Where the row was refused at or after
+   `markConnecting` without any connect call (B1a), the signal is `never-admitted`.
 2. **Proven never connected** — the row is `granted` (no `connecting` record), **and**
    the broker instance that held the grant is proven dead. The `connecting` record
    precedes the connect call, so its absence proves no socket was opened. Recovery
@@ -233,7 +279,8 @@ decided, keep them all.
 
 | Decision                          | Clock                                                                                                      | Starts / compared against                                                                        | On restart or loss of trust                                                                                           |
 | --------------------------------- | ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
-| Capability expiry (`expiresAtMs`) | **Store** time, inside `grantConnect`                                                                      | Set by the store at `reserved → started`: start time + 15 000 ms lease                           | Issued and checked by the same clock, so no cross-process skew. A row carries its own expiry; restart changes nothing |
+| Capability expiry (`expiresAtMs`) | **Store** time, inside `grantConnect` and again inside `markConnecting` (B1a)                              | Set by the store at `reserved → started`: start time + 15 000 ms lease                           | Issued and checked by the same clock, so no cross-process skew. A row carries its own expiry; restart changes nothing |
+| Grant-to-connect gap (`T_call`)   | **Broker monotonic** clock                                                                                 | Read before `markConnecting` is sent; compared immediately before the connect call               | Lost with the process; a new instance never connects on an old row (B3)                                               |
 | Connect deadline (5 000 ms)       | **Broker monotonic** clock                                                                                 | Starts when the broker makes the connect call, immediately after the durable `connecting` record | Lost with the process; the attempt becomes case 3 in B3, never a `timed-out`                                          |
 | Rate window                       | **Store** time                                                                                             | The `startedAtMs` written at `reserved → started`                                                | History is durable. If store time is earlier than the newest record, refuse (`rate_limited`) until it is later        |
 | Table freshness                   | Store time at reservation and grant; broker wall clock at its gate; renewer wall clock before each refresh | Snapshot date read from the anchor-verified table                                                | Any party that cannot trust its clock denies. The renewer then stops refreshing, so the kernel denies too             |
@@ -285,9 +332,16 @@ passes a case. Each needs both:
 
 - **Egress boundary:** the kernel rule counters for the accept and reject rules, read
   before and after, plus a packet capture on the test interface showing the number
-  of SYN packets to the target;
+  of **connection attempts** to the target;
 - **Durable store:** the ledger row and the owner's admission record, read back after
   the case.
+
+**How attempts are counted.** In the table, "n SYN" means n connection attempts. An
+attempt is identified by its source port and initial sequence number. The kernel
+retransmits an unanswered SYN, so one attempt can put several SYN packets on the
+wire; retransmissions carrying the same source port and sequence number belong to
+the same attempt and are not counted again. A SYN with a new source port or sequence
+number is a new attempt.
 
 **Proposed test target.** A listener inside a private network namespace on the same
 host, reached over a virtual link, so no packet leaves the machine. Its address must
@@ -295,30 +349,32 @@ not be in the special-use table or the gate will refuse it; choosing and reviewi
 that synthetic address is an owner decision (item 3). No real third-party target is
 used anywhere in this matrix.
 
-| #   | Case                                                                                                     | Obl.    | Expected at the egress boundary                                      | Expected in the store                                                                  |
-| --- | -------------------------------------------------------------------------------------------------------- | ------- | -------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| D1  | Worker paused before `reserved → started`; recovery supersedes its fence; policy narrows; worker resumes | 1, 3    | 0 SYN; no accept count                                               | No ledger row; attempt released by fenced cleanup                                      |
-| D2  | Worker paused after `started`, before sending the claim; target removed; worker resumes                  | 1, 3    | 0 SYN; pair absent from the kernel set                               | `refused` settled with `policy_changed`; `never-admitted`                              |
-| D3  | Broker paused between its gate and the connect call; target removed and confirmed absent; broker resumes | 1       | Connect rejected by the kernel; reject counter +1; 0 SYN on the wire | `connecting`, then `settled(error)`; slot released on that record                      |
-| D4  | Control plane killed while a target is live; nothing publishes a deny                                    | 1       | After `T_live`, connect rejected; reject counter +1                  | Attempt refused or settled `error`; never `connected`                                  |
-| D5  | Narrowing where element deletion fails                                                                   | 1       | Pair still present until flush or expiry                             | Epoch **not** advanced until readback shows absence                                    |
-| D6  | Freshness bound passes while a reservation is held                                                       | 1, 5    | 0 SYN; element not refreshed                                         | `refused`, `policy_changed`                                                            |
-| D7  | Capability expires before the grant                                                                      | 5       | 0 SYN                                                                | `refused`, `expired`                                                                   |
-| D8  | Same claim delivered twice at once                                                                       | 2       | Exactly 1 SYN                                                        | One row; second caller gets `effect_uncertain` or `replayed`                           |
-| D9  | Response lost after `settled`; worker retries                                                            | 2       | No further SYN                                                       | `replayed` with the stored outcome                                                     |
-| D10 | Broker killed after `granted`, before `connecting`; new broker starts                                    | 2, 3, 4 | 0 SYN                                                                | Row settled `refused`; `never-admitted`; slot released                                 |
-| D11 | Broker killed after `connecting`, socket open; new broker starts                                         | 2, 3, 4 | 1 SYN total; no reconnect                                            | `retired-unknown`; slot released; caller sees `effect_uncertain`                       |
-| D12 | As D11, but the old broker is only paused (not dead)                                                     | 3, 4    | No second SYN                                                        | New broker cannot take the lock; slot **held**; reported blocked however long it lasts |
-| D13 | Store unreachable during finalize                                                                        | 4       | 1 SYN                                                                | Row stays `connecting`; slot held; blocked; resolves only once the store returns       |
-| D14 | Wall clock stepped forward and back while an element is live                                             | 5       | Element lifetime unchanged                                           | Clock-trust rule denies when time is earlier than the newest record                    |
-| D15 | Host suspended with a live element, then resumed                                                         | 1, 5    | Set flushed before the broker runs; 0 SYN to the old pair            | No grant issued until the renewer re-adds the pair                                     |
-| D16 | Eleven starts in 60 s, then one more at exactly 60 000 ms after the first                                | 5       | 10 SYN, then 1 more                                                  | Eleventh refused `rate_limited`; the later one admitted                                |
-| D17 | Deadline fires on a silent target                                                                        | 5       | 1 SYN; socket destroyed at 5 s                                       | `settled(timed-out)` written by the same instance                                      |
-| D18 | Worker's own wait expires while the broker is still connecting                                           | 5       | 1 SYN                                                                | Worker reports blocked; store later shows the real outcome                             |
-| D19 | Worker process connects directly to an allowlisted target                                                | 1       | Rejected by the kernel; reject counter +1; 0 SYN                     | No ledger row                                                                          |
-| D20 | Straggler worker tries to commit a result after recovery marked the attempt `uncertain`                  | 3       | No SYN                                                               | Commit refused on the superseded fence; state unchanged                                |
-| D21 | Port 0, 65536, `"80"`, 80.5                                                                              | 5       | 0 SYN                                                                | Rejected before any reservation; no history entry                                      |
-| D22 | Broker started with no rule set loaded                                                                   | 1       | 0 SYN                                                                | Broker refuses to start; all attempts blocked                                          |
+| #   | Case                                                                                                     | Obl.    | Expected at the egress boundary                                                      | Expected in the store                                                                  |
+| --- | -------------------------------------------------------------------------------------------------------- | ------- | ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------- |
+| D1  | Worker paused before `reserved → started`; recovery supersedes its fence; policy narrows; worker resumes | 1, 3    | 0 SYN; no accept count                                                               | No ledger row; attempt released by fenced cleanup                                      |
+| D2  | Worker paused after `started`, before sending the claim; target removed; worker resumes                  | 1, 3    | 0 SYN; pair absent from the kernel set                                               | `refused` settled with `policy_changed`; `never-admitted`                              |
+| D3  | Broker paused between its gate and the connect call; target removed and confirmed absent; broker resumes | 1       | Connect rejected by the kernel; reject counter +1; 0 SYN on the wire                 | `connecting`, then `settled(error)`; slot released on that record                      |
+| D4  | Control plane killed while a target is live; nothing publishes a deny                                    | 1       | After `T_live`, connect rejected; reject counter +1                                  | Attempt refused or settled `error`; never `connected`                                  |
+| D5  | Narrowing where element deletion fails                                                                   | 1       | Pair still present until flush or expiry                                             | Epoch **not** advanced until readback shows absence                                    |
+| D6  | Freshness bound passes while a reservation is held                                                       | 1, 5    | 0 SYN; element not refreshed                                                         | `refused`, `policy_changed`                                                            |
+| D7  | Capability expires before the grant                                                                      | 5       | 0 SYN                                                                                | `refused`, `expired`                                                                   |
+| D8  | Same claim delivered twice at once                                                                       | 2       | Exactly 1 SYN                                                                        | One row; second caller gets `effect_uncertain` or `replayed`                           |
+| D9  | Response lost after `settled`; worker retries                                                            | 2       | No further SYN                                                                       | `replayed` with the stored outcome                                                     |
+| D10 | Broker killed after `granted`, before `connecting`; new broker starts                                    | 2, 3, 4 | 0 SYN                                                                                | Row settled `refused`; `never-admitted`; slot released                                 |
+| D11 | Broker killed after `connecting`, socket open; new broker starts                                         | 2, 3, 4 | 1 SYN total; no reconnect                                                            | `retired-unknown`; slot released; caller sees `effect_uncertain`                       |
+| D12 | As D11, but the old broker is only paused (not dead)                                                     | 3, 4    | No second SYN                                                                        | New broker cannot take the lock; slot **held**; reported blocked however long it lasts |
+| D13 | Store unreachable during finalize                                                                        | 4       | 1 SYN                                                                                | Row stays `connecting`; slot held; blocked; resolves only once the store returns       |
+| D14 | Wall clock stepped forward and back while an element is live                                             | 5       | Element lifetime unchanged                                                           | Clock-trust rule denies when time is earlier than the newest record                    |
+| D15 | Host suspended with a live element, then resumed                                                         | 1, 5    | Set flushed before the broker runs; 0 SYN to the old pair                            | No grant issued until the renewer re-adds the pair                                     |
+| D16 | Eleven starts in 60 s, then one more at exactly 60 000 ms after the first                                | 5       | 10 SYN, then 1 more                                                                  | Eleventh refused `rate_limited`; the later one admitted                                |
+| D17 | Deadline fires on a silent target                                                                        | 5       | 1 attempt; its retransmissions allowed until 5 s; none after the socket is destroyed | `settled(timed-out)` written by the same instance                                      |
+| D18 | Worker's own wait expires while the broker is still connecting                                           | 5       | 1 SYN                                                                                | Worker reports blocked; store later shows the real outcome                             |
+| D19 | Worker process connects directly to an allowlisted target                                                | 1       | Rejected by the kernel; reject counter +1; 0 SYN                                     | No ledger row                                                                          |
+| D20 | Straggler worker tries to commit a result after recovery marked the attempt `uncertain`                  | 3       | No SYN                                                                               | Commit refused on the superseded fence; state unchanged                                |
+| D21 | Port 0, 65536, `"80"`, 80.5                                                                              | 5       | 0 SYN                                                                                | Rejected before any reservation; no history entry                                      |
+| D22 | Broker started with no rule set loaded                                                                   | 1       | 0 SYN                                                                                | Broker refuses to start; all attempts blocked                                          |
+| D23 | Broker paused after `granted` until past `expiresAtMs`, pair still allowed; broker resumes               | 3, 5    | 0 SYN; no accept count                                                               | `markConnecting` refuses; `refused`, `expired`; `never-admitted`; slot released        |
+| D24 | Broker paused after the `connecting` commit for longer than `T_call`, pair still allowed; broker resumes | 3, 5    | 0 SYN; no accept count                                                               | `settled(refused)`, `expired`, written by the same instance; slot released             |
 
 A case passes only if both columns are observed. Any `connected` that the packet
 capture does not support, or any SYN the store cannot account for, fails the run.
@@ -330,13 +386,13 @@ explicit sign-off.
 
 ## Obligation coverage
 
-| Obligation (#779)                                               | Specified in | Demonstrated by      |
-| --------------------------------------------------------------- | ------------ | -------------------- |
-| 1 — freshness and revocation timing, independent deny path      | A2–A5        | D1–D6, D15, D19, D22 |
-| 2 — durable single use at the egress boundary                   | B1, B2, B4   | D8–D11               |
-| 3 — effect boundary rejects superseded capabilities             | A6, B3       | D1–D3, D10–D12, D20  |
-| 4 — eventual resolution under named assumptions                 | B3           | D10–D13              |
-| 5 — deadline origin, timeout versus unknown, port range, window | C1–C4        | D6, D7, D14–D18, D21 |
+| Obligation (#779)                                               | Specified in | Demonstrated by                |
+| --------------------------------------------------------------- | ------------ | ------------------------------ |
+| 1 — freshness and revocation timing, independent deny path      | A2–A5        | D1–D6, D15, D19, D22           |
+| 2 — durable single use at the egress boundary                   | B1, B2, B4   | D8–D11                         |
+| 3 — effect boundary rejects superseded capabilities             | A6, B1a, B3  | D1–D3, D10–D12, D20, D23, D24  |
+| 4 — eventual resolution under named assumptions                 | B3           | D10–D13                        |
+| 5 — deadline origin, timeout versus unknown, port range, window | B1a, C1–C4   | D6, D7, D14–D18, D21, D23, D24 |
 
 No obligation box on #779 should be ticked from this document. Each is ticked only
 when implemented and covered by its matrix cases.
@@ -356,6 +412,10 @@ when implemented and covered by its matrix cases.
 5. **Root-owned components.** The rule set, the renewer and the resume hook need
    root on the host. Confirm that is acceptable for a development-only capability.
 6. **Ledger retention.** Keep every row indefinitely, or define an archive rule.
+7. **Lease enforcement at the syscall.** Accept the residual in B1a (a pause between
+   the last broker check and the connect call can start a connect to a still-allowed
+   pair after `expiresAtMs + T_call`), or require the lease to be enforced in the
+   kernel as well. Also confirm `T_call` at 1 000 ms or set another value.
 
 ## Gates
 
