@@ -776,6 +776,7 @@ it("restores a partial capture into scratch JSON and an empty convex-test, then 
       taskId: stateDoc.tasks[0]?.id ?? "",
       buildId: buildDoc.builds[0]?.id ?? "",
       quoteId: seeded.quote.aggregate.quoteId,
+      // eslint-disable-next-line @convex-dev/no-process-env -- Exercise the host process environment in this off-host backup test, not Convex function env.
       configuredConvexUrl: process.env.CONVEX_URL,
     });
     expect(restarted.quoteRecovered).toBe(false);
