@@ -89,6 +89,7 @@ function harness(
     onend?: () => void;
     onerror?: () => void;
   }[] = [];
+  const speechCancels = { count: 0 };
   const actuations: string[] = [];
   const recognitions: Recognition[] = [];
   const delayedRequests = new Map<string, ReturnType<typeof deferred>>();
@@ -222,7 +223,9 @@ function harness(
       ? {}
       : {
           speechSynthesis: {
-            cancel() {},
+            cancel() {
+              speechCancels.count += 1;
+            },
             getVoices() {
               return options.noVoices ? [] : [{}];
             },
@@ -267,6 +270,7 @@ function harness(
     registry,
     spoken,
     speechUtterances,
+    speechCancels,
     actuations,
     recognitions,
     advance(milliseconds: number) {
@@ -471,6 +475,52 @@ describe("voice HUD clarification prompt (#567)", () => {
     assert.equal(h.get("voice-pending").hidden, true);
     assert.deepEqual(h.actuations, []);
   });
+
+  for (const failure of [
+    { status: 404, notice: /expired or is no longer available/ },
+    { status: 503, notice: /Voice service unavailable/ },
+  ]) {
+    it(`stops the spoken prompt when the reply request fails (${failure.status})`, async () => {
+      const h = harness();
+      await offerClarification(h);
+      const prompt = h.speechUtterances.at(-1)!;
+      assert.equal(prompt.text, CLARIFICATION_PROMPT);
+      prompt.onstart?.();
+      assert.match(h.get("voice-output-status").textContent, /started/i);
+      const cancels = h.speechCancels.count;
+      const spoken = h.spoken.length;
+      const creations = sessionCreations(h);
+      const sent = h.utterances().length;
+
+      h.fail(h.utterances().at(-1)!.path, failure.status);
+      h.type("Jarvis the second one");
+      await flush();
+      assert.equal(h.speechCancels.count, cancels + 1, "the active prompt speech is cancelled");
+      assert.equal(h.spoken.length, spoken, "the failure notice is not spoken");
+      assert.match(h.get("voice-result").textContent, failure.notice);
+      assert.doesNotMatch(h.get("voice-result").textContent, /Did you mean/);
+      assert.equal(h.get("voice-pending").hidden, true);
+      const stopped = h.get("voice-output-status").textContent;
+      assert.match(stopped, /stopped/i);
+
+      const notice = h.get("voice-result").textContent;
+      prompt.onstart?.();
+      prompt.onend?.();
+      prompt.onerror?.();
+      assert.equal(h.get("voice-output-status").textContent, stopped);
+      assert.equal(h.get("voice-result").textContent, notice);
+      assert.equal(h.utterances().length, sent + 1, "the failed reply is never retried");
+      assert.equal(sessionCreations(h), creations, "no session is created until a fresh command");
+      assert.deepEqual(h.actuations, []);
+
+      h.type("Jarvis the second one");
+      await flush();
+      assert.equal(sessionCreations(h), creations + 1);
+      assert.equal(h.get("voice-result").textContent, "Command not recognised.");
+      assert.equal(h.get("voice-pending").hidden, true);
+      assert.deepEqual(h.actuations, []);
+    });
+  }
 
   it("replaces the prompt with an ordinary non-ambiguous result", async () => {
     const h = harness();

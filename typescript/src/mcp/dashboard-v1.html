@@ -4292,6 +4292,8 @@
                   if (generation !== state.generation) return;
                   var id = invalidateSession();
                   if (error.status !== 404) retireSession(id);
+                  // A prompt still being spoken must not keep inviting a reply to a dead session.
+                  cancelSpeech();
                   renderLatency(startedAt, voiceClock(), true);
                   renderNotice(error.status === 404
                     ? "Voice session expired or is no longer available. Submit a fresh command; nothing was retried."
