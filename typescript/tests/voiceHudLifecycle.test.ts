@@ -68,6 +68,8 @@ function harness(
     synthesis?: boolean;
     noVoices?: boolean;
     speechThrows?: boolean;
+    /** Treat every recognition session as long-lived (no rapid-end guard). */
+    longSessions?: boolean;
   } = {},
 ) {
   const elements = new Map<string, Element>();
@@ -114,6 +116,7 @@ function harness(
   class Recognition {
     onresult?: (event: unknown) => void;
     onend?: () => void;
+    onerror?: (event: { error: string }) => void;
     stopCalls = 0;
     abortCalls = 0;
     constructor() {
@@ -247,14 +250,16 @@ function harness(
     "document",
     "fetch",
     "SpeechSynthesisUtterance",
-    `${
-      options.switchWaitMs === undefined
-        ? block
-        : block!.replace(
-            "var PROFILE_SWITCH_WAIT_MS = 10000;",
-            `var PROFILE_SWITCH_WAIT_MS = ${options.switchWaitMs};`,
-          )
-    }\nsetupVoiceConsole();`,
+    `${(options.switchWaitMs === undefined
+      ? block!
+      : block!.replace(
+          "var PROFILE_SWITCH_WAIT_MS = 10000;",
+          `var PROFILE_SWITCH_WAIT_MS = ${options.switchWaitMs};`,
+        )
+    ).replace(
+      "var RECOGNITION_SHORT_END_MS = 2000;",
+      `var RECOGNITION_SHORT_END_MS = ${options.longSessions ? 0 : 2000};`,
+    )}\nsetupVoiceConsole();`,
   )(
     window,
     { getElementById: get, createElement: () => new Element() },
@@ -1145,5 +1150,66 @@ describe("voice HUD lifecycle (actual setupVoiceConsole and real session registr
     await flush();
     assert.equal(h.utterances().length, 2);
     assert.equal(new Set(h.utterances().map((request) => request.path)).size, 1);
+  });
+
+  it("keeps listening when the browser ends a recognition session on its own", async () => {
+    const h = harness({ longSessions: true });
+    let recognition = h.enable();
+    for (let round = 0; round < 6; round += 1) {
+      recognition.onerror?.({ error: round % 2 ? "no-speech" : "network" });
+      recognition.onend?.();
+      assert.equal(h.recognitions.length, round + 2, "a fresh session replaces the ended one");
+      assert.equal(h.get("voice-enable").disabled, true, "the microphone still counts as on");
+      recognition = h.recognitions.at(-1)!;
+    }
+    recognition.emit("Jarvis any unpaid invoices");
+    await flush();
+    assert.equal(h.utterances().length, 1, "the resumed session dispatches normally");
+    h.recognitions[0].emit("Jarvis any unpaid invoices");
+    await flush();
+    assert.equal(h.utterances().length, 1, "an ended session can no longer dispatch");
+  });
+
+  it("does not resume listening after Stop", () => {
+    const h = harness({ longSessions: true });
+    const recognition = h.enable();
+    h.stop();
+    recognition.onend?.();
+    assert.equal(h.recognitions.length, 1);
+    assert.equal(h.get("voice-enable").disabled, false);
+  });
+
+  it("does not resume listening when the browser refuses the microphone", () => {
+    for (const error of ["not-allowed", "service-not-allowed", "audio-capture"]) {
+      const h = harness({ longSessions: true });
+      const recognition = h.enable();
+      recognition.onerror?.({ error });
+      recognition.onend?.();
+      assert.equal(h.recognitions.length, 1, error);
+      assert.equal(h.get("voice-enable").disabled, false, error);
+      assert.match(h.get("voice-result").textContent, /refused access/, error);
+      assert.match(h.get("voice-result").textContent, new RegExp(error), error);
+    }
+  });
+
+  it("gives up with a notice when recognition keeps ending straight away", () => {
+    const h = harness();
+    h.enable();
+    for (let round = 0; round < 2; round += 1) {
+      const current = h.recognitions.at(-1)!;
+      current.onerror?.({ error: "network" });
+      current.onend?.();
+    }
+    assert.equal(h.recognitions.length, 3, "two immediate endings are retried");
+    const last = h.recognitions.at(-1)!;
+    last.onerror?.({ error: "network" });
+    last.onend?.();
+    assert.equal(h.recognitions.length, 3, "the third immediate ending is not retried");
+    assert.equal(h.get("voice-enable").disabled, false);
+    assert.match(h.get("voice-result").textContent, /keeps ending \(network\)/);
+    h.enable();
+    assert.equal(h.recognitions.length, 4, "the operator can enable the microphone again");
+    h.recognitions.at(-1)!.onend?.();
+    assert.equal(h.recognitions.length, 5, "an explicit enable starts a fresh retry allowance");
   });
 });

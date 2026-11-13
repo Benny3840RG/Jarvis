@@ -172,6 +172,21 @@ describe("voice session — dispatch and confirmation lifecycle", () => {
     assert.equal(s.pending(), undefined);
   });
 
+  it("accepts 'confirmed' as a confirmation but not a sound-alike", async () => {
+    const s = session();
+    await handle(s, "winch up", { now: 0 });
+    const soundAlike = await handle(s, "concern", { now: 500 });
+    assert.notEqual(soundAlike.decision, "actuation-unavailable");
+    assert.ok(s.pending(), "a sound-alike must leave the pending confirmation untouched");
+
+    const confirmed = await handle(s, "confirmed", { now: 1_000, alternatives: ["concern"] });
+    assert.equal(confirmed.decision, "actuation-unavailable");
+    assert.equal(s.pending(), undefined);
+
+    const stale = await handle(s, "confirmed", { now: 1_500 });
+    assert.equal(stale.decision, "confirmation-not-pending");
+  });
+
   it("protects against replay: a second confirm after consumption does nothing", async () => {
     const s = session();
     await handle(s, "winch up", { now: 0 });

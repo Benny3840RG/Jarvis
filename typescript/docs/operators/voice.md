@@ -34,8 +34,9 @@ Only run these when the browser reports speech recognition support and the opera
 1. Speak a command without the wake word. It must not dispatch. A safe write spoken without the wake word must not stage a task or reminder.
 2. Speak `Jarvis crawler status` after selecting **Crawler**. Only a final recognition result may dispatch.
 3. Arm a critical command with `Jarvis crawler halt`, then use `Jarvis cancel`; confirm it disarms.
-4. Arm it again and use `Jarvis confirm`; with no hardware adapter the result must still fail closed.
+4. Arm it again and use `Jarvis confirm`; with no hardware adapter the result must still fail closed. `Jarvis confirmed` is accepted as the same confirmation, because browsers often transcribe a spoken "confirm" that way. Sound-alikes such as `Jarvis concern` must be rejected and leave the confirmation pending.
 5. Press **Stop** while recognition or TTS is active. Confirm recognition is aborted and speech output is cancelled, including final results or responses arriving after the button press.
+6. Leave the microphone enabled and stay silent for a minute. The browser ends a listening session after a silence or a network interruption; the HUD starts a new one, so **Enable microphone** stays disabled and the next `Jarvis` command is still heard. Listening ends only on **Stop**, a profile switch, a refused microphone permission, or three sessions in a row that each end within two seconds. The last two show a notice that names the browser's reason.
 
 ## Latency evidence
 

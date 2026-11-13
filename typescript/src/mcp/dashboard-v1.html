@@ -4123,11 +4123,16 @@
           // A request that never answers must not leave the profile paused.
           var PROFILE_SWITCH_WAIT_MS = 10000;
           var WAKE_WORD = "jarvis";
+          // Browser errors after which listening must not resume on its own.
+          var RECOGNITION_REFUSALS = ["not-allowed", "service-not-allowed", "audio-capture", "language-not-supported"];
+          // A session that ends this soon after starting, this many times in a row, is not retried.
+          var RECOGNITION_SHORT_END_MS = 2000;
+          var RECOGNITION_SHORT_END_LIMIT = 3;
           var caps = voiceCapabilities(typeof window !== "undefined" ? window : {});
           var state = {
             profile: "client", sessionId: null, sessionPromise: null, generation: 0,
             profilePending: false, profileFailed: false, commandQueue: Promise.resolve(),
-            recognition: null, recognitionGeneration: 0, catalog: [],
+            recognition: null, recognitionGeneration: 0, recognitionShortEnds: 0, catalog: [],
           };
           var capEl = document.getElementById("voice-capability");
           if (capEl) capEl.textContent = caps.recognition ? "MIC AVAILABLE" : "TYPED ONLY";
@@ -4433,10 +4438,33 @@
               );
               if (prepared) dispatch(prepared.transcript, prepared.isFinal, prepared.alternatives, prepared.heardTranscript);
             };
+            var startedAt = voiceClock();
+            var recognitionError = "";
+            recognition.onerror = function (event) {
+              if (state.recognition !== recognition || recognitionGeneration !== state.recognitionGeneration) return;
+              recognitionError = (event && event.error) || "unknown";
+            };
             recognition.onend = function () {
+              // Stop, a profile switch and an explicit restart all advance the generation first,
+              // so only an ending the browser chose on its own reaches the code below.
               if (state.recognition !== recognition || recognitionGeneration !== state.recognitionGeneration) return;
               state.recognition = null;
+              var refused = RECOGNITION_REFUSALS.indexOf(recognitionError) !== -1;
+              state.recognitionShortEnds =
+                voiceClock() - startedAt < RECOGNITION_SHORT_END_MS ? state.recognitionShortEnds + 1 : 0;
+              if (!refused && state.recognitionShortEnds < RECOGNITION_SHORT_END_LIMIT) {
+                // The browser ends a listening session after a silence or a network
+                // interruption. Listening continues until the operator presses Stop.
+                startRecognition();
+                // A profile switch in flight declines the restart; the control must then be usable again.
+                if (!state.recognition) updateMicrophoneControls();
+                return;
+              }
+              state.recognitionShortEnds = 0;
               updateMicrophoneControls();
+              renderNotice(refused
+                ? "Microphone stopped: the browser refused access (" + recognitionError + "). Check the browser's microphone permission, then enable the microphone again."
+                : "Microphone stopped: speech recognition keeps ending" + (recognitionError ? " (" + recognitionError + ")" : "") + ". Check the connection, then enable the microphone again.");
             };
             try { recognition.start(); }
             catch (error) {
@@ -4445,7 +4473,11 @@
             }
             updateMicrophoneControls();
           }
-          if (enableBtn) enableBtn.addEventListener("click", startRecognition);
+          if (enableBtn)
+            enableBtn.addEventListener("click", function () {
+              state.recognitionShortEnds = 0;
+              startRecognition();
+            });
           if (stopBtn)
             stopBtn.addEventListener("click", function () {
               retireSession(invalidateSession());
