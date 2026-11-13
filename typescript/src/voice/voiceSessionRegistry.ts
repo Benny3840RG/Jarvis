@@ -44,6 +44,12 @@ export class VoiceSessionRegistry {
   readonly #interpretNaturalLanguage: boolean;
   readonly #idFactory: () => string;
   readonly #sessions = new Map<string, Entry>();
+  #removalListener: ((session: VoiceSession) => void) | undefined;
+
+  /** Observe disposal without giving the observer control over session decisions. */
+  onRemove(listener: (session: VoiceSession) => void): void {
+    this.#removalListener = listener;
+  }
 
   constructor(options: VoiceSessionRegistryOptions) {
     this.#provider = options.provider;
@@ -82,7 +88,7 @@ export class VoiceSessionRegistry {
     const entry = this.#sessions.get(id);
     if (!entry) return undefined;
     if (now >= entry.expiresAt) {
-      this.#sessions.delete(id);
+      this.#delete(id);
       return undefined;
     }
     entry.expiresAt = now + this.#ttlMs;
@@ -99,10 +105,10 @@ export class VoiceSessionRegistry {
     const entry = this.#sessions.get(id);
     if (!entry) return false;
     if (now >= entry.expiresAt) {
-      this.#sessions.delete(id);
+      this.#delete(id);
       return false;
     }
-    return this.#sessions.delete(id);
+    return this.#delete(id);
   }
 
   size(): number {
@@ -111,7 +117,7 @@ export class VoiceSessionRegistry {
 
   #evictExpired(now: number): void {
     for (const [id, entry] of this.#sessions) {
-      if (now >= entry.expiresAt) this.#sessions.delete(id);
+      if (now >= entry.expiresAt) this.#delete(id);
     }
   }
 
@@ -126,6 +132,14 @@ export class VoiceSessionRegistry {
         oldestId = id;
       }
     }
-    if (oldestId !== undefined) this.#sessions.delete(oldestId);
+    if (oldestId !== undefined) this.#delete(oldestId);
+  }
+
+  #delete(id: string): boolean {
+    const entry = this.#sessions.get(id);
+    if (!entry) return false;
+    this.#sessions.delete(id);
+    this.#removalListener?.(entry.session);
+    return true;
   }
 }
