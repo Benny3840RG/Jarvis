@@ -16,6 +16,10 @@
   failed explicit resumes retain their verified JSON files for another retry.
 - The second PR #807 repair reserves manifest, marker, and every JSON document
   filename from sidecar extras before a fresh or resumed restore can write.
+- The third PR #807 repair records a durable action-start marker before the
+  isolated Convex action. Any outcome after that point requires operator
+  reconciliation; a pre-action interruption can still resume. The resume
+  fingerprint covers archive, sidecar, blob, ledger, and target inputs.
 
 Next: independent exact-head review, isolated backend restart proof on a future
 authorised host, and Benny's separate merge and commissioning decisions.

@@ -246,9 +246,17 @@ an incomplete, unusable restore. An explicit `resume` checks retained bytes,
 file type and private mode against the archive before writing the missing file;
 plain retry refuses the directory.
 The isolated Convex restore action runs before the JSON completion marker is
-written. If it fails during an explicit resume, the in-progress marker and
-verified ledger pair remain for another explicit resume. A failed action on a
-fresh destination removes only the still-owned, unchanged restore directory.
+written. Immediately before invoking it, restore durably writes
+`.jarvis-local-v1-action-started.json` in the isolated JSON destination. If the
+action returns an error, succeeds but JSON completion fails, or the process dies,
+the action's outcome is ambiguous. The action-started and in-progress markers
+remain; automatic resume refuses the directory and requires operator
+reconciliation. An interruption before the action-started marker is written can
+be explicitly resumed after the capture bytes and retained JSON files are
+verified. The resume identity includes the archive, both Convex sidecars, PDF
+blob bytes, ledger pair, and target identity, so changed capture inputs cannot
+be substituted during a retry. Do not delete an ambiguous destination as a
+cleanup step or infer that the injected action did not write anything.
 For `absent`, restore creates neither file. Older archives with no ledger section
 remain readable and restore as before, reporting `not-captured` rather than
 `absent`. Neither case silently starts a new ledger. Decisions made after capture

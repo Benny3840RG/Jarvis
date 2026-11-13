@@ -434,6 +434,7 @@ async function prepareDestination(
   archive: ArchiveV4,
   resume: boolean,
   extraFiles: readonly ExtraFile[],
+  fingerprint: string,
 ): Promise<{ dest: string; resumed: boolean; retainedFiles: Set<string> }> {
   const dest = path.resolve(destination);
   const state = await inspectDestination(dest);
@@ -449,7 +450,6 @@ async function prepareDestination(
     );
   }
   if (state.kind === "interrupted") {
-    const fingerprint = archiveFingerprint(archive);
     if (state.marker.archiveFingerprint !== fingerprint) {
       throw new StrictBackupError(
         `Restore destination ${dest} holds an interrupted restore of a different archive (started ${state.marker.startedAt}). Refusing; use a new destination, or remove that directory deliberately.`,
@@ -773,6 +773,10 @@ export type RestoreOptions = {
   injectAfterExtraFile?: string;
   /** Complete an isolated companion restore before clearing the JSON recovery marker. */
   beforeCompletion?: () => Promise<void>;
+  /** Stronger caller identity when sidecars or blobs affect a resumed restore. */
+  resumeFingerprint?: string;
+  /** Drill hook: fail after the companion action returns, before JSON completion. */
+  injectAfterBeforeCompletion?: boolean;
 };
 
 /**
@@ -811,18 +815,25 @@ export async function restoreArchiveV4(
   assertDestinationNotLive(physicalDestination, await physicalPath(liveDirectory));
   const now = options.now ?? ((): Date => new Date());
   const extraFiles = options.extraFiles ?? [];
+  const fingerprint = options.resumeFingerprint ?? archiveFingerprint(archive);
   plannedFileNames(archive, extraFiles);
   const {
     dest: destDir,
     resumed,
     retainedFiles,
-  } = await prepareDestination(physicalDestination, archive, options.resume ?? false, extraFiles);
+  } = await prepareDestination(
+    physicalDestination,
+    archive,
+    options.resume ?? false,
+    extraFiles,
+    fingerprint,
+  );
 
   // Written before the first document, so an interruption at any point after
   // this leaves a directory that says what it is and what it was going to hold.
   const inProgress: InProgressMarker = {
     contractVersion: archive.manifest.contractVersion,
-    archiveFingerprint: archiveFingerprint(archive),
+    archiveFingerprint: fingerprint,
     startedAt: now().toISOString(),
     plannedFiles: plannedFileNames(archive, extraFiles),
   };
@@ -865,6 +876,11 @@ export async function restoreArchiveV4(
   }
   await fsyncDir(destDir);
   await options.beforeCompletion?.();
+  if (options.injectAfterBeforeCompletion) {
+    throw new StrictBackupError(
+      `Injected failure after isolated action; restore left incomplete at ${destDir}.`,
+    );
+  }
 
   const markerPath = path.join(destDir, RESTORE_MARKER);
   await writeJson(markerPath, {
