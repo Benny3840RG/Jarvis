@@ -20,7 +20,12 @@ import {
   LOCAL_V1_LEDGER_FILE,
   readVerifiedLocalV1Ledger,
 } from "./localV1Ledger.js";
-import { restoreArchiveV4 } from "./restore.js";
+import {
+  archiveFingerprint,
+  inspectDestination,
+  restoreArchiveV4,
+  validateInterruptedRestore,
+} from "./restore.js";
 import { S6_CAPTURE_VERSION, S6_TABLES } from "./s6MutableQuotes.js";
 
 export class LocalV1RestoreError extends Error {
@@ -373,30 +378,70 @@ export async function restoreLocalV1Archive(
           { name: LOCAL_V1_LEDGER_FILE, bytes: verifiedLedger.pair.ledger },
         ]
       : [];
-  await restoreArchiveV4(archive, destination, {
-    allowPartial: true,
-    liveDataDir: request.liveDataDir ?? JARVIS_DATA_DIR,
-    now: () => new Date(request.now),
-    resume: request.resume,
-    extraFiles,
-    injectAfterExtraFile:
-      request.injectAfterLedgerFile === "checkpoint"
-        ? LOCAL_V1_CHECKPOINT_FILE
-        : request.injectAfterLedgerFile === "ledger"
-          ? LOCAL_V1_LEDGER_FILE
-          : undefined,
-  });
+  let maps: LocalV1RestoreMaps | undefined;
+  let freshActionFailed = false;
+  let owned: { dev: number; ino: number; physical: string } | undefined;
   try {
-    const maps = await request.client.action(restoreLocalV1Action, {
-      serviceToken: request.serviceToken,
-      approvalToken: request.approvalToken,
-      now: request.now,
-      payloadJson,
-      blobs,
+    await restoreArchiveV4(archive, destination, {
+      allowPartial: true,
+      liveDataDir: request.liveDataDir ?? JARVIS_DATA_DIR,
+      now: () => new Date(request.now),
+      resume: request.resume,
+      extraFiles,
+      injectAfterExtraFile:
+        request.injectAfterLedgerFile === "checkpoint"
+          ? LOCAL_V1_CHECKPOINT_FILE
+          : request.injectAfterLedgerFile === "ledger"
+            ? LOCAL_V1_LEDGER_FILE
+            : undefined,
+      beforeCompletion: async () => {
+        if (!request.resume) {
+          const stat = await fs.lstat(destination);
+          owned = { dev: stat.dev, ino: stat.ino, physical: await fs.realpath(destination) };
+        }
+        try {
+          maps = await request.client.action(restoreLocalV1Action, {
+            serviceToken: request.serviceToken,
+            approvalToken: request.approvalToken,
+            now: request.now,
+            payloadJson,
+            blobs,
+          });
+        } catch (error: unknown) {
+          freshActionFailed = !request.resume;
+          throw error;
+        }
+      },
     });
+    if (maps === undefined)
+      throw new LocalV1RestoreError("Local V1 restore action did not return maps.");
     return { jsonDirectory: destination, archive, maps, ledger: verifiedLedger.status };
   } catch (error: unknown) {
-    await fs.rm(destination, { recursive: true, force: true });
+    if (freshActionFailed && owned !== undefined) {
+      const state = await inspectDestination(destination);
+      const stat = await fs.lstat(destination);
+      const physical = await fs.realpath(destination);
+      if (
+        state.kind !== "interrupted" ||
+        state.marker.archiveFingerprint !== archiveFingerprint(archive) ||
+        !stat.isDirectory() ||
+        stat.dev !== owned.dev ||
+        stat.ino !== owned.ino ||
+        physical !== owned.physical
+      ) {
+        throw new LocalV1RestoreError("Local V1 restore refuses to clean a changed destination.", {
+          cause: error,
+        });
+      }
+      try {
+        await validateInterruptedRestore(destination, archive, state.marker, extraFiles);
+      } catch (validation: unknown) {
+        throw new LocalV1RestoreError("Local V1 restore refuses to clean a changed destination.", {
+          cause: validation,
+        });
+      }
+      await fs.rm(destination, { recursive: true });
+    }
     throw error;
   }
 }

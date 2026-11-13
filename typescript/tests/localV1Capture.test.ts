@@ -459,6 +459,25 @@ describe("Local V1 partial capture", () => {
       /not a regular file/,
     );
     await rm(path.join(target, LOCAL_V1_LEDGER_FILE));
+    await assert.rejects(
+      () =>
+        restoreLocalV1Archive({
+          ...base,
+          resume: true,
+          client: {
+            action: async () => {
+              throw new Error("injected isolated database failure");
+            },
+          },
+        }),
+      /injected isolated database failure/,
+    );
+    await lstat(path.join(target, ".jarvis-archive-v4-in-progress.json"));
+    await assert.rejects(
+      () => lstat(path.join(target, ".jarvis-archive-v4-complete.json")),
+      /ENOENT/,
+    );
+    await lstat(path.join(target, LOCAL_V1_LEDGER_FILE));
     const resumed = await restoreLocalV1Archive({ ...base, resume: true });
     assert.equal(resumed.ledger, "present");
     await lstat(path.join(target, ".jarvis-archive-v4-complete.json"));
@@ -470,6 +489,22 @@ describe("Local V1 partial capture", () => {
       await readFile(path.join(target, LOCAL_V1_LEDGER_FILE)),
       await readFile(path.join(output, LOCAL_V1_LEDGER_FILE)),
     );
+    const changed = path.join(root, "changed-during-failed-action");
+    await assert.rejects(
+      () =>
+        restoreLocalV1Archive({
+          ...base,
+          jsonDirectory: changed,
+          client: {
+            action: async () => {
+              await writeFile(path.join(changed, "manifest.json"), "replacement\n");
+              throw new Error("injected isolated database failure");
+            },
+          },
+        }),
+      /refuses to clean a changed destination/,
+    );
+    assert.equal(await readFile(path.join(changed, "manifest.json"), "utf8"), "replacement\n");
   });
 
   it("captures every live store and leaves completeness partial", async () => {
@@ -794,6 +829,30 @@ describe("Local V1 partial capture", () => {
     });
     assert.deepEqual(captured.archive.manifest.localV1OwnerDecisionLedger, { state: "absent" });
     const client = { action: async () => ({ tasks: [], reminders: [], builds: [], pdfs: [] }) };
+    await assert.rejects(
+      () =>
+        proveLocalV1Recovery({
+          restore: {
+            captureDirectory: output,
+            jsonDirectory: path.join(root, "missing-source-proof"),
+            client,
+            serviceToken: SERVICE,
+            approvalToken: APPROVAL,
+            convexUrl: ENDPOINT,
+            now: AT.getTime(),
+            liveDataDir: live,
+          },
+          liveDirectory: live,
+          ownerDecisionLedgerDirectory: path.join(root, "missing-owner-decisions"),
+          readIsolated: async () => ({
+            clientId: "client-1",
+            taskId: "task-1",
+            buildId: "build-1",
+            quoteId: "cq-1",
+          }),
+        }),
+      /owner decision ledger source directory/,
+    );
     const absent = await proveLocalV1Recovery({
       restore: {
         captureDirectory: output,

@@ -279,7 +279,7 @@ function parseInProgressMarker(value: Record<string, unknown>, target: string): 
  * entry in the directory means this is not purely a leftover restore, and the
  * resume refuses. Matching regular files are retained; changed files are refused.
  */
-async function validateInterruptedRestore(
+export async function validateInterruptedRestore(
   dest: string,
   archive: ArchiveV4,
   marker: InProgressMarker,
@@ -759,6 +759,8 @@ export type RestoreOptions = {
   extraFiles?: readonly ExtraFile[];
   /** Drill hook: fail after writing one extra file. */
   injectAfterExtraFile?: string;
+  /** Complete an isolated companion restore before clearing the JSON recovery marker. */
+  beforeCompletion?: () => Promise<void>;
 };
 
 /**
@@ -850,6 +852,7 @@ export async function restoreArchiveV4(
     }
   }
   await fsyncDir(destDir);
+  await options.beforeCompletion?.();
 
   const markerPath = path.join(destDir, RESTORE_MARKER);
   await writeJson(markerPath, {

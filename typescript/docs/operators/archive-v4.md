@@ -243,6 +243,10 @@ It writes the checkpoint first, so interruption before the ledger write leaves
 an incomplete, unusable restore. An explicit `resume` checks retained bytes,
 file type and private mode against the archive before writing the missing file;
 plain retry refuses the directory.
+The isolated Convex restore action runs before the JSON completion marker is
+written. If it fails during an explicit resume, the in-progress marker and
+verified ledger pair remain for another explicit resume. A failed action on a
+fresh destination removes only the still-owned, unchanged restore directory.
 For `absent`, restore creates neither file. Older archives with no ledger section
 remain readable and restore as before, reporting `not-captured` rather than
 `absent`. Neither case silently starts a new ledger. Decisions made after capture
@@ -251,6 +255,8 @@ compares restored ledger and checkpoint bytes with the capture and accepts later
 source ledger appends while requiring the captured bytes to remain its prefix.
 Proof uses the explicitly supplied `ownerDecisionLedgerDirectory` for that
 source check, including a fresh absence check when capture recorded `absent`.
+An absent claim requires that source directory still to exist as a directory;
+an unavailable source cannot prove absence.
 
 Business JSON stays in the checkout that started the process: `typescript/data/`
 holds `jarvis-clients.json`, properties, projects, the flat quote register,

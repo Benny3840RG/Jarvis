@@ -326,6 +326,19 @@ async function assertOwnerDecisions(
     throw new LocalV1ProofError("Local V1 proof ledger result disagrees with capture.");
   if (status === "not-captured") return;
   if (status === "absent") {
+    const directory = await fs.stat(source).catch((error: unknown) => {
+      throw new LocalV1ProofError(
+        "Local V1 proof owner decision ledger source directory is unavailable.",
+        {
+          cause: error,
+        },
+      );
+    });
+    if (!directory.isDirectory()) {
+      throw new LocalV1ProofError(
+        "Local V1 proof owner decision ledger source directory is not a directory.",
+      );
+    }
     await verifyLocalV1Ledger(source, { state: "absent" });
   }
   const file = path.join(target, LOCAL_V1_LEDGER_FILE);

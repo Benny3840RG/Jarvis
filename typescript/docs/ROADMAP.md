@@ -11,6 +11,9 @@
 - Focused tests cover a missing or empty source, restrictive umask, concurrent
   appends, metadata removal, mismatched source/business paths, interrupted pair
   writes, and refusal of changed or symlinked retained files.
+- PR #807 review repair requires the absent proof source directory to exist and
+  keeps the in-progress marker through the injected isolated database action;
+  failed explicit resumes retain their verified JSON files for another retry.
 
 Next: independent exact-head review, isolated backend restart proof on a future
 authorised host, and Benny's separate merge and commissioning decisions.
