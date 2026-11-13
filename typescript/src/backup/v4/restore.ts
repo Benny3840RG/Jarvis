@@ -66,6 +66,13 @@ const FILENAMES = {
   businessSettings: "jarvis-business-settings.json",
 } as const;
 
+const RESERVED_RESTORE_FILES = new Set<string>([
+  ...Object.values(FILENAMES),
+  MANIFEST_FILE,
+  RESTORE_MARKER,
+  RESTORE_IN_PROGRESS_MARKER,
+]);
+
 export type RestoreV4Result = {
   destination: string;
   manifest: ArchiveManifest;
@@ -166,7 +173,12 @@ function plannedFileNames(archive: ArchiveV4, extraFiles: readonly ExtraFile[]):
   ];
   if (
     new Set(names).size !== names.length ||
-    extraFiles.some((file) => !/^[a-zA-Z0-9._-]+$/.test(file.name) || file.name.startsWith("."))
+    extraFiles.some(
+      (file) =>
+        !/^[a-zA-Z0-9._-]+$/.test(file.name) ||
+        file.name.startsWith(".") ||
+        RESERVED_RESTORE_FILES.has(file.name),
+    )
   ) {
     throw new StrictBackupError("Restore extra file name is invalid or duplicated.");
   }

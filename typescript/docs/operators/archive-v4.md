@@ -239,6 +239,8 @@ Verification rechecks the digests, record count, hash chain and checkpoint.
 The isolated restore creates both files with mode `0600` only in a new JSON
 directory with neither file already present; it refuses overwrite or merge.
 The checkpoint and ledger are listed in the JSON restore's in-progress marker.
+Verified sidecar extras cannot claim the manifest, restore markers, or any JSON
+document filename, including a document absent from a particular archive.
 It writes the checkpoint first, so interruption before the ledger write leaves
 an incomplete, unusable restore. An explicit `resume` checks retained bytes,
 file type and private mode against the archive before writing the missing file;
