@@ -22,6 +22,101 @@ work out through its own governed path reports the result with
 or `indeterminate`), and the card shows it. `indeterminate` stays visible until
 a later report resolves it.
 
+## First-time setup on a runtime
+
+Nothing can be recorded until the runtime has an approval token and a started
+ledger. Both steps are the owner's; neither is done by an agent.
+
+### 1. Configure the approval token
+
+The HTTP process reads `JARVIS_APPROVAL_TOKEN` from its environment (on the Lenovo,
+`typescript/.env.local`, which is git-ignored and mode 0600). Rules enforced by
+`src/http/config.ts`: at least 32 characters, no whitespace. It must be a
+different secret from `JARVIS_SERVICE_TOKEN`.
+
+This is the **same** approval secret that governed ToolAction approvals use
+(`tool-action-approval.md`). When `PERSISTENCE_PROVIDER=convex`, the Convex
+deployment holds its own copy and verifies it independently, so:
+
+- if an approval token already exists for this deployment, put that same value in
+  `.env.local`; do not invent a second one, or ToolAction approvals over HTTP
+  would be refused by Convex;
+- if none exists yet, generate one and set it in both places.
+
+Configuring it on the HTTP process has an effect beyond this queue: the ToolAction
+approve and revoke routes (`POST .../tool-actions/{actionId}/approve` and
+`.../revoke`) stop failing at their missing-token check. Each still requires the
+token on the request, and the ToolAction state rules and Convex's own verification
+are unchanged.
+
+The block below adds the token without the value appearing on screen, in shell
+history, in the process list or in a log. It refuses to add a second entry, checks
+the length, ends the file with a newline first, stores the value single-quoted (so
+the systemd `EnvironmentFile` reader and Node's `.env` reader both take it
+literally), and then confirms that the value the runtime will load is the value
+you entered, comparing digests only. It restarts nothing: restart the service
+yourself only after it prints "Stored and verified".
+
+```sh
+( set -eu
+  cd ~/Jarvis/typescript
+  chmod 600 .env.local
+  if grep -q '^JARVIS_APPROVAL_TOKEN=' .env.local; then
+    echo "Already set. Edit that one line in an editor; do not add a second."; exit 1
+  fi
+  read -rs -p "Approval token (press Enter to generate a new one): " T; echo
+  [ -n "$T" ] || T=$(openssl rand -hex 32)
+  case "$T" in *[!A-Za-z0-9._~+/=-]*)
+    echo "Refused: this block only handles letters, digits and . _ ~ + / = -"; exit 1 ;;
+  esac
+  [ "${#T}" -ge 32 ] || { echo "Refused: shorter than 32 characters."; exit 1; }
+  [ -z "$(tail -c1 .env.local)" ] || echo >> .env.local
+  printf "JARVIS_APPROVAL_TOKEN='%s'\n" "$T" >> .env.local
+  WANT=$(printf %s "$T" | sha256sum | cut -d' ' -f1)
+  GOT=$(node --env-file=.env.local -e 'process.stdout.write(require("node:crypto").createHash("sha256").update(process.env.JARVIS_APPROVAL_TOKEN ?? "").digest("hex"))')
+  [ "$WANT" = "$GOT" ] || { echo "Mismatch: fix .env.local before restarting."; exit 1; }
+  echo "Stored and verified. Now run: systemctl --user restart jarvis.service"
+)
+```
+
+An existing token that contains other characters (for example `#` or `$`) is still
+valid for Jarvis, but an unquoted `#` starts a comment in a `.env` file and would
+silently shorten it. Add such a token by hand in an editor, as one line
+`JARVIS_APPROVAL_TOKEN='...'` (single-quoted; this does not work for a token that
+itself contains a single quote), then confirm what the runtime will load with this
+separate check. It asks for the token again at a hidden prompt and compares
+digests only:
+
+```sh
+( set -eu
+  cd ~/Jarvis/typescript
+  chmod 600 .env.local
+  [ "$(grep -c '^JARVIS_APPROVAL_TOKEN=' .env.local)" = 1 ] || { echo "Expected exactly one entry."; exit 1; }
+  read -rs -p "Approval token, to compare: " T; echo
+  WANT=$(printf %s "$T" | sha256sum | cut -d' ' -f1)
+  GOT=$(node --env-file=.env.local -e 'process.stdout.write(require("node:crypto").createHash("sha256").update(process.env.JARVIS_APPROVAL_TOKEN ?? "").digest("hex"))')
+  [ "$WANT" = "$GOT" ] || { echo "Mismatch: fix .env.local before restarting."; exit 1; }
+  echo "Verified. Now run: systemctl --user restart jarvis.service"
+)
+```
+
+A generated token then has to be copied once into a password manager, because the
+page asks for it on every decision: open `.env.local` in an editor to read it; do
+not `cat` it into a terminal that is being recorded or shared. Never commit it,
+paste it into an issue or chat, or give it to an agent. If the token is new, set
+the same value in the Convex deployment too.
+
+Check: `/settings/owner-decisions` no longer gives "No approval token is
+configured on this runtime" as the reason the queue is read-only. Until the ledger
+is started it will give the missing ledger as the reason instead.
+
+### 2. Start the ledger
+
+On the page, use "Start a new ledger": the service token, the approval token and
+the typed phrase `START NEW LEDGER`. Do this once per runtime, and only if there is
+genuinely no earlier ledger to restore (see "Starting the ledger, and restoring a
+backup" below).
+
 ## The manifest
 
 The cards come from `src/ownerGate/ownerDecisionManifest.json`, a reviewed file

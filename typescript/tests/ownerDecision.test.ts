@@ -88,6 +88,54 @@ function refusal(code: string) {
 let keyCounter = 0;
 const key = () => `test-key-${(keyCounter += 1)}`;
 
+test("the shipped manifest keeps its structural promises", () => {
+  const manifest = loadOwnerDecisionManifest();
+  const byId = new Map(manifest.decisions.map((entry) => [entry.id, entry]));
+  const dependsOn = (id: string) => byId.get(id)?.dependsOn ?? [];
+
+  // A branch moves on every merge, so a card that pins one is stale almost at
+  // once. A release candidate is pinned only when one has been frozen.
+  for (const entry of manifest.decisions) {
+    for (const pin of [...entry.subjects, ...entry.evidence.map((item) => item.pin)]) {
+      assert.notEqual(pin.kind, "branch", `${entry.id} pins a moving branch`);
+    }
+  }
+
+  // The specification merge went through the normal review path, not the queue.
+  assert.equal(byId.has("merge-tcp-check-specifications"), false);
+
+  // Each tcp-check workstream waits for the owner decisions it is built on.
+  assert.deepEqual(dependsOn("tcp-check-enforcer-build"), [
+    "tcp-check-worker-egress-scope",
+    "tcp-check-teardown-delay",
+    "tcp-check-root-components",
+  ]);
+  assert.deepEqual(dependsOn("tcp-check-store-build"), ["tcp-check-ledger-retention"]);
+  assert.deepEqual(dependsOn("tcp-check-time-build"), [
+    "tcp-check-lease-enforcement",
+    "tcp-check-clock-assumption",
+  ]);
+  assert.ok(dependsOn("tcp-check-evidence-run").includes("tcp-check-test-target"));
+
+  // The voice path does not call the reasoning model, so accepting voice must
+  // not wait on a provider key (and so on new spending).
+  assert.equal(dependsOn("voice-host-commissioning").includes("voice-model-provider-key"), false);
+
+  // No dependency cycle: every chain of dependsOn ends.
+  const visiting = new Set<string>();
+  const done = new Set<string>();
+  const walk = (id: string): void => {
+    if (done.has(id)) return;
+    assert.equal(visiting.has(id), false, `dependency cycle through ${id}`);
+    assert.ok(byId.has(id), `unknown dependency ${id}`);
+    visiting.add(id);
+    for (const next of dependsOn(id)) walk(next);
+    visiting.delete(id);
+    done.add(id);
+  };
+  for (const id of byId.keys()) walk(id);
+});
+
 test("the shipped manifest is valid and never offers a not-ready card as ready", async () => {
   const manifest = loadOwnerDecisionManifest();
   const { service } = serviceOf(manifest);
