@@ -410,7 +410,7 @@ describe("Integration commissioning HUD wiring", () => {
     assert.equal(h.registry.get("source-pill")?.textContent, "SOURCE · CONNECTING");
     assert.equal(
       h.registry.get("footer-status")?.textContent,
-      "Jarvis reconnecting · status unavailable",
+      "NOLAN reconnecting · status unavailable",
     );
 
     const restored = {
