@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { constants } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 
@@ -21,7 +22,8 @@ import {
   LOCAL_V1_LEDGER_FILE,
   readVerifiedLocalV1Ledger,
 } from "./localV1Ledger.js";
-import { restoreArchiveV4 } from "./restore.js";
+import { MAX_MARKER_BYTES } from "./limits.js";
+import { restoreArchiveV4, verifyCompletedRestore } from "./restore.js";
 
 const ACTION_STARTED_MARKER = ".jarvis-local-v1-action-started.json";
 import { S6_CAPTURE_VERSION, S6_TABLES } from "./s6MutableQuotes.js";
@@ -71,6 +73,8 @@ export type LocalV1RestoreRequest = {
   injectAfterLedgerFile?: "checkpoint" | "ledger";
   /** Test-only interruption after the isolated action returns. */
   injectAfterAction?: boolean;
+  /** Test-only interruption after JSON completion, before marker cleanup. */
+  injectAfterCompletion?: boolean;
 };
 
 export type LocalV1RestoreResult = {
@@ -258,6 +262,44 @@ async function markActionStarted(destination: string, fingerprint: string): Prom
   }
 }
 
+async function actionMarkerMatches(target: string, fingerprint: string): Promise<boolean> {
+  const entry = await fs.lstat(target).catch((error: unknown) => {
+    if (isNodeError(error) && error.code === "ENOENT") return null;
+    throw error;
+  });
+  if (
+    !entry?.isFile() ||
+    entry.nlink !== 1 ||
+    (entry.mode & 0o777) !== 0o600 ||
+    entry.size > MAX_MARKER_BYTES
+  )
+    return false;
+  try {
+    const handle = await fs.open(target, constants.O_RDONLY | constants.O_NOFOLLOW);
+    try {
+      const actual = await handle.stat();
+      if (
+        !actual.isFile() ||
+        actual.ino !== entry.ino ||
+        actual.dev !== entry.dev ||
+        actual.size > MAX_MARKER_BYTES
+      )
+        return false;
+      const value: unknown = JSON.parse(await handle.readFile("utf8"));
+      return (
+        object(value) &&
+        Object.keys(value).length === 2 &&
+        value.fingerprint === fingerprint &&
+        value.state === "outcome-ambiguous"
+      );
+    } finally {
+      await handle.close();
+    }
+  } catch {
+    return false;
+  }
+}
+
 function quoteIds(tables: unknown[]): {
   convex: Set<string>;
   artifacts: Array<{ id: string; digest: string }>;
@@ -414,13 +456,24 @@ export async function restoreLocalV1Archive(
     ...extraFiles.map((file) => file.bytes),
     Buffer.from(JSON.stringify({ convexUrl: request.convexUrl, now: request.now })),
   ]);
-  const actionMarker = await fs
-    .lstat(path.join(destination, ACTION_STARTED_MARKER))
-    .catch((error: unknown) => {
-      if (isNodeError(error) && error.code === "ENOENT") return null;
-      throw error;
-    });
+  const actionMarkerPath = path.join(destination, ACTION_STARTED_MARKER);
+  const actionMarker = await fs.lstat(actionMarkerPath).catch((error: unknown) => {
+    if (isNodeError(error) && error.code === "ENOENT") return null;
+    throw error;
+  });
   if (actionMarker !== null) {
+    if (
+      request.resume &&
+      (await actionMarkerMatches(actionMarkerPath, fingerprint)) &&
+      (await verifyCompletedRestore(destination, archive, extraFiles, fingerprint, {
+        name: ACTION_STARTED_MARKER,
+        bytes: Buffer.from(`${JSON.stringify({ fingerprint, state: "outcome-ambiguous" })}\n`),
+      }))
+    ) {
+      throw new LocalV1RestoreError(
+        "Local V1 restore already completed; the retained action marker is historical. Use the completed destination; no action was replayed.",
+      );
+    }
     throw new LocalV1RestoreError(
       "Isolated restore action outcome is ambiguous; operator reconciliation is required before retry.",
     );
@@ -453,5 +506,22 @@ export async function restoreLocalV1Archive(
   });
   if (maps === undefined)
     throw new LocalV1RestoreError("Local V1 restore action did not return maps.");
+  if (request.injectAfterCompletion) {
+    throw new LocalV1RestoreError(
+      "Injected failure after JSON completion, before action marker cleanup.",
+    );
+  }
+  if (!(await actionMarkerMatches(actionMarkerPath, fingerprint))) {
+    throw new LocalV1RestoreError(
+      "Completed restore action marker changed; operator reconciliation is required.",
+    );
+  }
+  await fs.rm(actionMarkerPath);
+  const directory = await fs.open(destination, "r");
+  try {
+    await directory.sync();
+  } finally {
+    await directory.close();
+  }
   return { jsonDirectory: destination, archive, maps, ledger: verifiedLedger.status };
 }

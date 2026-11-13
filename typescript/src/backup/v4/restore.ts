@@ -306,7 +306,21 @@ export async function validateInterruptedRestore(
       `Refusing to resume the restore at ${dest}: its recovery marker does not match the archive. Inspect the directory; no files were removed.`,
     );
   }
-  const removable = new Set<string>([...expectedFiles, MANIFEST_FILE, RESTORE_IN_PROGRESS_MARKER]);
+  const expected = new Map<string, unknown>(
+    archiveDocuments(archive).map(([key, document]) => [FILENAMES[key], document]),
+  );
+  expected.set(MANIFEST_FILE, archive.manifest);
+  expected.set(RESTORE_IN_PROGRESS_MARKER, marker);
+  for (const extra of extraFiles) expected.set(extra.name, extra.bytes);
+  return validateRestoreFiles(dest, expected, extraFiles);
+}
+
+async function validateRestoreFiles(
+  dest: string,
+  expected: ReadonlyMap<string, unknown>,
+  extraFiles: readonly ExtraFile[],
+): Promise<Set<string>> {
+  const removable = new Set(expected.keys());
   const entries = await fs.readdir(dest, { withFileTypes: true });
   const foreign = entries.filter((entry) => !removable.has(entry.name)).map((entry) => entry.name);
   if (foreign.length > 0) {
@@ -321,12 +335,6 @@ export async function validateInterruptedRestore(
       );
     }
   }
-  const expected = new Map<string, unknown>(
-    archiveDocuments(archive).map(([key, document]) => [FILENAMES[key], document]),
-  );
-  expected.set(MANIFEST_FILE, archive.manifest);
-  expected.set(RESTORE_IN_PROGRESS_MARKER, marker);
-  for (const extra of extraFiles) expected.set(extra.name, extra.bytes);
   // Validate every document before any write. Names establish scope, not ownership.
   // Matching files are retained, so resume never deletes same-name replacements.
   for (const entry of entries) {
@@ -383,6 +391,85 @@ export async function validateInterruptedRestore(
     }
   }
   return new Set(entries.map((entry) => entry.name));
+}
+
+/** A retained companion-action marker is historical only after exact JSON completion. */
+export async function verifyCompletedRestore(
+  dest: string,
+  archive: ArchiveV4,
+  extraFiles: readonly ExtraFile[],
+  fingerprint: string,
+  historicalFile: ExtraFile,
+): Promise<boolean> {
+  const completionPath = path.join(dest, RESTORE_MARKER);
+  const progressPath = path.join(dest, RESTORE_IN_PROGRESS_MARKER);
+  const progress = await fs.lstat(progressPath).catch((error: unknown) => {
+    if (isNodeError(error) && error.code === "ENOENT") return null;
+    throw error;
+  });
+  if (progress !== null) return false;
+  const entry = await fs.lstat(completionPath).catch((error: unknown) => {
+    if (isNodeError(error) && error.code === "ENOENT") return null;
+    throw error;
+  });
+  if (
+    !entry?.isFile() ||
+    entry.nlink !== 1 ||
+    (entry.mode & 0o077) !== 0 ||
+    (entry.mode & 0o400) === 0 ||
+    entry.size > MAX_MARKER_BYTES
+  )
+    return false;
+  const handle = await fs.open(completionPath, constants.O_RDONLY | constants.O_NOFOLLOW);
+  let completion: Record<string, unknown>;
+  try {
+    const actual = await handle.stat();
+    if (
+      !actual.isFile() ||
+      actual.ino !== entry.ino ||
+      actual.dev !== entry.dev ||
+      actual.size > MAX_MARKER_BYTES
+    )
+      return false;
+    const value: unknown = JSON.parse(await handle.readFile("utf8"));
+    if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+    completion = value as Record<string, unknown>;
+  } catch {
+    return false;
+  } finally {
+    await handle.close();
+  }
+  const expectedCompletion = {
+    contractVersion: archive.manifest.contractVersion,
+    archiveFingerprint: fingerprint,
+    completeness: archive.manifest.completeness,
+    restoredAt: completion.restoredAt,
+    resumed: completion.resumed,
+    groups: archive.manifest.coverage.present,
+    absentGroups: archive.manifest.coverage.absent,
+    unresolvedReferences: archive.manifest.unresolvedReferences,
+    files: [...plannedFileNames(archive, extraFiles)],
+  };
+  if (
+    typeof completion.restoredAt !== "string" ||
+    !Number.isFinite(Date.parse(completion.restoredAt)) ||
+    typeof completion.resumed !== "boolean" ||
+    !isDeepStrictEqual(completion, expectedCompletion)
+  )
+    return false;
+  const expected = new Map<string, unknown>(
+    archiveDocuments(archive).map(([key, document]) => [FILENAMES[key], document]),
+  );
+  expected.set(MANIFEST_FILE, archive.manifest);
+  expected.set(RESTORE_MARKER, completion);
+  for (const extra of extraFiles) expected.set(extra.name, extra.bytes);
+  expected.set(historicalFile.name, historicalFile.bytes);
+  try {
+    const retained = await validateRestoreFiles(dest, expected, [...extraFiles, historicalFile]);
+    return retained.size === expected.size;
+  } catch {
+    return false;
+  }
 }
 
 export type DestinationState =
@@ -885,6 +972,7 @@ export async function restoreArchiveV4(
   const markerPath = path.join(destDir, RESTORE_MARKER);
   await writeJson(markerPath, {
     contractVersion: archive.manifest.contractVersion,
+    archiveFingerprint: fingerprint,
     completeness: archive.manifest.completeness,
     restoredAt: now().toISOString(),
     resumed,

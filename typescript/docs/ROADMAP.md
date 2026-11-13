@@ -20,6 +20,10 @@
   isolated Convex action. Any outcome after that point requires operator
   reconciliation; a pre-action interruption can still resume. The resume
   fingerprint covers archive, sidecar, blob, ledger, and target inputs.
+- The fourth PR #807 repair removes action-start evidence after durable JSON
+  completion. A retained marker is historical only after exact completion and
+  restored-file verification; interrupted and tampered markers still require
+  reconciliation without action replay.
 
 Next: independent exact-head review, isolated backend restart proof on a future
 authorised host, and Benny's separate merge and commissioning decisions.

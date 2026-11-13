@@ -257,6 +257,12 @@ verified. The resume identity includes the archive, both Convex sidecars, PDF
 blob bytes, ledger pair, and target identity, so changed capture inputs cannot
 be substituted during a retry. Do not delete an ambiguous destination as a
 cleanup step or infer that the injected action did not write anything.
+After JSON completion is durable, restore removes the action-started marker.
+If cleanup is interrupted, an explicit retry recognizes the retained marker as
+historical only when its fingerprint, the completion marker, and every restored
+file exactly match the capture and the in-progress marker is absent. It reports
+the destination as already completed without replaying the isolated action.
+Changed or symlinked markers remain ambiguous and require reconciliation.
 For `absent`, restore creates neither file. Older archives with no ledger section
 remain readable and restore as before, reporting `not-captured` rather than
 `absent`. Neither case silently starts a new ledger. Decisions made after capture

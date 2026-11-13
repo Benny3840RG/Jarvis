@@ -556,6 +556,12 @@ describe("Local V1 partial capture", () => {
     assert.equal(actionCalls, 1);
     await lstat(path.join(target, ".jarvis-archive-v4-in-progress.json"));
     const actionMarker = path.join(target, ".jarvis-local-v1-action-started.json");
+    await writeFile(path.join(target, ".jarvis-archive-v4-complete.json"), "{}\n");
+    await assert.rejects(
+      () => restoreLocalV1Archive({ ...base, resume: true }),
+      /ambiguous|reconciliation/i,
+    );
+    await rm(path.join(target, ".jarvis-archive-v4-complete.json"));
     await writeFile(actionMarker, "tampered\n");
     await assert.rejects(
       () => restoreLocalV1Archive({ ...base, resume: true }),
@@ -568,6 +574,179 @@ describe("Local V1 partial capture", () => {
       /ambiguous|reconciliation/i,
     );
     assert.equal(actionCalls, 1);
+  });
+
+  it("resolves action-start evidence after a successful restore", async () => {
+    const root = await scratch();
+    const live = path.join(root, "live");
+    const output = path.join(root, "capture");
+    const target = path.join(root, "restore");
+    const { mkdir, lstat } = await import("node:fs/promises");
+    await mkdir(live);
+    await writeBusiness(live);
+    await captureLocalV1Archive({
+      outputDirectory: output,
+      ownerDecisionLedgerDirectory: live,
+      businessPaths: businessPaths(live),
+      client: scriptedClient().client,
+      serviceToken: SERVICE,
+      approvalToken: APPROVAL,
+      convexUrl: ENDPOINT,
+      capturedAt: AT,
+    });
+    let calls = 0;
+    const base = {
+      captureDirectory: output,
+      jsonDirectory: target,
+      client: {
+        action: async () => {
+          calls += 1;
+          return { tasks: [], reminders: [], builds: [], pdfs: [] };
+        },
+      },
+      serviceToken: SERVICE,
+      approvalToken: APPROVAL,
+      convexUrl: ENDPOINT,
+      now: AT.getTime(),
+      liveDataDir: live,
+    };
+    await restoreLocalV1Archive(base);
+    await lstat(path.join(target, ".jarvis-archive-v4-complete.json"));
+    await assert.rejects(
+      () => lstat(path.join(target, ".jarvis-local-v1-action-started.json")),
+      /ENOENT/,
+    );
+    await assert.rejects(
+      () => restoreLocalV1Archive({ ...base, resume: true }),
+      /already.*completed/i,
+    );
+    assert.equal(calls, 1);
+  });
+
+  it("treats a retained action marker after durable completion as historical, but refuses forged completion", async () => {
+    const root = await scratch();
+    const live = path.join(root, "live");
+    const output = path.join(root, "capture");
+    const target = path.join(root, "restore");
+    const { mkdir, chmod } = await import("node:fs/promises");
+    await mkdir(live);
+    await writeBusiness(live);
+    await captureLocalV1Archive({
+      outputDirectory: output,
+      ownerDecisionLedgerDirectory: live,
+      businessPaths: businessPaths(live),
+      client: scriptedClient().client,
+      serviceToken: SERVICE,
+      approvalToken: APPROVAL,
+      convexUrl: ENDPOINT,
+      capturedAt: AT,
+    });
+    let actionMarkerBytes: Buffer | undefined;
+    let calls = 0;
+    const base = {
+      captureDirectory: output,
+      jsonDirectory: target,
+      client: {
+        action: async () => {
+          calls += 1;
+          actionMarkerBytes = await readFile(
+            path.join(target, ".jarvis-local-v1-action-started.json"),
+          );
+          return { tasks: [], reminders: [], builds: [], pdfs: [] };
+        },
+      },
+      serviceToken: SERVICE,
+      approvalToken: APPROVAL,
+      convexUrl: ENDPOINT,
+      now: AT.getTime(),
+      liveDataDir: live,
+    };
+    await restoreLocalV1Archive(base);
+    const markerPath = path.join(target, ".jarvis-local-v1-action-started.json");
+    assert.ok(actionMarkerBytes);
+    await writeFile(markerPath, actionMarkerBytes);
+    await chmod(markerPath, 0o600);
+    await assert.rejects(
+      () => restoreLocalV1Archive({ ...base, resume: true }),
+      /already.*completed/i,
+    );
+    assert.equal(calls, 1);
+    const manifestPath = path.join(target, "manifest.json");
+    const manifestBytes = await readFile(manifestPath);
+    await writeFile(manifestPath, "{}\n");
+    await assert.rejects(
+      () => restoreLocalV1Archive({ ...base, resume: true }),
+      /ambiguous|reconciliation/i,
+    );
+    await writeFile(manifestPath, manifestBytes);
+    await writeFile(markerPath, "tampered\n");
+    await assert.rejects(
+      () => restoreLocalV1Archive({ ...base, resume: true }),
+      /ambiguous|reconciliation/i,
+    );
+    await rm(markerPath);
+    await symlink(path.join(output, LOCAL_V1_RECEIPTS_FILE), markerPath);
+    await assert.rejects(
+      () => restoreLocalV1Archive({ ...base, resume: true }),
+      /ambiguous|reconciliation/i,
+    );
+    await rm(markerPath);
+    await writeFile(markerPath, actionMarkerBytes);
+    await chmod(markerPath, 0o600);
+    const completePath = path.join(target, ".jarvis-archive-v4-complete.json");
+    await writeFile(completePath, "{}\n");
+    await assert.rejects(
+      () => restoreLocalV1Archive({ ...base, resume: true }),
+      /ambiguous|reconciliation/i,
+    );
+    assert.equal(calls, 1);
+  });
+
+  it("preserves a completed restore if action-marker cleanup fails", async () => {
+    const root = await scratch();
+    const live = path.join(root, "live");
+    const output = path.join(root, "capture");
+    const target = path.join(root, "restore");
+    const { mkdir, lstat } = await import("node:fs/promises");
+    await mkdir(live);
+    await writeBusiness(live);
+    await captureLocalV1Archive({
+      outputDirectory: output,
+      ownerDecisionLedgerDirectory: live,
+      businessPaths: businessPaths(live),
+      client: scriptedClient().client,
+      serviceToken: SERVICE,
+      approvalToken: APPROVAL,
+      convexUrl: ENDPOINT,
+      capturedAt: AT,
+    });
+    let calls = 0;
+    const base = {
+      captureDirectory: output,
+      jsonDirectory: target,
+      client: {
+        action: async () => {
+          calls += 1;
+          return { tasks: [], reminders: [], builds: [], pdfs: [] };
+        },
+      },
+      serviceToken: SERVICE,
+      approvalToken: APPROVAL,
+      convexUrl: ENDPOINT,
+      now: AT.getTime(),
+      liveDataDir: live,
+    };
+    await assert.rejects(
+      () => restoreLocalV1Archive({ ...base, injectAfterCompletion: true }),
+      /Injected failure after JSON completion/,
+    );
+    await lstat(path.join(target, ".jarvis-archive-v4-complete.json"));
+    await lstat(path.join(target, ".jarvis-local-v1-action-started.json"));
+    await assert.rejects(
+      () => restoreLocalV1Archive({ ...base, resume: true }),
+      /already.*completed/i,
+    );
+    assert.equal(calls, 1);
   });
 
   it("refuses resume when a sidecar differs despite unchanged archive groups", async () => {
