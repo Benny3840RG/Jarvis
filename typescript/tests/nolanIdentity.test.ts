@@ -13,21 +13,45 @@ describe("NOLAN identity and guarded voice compatibility", () => {
   });
 
   it("recognizes Nolan with punctuation and keeps legacy Jarvis compatibility", () => {
-    for (const input of ["Nolan, add a task", "Nolan. add a task", "Nolan? add a task", "Jarvis add a task"]) {
+    for (const input of [
+      "Nolan, add a task",
+      "Nolan. add a task",
+      "Nolan? add a task",
+      "Jarvis add a task",
+    ]) {
       assert.deepEqual(splitVoiceWakeWord(input), { heard: true, rest: "add a task" });
     }
   });
 
   it("rejects similarly prefixed words and unauthorised indirect transcripts", () => {
-    for (const input of ["nolanx add a task", "nolander add a task", "jarvisx add a task", "I asked Nolan add a task"]) {
+    for (const input of [
+      "nolanx add a task",
+      "nolander add a task",
+      "jarvisx add a task",
+      "I asked Nolan add a task",
+    ]) {
       assert.equal(splitVoiceWakeWord(input).heard, false);
     }
-    assert.equal(voiceUtteranceForSession({ transcript: "add a task", heardTranscript: "Nolanx add a task" }).wakeAuthorized, false);
-    assert.equal(voiceUtteranceForSession({ transcript: "add a task", heardTranscript: "Nolan, add a task" }).wakeAuthorized, true);
+    assert.equal(
+      voiceUtteranceForSession({ transcript: "add a task", heardTranscript: "Nolanx add a task" })
+        .wakeAuthorized,
+      false,
+    );
+    assert.equal(
+      voiceUtteranceForSession({ transcript: "add a task", heardTranscript: "Nolan, add a task" })
+        .wakeAuthorized,
+      true,
+    );
   });
 
   it("does not authorise a bare wake word or mismatched transcript", () => {
     assert.equal(voiceUtteranceForSession({ transcript: "Nolan" }).wakeAuthorized, false);
-    assert.equal(voiceUtteranceForSession({ transcript: "add a task", heardTranscript: "Nolan, delete everything" }).wakeAuthorized, false);
+    assert.equal(
+      voiceUtteranceForSession({
+        transcript: "add a task",
+        heardTranscript: "Nolan, delete everything",
+      }).wakeAuthorized,
+      false,
+    );
   });
 });
