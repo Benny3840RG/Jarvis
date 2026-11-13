@@ -4123,8 +4123,15 @@
           // A request that never answers must not leave the profile paused.
           var PROFILE_SWITCH_WAIT_MS = 10000;
           var WAKE_WORD = "jarvis";
-          // Browser errors after which listening must not resume on its own.
-          var RECOGNITION_REFUSALS = ["not-allowed", "service-not-allowed", "audio-capture", "language-not-supported"];
+          // Browser errors after which the microphone must not resume on its own, each with
+          // the notice shown. "aborted" covers the operator cancelling input in browser UI.
+          var RECOGNITION_STOP_NOTICES = {
+            "not-allowed": "the browser refused microphone access. Check the browser's microphone permission",
+            "service-not-allowed": "the browser refused the speech recognition service. Check the browser's microphone permission",
+            "audio-capture": "no microphone audio could be captured. Check the microphone and its input level",
+            "language-not-supported": "the browser does not support speech recognition in en-AU",
+            "aborted": "speech input was cancelled in the browser",
+          };
           // A session that ends this soon after starting, this many times in a row, is not retried.
           var RECOGNITION_SHORT_END_MS = 2000;
           var RECOGNITION_SHORT_END_LIMIT = 3;
@@ -4449,12 +4456,14 @@
               // so only an ending the browser chose on its own reaches the code below.
               if (state.recognition !== recognition || recognitionGeneration !== state.recognitionGeneration) return;
               state.recognition = null;
-              var refused = RECOGNITION_REFUSALS.indexOf(recognitionError) !== -1;
+              var stopNotice = Object.prototype.hasOwnProperty.call(RECOGNITION_STOP_NOTICES, recognitionError)
+                ? RECOGNITION_STOP_NOTICES[recognitionError]
+                : "";
               state.recognitionShortEnds =
                 voiceClock() - startedAt < RECOGNITION_SHORT_END_MS ? state.recognitionShortEnds + 1 : 0;
-              if (!refused && state.recognitionShortEnds < RECOGNITION_SHORT_END_LIMIT) {
-                // The browser ends a listening session after a silence or a network
-                // interruption. Listening continues until the operator presses Stop.
+              if (!stopNotice && state.recognitionShortEnds < RECOGNITION_SHORT_END_LIMIT) {
+                // The browser ends a recognition session after a silence or a network
+                // interruption. The microphone stays on until the operator presses Stop.
                 startRecognition();
                 // A profile switch in flight declines the restart; the control must then be usable again.
                 if (!state.recognition) updateMicrophoneControls();
@@ -4462,8 +4471,8 @@
               }
               state.recognitionShortEnds = 0;
               updateMicrophoneControls();
-              renderNotice(refused
-                ? "Microphone stopped: the browser refused access (" + recognitionError + "). Check the browser's microphone permission, then enable the microphone again."
+              renderNotice(stopNotice
+                ? "Microphone stopped: " + stopNotice + " (" + recognitionError + "). Enable the microphone again to resume."
                 : "Microphone stopped: speech recognition keeps ending" + (recognitionError ? " (" + recognitionError + ")" : "") + ". Check the connection, then enable the microphone again.");
             };
             try { recognition.start(); }

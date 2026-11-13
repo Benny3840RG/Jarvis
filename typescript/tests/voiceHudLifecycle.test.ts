@@ -1179,17 +1179,37 @@ describe("voice HUD lifecycle (actual setupVoiceConsole and real session registr
     assert.equal(h.get("voice-enable").disabled, false);
   });
 
-  it("does not resume listening when the browser refuses the microphone", () => {
-    for (const error of ["not-allowed", "service-not-allowed", "audio-capture"]) {
+  it("does not resume listening after a browser error that must not be retried", () => {
+    const notices: Record<string, RegExp> = {
+      "not-allowed": /refused microphone access.*\(not-allowed\)/,
+      "service-not-allowed": /refused the speech recognition service.*\(service-not-allowed\)/,
+      "audio-capture": /no microphone audio could be captured.*\(audio-capture\)/,
+      "language-not-supported": /does not support speech recognition.*\(language-not-supported\)/,
+      // The operator cancelling input in browser UI must not be overridden, however
+      // long the session had been running.
+      aborted: /speech input was cancelled in the browser \(aborted\)/,
+    };
+    for (const [error, notice] of Object.entries(notices)) {
       const h = harness({ longSessions: true });
       const recognition = h.enable();
       recognition.onerror?.({ error });
       recognition.onend?.();
       assert.equal(h.recognitions.length, 1, error);
       assert.equal(h.get("voice-enable").disabled, false, error);
-      assert.match(h.get("voice-result").textContent, /refused access/, error);
-      assert.match(h.get("voice-result").textContent, new RegExp(error), error);
+      assert.match(h.get("voice-result").textContent, notice, error);
     }
+  });
+
+  it("gives up without inventing a reason when sessions end with no error code", () => {
+    const h = harness();
+    h.enable();
+    for (let round = 0; round < 3; round += 1) h.recognitions.at(-1)!.onend?.();
+    assert.equal(h.recognitions.length, 3);
+    assert.equal(h.get("voice-enable").disabled, false);
+    assert.equal(
+      h.get("voice-result").textContent,
+      "Microphone stopped: speech recognition keeps ending. Check the connection, then enable the microphone again.",
+    );
   });
 
   it("gives up with a notice when recognition keeps ending straight away", () => {
