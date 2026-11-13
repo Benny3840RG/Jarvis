@@ -1170,6 +1170,37 @@ describe("voice HUD lifecycle (actual setupVoiceConsole and real session registr
     assert.equal(h.utterances().length, 1, "an ended session can no longer dispatch");
   });
 
+  it("confirms with 'confirmed' on a resumed session under the NOLAN prompt", async () => {
+    const h = harness({ longSessions: true });
+    await armCrawler(h);
+    const first = h.enable();
+    first.onerror?.({ error: "no-speech" });
+    first.onend?.();
+    const resumed = h.recognitions.at(-1)!;
+    assert.notEqual(resumed, first);
+    assert.match(h.get("voice-pending").textContent, /say “Nolan confirm” or “Nolan cancel”/);
+
+    resumed.emit("Jarvis concern");
+    await flush();
+    assert.equal(h.get("voice-pending").hidden, false, "a sound-alike leaves it pending");
+    assert.deepEqual(h.actuations, []);
+
+    const before = h.utterances().length;
+    first.emit("Jarvis confirmed");
+    await flush();
+    assert.equal(h.utterances().length, before, "the ended session cannot confirm");
+
+    resumed.emit("Jarvis confirmed");
+    await flush();
+    assert.equal(h.utterances().at(-1)?.body.transcript, "confirmed");
+    assert.equal(h.utterances().at(-1)?.body.heardTranscript, "jarvis confirmed");
+    assert.equal(h.get("voice-pending").hidden, true, "the confirmation was consumed");
+    assert.deepEqual(h.actuations, ["crawler.stop"], "the test provider saw one confirmed halt");
+    resumed.emit("Jarvis confirmed");
+    await flush();
+    assert.deepEqual(h.actuations, ["crawler.stop"], "a repeated confirmation does nothing");
+  });
+
   it("does not resume listening after Stop", () => {
     const h = harness({ longSessions: true });
     const recognition = h.enable();
