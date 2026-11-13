@@ -18,6 +18,18 @@ import {
   type LocalV1RestoreResult,
 } from "./localV1Restore.js";
 import { RESTORE_IN_PROGRESS_MARKER, RESTORE_MARKER } from "./restore.js";
+import {
+  LOCAL_V1_CHECKPOINT_FILE,
+  LOCAL_V1_LEDGER_FILE,
+  readLocalV1LedgerFileNoFollow,
+  verifyLocalV1Ledger,
+} from "./localV1Ledger.js";
+import { assertLedgerIntact } from "../../ownerGate/ownerDecision.js";
+import {
+  JsonLinesOwnerDecisionLedger,
+  loadOwnerDecisionManifest,
+  OwnerDecisionService,
+} from "../../ownerGate/ownerDecisionService.js";
 import { S6_CAPTURE_VERSION, S6_TABLES } from "./s6MutableQuotes.js";
 
 /** Same per-table bound the S6 capture already enforces. This gate does not raise it. */
@@ -300,6 +312,73 @@ async function assertJsonRestore(jsonDirectory: string, archive: ArchiveV4): Pro
   );
 }
 
+async function assertOwnerDecisions(
+  capture: string,
+  source: string,
+  target: string,
+  status: LocalV1RestoreResult["ledger"],
+  archive: ArchiveV4,
+): Promise<void> {
+  const expected = await verifyLocalV1Ledger(capture, archive.manifest.localV1OwnerDecisionLedger);
+  if (status !== expected)
+    throw new LocalV1ProofError("Local V1 proof ledger result disagrees with capture.");
+  if (status === "not-captured") return;
+  const file = path.join(target, LOCAL_V1_LEDGER_FILE);
+  const checkpoint = path.join(target, LOCAL_V1_CHECKPOINT_FILE);
+  if (status === "present") {
+    for (const name of [LOCAL_V1_LEDGER_FILE, LOCAL_V1_CHECKPOINT_FILE]) {
+      const captured = await fs.readFile(path.join(capture, name));
+      const restored = await fs.readFile(path.join(target, name));
+      if (!captured.equals(restored)) {
+        throw new LocalV1ProofError("Local V1 proof ledger bytes differ after restore.");
+      }
+    }
+    const capturedLedger = await fs.readFile(path.join(capture, LOCAL_V1_LEDGER_FILE));
+    const sourceLedger = await readLocalV1LedgerFileNoFollow(
+      path.join(source, LOCAL_V1_LEDGER_FILE),
+    );
+    if (
+      sourceLedger === null ||
+      !sourceLedger.subarray(0, capturedLedger.length).equals(capturedLedger)
+    ) {
+      throw new LocalV1ProofError(
+        "Local V1 proof source ledger no longer contains the captured prefix.",
+      );
+    }
+    assertLedgerIntact(await new JsonLinesOwnerDecisionLedger(file).read());
+  } else {
+    for (const name of [file, checkpoint]) {
+      if (
+        await fs.lstat(name).then(
+          () => true,
+          (error: unknown) => {
+            if (isNodeError(error) && error.code === "ENOENT") return false;
+            throw error;
+          },
+        )
+      )
+        throw new LocalV1ProofError("Local V1 proof restored an absent ledger.");
+    }
+  }
+  const manifest = loadOwnerDecisionManifest();
+  const service = (root: string) =>
+    new OwnerDecisionService({
+      manifest,
+      ledger: new JsonLinesOwnerDecisionLedger(path.join(root, LOCAL_V1_LEDGER_FILE)),
+      approvalConfigured: () => false,
+      clock: () => Date.parse(archive.manifest.createdAt),
+    });
+  const capturedQueue = await service(capture).inspect();
+  const targetQueue = await service(target).inspect();
+  if (
+    capturedQueue.ledgerState !== targetQueue.ledgerState ||
+    JSON.stringify(capturedQueue.cards.map(({ entry, status }) => [entry.id, status])) !==
+      JSON.stringify(targetQueue.cards.map(({ entry, status }) => [entry.id, status]))
+  ) {
+    throw new LocalV1ProofError("Local V1 proof restored different owner decision card statuses.");
+  }
+}
+
 /**
  * Proves one partial Local V1 capture on isolated targets.
  * Calls `restoreLocalV1Archive` and does not write the live provider.
@@ -339,6 +418,13 @@ export async function proveLocalV1Recovery(
     const capture = path.resolve(request.restore.captureDirectory);
     assertStores(restored.archive);
     await assertJsonRestore(restored.jsonDirectory, restored.archive);
+    await assertOwnerDecisions(
+      capture,
+      request.liveDirectory,
+      restored.jsonDirectory,
+      restored.ledger,
+      restored.archive,
+    );
     const s6Tables = await capturedTables(
       path.join(capture, LOCAL_V1_S6_FILE),
       S6_CAPTURE_VERSION,

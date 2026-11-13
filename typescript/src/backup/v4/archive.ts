@@ -13,9 +13,11 @@ import {
   type ArchiveManifest,
   type ArchiveUnresolvedReference,
   type ArchiveVerifiedGroup,
+  type LocalV1OwnerDecisionLedger,
 } from "../archiveManifest.js";
 import { StrictBackupError } from "../strictValues.js";
 import { overLimitAdvice, resolveMaxArchiveBytes } from "./limits.js";
+import { verifyLocalV1Ledger } from "./localV1Ledger.js";
 import { businessUnresolvedReferences, type BusinessRecordsPayload } from "./businessSource.js";
 import { memoryUnresolvedReferences } from "./jsonSource.js";
 import type { CoreGroupPayload, JsonCapture, MemoryGroupPayload } from "./jsonSource.js";
@@ -98,7 +100,11 @@ function businessRecordsEntry(payload: BusinessRecordsPayload): ArchiveGroupEntr
 export function buildArchiveV4(
   capture: JsonCapture,
   createdAt: Date,
-  options?: { consistentSnapshot?: boolean; blobs?: ArchiveManifest["blobs"] },
+  options?: {
+    consistentSnapshot?: boolean;
+    blobs?: ArchiveManifest["blobs"];
+    localV1OwnerDecisionLedger?: LocalV1OwnerDecisionLedger;
+  },
 ): ArchiveV4 {
   const consistentSnapshot = options?.consistentSnapshot ?? true;
   return {
@@ -110,6 +116,7 @@ export function buildArchiveV4(
         { ...businessRecordsEntry(capture.businessRecords), consistentSnapshot },
       ],
       blobs: options?.blobs,
+      localV1OwnerDecisionLedger: options?.localV1OwnerDecisionLedger,
       unresolvedReferences: unresolvedReferencesFor(capture),
     }),
     groups: {
@@ -141,6 +148,7 @@ export function sealVerifiedArchive(
     dependencies: archive.manifest.dependencies,
     exclusions: archive.manifest.exclusions,
     blobs: archive.manifest.blobs,
+    localV1OwnerDecisionLedger: archive.manifest.localV1OwnerDecisionLedger,
     unresolvedReferences: archive.manifest.unresolvedReferences,
     verification: {
       verifiedAt: verifiedAt.toISOString(),
@@ -302,5 +310,9 @@ export async function readArchiveV4File(
       `Archive is not valid JSON: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
-  return parseArchiveV4(parsed);
+  const archive = parseArchiveV4(parsed);
+  if (archive.manifest.localV1OwnerDecisionLedger !== undefined) {
+    await verifyLocalV1Ledger(path.dirname(target), archive.manifest.localV1OwnerDecisionLedger);
+  }
+  return archive;
 }

@@ -230,16 +230,29 @@ A runtime with neither file has no ledger, and nothing can be recorded. The
 page offers "Start a new ledger", which needs both tokens and the typed
 confirmation `START NEW LEDGER`.
 
-This is deliberate. A data directory restored from a backup also has neither
-file, because **archive v4 does not include the ledger**. If that runtime
-started an empty ledger silently, every card would show as undecided. So after
-a restore:
+This is deliberate. A new Local V1 capture records whether the ledger was
+present or absent. When present, it copies the exact ledger and checkpoint bytes
+into the capture directory and binds their SHA-256 digests and ledger record
+count into `archive.json`. Verification checks those values, the hash chain and
+the checkpoint. The capture caller supplies the ledger directory explicitly;
+the runtime uses `JARVIS_DATA_DIR` through `jarvisDataFile`, independently of
+the clients register location. The isolated proof accepts later source appends
+when the captured ledger remains an exact byte prefix and the restored files
+match the capture. A Local V1 restore writes both files with mode `0600` into its
+new isolated JSON directory only when neither target file exists. It refuses
+an existing ledger or checkpoint and never merges histories. An absent capture
+restores neither file, so the queue remains unstarted until the owner explicitly
+starts it. Older archives without the ledger section report `not-captured`;
+restore the two files separately before using their decisions.
 
-1. Copy `jarvis-owner-decisions.jsonl` and its `.checkpoint.json` back into the
-   data directory, both mode `0600`, before opening the queue.
-2. Only if there is genuinely no earlier ledger, start a new one.
+The restore writes the checkpoint before the ledger. If it stops between those
+writes, the queue treats the checkpoint-only state as damaged, never as a valid
+empty or shorter decision history. Preserve and inspect an interrupted restore;
+use a fresh isolated destination for a retry.
 
-Back the two files up together alongside each archive.
+Keep both source files together with any older archive. A capture does not
+include decisions recorded after its capture time, the approval token, any
+service token, or the reviewed decision-card manifest from a later code version.
 
 Other limits:
 

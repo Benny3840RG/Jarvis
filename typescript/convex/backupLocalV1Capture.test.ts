@@ -256,6 +256,7 @@ it("captures every Convex Local V1 store, PDF bytes, and business JSON without w
   try {
     const captured = await captureLocalV1Archive({
       outputDirectory: path.join(root, "out"),
+      ownerDecisionLedgerDirectory: live,
       businessPaths: {
         clients: clientFile,
         properties: path.join(live, "jarvis-properties.json"),
