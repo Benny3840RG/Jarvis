@@ -223,20 +223,34 @@ decision ledger. For `present`, the capture directory carries byte-identical
 `jarvis-owner-decisions.jsonl.checkpoint.json` files. The archive manifest binds
 the ledger SHA-256, checkpoint SHA-256, and record count. Capture opens source
 files read-only without following symbolic links and refuses a damaged ledger.
+These captures use contract version `jarvis-archive-v4:2`, which requires the
+ledger claim even when it says `absent`. Removing the claim makes verification
+and restore refuse the archive. Version `:1` archives written before this
+feature remain readable as `not-captured`.
+For initial PR #806 captures that still used `:1`, a missing claim is refused
+when ledger sidecars remain or a Local V1 capture timestamp is at or after the
+exact #806 merge. A `:1` capture with no ledger claim and no reliable provenance
+must not be presented as proof that no ledger existed.
 The capture caller supplies the ledger directory explicitly as
 `ownerDecisionLedgerDirectory`; for the runtime this is `JARVIS_DATA_DIR`,
 the directory used by `jarvisDataFile`, even if business JSON files live elsewhere.
+The directory must exist; a real empty directory records `absent`.
 Verification rechecks the digests, record count, hash chain and checkpoint.
 The isolated restore creates both files with mode `0600` only in a new JSON
 directory with neither file already present; it refuses overwrite or merge.
+The checkpoint and ledger are listed in the JSON restore's in-progress marker.
 It writes the checkpoint first, so interruption before the ledger write leaves
-a damaged checkpoint-only state that the owner decision service refuses.
+an incomplete, unusable restore. An explicit `resume` checks retained bytes,
+file type and private mode against the archive before writing the missing file;
+plain retry refuses the directory.
 For `absent`, restore creates neither file. Older archives with no ledger section
 remain readable and restore as before, reporting `not-captured` rather than
 `absent`. Neither case silently starts a new ledger. Decisions made after capture
 and all approval or service tokens remain outside the archive. The isolated proof
 compares restored ledger and checkpoint bytes with the capture and accepts later
 source ledger appends while requiring the captured bytes to remain its prefix.
+Proof uses the explicitly supplied `ownerDecisionLedgerDirectory` for that
+source check, including a fresh absence check when capture recorded `absent`.
 
 Business JSON stays in the checkout that started the process: `typescript/data/`
 holds `jarvis-clients.json`, properties, projects, the flat quote register,

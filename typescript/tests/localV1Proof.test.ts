@@ -67,6 +67,7 @@ describe("Local V1 proof gate", () => {
               liveDataDir: live,
             },
             liveDirectory: live,
+            ownerDecisionLedgerDirectory: live,
             readIsolated: async () => {
               calls.push("read");
               return readIds;
@@ -116,6 +117,7 @@ describe("Local V1 proof gate", () => {
             liveDataDir: other,
           },
           liveDirectory: live,
+          ownerDecisionLedgerDirectory: live,
           readIsolated: async () => {
             calls.push("read");
             return readIds;

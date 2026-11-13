@@ -6,6 +6,7 @@ import { makeFunctionReference, type FunctionReference } from "convex/server";
 
 import { sha256HexBytes } from "../../actions/sha256.js";
 import { exportBackup, type BackupArchive } from "../backup.js";
+import { LOCAL_V1_LEDGER_CONTRACT_VERSION } from "../archiveManifest.js";
 import { StrictBackupError } from "../strictValues.js";
 import { ConvexAssetStore } from "../../assets/convexAssetStore.js";
 import { ConvexBuildLogStore } from "../../buildLog/convexBuildLogStore.js";
@@ -504,6 +505,7 @@ export async function captureLocalV1Archive(
       request.ownerDecisionLedgerDirectory,
       output,
     );
+    archive.manifest.contractVersion = LOCAL_V1_LEDGER_CONTRACT_VERSION;
     const blobDir = path.join(output, LOCAL_V1_BLOB_DIR);
     assertContained(output, blobDir);
     await fs.mkdir(blobDir);

@@ -1,5 +1,20 @@
 # Jarvis TypeScript Roadmap
 
+## PR #806 post-merge owner-decision ledger recovery repair (2026-11-13)
+
+- Local V1 captures require an existing explicit ledger source directory and
+  use archive contract version `:2` to make their present/absent ledger claim
+  mandatory. Older `:1` archives continue to report `not-captured`.
+- Ledger sidecars are part of the resumable JSON restore marker and are checked
+  byte-for-byte before an explicit retry. Proof checks the explicit ledger
+  source, including a later ledger appearing after an `absent` capture.
+- Focused tests cover a missing or empty source, restrictive umask, concurrent
+  appends, metadata removal, mismatched source/business paths, interrupted pair
+  writes, and refusal of changed or symlinked retained files.
+
+Next: independent exact-head review, isolated backend restart proof on a future
+authorised host, and Benny's separate merge and commissioning decisions.
+
 ## PR #786 voice inference safety repair (2026-11-11)
 
 - Raw wake-prefixed declarative speech now uses the same accepted-prefix

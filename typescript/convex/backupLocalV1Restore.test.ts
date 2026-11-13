@@ -525,6 +525,7 @@ it("restores a partial capture into scratch JSON and an empty convex-test, then 
         liveDataDir: live,
       },
       liveDirectory: live,
+      ownerDecisionLedgerDirectory: live,
       readIsolated: async () => {
         const convex = clientFor(target);
         const listedClients = await new JsonClientStore(

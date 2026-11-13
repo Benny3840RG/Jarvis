@@ -15,7 +15,11 @@ import {
   LOCAL_V1_S6_FILE,
 } from "./localV1Capture.js";
 import { LOCAL_V1_RECEIPT_CAPTURE_VERSION, LOCAL_V1_RECEIPT_TABLES } from "./localV1Receipts.js";
-import { restoreLocalV1Ledger } from "./localV1Ledger.js";
+import {
+  LOCAL_V1_CHECKPOINT_FILE,
+  LOCAL_V1_LEDGER_FILE,
+  readVerifiedLocalV1Ledger,
+} from "./localV1Ledger.js";
 import { restoreArchiveV4 } from "./restore.js";
 import { S6_CAPTURE_VERSION, S6_TABLES } from "./s6MutableQuotes.js";
 
@@ -43,7 +47,7 @@ export type LocalV1RestoreClient = {
 export type LocalV1RestoreRequest = {
   /** Directory written by `captureLocalV1Archive`. Read only. */
   captureDirectory: string;
-  /** New directory for the JSON half. Must not already exist. */
+  /** New directory for the JSON half, or an interrupted restore with resume. */
   jsonDirectory: string;
   /** Empty `convex-test` client. This function never constructs one from `CONVEX_URL`. */
   client: LocalV1RestoreClient;
@@ -59,6 +63,9 @@ export type LocalV1RestoreRequest = {
   liveDataDir?: string;
   forbiddenUrls?: readonly string[];
   forbiddenWriteRoots?: readonly string[];
+  resume?: boolean;
+  /** Test-only interruption after the checkpoint or ledger file. */
+  injectAfterLedgerFile?: "checkpoint" | "ledger";
 };
 
 export type LocalV1RestoreResult = {
@@ -157,7 +164,7 @@ async function assertJsonDestination(request: LocalV1RestoreRequest): Promise<st
     if (error instanceof Error && "code" in error && error.code === "ENOENT") return null;
     throw error;
   });
-  if (stat !== null)
+  if (stat !== null && !request.resume)
     throw new LocalV1RestoreError(`Local V1 restore JSON directory already exists: ${destination}`);
   return destination;
 }
@@ -355,17 +362,31 @@ export async function restoreLocalV1Archive(
     receiptTombstones: receiptSidecar.tombstones,
   });
 
+  const verifiedLedger = await readVerifiedLocalV1Ledger(
+    capture,
+    archive.manifest.localV1OwnerDecisionLedger,
+  );
+  const extraFiles =
+    verifiedLedger.status === "present"
+      ? [
+          { name: LOCAL_V1_CHECKPOINT_FILE, bytes: verifiedLedger.pair.checkpoint },
+          { name: LOCAL_V1_LEDGER_FILE, bytes: verifiedLedger.pair.ledger },
+        ]
+      : [];
   await restoreArchiveV4(archive, destination, {
     allowPartial: true,
     liveDataDir: request.liveDataDir ?? JARVIS_DATA_DIR,
     now: () => new Date(request.now),
+    resume: request.resume,
+    extraFiles,
+    injectAfterExtraFile:
+      request.injectAfterLedgerFile === "checkpoint"
+        ? LOCAL_V1_CHECKPOINT_FILE
+        : request.injectAfterLedgerFile === "ledger"
+          ? LOCAL_V1_LEDGER_FILE
+          : undefined,
   });
   try {
-    const ledger = await restoreLocalV1Ledger(
-      capture,
-      destination,
-      archive.manifest.localV1OwnerDecisionLedger,
-    );
     const maps = await request.client.action(restoreLocalV1Action, {
       serviceToken: request.serviceToken,
       approvalToken: request.approvalToken,
@@ -373,7 +394,7 @@ export async function restoreLocalV1Archive(
       payloadJson,
       blobs,
     });
-    return { jsonDirectory: destination, archive, maps, ledger };
+    return { jsonDirectory: destination, archive, maps, ledger: verifiedLedger.status };
   } catch (error: unknown) {
     await fs.rm(destination, { recursive: true, force: true });
     throw error;

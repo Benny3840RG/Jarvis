@@ -157,6 +157,22 @@ function plannedFiles(archive: ArchiveV4): Array<keyof typeof FILENAMES> {
   return archiveDocuments(archive).map(([key]) => key);
 }
 
+type ExtraFile = { name: string; bytes: Buffer };
+
+function plannedFileNames(archive: ArchiveV4, extraFiles: readonly ExtraFile[]): string[] {
+  const names = [
+    ...plannedFiles(archive).map((key) => FILENAMES[key]),
+    ...extraFiles.map((f) => f.name),
+  ];
+  if (
+    new Set(names).size !== names.length ||
+    extraFiles.some((file) => !/^[a-zA-Z0-9._-]+$/.test(file.name) || file.name.startsWith("."))
+  ) {
+    throw new StrictBackupError("Restore extra file name is invalid or duplicated.");
+  }
+  return names;
+}
+
 function isNodeError(error: unknown): error is NodeJS.ErrnoException {
   return error instanceof Error && "code" in error;
 }
@@ -267,8 +283,9 @@ async function validateInterruptedRestore(
   dest: string,
   archive: ArchiveV4,
   marker: InProgressMarker,
+  extraFiles: readonly ExtraFile[],
 ): Promise<Set<string>> {
-  const expectedFiles = plannedFiles(archive).map((key) => FILENAMES[key]);
+  const expectedFiles = plannedFileNames(archive, extraFiles);
   if (
     marker.contractVersion !== archive.manifest.contractVersion ||
     !isDeepStrictEqual(marker.plannedFiles, expectedFiles)
@@ -297,10 +314,14 @@ async function validateInterruptedRestore(
   );
   expected.set(MANIFEST_FILE, archive.manifest);
   expected.set(RESTORE_IN_PROGRESS_MARKER, marker);
+  for (const extra of extraFiles) expected.set(extra.name, extra.bytes);
   // Validate every document before any write. Names establish scope, not ownership.
   // Matching files are retained, so resume never deletes same-name replacements.
   for (const entry of entries) {
-    const bytes = Buffer.from(serializeJson(expected.get(entry.name)), "utf8");
+    const expectedValue = expected.get(entry.name);
+    const bytes = Buffer.isBuffer(expectedValue)
+      ? expectedValue
+      : Buffer.from(serializeJson(expectedValue), "utf8");
     const handle = await fs.open(
       path.join(dest, entry.name),
       constants.O_RDONLY | constants.O_NOFOLLOW,
@@ -315,6 +336,12 @@ async function validateInterruptedRestore(
         throw new StrictBackupError(
           `Restore output ${entry.name} does not have private owner-readable permissions; no files were changed.`,
         );
+      }
+      if (
+        extraFiles.some((file) => file.name === entry.name) &&
+        (metadata.mode & 0o777) !== 0o600
+      ) {
+        throw new StrictBackupError(`Restore output ${entry.name} is not mode 0600.`);
       }
       if (metadata.nlink !== 1) {
         throw new StrictBackupError(
@@ -394,6 +421,7 @@ async function prepareDestination(
   destination: string,
   archive: ArchiveV4,
   resume: boolean,
+  extraFiles: readonly ExtraFile[],
 ): Promise<{ dest: string; resumed: boolean; retainedFiles: Set<string> }> {
   const dest = path.resolve(destination);
   const state = await inspectDestination(dest);
@@ -420,7 +448,7 @@ async function prepareDestination(
         `Restore destination ${dest} holds an interrupted restore of this archive, started ${state.marker.startedAt}. It is incomplete and must not be used as recovered data. Re-run with --resume to verify existing output and restore missing files, or remove the directory.`,
       );
     }
-    const retainedFiles = await validateInterruptedRestore(dest, archive, state.marker);
+    const retainedFiles = await validateInterruptedRestore(dest, archive, state.marker, extraFiles);
     return { dest, resumed: true, retainedFiles };
   }
 
@@ -727,6 +755,10 @@ export type RestoreOptions = {
   injectAfterWrite?: keyof typeof FILENAMES;
   /** Drill hook: throw between verification and the completion marker. */
   injectAfterVerify?: boolean;
+  /** Verified sidecars included in the in-progress marker and completion boundary. */
+  extraFiles?: readonly ExtraFile[];
+  /** Drill hook: fail after writing one extra file. */
+  injectAfterExtraFile?: string;
 };
 
 /**
@@ -764,11 +796,13 @@ export async function restoreArchiveV4(
   const physicalDestination = await physicalPath(destination);
   assertDestinationNotLive(physicalDestination, await physicalPath(liveDirectory));
   const now = options.now ?? ((): Date => new Date());
+  const extraFiles = options.extraFiles ?? [];
+  plannedFileNames(archive, extraFiles);
   const {
     dest: destDir,
     resumed,
     retainedFiles,
-  } = await prepareDestination(physicalDestination, archive, options.resume ?? false);
+  } = await prepareDestination(physicalDestination, archive, options.resume ?? false, extraFiles);
 
   // Written before the first document, so an interruption at any point after
   // this leaves a directory that says what it is and what it was going to hold.
@@ -776,7 +810,7 @@ export async function restoreArchiveV4(
     contractVersion: archive.manifest.contractVersion,
     archiveFingerprint: archiveFingerprint(archive),
     startedAt: now().toISOString(),
-    plannedFiles: plannedFiles(archive).map((key) => FILENAMES[key]),
+    plannedFiles: plannedFileNames(archive, extraFiles),
   };
   if (!resumed) await writeJson(path.join(destDir, RESTORE_IN_PROGRESS_MARKER), inProgress);
   await fsyncDir(destDir);
@@ -798,6 +832,25 @@ export async function restoreArchiveV4(
     );
   }
 
+  for (const extra of extraFiles) {
+    if (!retainedFiles.has(extra.name)) {
+      const handle = await fs.open(path.join(destDir, extra.name), "wx", 0o600);
+      try {
+        await handle.chmod(0o600);
+        await handle.writeFile(extra.bytes);
+        await handle.sync();
+      } finally {
+        await handle.close();
+      }
+    }
+    if (options.injectAfterExtraFile === extra.name) {
+      throw new StrictBackupError(
+        `Injected failure after writing ${extra.name}; restore left incomplete at ${destDir}.`,
+      );
+    }
+  }
+  await fsyncDir(destDir);
+
   const markerPath = path.join(destDir, RESTORE_MARKER);
   await writeJson(markerPath, {
     contractVersion: archive.manifest.contractVersion,
@@ -807,7 +860,7 @@ export async function restoreArchiveV4(
     groups: archive.manifest.coverage.present,
     absentGroups: archive.manifest.coverage.absent,
     unresolvedReferences: archive.manifest.unresolvedReferences,
-    files: written.map((key) => FILENAMES[key]),
+    files: [...written.map((key) => FILENAMES[key]), ...extraFiles.map((file) => file.name)],
   });
   await fsyncDir(destDir);
 

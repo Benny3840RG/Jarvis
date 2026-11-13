@@ -14,7 +14,6 @@ import { JsonLinesOwnerDecisionLedger } from "../src/ownerGate/ownerDecisionServ
 import {
   captureLocalV1Ledger,
   verifyLocalV1Ledger,
-  restoreLocalV1Ledger,
   LOCAL_V1_LEDGER_FILE,
   LOCAL_V1_CHECKPOINT_FILE,
 } from "../src/backup/v4/localV1Ledger.js";
@@ -29,20 +28,97 @@ afterEach(async () => {
   await Promise.all(dirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })));
 });
 
-it("captures absent explicitly and restores no ledger", async () => {
+it("captures absent explicitly without creating ledger sidecars", async () => {
   const root = await scratch();
   const source = path.join(root, "source");
   const capture = path.join(root, "capture");
-  const target = path.join(root, "target");
-  await Promise.all([fs.mkdir(source), fs.mkdir(capture), fs.mkdir(target)]);
+  await Promise.all([fs.mkdir(source), fs.mkdir(capture)]);
   const state = await captureLocalV1Ledger(source, capture);
   assert.deepEqual(state, { state: "absent" });
   assert.equal(await verifyLocalV1Ledger(capture, state), "absent");
-  assert.equal(await restoreLocalV1Ledger(capture, target, state), "absent");
-  await assert.rejects(
-    () => new JsonLinesOwnerDecisionLedger(path.join(target, LOCAL_V1_LEDGER_FILE)).read(),
-    /No decision ledger/,
-  );
+  await assert.rejects(() => fs.lstat(path.join(capture, LOCAL_V1_LEDGER_FILE)), /ENOENT/);
+});
+
+it("refuses a nonexistent explicit source directory but accepts a real empty one", async () => {
+  const root = await scratch();
+  const source = path.join(root, "source");
+  const capture = path.join(root, "capture");
+  await fs.mkdir(capture);
+  await assert.rejects(() => captureLocalV1Ledger(source, capture), /source directory/);
+  await fs.mkdir(source);
+  assert.deepEqual(await captureLocalV1Ledger(source, capture), { state: "absent" });
+});
+
+it("creates exact owner-only files even with a restrictive umask", async () => {
+  const root = await scratch();
+  const source = path.join(root, "source");
+  const capture = path.join(root, "capture");
+  await Promise.all([fs.mkdir(source), fs.mkdir(capture)]);
+  await new JsonLinesOwnerDecisionLedger(path.join(source, LOCAL_V1_LEDGER_FILE)).start();
+  const previous = process.umask(0o400);
+  try {
+    const state = await captureLocalV1Ledger(source, capture);
+    assert.equal(await verifyLocalV1Ledger(capture, state), "present");
+    for (const name of [LOCAL_V1_LEDGER_FILE, LOCAL_V1_CHECKPOINT_FILE]) {
+      assert.equal((await fs.stat(path.join(capture, name))).mode & 0o777, 0o600);
+    }
+  } finally {
+    process.umask(previous);
+  }
+});
+
+it("captures a consistent pair when two appends land between reads", async () => {
+  const root = await scratch();
+  const source = path.join(root, "source");
+  const capture = path.join(root, "capture");
+  await Promise.all([fs.mkdir(source), fs.mkdir(capture)]);
+  const ledgerPath = path.join(source, LOCAL_V1_LEDGER_FILE);
+  const ledger = new JsonLinesOwnerDecisionLedger(ledgerPath);
+  await ledger.start();
+  const body = {
+    sequence: 1,
+    recordId: "record-1",
+    kind: "decision" as const,
+    decisionId: "decision-1",
+    actionDigest: "a".repeat(64),
+    subjects: [],
+    environment: "development" as const,
+    decision: "reject" as const,
+    actor: "fixture-owner",
+    idempotencyKey: "key-1",
+    requestDigest: "b".repeat(64),
+    recordedAt: "2026-10-07T03:00:00.000Z",
+    previousHash: LEDGER_GENESIS_HASH,
+  };
+  const record: OwnerDecisionRecord = { ...body, hash: ownerDecisionRecordHash(body) };
+  const nextBody = {
+    ...body,
+    sequence: 2,
+    recordId: "record-2",
+    decisionId: "decision-2",
+    idempotencyKey: "key-2",
+    previousHash: record.hash,
+  };
+  const nextRecord: OwnerDecisionRecord = { ...nextBody, hash: ownerDecisionRecordHash(nextBody) };
+  const originalOpen = fs.open.bind(fs);
+  let appended = false;
+  mock.method(fs, "open", async (...args: Parameters<typeof fs.open>) => {
+    if (!appended && String(args[0]) === ledgerPath) {
+      appended = true;
+      mock.restoreAll();
+      await ledger.append(record);
+      await ledger.append(nextRecord);
+    }
+    return originalOpen(...args);
+  });
+  try {
+    const state = await captureLocalV1Ledger(source, capture);
+    assert.equal(state.state, "present");
+    assert.equal(state.recordCount, 2);
+    assert.equal(await verifyLocalV1Ledger(capture, state), "present");
+  } finally {
+    mock.restoreAll();
+  }
 });
 
 it("reads the checkpoint before the ledger during capture", async () => {
@@ -70,8 +146,7 @@ it("preserves exact bytes and checks digest, chain, checkpoint, and count", asyn
   const root = await scratch();
   const source = path.join(root, "source");
   const capture = path.join(root, "capture");
-  const target = path.join(root, "target");
-  await Promise.all([fs.mkdir(source), fs.mkdir(capture), fs.mkdir(target)]);
+  await Promise.all([fs.mkdir(source), fs.mkdir(capture)]);
   const ledgerPath = path.join(source, LOCAL_V1_LEDGER_FILE);
   await new JsonLinesOwnerDecisionLedger(ledgerPath).start();
   const before = await fs.readFile(ledgerPath);
@@ -79,14 +154,11 @@ it("preserves exact bytes and checks digest, chain, checkpoint, and count", asyn
   const state = await captureLocalV1Ledger(source, capture);
   assert.equal(state.state, "present");
   assert.equal(await verifyLocalV1Ledger(capture, state), "present");
-  assert.equal(await restoreLocalV1Ledger(capture, target, state), "present");
-  assert.deepEqual(await fs.readFile(path.join(target, LOCAL_V1_LEDGER_FILE)), before);
+  assert.deepEqual(await fs.readFile(path.join(capture, LOCAL_V1_LEDGER_FILE)), before);
   assert.deepEqual(
-    await fs.readFile(path.join(target, LOCAL_V1_CHECKPOINT_FILE)),
+    await fs.readFile(path.join(capture, LOCAL_V1_CHECKPOINT_FILE)),
     checkpointBefore,
   );
-  assert.equal((await fs.stat(path.join(target, LOCAL_V1_LEDGER_FILE))).mode & 0o777, 0o600);
-  await assert.rejects(() => restoreLocalV1Ledger(capture, target, state), /already exists/);
   await fs.writeFile(
     path.join(capture, LOCAL_V1_CHECKPOINT_FILE),
     `${JSON.stringify({ count: 1, hash: LEDGER_GENESIS_HASH })}\n`,
@@ -194,16 +266,4 @@ it("refuses an incomplete source and symlinks without changing source", async ()
     `${JSON.stringify({ count: 1, hash: "f".repeat(64) })}\n`,
   );
   await assert.rejects(() => captureLocalV1Ledger(source, capture), /not intact/);
-});
-
-it("refuses a target with either ledger file and never writes the other", async () => {
-  const root = await scratch();
-  const source = path.join(root, "source");
-  const capture = path.join(root, "capture");
-  const target = path.join(root, "target");
-  await Promise.all([fs.mkdir(source), fs.mkdir(capture), fs.mkdir(target)]);
-  const state = await captureLocalV1Ledger(source, capture);
-  await fs.writeFile(path.join(target, LOCAL_V1_CHECKPOINT_FILE), "existing", { mode: 0o600 });
-  await assert.rejects(() => restoreLocalV1Ledger(capture, target, state), /already exists/);
-  await assert.rejects(() => fs.stat(path.join(target, LOCAL_V1_LEDGER_FILE)), /ENOENT/);
 });
