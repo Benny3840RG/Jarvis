@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Jarvis Systems // Console 01</title>
+    <title>NOLAN // Command Centre</title>
     <style>
       /* Rajdhani by the Indian Type Foundry, SIL Open Font License 1.1.
          License text: src/mcp/assets/Rajdhani-OFL.txt. Subset is inlined; no CDN. */
@@ -2449,7 +2449,7 @@
       <p class="live-state" id="totality-state-value">UNKNOWN</p>
     </div>
     <main class="shell">
-      <section class="hud-frame" aria-label="Jarvis landscape command centre">
+      <section class="hud-frame" aria-label="NOLAN landscape command centre">
         <div class="top-glow"></div>
         <header class="topbar">
           <div class="brand">
@@ -2481,10 +2481,10 @@
             <a class="pill limits-now" id="limits-now-chip" data-now-chip="limits" href="/settings/limits">Limits · UNKNOWN</a>
             <span class="pill" id="clock">00:00:00</span>
             <button class="pill capture-toggle" id="capture-toggle" type="button" aria-controls="capture-drawer" aria-expanded="false">+ Add</button>
-            <button class="icon-button" id="refresh" type="button" aria-label="Refresh Jarvis">↻</button>
+            <button class="icon-button" id="refresh" type="button" aria-label="Refresh NOLAN">↻</button>
           </div>
         </header>
-        <section class="telemetry" aria-label="Live Jarvis state">
+        <section class="telemetry" aria-label="Live NOLAN state">
           <div><span>Owner</span><b>BENNY</b></div>
           <div><span>Persistence</span><b class="good" id="telemetry-provider">CONNECTING</b></div>
           <div><span>Deployment</span><b id="telemetry-deployment">DEVELOPMENT</b></div>
@@ -2701,7 +2701,7 @@
                     <div class="mission-core">
     <div class="mission-copy">
                         <p class="eyebrow">NOW</p>
-                        <h2 id="current-task">Waiting for Jarvis…</h2>
+                        <h2 id="current-task">Waiting for NOLAN…</h2>
                         <p id="current-subtitle">Live durable task state will appear here.</p>
                         <div class="chips" id="current-meta"></div>
                         <div class="actions" id="current-actions"></div>
@@ -2779,7 +2779,7 @@
                         <button type="button" class="voice-btn" id="voice-stop">Stop</button>
                         <button type="button" class="voice-btn" id="voice-test-output">Test spoken output</button>
                       </div>
-                      <p class="voice-hint">Say “<strong>Jarvis</strong>” then a command. Partial speech never acts; critical commands need “Jarvis confirm”. Equipment with no adapter fails closed.</p>
+                      <p class="voice-hint">Say “<strong>Nolan</strong>” then a command. Partial speech never acts; critical commands need “Nolan confirm”. Equipment with no adapter fails closed.</p>
                       <div class="voice-live"><small>HEARD</small><p id="voice-transcript">—</p></div>
                       <div class="voice-pending" id="voice-pending" hidden></div>
                       <div class="voice-result" id="voice-result" data-tone="muted">Idle.</div>
@@ -2859,7 +2859,7 @@
                   <article class="panel green">
                     <div class="panel-header"><h2>Live work</h2><span id="livework-state">STANDBY</span></div>
                     <p class="eyebrow">CURRENT MISSION</p>
-                    <h3 id="livework-objective">Waiting for Jarvis…</h3>
+                    <h3 id="livework-objective">Waiting for NOLAN…</h3>
                     <p id="livework-subject">Live development mission state will appear here.</p>
                   </article>
                   <article class="panel violet">
@@ -3196,7 +3196,7 @@
               <div class="panel-content"><div class="panel-header"><h2>Command capture</h2><span>REAL MCP OPERATIONS</span></div><div class="capture-body"><div class="capture-tabs"><button class="capture-tab active" type="button" data-capture="task">TASK</button><button class="capture-tab" type="button" data-capture="reminder">REMINDER</button></div><form class="capture-form" id="capture-form"><label><span id="capture-title-label">Task command</span><input id="capture-title" maxlength="500" autocomplete="off" required /></label><label id="capture-detail-label"><span id="capture-detail-copy">Category</span><select id="capture-category"><option value="personal">Personal</option><option value="work">Work</option><option value="builds">Builds</option><option value="money">Money</option><option value="life">Life</option></select><input id="capture-due" maxlength="500" placeholder="Friday 9am" autocomplete="off" hidden /></label><button class="capture-submit" id="capture-submit" type="submit">ADD TASK</button></form></div></div>
             </article>
         </section>
-        <footer class="footer"><div class="stream"><span class="live">● LIVE</span><span id="footer-status">Jarvis bridge initialising</span><span>Warm Instrument · calm glass · one focus · standing distance</span><span>Durable operations snapshot</span><span class="guard">Production boundary secured</span></div><span>JARVIS PRIME OMNI · DEVELOPMENT</span></footer>
+        <footer class="footer"><div class="stream"><span class="live">● LIVE</span><span id="footer-status">NOLAN bridge initialising</span><span>Warm Instrument · calm glass · one focus · standing distance</span><span>Durable operations snapshot</span><span class="guard">Production boundary secured</span></div><span>NOLAN · DEVELOPMENT</span></footer>
       </section>
     </main>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
@@ -3395,7 +3395,7 @@
             text(byId("telemetry-deployment"), "UNAVAILABLE");
             text(byId("telemetry-z-state"), "UNAVAILABLE");
             text(byId("source-pill"), "SOURCE · CONNECTING");
-            text(byId("footer-status"), "Jarvis reconnecting · status unavailable");
+            text(byId("footer-status"), "NOLAN reconnecting · status unavailable");
             renderReadiness();
             renderRadar();
             return;
@@ -4064,7 +4064,7 @@
             : labels.map(function (label, index) { return (index + 1) + ". " + label; }).join("; ");
           return {
             label: "Ambiguous — nothing was done. Did you mean: " + choices + more +
-              "? Reply once with “Jarvis” and your choice, or repeat the full command.",
+              "? Reply once with “Nolan” and your choice, or repeat the full command.",
             tone: "warn",
           };
         }
@@ -4186,7 +4186,7 @@
             if (!el) return;
             if (pending && pending.command) {
               el.hidden = false;
-              el.textContent = "Awaiting confirm: " + pending.command.summary + " — say “Jarvis confirm” or “Jarvis cancel”.";
+              el.textContent = "Awaiting confirm: " + pending.command.summary + " — say “Nolan confirm” or “Nolan cancel”.";
             } else {
               el.hidden = true;
               el.textContent = "";
@@ -4649,7 +4649,7 @@
         applySettingsHash();
         document.querySelectorAll("[data-settings-jump]").forEach((link) => link.addEventListener("click", (event) => { event.preventDefault(); const tab = link.getAttribute("data-settings-jump"); activateNamedView("settings"); showSettingsTab(tab); const target = document.querySelector(link.getAttribute("href")); if (target instanceof HTMLElement) target.focus(); }));
         document.querySelectorAll("[data-capture]").forEach((button) => button.addEventListener("click",() => setCaptureMode(button.dataset.capture)));
-        byId("refresh").addEventListener("click",async () => { const button = byId("refresh"); button.disabled = true; try { await callTool("show_jarvis_dashboard"); try { update(await request("tools/call", { name: "get_general_settings", arguments: {} }, 10000)); } catch { state.generalSettings = null; renderGeneral(); } void loadPersistence(); activity("Snapshot refreshed","Live dashboard state reloaded"); toast("Jarvis HUD refreshed."); } catch { toast("Jarvis refresh failed.",true); } finally { button.disabled = false; } });
+        byId("refresh").addEventListener("click",async () => { const button = byId("refresh"); button.disabled = true; try { await callTool("show_jarvis_dashboard"); try { update(await request("tools/call", { name: "get_general_settings", arguments: {} }, 10000)); } catch { state.generalSettings = null; renderGeneral(); } void loadPersistence(); activity("Snapshot refreshed","Live dashboard state reloaded"); toast("NOLAN HUD refreshed."); } catch { toast("NOLAN refresh failed.",true); } finally { button.disabled = false; } });
         byId("save-display-preferences").addEventListener("click", saveDisplayPreferences);
         const savedDisplay = loadSavedDisplayPreferences();
         applyConsoleDisplayPreferences(savedDisplay, document.documentElement);

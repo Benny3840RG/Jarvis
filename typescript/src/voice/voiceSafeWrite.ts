@@ -10,7 +10,8 @@ import { sha256Hex } from "../actions/sha256.js";
 import type { ToolActionService } from "../actions/toolActions.js";
 import { normalizeUtterance, type VoiceCommand } from "./voiceCommands.js";
 
-const WAKE_WORD = "jarvis";
+/** NOLAN is the approved public wake word. Keep Jarvis temporarily for legacy clients. */
+const WAKE_WORDS = ["nolan", "jarvis"] as const;
 /** Punctuation or whitespace that may sit between the wake word and the command. */
 const WAKE_SEPARATOR = /^[\s.,!?;:]+/;
 
@@ -30,12 +31,14 @@ export type VoiceWriteCapture = Readonly<{
 
 export function splitVoiceWakeWord(raw: string): { heard: boolean; rest: string } {
   const text = normalizeUtterance(raw);
-  if (text === WAKE_WORD) return { heard: true, rest: "" };
-  if (!text.startsWith(WAKE_WORD)) return { heard: false, rest: text };
-  const after = text.slice(WAKE_WORD.length);
-  const separator = WAKE_SEPARATOR.exec(after);
-  if (!separator) return { heard: false, rest: text };
-  return { heard: true, rest: after.slice(separator[0].length).trim() };
+  for (const wakeWord of WAKE_WORDS) {
+    if (text === wakeWord) return { heard: true, rest: "" };
+    if (!text.startsWith(wakeWord)) continue;
+    const after = text.slice(wakeWord.length);
+    const separator = WAKE_SEPARATOR.exec(after);
+    if (separator) return { heard: true, rest: after.slice(separator[0].length).trim() };
+  }
+  return { heard: false, rest: text };
 }
 
 export function voiceUtteranceForSession(input: {
