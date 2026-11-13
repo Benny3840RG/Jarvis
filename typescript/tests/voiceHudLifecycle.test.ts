@@ -319,7 +319,7 @@ async function armCrawler(h: ReturnType<typeof harness>) {
 const AMBIGUOUS_REQUEST = "Jarvis crawler forward and turn crawler lights on";
 const CLARIFICATION_PROMPT =
   "Ambiguous — nothing was done. Did you mean: 1. Drive the crawler forward; " +
-  "2. Turn the crawler inspection lights on? Reply once with “Jarvis” and your choice, " +
+  "2. Turn the crawler inspection lights on? Reply once with “Nolan” and your choice, " +
   "or repeat the full command.";
 const GENERIC_AMBIGUOUS = "Ambiguous — ignored for safety.";
 
@@ -571,7 +571,7 @@ describe("voice HUD clarification prompt (#567)", () => {
     assert.equal(
       single.label,
       "Ambiguous — nothing was done. Did you mean: Drive the crawler forward? " +
-        "Reply once with “Jarvis” and your choice, or repeat the full command.",
+        "Reply once with “Nolan” and your choice, or repeat the full command.",
     );
     const ids = VOICE_COMMANDS.filter((command) => command.profile === "crawler").map(
       (command) => command.id,
