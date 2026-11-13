@@ -111,6 +111,8 @@ it("sends the unavailable source as a tool result and never relays a guessed cou
 
 it("grounds a reply through the existing spoken query answer", async () => {
   const calls: { params: unknown; options: unknown }[] = [];
+  const thinking = { type: "thinking", thinking: "", signature: "sig-test-only" };
+  const preamble = { type: "text", text: "Checking invoices." };
   const tool = {
     type: "tool_use",
     id: "t1",
@@ -122,7 +124,7 @@ it("grounds a reply through the existing spoken query answer", async () => {
     {
       client: client(
         [
-          { stop_reason: "tool_use", content: [tool] },
+          { stop_reason: "tool_use", content: [thinking, preamble, tool] },
           { stop_reason: "end_turn", content: [{ type: "text", text: "No unpaid invoices." }] },
         ],
         calls,
@@ -136,6 +138,8 @@ it("grounds a reply through the existing spoken query answer", async () => {
   assert.equal(calls.length, 2);
   const messages = (calls[1]!.params as { messages: { role: string; content: unknown }[] })
     .messages;
+  // The assistant turn is replayed exactly, thinking block and all, before the tool result.
+  assert.deepEqual(messages.at(-2), { role: "assistant", content: [thinking, preamble, tool] });
   assert.deepEqual(messages.at(-1), {
     role: "user",
     content: [{ type: "tool_result", tool_use_id: "t1", content: "No unpaid invoices." }],

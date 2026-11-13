@@ -1,9 +1,9 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type {
+  BetaContentBlockParam,
   BetaMessage,
   BetaMessageParam,
   BetaToolResultBlockParam,
-  BetaToolUseBlockParam,
   MessageCreateParamsNonStreaming,
 } from "@anthropic-ai/sdk/resources/beta/messages/messages";
 
@@ -124,14 +124,12 @@ export function createAnthropicVoiceReasoner(
           if (!uses.length || toolCalls + uses.length > 4)
             return { status: "unavailable", reason: "tool-limit" };
           const results: BetaToolResultBlockParam[] = [];
-          const assistantUses: BetaToolUseBlockParam[] = [];
           for (const use of uses) {
             if (use.name !== "voice_query")
               return { status: "unavailable", reason: "provider-error" };
             const commandId = parsedCommandId(use.input, allowed);
             if (!commandId) return { status: "unavailable", reason: "provider-error" };
             const answer = await input.query(commandId);
-            assistantUses.push({ type: "tool_use", id: use.id, name: use.name, input: use.input });
             if (answer.status === "unavailable") unavailableSource ??= answer.reason;
             results.push({
               type: "tool_result",
@@ -140,7 +138,13 @@ export function createAnthropicVoiceReasoner(
             });
             toolCalls += 1;
           }
-          messages.push({ role: "assistant", content: assistantUses });
+          // Append the assistant turn exactly as returned. Its thinking blocks are bound to
+          // this conversation and must precede the tool results unchanged; dropping or
+          // rebuilding them is a history edit the current models reject.
+          messages.push({
+            role: "assistant",
+            content: response.content as BetaContentBlockParam[],
+          });
           messages.push({ role: "user", content: results });
         } catch (error) {
           if (error instanceof Anthropic.RateLimitError)
