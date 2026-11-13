@@ -4078,6 +4078,24 @@
               ? { label: answer, tone: "ok" }
               : { label: "Query unavailable — no authoritative answer was returned.", tone: "warn" };
           }
+          if (dispatch && dispatch.decision === "conversation") {
+            var reply = typeof dispatch.reply === "string" ? dispatch.reply.trim() : "";
+            return reply
+              ? { label: reply, tone: "ok" }
+              : { label: "Conversation unavailable.", tone: "warn", notice: true };
+          }
+          if (dispatch && dispatch.decision === "conversation-unavailable") {
+            var notices = {
+              "provider-error": "Conversation unavailable. The provider did not return a usable reply.",
+              refused: "Conversation unavailable. The provider declined to answer.",
+              "rate-limited": "Conversation limit reached. Try again later.",
+              "too-long": "Conversation request is too long. Please shorten it.",
+              unavailable: "Conversation unavailable. Please try again.",
+              timeout: "Conversation timed out. Please try again.",
+              "tool-limit": "Conversation reached its query limit. Please ask a shorter question.",
+            };
+            return { label: notices[dispatch.conversationReason] || "Conversation unavailable.", tone: "warn", notice: true };
+          }
           var map = {
             "ignored-interim": { label: "Listening…", tone: "muted" },
             empty: { label: "No command heard.", tone: "muted" },
@@ -4199,7 +4217,7 @@
               el.textContent = info.label;
               el.setAttribute("data-tone", info.tone);
             }
-            speak(info.label);
+            if (!info.notice) speak(info.label);
           }
           function renderLatency(startedAt, endedAt, failed) {
             var elapsed = voiceLatencyMs(startedAt, endedAt);

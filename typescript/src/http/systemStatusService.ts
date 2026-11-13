@@ -8,6 +8,7 @@ import { resolveReminderTimezone } from "../reminders/due.js";
 import { ReliabilityController } from "../reliability/reliabilityController.js";
 import { assessReconciliationHealth } from "../reliability/reliabilityHealth.js";
 import { resolveTotalityReasoningStatus } from "../totality/totalityFactory.js";
+import type { VoiceConversationStatus } from "../voice/voiceConversationFactory.js";
 import type { HttpAppConfig } from "./config.js";
 import type { IntegrationStatus, LayersStatus, SystemStatus } from "./contracts.js";
 import { integrationStatusFromStage } from "./contracts.js";
@@ -18,6 +19,7 @@ import {
   HTTP_PROVIDER_NAME,
   HTTP_RECONCILIATION_HEALTH,
   HTTP_TOOL_EXECUTION,
+  HTTP_VOICE_CONVERSATION_STATUS,
 } from "./tokens.js";
 
 const LAYERS: LayersStatus = {
@@ -83,6 +85,8 @@ export class SystemStatusService {
     private readonly reconciliationHealth: () => RuntimeReconciliationHealth,
     @Inject(HTTP_TOOL_EXECUTION)
     private readonly toolExecutionService: ToolExecutionService | null,
+    @Inject(HTTP_VOICE_CONVERSATION_STATUS)
+    private readonly voiceConversationStatus: VoiceConversationStatus,
   ) {}
 
   /**
@@ -175,6 +179,7 @@ export class SystemStatusService {
       reconciliation,
       integrations: [this.quoteDeliveryIntegrationStatus()],
       reasoning: resolveTotalityReasoningStatus(this.providerName),
+      voiceConversation: this.voiceConversationStatus,
       timezone,
       layers: { ...LAYERS, reliability: this.reliability.layerStatus() },
       zState: "disabled",

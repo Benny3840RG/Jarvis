@@ -25,6 +25,12 @@ const STATUS: SystemStatus = {
     model: null,
     reason: "Totality reasoning requires Convex persistence, which is not the active provider.",
   },
+  voiceConversation: {
+    status: "not-configured",
+    provider: null,
+    model: null,
+    reason: "Voice conversation is disabled.",
+  },
   timezone: "Australia/Melbourne",
   layers: {
     runtime: { status: "ready" },

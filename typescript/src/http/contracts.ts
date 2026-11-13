@@ -101,6 +101,7 @@ export type SystemStatus = {
   reconciliation: RuntimeReconciliationHealth;
   integrations: IntegrationStatus[];
   reasoning: ReasoningStatus;
+  voiceConversation: import("../voice/voiceConversationFactory.js").VoiceConversationStatus;
   timezone: string;
   layers: LayersStatus;
   zState: "disabled" | "stabilising" | "active" | "suspended";

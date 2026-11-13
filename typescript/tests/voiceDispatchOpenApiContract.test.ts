@@ -16,6 +16,8 @@ it("validates inferred voice dispatch metadata against its decision and confiden
     { decision: "awaiting-confirmation", inferred: true, confidence: 0 },
     { decision: "awaiting-confirmation", inferred: true, confidence: 1 },
     { decision: "unrecognized" },
+    { decision: "conversation", reply: "G'day." },
+    { decision: "conversation-unavailable", conversationReason: "provider-error" },
   ])
     assert.equal(validate(value), true, JSON.stringify(value));
   for (const value of [
@@ -26,6 +28,9 @@ it("validates inferred voice dispatch metadata against its decision and confiden
     { decision: "awaiting-confirmation", inferred: true, confidence: "0.5" },
     { decision: "unrecognized", inferred: true, confidence: 0.5 },
     { decision: "unrecognized", confidence: 0.5 },
+    { decision: "conversation" },
+    { decision: "conversation-unavailable", conversationReason: "secret provider error" },
+    { decision: "unrecognized", reply: "No." },
   ])
     assert.equal(validate(value), false, JSON.stringify(value));
 });

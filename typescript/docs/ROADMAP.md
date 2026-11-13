@@ -1,5 +1,17 @@
 # Jarvis TypeScript Roadmap
 
+## NOLAN voice conversation draft (#811, 2026-11-14)
+
+- Added an opt-in Anthropic conversational reply for final wake-authorised
+  unrecognised voice utterances after the deterministic session decision.
+- Grounding uses only the active profile's existing read-only voice queries;
+  no model action authority or persistent conversation state was added.
+- Added public configuration status, bounded calls/context/output, fixed
+  unavailable codes, HUD rendering and operator privacy documentation.
+- Next: independent Claude review of the exact draft head, owner-gated merge,
+  then separate live microphone and speech commissioning. Model-initiated
+  actions remain a separate future change.
+
 ## PR #786 voice inference safety repair (2026-11-11)
 
 - Raw wake-prefixed declarative speech now uses the same accepted-prefix

@@ -1,5 +1,45 @@
 # Guarded voice commissioning
 
+## Optional NOLAN conversation
+
+Merging the conversational voice code enables nothing. The existing command
+catalogue and safety decisions stay authoritative. To opt in, set
+`JARVIS_VOICE_CONVERSATION_PROVIDER=anthropic` and supply `ANTHROPIC_API_KEY`
+or `ANTHROPIC_AUTH_TOKEN` to the server process environment. The default model is `claude-opus-5-5`;
+`JARVIS_VOICE_CONVERSATION_MODEL` selects another model. Remove or unset the
+provider selector to disable paid conversation even if a key remains present.
+The status API reports the provider, model and configuration reason without a
+key or a live provider probe. Unknown provider values disable conversation.
+
+Only a final, wake-authorised utterance that the deterministic session returns
+as unrecognised reaches the conversation provider. **Enabling this sends the
+wake-authorised utterance text and the read-only answers the model asks for to
+the provider.** It also sends the short in-memory conversation history and the
+active profile's catalogue phrases and summaries. It does not send raw business
+records, extra project or client identifiers, approval tokens, ToolAction
+payloads, or a provider key as model content. The SDK uses its process key for
+API authentication; the key is never returned to the HUD, logged, or stored by
+the conversation feature. No conversation history is saved to JSON or Convex.
+
+The model can request only the existing read-only voice queries for the active
+profile. It cannot write, stage, approve, confirm, cancel, actuate, or switch
+profiles. If asked to do work, it must say it has not done it and give the
+catalogue phrase instead. Model-initiated actions require a later, separate
+reviewed change.
+
+Defaults: 120 model calls per rolling hour per server process, 500 characters
+per utterance, 600 characters per spoken reply, 12 recent user/assistant
+messages per voice session, four model turns per utterance, and a 20-second
+request timeout. The first five limits can be adjusted with
+`JARVIS_VOICE_CONVERSATION_MAX_CALLS_PER_HOUR`,
+`JARVIS_VOICE_CONVERSATION_MAX_UTTERANCE_CHARS`,
+`JARVIS_VOICE_CONVERSATION_MAX_REPLY_CHARS`,
+`JARVIS_VOICE_CONVERSATION_HISTORY_MESSAGES`, and
+`JARVIS_VOICE_CONVERSATION_TIMEOUT_MS`. Invalid limits disable conversation.
+History is discarded when the voice session ends, expires, is evicted, or
+switches profile. A limit or provider failure appears as a plain notice; the
+browser does not speak a fabricated answer.
+
 This runbook commissions the browser/HUD voice path from speech or typed input to the Jarvis voice HTTP boundary. It does **not** prove physical equipment control. Main uses `AbsentHardwareProvider`, so every actuation target must remain unavailable until a separately reviewed hardware adapter is installed and commissioned.
 
 ## Preconditions
