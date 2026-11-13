@@ -3966,8 +3966,18 @@
             synthesis: !!w.speechSynthesis,
           };
         }
+        // The exact leading wake words: NOLAN, and the legacy Jarvis for compatibility.
+        var VOICE_WAKE_WORDS = ["nolan", "jarvis"];
         function voiceWakeGate(raw, isFinal, wakeWord) {
-          var word = normalizeVoicePhrase(wakeWord || "jarvis");
+          var words = wakeWord ? [].concat(wakeWord) : VOICE_WAKE_WORDS;
+          for (var w = 0; w < words.length; w += 1) {
+            var gate = voiceWakeGateFor(raw, isFinal, words[w]);
+            if (gate.status !== "idle") return gate;
+          }
+          return { status: "idle" };
+        }
+        function voiceWakeGateFor(raw, isFinal, wakeWord) {
+          var word = normalizeVoicePhrase(wakeWord);
           var text = normalizeVoicePhrase(raw);
           if (text === word) return { status: "awake" };
           if (text.indexOf(word) !== 0) return { status: "idle" };
@@ -4122,7 +4132,7 @@
           // How long a profile switch waits for the command queued before it.
           // A request that never answers must not leave the profile paused.
           var PROFILE_SWITCH_WAIT_MS = 10000;
-          var WAKE_WORD = "jarvis";
+          var WAKE_WORDS = VOICE_WAKE_WORDS;
           // Browser errors after which the microphone must not resume on its own, each with
           // the notice shown. "aborted" covers the operator cancelling input in browser UI.
           var RECOGNITION_STOP_NOTICES = {
@@ -4132,6 +4142,9 @@
             "language-not-supported": "the browser does not support speech recognition in en-AU",
             "aborted": "speech input was cancelled in the browser",
           };
+          // Only a natural end (no error), no-speech and network are recoverable. Every other
+          // code, known or not, stops safely.
+          var RECOGNITION_RECOVERABLE_ERRORS = ["", "no-speech", "network"];
           // A session that ends this soon after starting, this many times in a row, is not retried.
           var RECOGNITION_SHORT_END_MS = 2000;
           var RECOGNITION_SHORT_END_LIMIT = 3;
@@ -4441,7 +4454,7 @@
                 recognitionResult.transcript,
                 true,
                 recognitionResult.alternatives,
-                WAKE_WORD,
+                WAKE_WORDS,
               );
               if (prepared) dispatch(prepared.transcript, prepared.isFinal, prepared.alternatives, prepared.heardTranscript);
             };
@@ -4461,7 +4474,8 @@
                 : "";
               state.recognitionShortEnds =
                 voiceClock() - startedAt < RECOGNITION_SHORT_END_MS ? state.recognitionShortEnds + 1 : 0;
-              if (!stopNotice && state.recognitionShortEnds < RECOGNITION_SHORT_END_LIMIT) {
+              var recoverable = RECOGNITION_RECOVERABLE_ERRORS.indexOf(recognitionError) >= 0;
+              if (recoverable && state.recognitionShortEnds < RECOGNITION_SHORT_END_LIMIT) {
                 // The browser ends a recognition session after a silence or a network
                 // interruption. The microphone stays on until the operator presses Stop.
                 startRecognition();
@@ -4473,7 +4487,9 @@
               updateMicrophoneControls();
               renderNotice(stopNotice
                 ? "Microphone stopped: " + stopNotice + " (" + recognitionError + "). Enable the microphone again to resume."
-                : "Microphone stopped: speech recognition keeps ending" + (recognitionError ? " (" + recognitionError + ")" : "") + ". Check the connection, then enable the microphone again.");
+                : !recoverable
+                  ? "Microphone stopped: speech recognition ended with an unexpected error (" + recognitionError + "). Enable the microphone again to resume."
+                  : "Microphone stopped: speech recognition keeps ending" + (recognitionError ? " (" + recognitionError + ")" : "") + ". Check the connection, then enable the microphone again.");
             };
             try { recognition.start(); }
             catch (error) {

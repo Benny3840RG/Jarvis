@@ -1201,6 +1201,67 @@ describe("voice HUD lifecycle (actual setupVoiceConsole and real session registr
     assert.deepEqual(h.actuations, ["crawler.stop"], "a repeated confirmation does nothing");
   });
 
+  it("accepts a spoken NOLAN wake on the initial and the resumed recogniser", async () => {
+    const h = harness({ longSessions: true });
+    const first = h.enable();
+    first.emit("Nolan, any unpaid invoices");
+    await flush();
+    assert.equal(h.utterances().length, 1, "NOLAN reaches the server on the first session");
+    assert.equal(h.utterances().at(-1)?.body.transcript, "any unpaid invoices");
+    assert.equal(h.utterances().at(-1)?.body.heardTranscript, "nolan, any unpaid invoices");
+    first.emit("Nolan any unpaid invoices", false);
+    first.emit("Nolanx any unpaid invoices");
+    first.emit("any unpaid invoices");
+    await flush();
+    assert.equal(h.utterances().length, 1, "interim, glued and wake-less speech stay dropped");
+
+    first.onerror?.({ error: "no-speech" });
+    first.onend?.();
+    const resumed = h.recognitions.at(-1)!;
+    assert.notEqual(resumed, first);
+    resumed.emit("Nolan, what is on today");
+    await flush();
+    assert.equal(h.utterances().length, 2, "NOLAN reaches the server on the resumed session");
+    assert.equal(h.utterances().at(-1)?.body.transcript, "what is on today");
+    resumed.emit("Jarvis any unpaid invoices");
+    await flush();
+    assert.equal(h.utterances().length, 3, "the legacy wake word still works");
+  });
+
+  it("confirms with a spoken NOLAN wake on a resumed session", async () => {
+    const h = harness({ longSessions: true });
+    await armCrawler(h);
+    const first = h.enable();
+    first.onerror?.({ error: "network" });
+    first.onend?.();
+    h.recognitions.at(-1)!.emit("Nolan, confirmed");
+    await flush();
+    assert.equal(h.utterances().at(-1)?.body.transcript, "confirmed");
+    assert.deepEqual(h.actuations, ["crawler.stop"]);
+  });
+
+  it("stops after a long session ends with an unclassified or unknown error code", () => {
+    for (const error of ["bad-grammar", "some-new-code", "unknown"]) {
+      const h = harness({ longSessions: true });
+      const recognition = h.enable();
+      recognition.onerror?.({ error });
+      recognition.onend?.();
+      assert.equal(h.recognitions.length, 1, `${error} must not restart`);
+      assert.equal(h.get("voice-enable").disabled, false, error);
+      assert.match(
+        h.get("voice-result").textContent,
+        new RegExp(`Microphone stopped.*\\(${error}\\)`),
+        error,
+      );
+    }
+    const h = harness({ longSessions: true });
+    const recognition = h.enable();
+    recognition.onerror?.({} as { error: string });
+    recognition.onend?.();
+    assert.equal(h.recognitions.length, 1, "an error event without a code is not recoverable");
+    assert.match(h.get("voice-result").textContent, /Microphone stopped/);
+  });
+
   it("does not resume listening after Stop", () => {
     const h = harness({ longSessions: true });
     const recognition = h.enable();
