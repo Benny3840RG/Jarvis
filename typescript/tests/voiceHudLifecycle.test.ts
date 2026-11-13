@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 
 import { VOICE_COMMANDS, type VoiceProfile } from "../src/voice/voiceCommands.js";
+import { voiceUtteranceForSession } from "../src/voice/voiceSafeWrite.js";
 import { VoiceSessionRegistry } from "../src/voice/voiceSessionRegistry.js";
 
 const html = readFileSync(new URL("../src/mcp/dashboard-v1.html", import.meta.url), "utf8");
@@ -51,7 +52,13 @@ function deferred() {
 type Request = {
   path: string;
   method: string;
-  body: { profile?: VoiceProfile; transcript?: string; isFinal?: boolean; alternatives?: string[] };
+  body: {
+    profile?: VoiceProfile;
+    transcript?: string;
+    isFinal?: boolean;
+    alternatives?: string[];
+    heardTranscript?: string;
+  };
 };
 
 function harness(
@@ -82,6 +89,7 @@ function harness(
     onend?: () => void;
     onerror?: () => void;
   }[] = [];
+  const speechCancels = { count: 0 };
   const actuations: string[] = [];
   const recognitions: Recognition[] = [];
   const delayedRequests = new Map<string, ReturnType<typeof deferred>>();
@@ -99,6 +107,8 @@ function harness(
     },
     clock: () => now,
     idFactory: () => `s${++sequence}`,
+    // Same as the maintained HTTP app: inference only ever arms a confirmation.
+    interpretNaturalLanguage: true,
   });
 
   class Recognition {
@@ -177,10 +187,19 @@ function harness(
         } else {
           assert.equal(operation, "utterances");
           assert.equal(typeof body.transcript, "string");
-          const dispatch = await session.handle({
+          // Mirror the voice controller: the server, not the HUD, decides wake authority.
+          const prepared = voiceUtteranceForSession({
             transcript: body.transcript!,
+            ...(body.heardTranscript === undefined
+              ? {}
+              : { heardTranscript: body.heardTranscript }),
+            ...(body.alternatives ? { alternatives: body.alternatives } : {}),
+          });
+          const dispatch = await session.handle({
+            transcript: prepared.transcript,
             isFinal: body.isFinal === true,
-            alternatives: body.alternatives,
+            wakeAuthorized: prepared.wakeAuthorized,
+            ...(prepared.alternatives ? { alternatives: prepared.alternatives } : {}),
             now,
           });
           reply = response({ dispatch, pending: session.pending() ?? null });
@@ -204,7 +223,9 @@ function harness(
       ? {}
       : {
           speechSynthesis: {
-            cancel() {},
+            cancel() {
+              speechCancels.count += 1;
+            },
             getVoices() {
               return options.noVoices ? [] : [{}];
             },
@@ -249,6 +270,7 @@ function harness(
     registry,
     spoken,
     speechUtterances,
+    speechCancels,
     actuations,
     recognitions,
     advance(milliseconds: number) {
@@ -293,6 +315,333 @@ async function armCrawler(h: ReturnType<typeof harness>) {
   await flush();
   assert.equal(h.get("voice-pending").hidden, false);
 }
+
+const AMBIGUOUS_REQUEST = "Jarvis crawler forward and turn crawler lights on";
+const CLARIFICATION_PROMPT =
+  "Ambiguous — nothing was done. Did you mean: 1. Drive the crawler forward; " +
+  "2. Turn the crawler inspection lights on? Reply once with “Jarvis” and your choice, " +
+  "or repeat the full command.";
+const GENERIC_AMBIGUOUS = "Ambiguous — ignored for safety.";
+
+async function offerClarification(h: ReturnType<typeof harness>) {
+  h.profile("crawler");
+  await flush();
+  h.type(AMBIGUOUS_REQUEST);
+  await flush();
+  assert.equal(h.get("voice-result").textContent, CLARIFICATION_PROMPT);
+}
+
+const sessionCreations = (h: ReturnType<typeof harness>) =>
+  h.requests.filter((request) => request.path === "/sessions").length;
+
+type Describe = (
+  dispatch: unknown,
+  catalog?: unknown,
+  profile?: unknown,
+) => { label: string; tone: string };
+const describeVoiceDispatch = new Function(
+  `"use strict"; ${block}\n return describeVoiceDispatch;`,
+)() as Describe;
+
+describe("voice HUD clarification prompt (#567)", () => {
+  it("displays and speaks only the returned candidates and keeps the session for one reply", async () => {
+    const h = harness();
+    await offerClarification(h);
+    assert.equal(h.spoken.at(-1), CLARIFICATION_PROMPT);
+    assert.equal(h.get("voice-result").attributes.get("data-tone"), "warn");
+    assert.equal(h.get("voice-pending").hidden, true);
+    assert.deepEqual(h.actuations, []);
+    const creations = sessionCreations(h);
+    const sent = h.utterances().length;
+
+    h.type("Jarvis the second one");
+    await flush();
+    assert.equal(sessionCreations(h), creations, "the reply reuses the same server session");
+    assert.equal(h.utterances().length, sent + 1, "exactly one reply request, no local dispatch");
+    assert.equal(h.utterances().at(-1)?.path, h.utterances().at(-2)?.path);
+    assert.equal(h.get("voice-result").textContent, "Awaiting spoken “confirm”.");
+    assert.match(h.get("voice-pending").textContent, /Turn the crawler inspection lights on/);
+    assert.deepEqual(h.actuations, [], "a clarified choice still waits for server confirmation");
+
+    h.type("Jarvis confirm");
+    await flush();
+    assert.deepEqual(h.actuations, ["crawler.lights-on"]);
+    assert.equal(h.get("voice-pending").hidden, true);
+  });
+
+  it("offers the choice once: a second ordinal after the reply does nothing", async () => {
+    const h = harness();
+    await offerClarification(h);
+    h.type("Jarvis what");
+    await flush();
+    assert.equal(h.get("voice-result").textContent, "Command not recognised.");
+    h.type("Jarvis the second one");
+    await flush();
+    assert.equal(h.get("voice-result").textContent, "Command not recognised.");
+    assert.equal(h.get("voice-pending").hidden, true);
+    assert.deepEqual(h.actuations, []);
+  });
+
+  it("keeps interim speech silent and resolves only on a final spoken reply", async () => {
+    const h = harness();
+    h.profile("crawler");
+    await flush();
+    const recognition = h.enable();
+    recognition.emit(AMBIGUOUS_REQUEST, false);
+    await flush();
+    assert.equal(h.utterances().length, 0);
+    assert.doesNotMatch(h.get("voice-result").textContent, /Did you mean/);
+    recognition.emit(AMBIGUOUS_REQUEST);
+    await flush();
+    assert.equal(h.get("voice-result").textContent, CLARIFICATION_PROMPT);
+    assert.equal(h.spoken.at(-1), CLARIFICATION_PROMPT);
+
+    recognition.emit("Jarvis the second one", false);
+    recognition.emit("the second one");
+    await flush();
+    assert.equal(h.utterances().length, 1, "interim and wake-less replies never dispatch");
+    assert.equal(h.get("voice-result").textContent, CLARIFICATION_PROMPT);
+
+    recognition.emit("Jarvis the second one");
+    await flush();
+    assert.equal(h.utterances().at(-1)?.body.transcript, "the second one");
+    assert.equal(h.utterances().at(-1)?.body.heardTranscript, "jarvis the second one");
+    assert.equal(h.get("voice-result").textContent, "Awaiting spoken “confirm”.");
+    assert.match(h.get("voice-pending").textContent, /Turn the crawler inspection lights on/);
+    assert.deepEqual(h.actuations, []);
+  });
+
+  it("leaves nothing pending when a recogniser alternative disagrees with the reply", async () => {
+    const h = harness();
+    await offerClarification(h);
+    const recognition = h.enable();
+    recognition.emit("Jarvis the second one", true, ["Jarvis the first one"]);
+    await flush();
+    assert.deepEqual(h.utterances().at(-1)?.body.alternatives, ["the first one"]);
+    assert.equal(h.get("voice-pending").hidden, true);
+    recognition.emit("Jarvis the second one");
+    await flush();
+    assert.equal(h.get("voice-result").textContent, "Command not recognised.");
+    assert.equal(h.get("voice-pending").hidden, true);
+    assert.deepEqual(h.actuations, []);
+  });
+
+  it("drops the prompt and the offer on Stop", async () => {
+    const h = harness();
+    await offerClarification(h);
+    const creations = sessionCreations(h);
+    h.stop();
+    assert.doesNotMatch(h.get("voice-result").textContent, /Did you mean/);
+    h.type("Jarvis the second one");
+    await flush();
+    assert.equal(sessionCreations(h), creations + 1, "Stop retired the offering session");
+    assert.equal(h.get("voice-result").textContent, "Command not recognised.");
+    assert.equal(h.get("voice-pending").hidden, true);
+    assert.deepEqual(h.actuations, []);
+  });
+
+  it("drops the prompt and the offer on a profile change", async () => {
+    const h = harness();
+    await offerClarification(h);
+    h.profile("workshop");
+    assert.doesNotMatch(h.get("voice-result").textContent, /Did you mean/);
+    await flush();
+    h.profile("crawler");
+    await flush();
+    assert.doesNotMatch(h.get("voice-result").textContent, /Did you mean/);
+    h.type("Jarvis the second one");
+    await flush();
+    assert.equal(h.get("voice-result").textContent, "Command not recognised.");
+    assert.equal(h.get("voice-pending").hidden, true);
+    assert.deepEqual(h.actuations, []);
+  });
+
+  it("drops the prompt when the session fails and never replays the reply", async () => {
+    const h = harness();
+    await offerClarification(h);
+    h.advance(31 * 60_000);
+    h.type("Jarvis the second one");
+    await flush();
+    assert.match(h.get("voice-result").textContent, /expired|no longer available/i);
+    assert.doesNotMatch(h.get("voice-result").textContent, /Did you mean/);
+    assert.equal(
+      h.utterances().filter((request) => request.body.transcript === "Jarvis the second one")
+        .length,
+      1,
+    );
+    h.type("Jarvis the second one");
+    await flush();
+    assert.equal(h.get("voice-result").textContent, "Command not recognised.");
+    assert.equal(h.get("voice-pending").hidden, true);
+    assert.deepEqual(h.actuations, []);
+  });
+
+  for (const failure of [
+    { status: 404, notice: /expired or is no longer available/ },
+    { status: 503, notice: /Voice service unavailable/ },
+  ]) {
+    it(`stops the spoken prompt when the reply request fails (${failure.status})`, async () => {
+      const h = harness();
+      await offerClarification(h);
+      const prompt = h.speechUtterances.at(-1)!;
+      assert.equal(prompt.text, CLARIFICATION_PROMPT);
+      prompt.onstart?.();
+      assert.match(h.get("voice-output-status").textContent, /started/i);
+      const cancels = h.speechCancels.count;
+      const spoken = h.spoken.length;
+      const creations = sessionCreations(h);
+      const sent = h.utterances().length;
+
+      h.fail(h.utterances().at(-1)!.path, failure.status);
+      h.type("Jarvis the second one");
+      await flush();
+      assert.equal(h.speechCancels.count, cancels + 1, "the active prompt speech is cancelled");
+      assert.equal(h.spoken.length, spoken, "the failure notice is not spoken");
+      assert.match(h.get("voice-result").textContent, failure.notice);
+      assert.doesNotMatch(h.get("voice-result").textContent, /Did you mean/);
+      assert.equal(h.get("voice-pending").hidden, true);
+      const stopped = h.get("voice-output-status").textContent;
+      assert.match(stopped, /stopped/i);
+
+      const notice = h.get("voice-result").textContent;
+      prompt.onstart?.();
+      prompt.onend?.();
+      prompt.onerror?.();
+      assert.equal(h.get("voice-output-status").textContent, stopped);
+      assert.equal(h.get("voice-result").textContent, notice);
+      assert.equal(h.utterances().length, sent + 1, "the failed reply is never retried");
+      assert.equal(sessionCreations(h), creations, "no session is created until a fresh command");
+      assert.deepEqual(h.actuations, []);
+
+      h.type("Jarvis the second one");
+      await flush();
+      assert.equal(sessionCreations(h), creations + 1);
+      assert.equal(h.get("voice-result").textContent, "Command not recognised.");
+      assert.equal(h.get("voice-pending").hidden, true);
+      assert.deepEqual(h.actuations, []);
+    });
+  }
+
+  it("replaces the prompt with an ordinary non-ambiguous result", async () => {
+    const h = harness();
+    await offerClarification(h);
+    h.type("Jarvis crawler status");
+    await flush();
+    assert.equal(
+      h.get("voice-result").textContent,
+      "Query unavailable — no data provider connected.",
+    );
+    assert.equal(h.get("voice-pending").hidden, true);
+  });
+
+  it("does not invite a choice for control conflicts and falls back to plain ids", () => {
+    assert.deepEqual(
+      describeVoiceDispatch(
+        { decision: "ambiguous", candidates: ["control.cancel", "control.confirm"] },
+        VOICE_COMMANDS,
+        "crawler",
+      ),
+      {
+        label:
+          "Ambiguous — nothing was done. Conflicting: control.cancel; control.confirm. " +
+          "Repeat the full command.",
+        tone: "warn",
+      },
+    );
+    // No catalog, or a catalog entry from another profile, never lends its summary.
+    for (const catalog of [undefined, [], VOICE_COMMANDS]) {
+      assert.equal(
+        describeVoiceDispatch(
+          { decision: "ambiguous", candidates: ["crawler.forward", "crawler.lights-on"] },
+          catalog,
+          "workshop",
+        ).label,
+        "Ambiguous — nothing was done. Conflicting: crawler.forward; crawler.lights-on. " +
+          "Repeat the full command.",
+      );
+    }
+  });
+
+  it("formats deterministically within fixed bounds", () => {
+    const single = describeVoiceDispatch(
+      { decision: "ambiguous", candidates: ["crawler.forward"] },
+      VOICE_COMMANDS,
+      "crawler",
+    );
+    assert.equal(
+      single.label,
+      "Ambiguous — nothing was done. Did you mean: Drive the crawler forward? " +
+        "Reply once with “Jarvis” and your choice, or repeat the full command.",
+    );
+    const ids = VOICE_COMMANDS.filter((command) => command.profile === "crawler").map(
+      (command) => command.id,
+    );
+    assert.ok(ids.length > 4);
+    const many = describeVoiceDispatch(
+      { decision: "ambiguous", candidates: ids },
+      VOICE_COMMANDS,
+      "crawler",
+    ).label;
+    assert.match(many, /4\. [^;]+; and \d+ more\? Reply once/);
+    assert.doesNotMatch(many, /5\. /);
+    assert.equal(
+      many,
+      describeVoiceDispatch({ decision: "ambiguous", candidates: ids }, VOICE_COMMANDS, "crawler")
+        .label,
+    );
+    const long = describeVoiceDispatch(
+      { decision: "ambiguous", candidates: ["crawler.forward", "crawler.stop"] },
+      [
+        { id: "crawler.forward", profile: "crawler", summary: `  spaced\n out ${"x".repeat(500)}` },
+        { id: "crawler.stop", profile: "crawler", summary: "<img src=x onerror=alert(1)>" },
+      ],
+      "crawler",
+    ).label;
+    assert.ok(long.length < 400, `bounded label, got ${long.length}`);
+    assert.match(long, /1\. spaced out x+…; 2\. <img src=x onerror=alert\(1\)>\?/);
+  });
+
+  it("fails closed to the generic label for malformed candidate lists", () => {
+    const malformed: unknown[] = [
+      undefined,
+      null,
+      "crawler.forward",
+      [],
+      [42, "crawler.forward"],
+      ["crawler.forward", "crawler.forward"],
+      ["<script>alert(1)</script>", "crawler.forward"],
+      ["crawler.forward", "Crawler Forward"],
+      ["crawler.forward", "x".repeat(65)],
+      Array.from({ length: 65 }, (_, index) => `crawler.c${index}`),
+    ];
+    for (const candidates of malformed) {
+      assert.deepEqual(
+        describeVoiceDispatch({ decision: "ambiguous", candidates }, VOICE_COMMANDS, "crawler"),
+        { label: GENERIC_AMBIGUOUS, tone: "warn" },
+        JSON.stringify(candidates)?.slice(0, 80),
+      );
+    }
+    assert.deepEqual(describeVoiceDispatch({ decision: "ambiguous" }), {
+      label: GENERIC_AMBIGUOUS,
+      tone: "warn",
+    });
+  });
+
+  it("accepts every catalog id and renders through textContent only", () => {
+    for (const command of VOICE_COMMANDS) {
+      assert.notEqual(
+        describeVoiceDispatch(
+          { decision: "ambiguous", candidates: [command.id] },
+          VOICE_COMMANDS,
+          command.profile,
+        ).label,
+        GENERIC_AMBIGUOUS,
+        command.id,
+      );
+    }
+    assert.doesNotMatch(block!, /innerHTML|outerHTML|insertAdjacentHTML|document\.write/);
+  });
+});
 
 describe("voice HUD lifecycle (actual setupVoiceConsole and real session registry)", () => {
   it("tests local speech only on request and reports browser events without claiming audibility", async () => {

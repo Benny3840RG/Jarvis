@@ -110,10 +110,10 @@
     },
     {
       "id": "voice-model-provider-key",
-      "title": "Authorise a model-provider key for the reasoning service",
+      "title": "Authorise a model-provider key for Totality reasoning",
       "issues": [567, 697],
       "proposedAction": "Configure a model-provider API key on the Lenovo development runtime through the approved secret onboarding path.",
-      "consequence": "The reasoning service stops reporting not-configured, so spoken commissioning can proceed. This starts paid usage on the provider account.",
+      "consequence": "The HUD and API reasoning service stops reporting not-configured and can produce proposal-only reasoning. This starts paid usage on the provider account. It does not change voice: the voice path does not call the model.",
       "scope": "Development runtime only. One secret, stored where the runtime reads its other secrets. Not committed.",
       "environment": "development",
       "risk": "standard",
@@ -121,7 +121,7 @@
         {
           "kind": "issue",
           "number": 567,
-          "revision": "2026-11-10T12:45:52Z"
+          "revision": "2026-11-12T22:14:16Z"
         }
       ],
       "dependsOn": [],
@@ -131,7 +131,16 @@
           "pin": {
             "kind": "issue",
             "number": 567,
-            "revision": "2026-11-10T12:45:52Z"
+            "revision": "2026-11-12T22:14:16Z"
+          }
+        },
+        {
+          "label": "Voice commissioning audit: the key is not a voice prerequisite",
+          "pin": {
+            "kind": "comment",
+            "id": 6837394455,
+            "on": 567,
+            "revision": "2026-11-12T22:14:15Z"
           }
         },
         {
@@ -160,23 +169,33 @@
         {
           "kind": "issue",
           "number": 567,
-          "revision": "2026-11-10T12:45:52Z"
+          "revision": "2026-11-12T22:14:16Z"
         }
       ],
-      "dependsOn": ["voice-model-provider-key"],
+      "dependsOn": [],
       "evidence": [
         {
           "label": "Issue #567",
           "pin": {
             "kind": "issue",
             "number": 567,
-            "revision": "2026-11-10T12:45:52Z"
+            "revision": "2026-11-12T22:14:16Z"
+          }
+        },
+        {
+          "label": "Voice commissioning audit: what remains",
+          "pin": {
+            "kind": "comment",
+            "id": 6837394455,
+            "on": 567,
+            "revision": "2026-11-12T22:14:15Z"
           }
         }
       ],
       "missingPrerequisites": [
-        "The reasoning service is not configured on the host.",
-        "No microphone and audibility acceptance run has been recorded on the real host."
+        "Pull request #804 (the HUD shows and speaks the clarification question) is not merged and running on the host.",
+        "No microphone and audibility acceptance run has been recorded on the real host.",
+        "Ten dispatch round-trip samples from the owner's own HUD session have not been recorded."
       ],
       "rollback": "Reopen #567. Voice can be disabled by leaving the microphone off; no hardware adapter ships.",
       "expiresAt": "2026-12-12T00:00:00.000Z"
@@ -216,31 +235,28 @@
       "expiresAt": "2026-12-12T00:00:00.000Z"
     },
     {
-      "id": "merge-tcp-check-specifications",
-      "title": "Merge the tcp-check commissioning specifications",
+      "id": "tcp-check-worker-egress-scope",
+      "title": "tcp-check decision 2: keep the narrow worker egress scope",
       "issues": [779],
-      "proposedAction": "Merge pull request #800 at the exact commit shown.",
-      "consequence": "The proposed enforcer, durable store and clock specifications and the adversarial test matrix land on main as a planning document. It authorises no code.",
-      "scope": "Repository only. One new design document.",
-      "environment": "repository",
+      "proposedAction": "Accept the scope stated in the specification: the kernel blocks every process except the broker from reaching any target that is or ever was allowlisted, and the Jarvis service keeps its general outbound access.",
+      "consequence": "The Jarvis service can still open connections to unrelated addresses, as it does today for Convex and Microsoft Graph. Rejecting this card means requiring default-deny outbound for the whole service, which is stronger and considerably more work.",
+      "scope": "Planning decision only. It changes the specification a builder works from; it authorises no code, no host change and no target.",
+      "environment": "development",
       "risk": "standard",
       "subjects": [
         {
+          "kind": "issue",
+          "number": 779,
+          "revision": "2026-11-09T14:07:38Z"
+        },
+        {
           "kind": "pull-request",
           "number": 800,
-          "revision": "68b8cb190e3e258411b4290c2bee531c432f454c"
+          "revision": "61fe6ae630522c5a81e6bc9e8e2b3f33da99f7a1"
         }
       ],
       "dependsOn": [],
       "evidence": [
-        {
-          "label": "Pull request #800",
-          "pin": {
-            "kind": "pull-request",
-            "number": 800,
-            "revision": "68b8cb190e3e258411b4290c2bee531c432f454c"
-          }
-        },
         {
           "label": "Issue #779",
           "pin": {
@@ -248,10 +264,345 @@
             "number": 779,
             "revision": "2026-11-09T14:07:38Z"
           }
+        },
+        {
+          "label": "Pull request #800 (merged specification)",
+          "pin": {
+            "kind": "pull-request",
+            "number": 800,
+            "revision": "61fe6ae630522c5a81e6bc9e8e2b3f33da99f7a1"
+          }
+        },
+        {
+          "label": "Independent review of the specification: pass, no findings",
+          "pin": {
+            "kind": "comment",
+            "id": 6825274612,
+            "on": 800,
+            "revision": "2026-11-12T13:43:43Z"
+          }
         }
       ],
-      "missingPrerequisites": ["An independent review of this pull request has not been done."],
-      "rollback": "Revert the merge commit.",
+      "missingPrerequisites": [],
+      "rollback": "Record a later decision requiring default-deny outbound; the enforcer specification is then amended before it is built.",
+      "expiresAt": "2026-12-12T00:00:00.000Z"
+    },
+    {
+      "id": "tcp-check-test-target",
+      "title": "tcp-check decision 3: approve a host-local synthetic test target",
+      "issues": [779],
+      "proposedAction": "Approve using a listener inside a private network namespace on the Lenovo, reached over a virtual link, as the only target for the adversarial test matrix.",
+      "consequence": "No test packet leaves the machine and no third-party address is ever contacted. The exact address is chosen so that it is outside the special-use table.",
+      "scope": "Planning decision only. It changes the specification a builder works from; it authorises no code, no host change and no target.",
+      "environment": "development",
+      "risk": "standard",
+      "subjects": [
+        {
+          "kind": "issue",
+          "number": 779,
+          "revision": "2026-11-09T14:07:38Z"
+        },
+        {
+          "kind": "pull-request",
+          "number": 800,
+          "revision": "61fe6ae630522c5a81e6bc9e8e2b3f33da99f7a1"
+        }
+      ],
+      "dependsOn": [],
+      "evidence": [
+        {
+          "label": "Issue #779",
+          "pin": {
+            "kind": "issue",
+            "number": 779,
+            "revision": "2026-11-09T14:07:38Z"
+          }
+        },
+        {
+          "label": "Pull request #800 (merged specification)",
+          "pin": {
+            "kind": "pull-request",
+            "number": 800,
+            "revision": "61fe6ae630522c5a81e6bc9e8e2b3f33da99f7a1"
+          }
+        },
+        {
+          "label": "Independent review of the specification: pass, no findings",
+          "pin": {
+            "kind": "comment",
+            "id": 6825274612,
+            "on": 800,
+            "revision": "2026-11-12T13:43:43Z"
+          }
+        }
+      ],
+      "missingPrerequisites": ["The exact address has not been proposed and reviewed."],
+      "rollback": "Withdraw the approval; the evidence run cannot then be prepared.",
+      "expiresAt": "2026-12-12T00:00:00.000Z"
+    },
+    {
+      "id": "tcp-check-teardown-delay",
+      "title": "tcp-check decision 4: confirm 30 seconds as the fail-safe teardown delay",
+      "issues": [779],
+      "proposedAction": "Confirm T_live at 30 seconds: when the control plane has failed, a live target stays reachable by the broker for at most 30 seconds after its last refresh.",
+      "consequence": "A shorter value closes the window sooner and costs more frequent kernel updates; a longer value does the opposite. Thirty seconds is the proposal in the specification.",
+      "scope": "Planning decision only. It changes the specification a builder works from; it authorises no code, no host change and no target.",
+      "environment": "development",
+      "risk": "standard",
+      "subjects": [
+        {
+          "kind": "issue",
+          "number": 779,
+          "revision": "2026-11-09T14:07:38Z"
+        },
+        {
+          "kind": "pull-request",
+          "number": 800,
+          "revision": "61fe6ae630522c5a81e6bc9e8e2b3f33da99f7a1"
+        }
+      ],
+      "dependsOn": [],
+      "evidence": [
+        {
+          "label": "Issue #779",
+          "pin": {
+            "kind": "issue",
+            "number": 779,
+            "revision": "2026-11-09T14:07:38Z"
+          }
+        },
+        {
+          "label": "Pull request #800 (merged specification)",
+          "pin": {
+            "kind": "pull-request",
+            "number": 800,
+            "revision": "61fe6ae630522c5a81e6bc9e8e2b3f33da99f7a1"
+          }
+        },
+        {
+          "label": "Independent review of the specification: pass, no findings",
+          "pin": {
+            "kind": "comment",
+            "id": 6825274612,
+            "on": 800,
+            "revision": "2026-11-12T13:43:43Z"
+          }
+        }
+      ],
+      "missingPrerequisites": [],
+      "rollback": "Record a different value; the specification's constants are then amended.",
+      "expiresAt": "2026-12-12T00:00:00.000Z"
+    },
+    {
+      "id": "tcp-check-root-components",
+      "title": "tcp-check decision 5: accept root-owned components on the development host",
+      "issues": [779],
+      "proposedAction": "Accept that the rule set, the renewer, the resume hook, the lock files and the guard unit run as root on the Lenovo, that the Jarvis service will not start if the guard unit fails (including when the store cannot be reached at boot), and that the control plane may kill a stopped renewer.",
+      "consequence": "Jarvis gains root-owned parts and its startup becomes dependent on the firewall rules and the store. A failed rule load stops the whole service rather than leaving former targets reachable.",
+      "scope": "Planning decision only. It changes the specification a builder works from; it authorises no code, no host change and no target.",
+      "environment": "development",
+      "risk": "standard",
+      "subjects": [
+        {
+          "kind": "issue",
+          "number": 779,
+          "revision": "2026-11-09T14:07:38Z"
+        },
+        {
+          "kind": "pull-request",
+          "number": 800,
+          "revision": "61fe6ae630522c5a81e6bc9e8e2b3f33da99f7a1"
+        }
+      ],
+      "dependsOn": [],
+      "evidence": [
+        {
+          "label": "Issue #779",
+          "pin": {
+            "kind": "issue",
+            "number": 779,
+            "revision": "2026-11-09T14:07:38Z"
+          }
+        },
+        {
+          "label": "Pull request #800 (merged specification)",
+          "pin": {
+            "kind": "pull-request",
+            "number": 800,
+            "revision": "61fe6ae630522c5a81e6bc9e8e2b3f33da99f7a1"
+          }
+        },
+        {
+          "label": "Independent review of the specification: pass, no findings",
+          "pin": {
+            "kind": "comment",
+            "id": 6825274612,
+            "on": 800,
+            "revision": "2026-11-12T13:43:43Z"
+          }
+        }
+      ],
+      "missingPrerequisites": [],
+      "rollback": "Withdraw the acceptance before anything is installed; after installation, remove the units, the rule set and the broker user.",
+      "expiresAt": "2026-12-12T00:00:00.000Z"
+    },
+    {
+      "id": "tcp-check-ledger-retention",
+      "title": "tcp-check decision 6: keep every single-use ledger row",
+      "issues": [779],
+      "proposedAction": "Keep every tcp-check ledger row indefinitely. No archive rule.",
+      "consequence": "The ledger grows by at most ten rows per owner per minute of use and is never pruned, so a retired claim can never be presented again. An archive rule can be decided later.",
+      "scope": "Planning decision only. It changes the specification a builder works from; it authorises no code, no host change and no target.",
+      "environment": "development",
+      "risk": "standard",
+      "subjects": [
+        {
+          "kind": "issue",
+          "number": 779,
+          "revision": "2026-11-09T14:07:38Z"
+        },
+        {
+          "kind": "pull-request",
+          "number": 800,
+          "revision": "61fe6ae630522c5a81e6bc9e8e2b3f33da99f7a1"
+        }
+      ],
+      "dependsOn": [],
+      "evidence": [
+        {
+          "label": "Issue #779",
+          "pin": {
+            "kind": "issue",
+            "number": 779,
+            "revision": "2026-11-09T14:07:38Z"
+          }
+        },
+        {
+          "label": "Pull request #800 (merged specification)",
+          "pin": {
+            "kind": "pull-request",
+            "number": 800,
+            "revision": "61fe6ae630522c5a81e6bc9e8e2b3f33da99f7a1"
+          }
+        },
+        {
+          "label": "Independent review of the specification: pass, no findings",
+          "pin": {
+            "kind": "comment",
+            "id": 6825274612,
+            "on": 800,
+            "revision": "2026-11-12T13:43:43Z"
+          }
+        }
+      ],
+      "missingPrerequisites": [],
+      "rollback": "Define an archive rule later; nothing is deleted in the meantime.",
+      "expiresAt": "2026-12-12T00:00:00.000Z"
+    },
+    {
+      "id": "tcp-check-lease-enforcement",
+      "title": "tcp-check decision 7: enforce permission expiry in the kernel (option 7a)",
+      "issues": [779],
+      "proposedAction": "Choose option 7a: the lease is enforced in the kernel as well as in the store and the broker, so an expired capability is rejected at the connect call itself. Confirm T_call at 1 000 ms.",
+      "consequence": "This keeps the scope locked on #779 intact. It requires a further short specification (helper interface, clock mapping, skew allowance) before the time workstream can be built. Rejecting this card and choosing 7b instead means accepting a small gap and formally loosening the locked scope.",
+      "scope": "Planning decision only. It changes the specification a builder works from; it authorises no code, no host change and no target.",
+      "environment": "development",
+      "risk": "standard",
+      "subjects": [
+        {
+          "kind": "issue",
+          "number": 779,
+          "revision": "2026-11-09T14:07:38Z"
+        },
+        {
+          "kind": "pull-request",
+          "number": 800,
+          "revision": "61fe6ae630522c5a81e6bc9e8e2b3f33da99f7a1"
+        }
+      ],
+      "dependsOn": [],
+      "evidence": [
+        {
+          "label": "Issue #779",
+          "pin": {
+            "kind": "issue",
+            "number": 779,
+            "revision": "2026-11-09T14:07:38Z"
+          }
+        },
+        {
+          "label": "Pull request #800 (merged specification)",
+          "pin": {
+            "kind": "pull-request",
+            "number": 800,
+            "revision": "61fe6ae630522c5a81e6bc9e8e2b3f33da99f7a1"
+          }
+        },
+        {
+          "label": "Independent review of the specification: pass, no findings",
+          "pin": {
+            "kind": "comment",
+            "id": 6825274612,
+            "on": 800,
+            "revision": "2026-11-12T13:43:43Z"
+          }
+        }
+      ],
+      "missingPrerequisites": [],
+      "rollback": "Record 7b instead; the specification is amended to state the weaker contract.",
+      "expiresAt": "2026-12-12T00:00:00.000Z"
+    },
+    {
+      "id": "tcp-check-clock-assumption",
+      "title": "tcp-check decision 8: accept the bounded clock assumption",
+      "issues": [779],
+      "proposedAction": "Confirm 5 000 ms as the allowed difference between a component's clock and store time, T_guard at 2 000 ms, and that exact expiry is proved only if the store's clock never steps back unseen by more than T_guard. Confirm that resetting the time high-water mark is an owner-only action.",
+      "consequence": "Expiry is checked two seconds early, shortening the usable lease to 13 seconds. A backward clock step larger than two seconds that no write observed is outside what the design can detect. Rejecting this card means one of two things, to be stated in the note: different values for the tolerance or the guard margin, or a requirement for a second trusted time source.",
+      "scope": "Planning decision only. It changes the specification a builder works from; it authorises no code, no host change and no target.",
+      "environment": "development",
+      "risk": "standard",
+      "subjects": [
+        {
+          "kind": "issue",
+          "number": 779,
+          "revision": "2026-11-09T14:07:38Z"
+        },
+        {
+          "kind": "pull-request",
+          "number": 800,
+          "revision": "61fe6ae630522c5a81e6bc9e8e2b3f33da99f7a1"
+        }
+      ],
+      "dependsOn": [],
+      "evidence": [
+        {
+          "label": "Issue #779",
+          "pin": {
+            "kind": "issue",
+            "number": 779,
+            "revision": "2026-11-09T14:07:38Z"
+          }
+        },
+        {
+          "label": "Pull request #800 (merged specification)",
+          "pin": {
+            "kind": "pull-request",
+            "number": 800,
+            "revision": "61fe6ae630522c5a81e6bc9e8e2b3f33da99f7a1"
+          }
+        },
+        {
+          "label": "Independent review of the specification: pass, no findings",
+          "pin": {
+            "kind": "comment",
+            "id": 6825274612,
+            "on": 800,
+            "revision": "2026-11-12T13:43:43Z"
+          }
+        }
+      ],
+      "missingPrerequisites": [],
+      "rollback": "Record different values, or a requirement for a second time source; the time specification is amended before it is built.",
       "expiresAt": "2026-12-12T00:00:00.000Z"
     },
     {
@@ -259,7 +610,7 @@
       "title": "Approve building the tcp-check egress enforcer (WS-A)",
       "issues": [779],
       "proposedAction": "Approve implementation of the egress enforcer specification: a separate broker process and a root-owned kernel rule set.",
-      "consequence": "Work starts on code that owns a real network socket, behind the default-deny registry entry. It also means accepting root-owned components on the development host.",
+      "consequence": "Work starts on code that owns a real network socket, behind the default-deny registry entry, to the merged specification (docs/design/issue-779-tcp-check-commissioning-specs.md, WS-A).",
       "scope": "Development only. Draft pull requests; the capability stays planned and no real target is allowlisted.",
       "environment": "development",
       "risk": "standard",
@@ -272,25 +623,38 @@
         {
           "kind": "pull-request",
           "number": 800,
-          "revision": "68b8cb190e3e258411b4290c2bee531c432f454c"
+          "revision": "61fe6ae630522c5a81e6bc9e8e2b3f33da99f7a1"
         }
       ],
-      "dependsOn": ["merge-tcp-check-specifications"],
+      "dependsOn": [
+        "tcp-check-worker-egress-scope",
+        "tcp-check-teardown-delay",
+        "tcp-check-root-components"
+      ],
       "evidence": [
-        {
-          "label": "Pull request #800",
-          "pin": {
-            "kind": "pull-request",
-            "number": 800,
-            "revision": "68b8cb190e3e258411b4290c2bee531c432f454c"
-          }
-        },
         {
           "label": "Issue #779",
           "pin": {
             "kind": "issue",
             "number": 779,
             "revision": "2026-11-09T14:07:38Z"
+          }
+        },
+        {
+          "label": "Pull request #800 (merged specification)",
+          "pin": {
+            "kind": "pull-request",
+            "number": 800,
+            "revision": "61fe6ae630522c5a81e6bc9e8e2b3f33da99f7a1"
+          }
+        },
+        {
+          "label": "Independent review of the specification: pass, no findings",
+          "pin": {
+            "kind": "comment",
+            "id": 6825274612,
+            "on": 800,
+            "revision": "2026-11-12T13:43:43Z"
           }
         }
       ],
@@ -316,25 +680,34 @@
         {
           "kind": "pull-request",
           "number": 800,
-          "revision": "68b8cb190e3e258411b4290c2bee531c432f454c"
+          "revision": "61fe6ae630522c5a81e6bc9e8e2b3f33da99f7a1"
         }
       ],
-      "dependsOn": ["merge-tcp-check-specifications"],
+      "dependsOn": ["tcp-check-ledger-retention"],
       "evidence": [
-        {
-          "label": "Pull request #800",
-          "pin": {
-            "kind": "pull-request",
-            "number": 800,
-            "revision": "68b8cb190e3e258411b4290c2bee531c432f454c"
-          }
-        },
         {
           "label": "Issue #779",
           "pin": {
             "kind": "issue",
             "number": 779,
             "revision": "2026-11-09T14:07:38Z"
+          }
+        },
+        {
+          "label": "Pull request #800 (merged specification)",
+          "pin": {
+            "kind": "pull-request",
+            "number": 800,
+            "revision": "61fe6ae630522c5a81e6bc9e8e2b3f33da99f7a1"
+          }
+        },
+        {
+          "label": "Independent review of the specification: pass, no findings",
+          "pin": {
+            "kind": "comment",
+            "id": 6825274612,
+            "on": 800,
+            "revision": "2026-11-12T13:43:43Z"
           }
         }
       ],
@@ -360,19 +733,11 @@
         {
           "kind": "pull-request",
           "number": 800,
-          "revision": "68b8cb190e3e258411b4290c2bee531c432f454c"
+          "revision": "61fe6ae630522c5a81e6bc9e8e2b3f33da99f7a1"
         }
       ],
-      "dependsOn": ["merge-tcp-check-specifications"],
+      "dependsOn": ["tcp-check-lease-enforcement", "tcp-check-clock-assumption"],
       "evidence": [
-        {
-          "label": "Pull request #800",
-          "pin": {
-            "kind": "pull-request",
-            "number": 800,
-            "revision": "68b8cb190e3e258411b4290c2bee531c432f454c"
-          }
-        },
         {
           "label": "Issue #779",
           "pin": {
@@ -380,9 +745,28 @@
             "number": 779,
             "revision": "2026-11-09T14:07:38Z"
           }
+        },
+        {
+          "label": "Pull request #800 (merged specification)",
+          "pin": {
+            "kind": "pull-request",
+            "number": 800,
+            "revision": "61fe6ae630522c5a81e6bc9e8e2b3f33da99f7a1"
+          }
+        },
+        {
+          "label": "Independent review of the specification: pass, no findings",
+          "pin": {
+            "kind": "comment",
+            "id": 6825274612,
+            "on": 800,
+            "revision": "2026-11-12T13:43:43Z"
+          }
         }
       ],
-      "missingPrerequisites": [],
+      "missingPrerequisites": [
+        "If decision 7 chooses option 7a, the kernel-lease mechanism needs its own reviewed specification before this workstream is built."
+      ],
       "rollback": "Close the implementation pull requests.",
       "expiresAt": "2026-12-12T00:00:00.000Z"
     },
@@ -402,14 +786,19 @@
           "revision": "2026-11-09T14:07:38Z"
         }
       ],
-      "dependsOn": ["tcp-check-enforcer-build", "tcp-check-store-build", "tcp-check-time-build"],
+      "dependsOn": [
+        "tcp-check-enforcer-build",
+        "tcp-check-store-build",
+        "tcp-check-time-build",
+        "tcp-check-test-target"
+      ],
       "evidence": [
         {
-          "label": "Pull request #800",
+          "label": "Pull request #800 (merged specification)",
           "pin": {
             "kind": "pull-request",
             "number": 800,
-            "revision": "68b8cb190e3e258411b4290c2bee531c432f454c"
+            "revision": "61fe6ae630522c5a81e6bc9e8e2b3f33da99f7a1"
           }
         },
         {
@@ -473,11 +862,6 @@
           "kind": "issue",
           "number": 697,
           "revision": "2026-11-10T12:37:40Z"
-        },
-        {
-          "kind": "branch",
-          "name": "main",
-          "revision": "8d90db25167018cf29c6177abf530f79ff3e6d2b"
         }
       ],
       "dependsOn": [
@@ -557,7 +941,7 @@
         {
           "kind": "issue",
           "number": 307,
-          "revision": "2026-10-31T05:29:26Z"
+          "revision": "2026-11-11T23:41:49Z"
         }
       ],
       "dependsOn": ["local-v1-release"],
@@ -567,7 +951,7 @@
           "pin": {
             "kind": "issue",
             "number": 307,
-            "revision": "2026-10-31T05:29:26Z"
+            "revision": "2026-11-11T23:41:49Z"
           }
         }
       ],

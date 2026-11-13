@@ -4025,7 +4025,53 @@
           });
           return { transcript: transcript, alternatives: alternatives };
         }
-        function describeVoiceDispatch(dispatch) {
+        // Presentation only: the prompt names the command ids the server returned, in
+        // the server's order. It holds no choice, sends nothing and grants nothing —
+        // the reply is an ordinary utterance that the server session resolves.
+        function describeVoiceClarification(candidates, catalog, profile) {
+          var generic = { label: "Ambiguous — ignored for safety.", tone: "warn" };
+          var MAX_CANDIDATES = 64, MAX_CHOICES = 4, MAX_SUMMARY = 80;
+          if (!Array.isArray(candidates) || !candidates.length || candidates.length > MAX_CANDIDATES) return generic;
+          var commands = Array.isArray(catalog) ? catalog : [];
+          var seen = [];
+          var labels = [];
+          var allKnown = true;
+          for (var i = 0; i < candidates.length; i += 1) {
+            var id = candidates[i];
+            // A list that is not plain, distinct ids cannot be numbered truthfully.
+            if (typeof id !== "string" || id.length > 64 || !/^[a-z0-9]+(?:[.-][a-z0-9]+)*$/.test(id) || seen.indexOf(id) >= 0) return generic;
+            seen.push(id);
+            var summary = "";
+            for (var j = 0; j < commands.length && !summary; j += 1) {
+              var command = commands[j];
+              if (command && command.id === id && command.profile === profile && typeof command.summary === "string") {
+                summary = command.summary.replace(/\s+/g, " ").trim().replace(/[.!?;:]+$/, "");
+              }
+            }
+            if (!summary) allKnown = false;
+            else if (summary.length > MAX_SUMMARY) summary = summary.slice(0, MAX_SUMMARY - 1).trim() + "…";
+            if (i < MAX_CHOICES) labels.push(summary || id);
+          }
+          var more = candidates.length > MAX_CHOICES ? "; and " + (candidates.length - MAX_CHOICES) + " more" : "";
+          if (!allKnown) {
+            return {
+              label: "Ambiguous — nothing was done. Conflicting: " + labels.join("; ") + more + ". Repeat the full command.",
+              tone: "warn",
+            };
+          }
+          var choices = labels.length === 1
+            ? labels[0]
+            : labels.map(function (label, index) { return (index + 1) + ". " + label; }).join("; ");
+          return {
+            label: "Ambiguous — nothing was done. Did you mean: " + choices + more +
+              "? Reply once with “Jarvis” and your choice, or repeat the full command.",
+            tone: "warn",
+          };
+        }
+        function describeVoiceDispatch(dispatch, catalog, profile) {
+          if (dispatch && dispatch.decision === "ambiguous") {
+            return describeVoiceClarification(dispatch.candidates, catalog, profile);
+          }
           if (dispatch && dispatch.decision === "answered") {
             var answer = typeof dispatch.answer === "string" ? dispatch.answer.trim() : "";
             return answer
@@ -4036,7 +4082,6 @@
             "ignored-interim": { label: "Listening…", tone: "muted" },
             empty: { label: "No command heard.", tone: "muted" },
             unrecognized: { label: "Command not recognised.", tone: "warn" },
-            ambiguous: { label: "Ambiguous — ignored for safety.", tone: "warn" },
             "query-unavailable": { label: "Query unavailable — no data provider connected.", tone: "warn" },
             "awaiting-confirmation": { label: "Awaiting spoken “confirm”.", tone: "pending" },
             "confirmation-not-pending": { label: "Nothing to confirm.", tone: "muted" },
@@ -4148,7 +4193,7 @@
             }
           }
           function renderResult(dispatch) {
-            var info = describeVoiceDispatch(dispatch);
+            var info = describeVoiceDispatch(dispatch, state.catalog, state.profile);
             var el = document.getElementById("voice-result");
             if (el) {
               el.textContent = info.label;
@@ -4247,6 +4292,8 @@
                   if (generation !== state.generation) return;
                   var id = invalidateSession();
                   if (error.status !== 404) retireSession(id);
+                  // A prompt still being spoken must not keep inviting a reply to a dead session.
+                  cancelSpeech();
                   renderLatency(startedAt, voiceClock(), true);
                   renderNotice(error.status === 404
                     ? "Voice session expired or is no longer available. Submit a fresh command; nothing was retried."
