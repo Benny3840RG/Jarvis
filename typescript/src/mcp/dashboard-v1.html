@@ -3966,8 +3966,18 @@
             synthesis: !!w.speechSynthesis,
           };
         }
+        // The exact leading wake words: NOLAN, and the legacy Jarvis for compatibility.
+        var VOICE_WAKE_WORDS = ["nolan", "jarvis"];
         function voiceWakeGate(raw, isFinal, wakeWord) {
-          var word = normalizeVoicePhrase(wakeWord || "jarvis");
+          var words = wakeWord ? [].concat(wakeWord) : VOICE_WAKE_WORDS;
+          for (var w = 0; w < words.length; w += 1) {
+            var gate = voiceWakeGateFor(raw, isFinal, words[w]);
+            if (gate.status !== "idle") return gate;
+          }
+          return { status: "idle" };
+        }
+        function voiceWakeGateFor(raw, isFinal, wakeWord) {
+          var word = normalizeVoicePhrase(wakeWord);
           var text = normalizeVoicePhrase(raw);
           if (text === word) return { status: "awake" };
           if (text.indexOf(word) !== 0) return { status: "idle" };
@@ -4122,12 +4132,27 @@
           // How long a profile switch waits for the command queued before it.
           // A request that never answers must not leave the profile paused.
           var PROFILE_SWITCH_WAIT_MS = 10000;
-          var WAKE_WORD = "jarvis";
+          var WAKE_WORDS = VOICE_WAKE_WORDS;
+          // Browser errors after which the microphone must not resume on its own, each with
+          // the notice shown. "aborted" covers the operator cancelling input in browser UI.
+          var RECOGNITION_STOP_NOTICES = {
+            "not-allowed": "the browser refused microphone access. Check the browser's microphone permission",
+            "service-not-allowed": "the browser refused the speech recognition service. Check the browser's microphone permission",
+            "audio-capture": "no microphone audio could be captured. Check the microphone and its input level",
+            "language-not-supported": "the browser does not support speech recognition in en-AU",
+            "aborted": "speech input was cancelled in the browser",
+          };
+          // Only a natural end (no error), no-speech and network are recoverable. Every other
+          // code, known or not, stops safely.
+          var RECOGNITION_RECOVERABLE_ERRORS = ["", "no-speech", "network"];
+          // A session that ends this soon after starting, this many times in a row, is not retried.
+          var RECOGNITION_SHORT_END_MS = 2000;
+          var RECOGNITION_SHORT_END_LIMIT = 3;
           var caps = voiceCapabilities(typeof window !== "undefined" ? window : {});
           var state = {
             profile: "client", sessionId: null, sessionPromise: null, generation: 0,
             profilePending: false, profileFailed: false, commandQueue: Promise.resolve(),
-            recognition: null, recognitionGeneration: 0, catalog: [],
+            recognition: null, recognitionGeneration: 0, recognitionShortEnds: 0, catalog: [],
           };
           var capEl = document.getElementById("voice-capability");
           if (capEl) capEl.textContent = caps.recognition ? "MIC AVAILABLE" : "TYPED ONLY";
@@ -4429,14 +4454,45 @@
                 recognitionResult.transcript,
                 true,
                 recognitionResult.alternatives,
-                WAKE_WORD,
+                WAKE_WORDS,
               );
               if (prepared) dispatch(prepared.transcript, prepared.isFinal, prepared.alternatives, prepared.heardTranscript);
             };
+            var startedAt = voiceClock();
+            var recognitionError = "";
+            recognition.onerror = function (event) {
+              if (state.recognition !== recognition || recognitionGeneration !== state.recognitionGeneration) return;
+              var observed = (event && event.error) || "unknown";
+              // The first terminal or unknown code is kept: a later recoverable code must not
+              // downgrade it, and a later terminal code must not replace its notice.
+              if (RECOGNITION_RECOVERABLE_ERRORS.indexOf(recognitionError) >= 0) recognitionError = observed;
+            };
             recognition.onend = function () {
+              // Stop, a profile switch and an explicit restart all advance the generation first,
+              // so only an ending the browser chose on its own reaches the code below.
               if (state.recognition !== recognition || recognitionGeneration !== state.recognitionGeneration) return;
               state.recognition = null;
+              var stopNotice = Object.prototype.hasOwnProperty.call(RECOGNITION_STOP_NOTICES, recognitionError)
+                ? RECOGNITION_STOP_NOTICES[recognitionError]
+                : "";
+              state.recognitionShortEnds =
+                voiceClock() - startedAt < RECOGNITION_SHORT_END_MS ? state.recognitionShortEnds + 1 : 0;
+              var recoverable = RECOGNITION_RECOVERABLE_ERRORS.indexOf(recognitionError) >= 0;
+              if (recoverable && state.recognitionShortEnds < RECOGNITION_SHORT_END_LIMIT) {
+                // The browser ends a recognition session after a silence or a network
+                // interruption. The microphone stays on until the operator presses Stop.
+                startRecognition();
+                // A profile switch in flight declines the restart; the control must then be usable again.
+                if (!state.recognition) updateMicrophoneControls();
+                return;
+              }
+              state.recognitionShortEnds = 0;
               updateMicrophoneControls();
+              renderNotice(stopNotice
+                ? "Microphone stopped: " + stopNotice + " (" + recognitionError + "). Enable the microphone again to resume."
+                : !recoverable
+                  ? "Microphone stopped: speech recognition ended with an unexpected error (" + recognitionError + "). Enable the microphone again to resume."
+                  : "Microphone stopped: speech recognition keeps ending" + (recognitionError ? " (" + recognitionError + ")" : "") + ". Check the connection, then enable the microphone again.");
             };
             try { recognition.start(); }
             catch (error) {
@@ -4445,7 +4501,11 @@
             }
             updateMicrophoneControls();
           }
-          if (enableBtn) enableBtn.addEventListener("click", startRecognition);
+          if (enableBtn)
+            enableBtn.addEventListener("click", function () {
+              state.recognitionShortEnds = 0;
+              startRecognition();
+            });
           if (stopBtn)
             stopBtn.addEventListener("click", function () {
               retireSession(invalidateSession());
