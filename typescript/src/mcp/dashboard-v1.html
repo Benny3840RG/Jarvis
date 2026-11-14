@@ -4462,7 +4462,10 @@
             var recognitionError = "";
             recognition.onerror = function (event) {
               if (state.recognition !== recognition || recognitionGeneration !== state.recognitionGeneration) return;
-              recognitionError = (event && event.error) || "unknown";
+              var observed = (event && event.error) || "unknown";
+              // The first terminal or unknown code is kept: a later recoverable code must not
+              // downgrade it, and a later terminal code must not replace its notice.
+              if (RECOGNITION_RECOVERABLE_ERRORS.indexOf(recognitionError) >= 0) recognitionError = observed;
             };
             recognition.onend = function () {
               // Stop, a profile switch and an explicit restart all advance the generation first,

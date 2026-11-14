@@ -1292,6 +1292,39 @@ describe("voice HUD lifecycle (actual setupVoiceConsole and real session registr
     }
   });
 
+  it("a later recoverable error cannot downgrade an earlier terminal one before onend", () => {
+    const cases: Array<{ first: string | undefined; later: string; notice: RegExp }> = [
+      {
+        first: "not-allowed",
+        later: "network",
+        notice: /refused microphone access.*\(not-allowed\)/,
+      },
+      {
+        first: "audio-capture",
+        later: "no-speech",
+        notice: /no microphone audio could be captured.*\(audio-capture\)/,
+      },
+      {
+        first: "not-allowed",
+        later: "audio-capture",
+        notice: /refused microphone access.*\(not-allowed\)/,
+      },
+      { first: "some-new-code", later: "network", notice: /unexpected error \(some-new-code\)/ },
+      { first: undefined, later: "network", notice: /unexpected error \(unknown\)/ },
+    ];
+    for (const { first, later, notice } of cases) {
+      const h = harness({ longSessions: true });
+      const recognition = h.enable();
+      recognition.onerror?.(first === undefined ? ({} as { error: string }) : { error: first });
+      recognition.onerror?.({ error: later });
+      recognition.onend?.();
+      const label = `${first ?? "missing"} -> ${later}`;
+      assert.equal(h.recognitions.length, 1, `${label} must not restart`);
+      assert.equal(h.get("voice-enable").disabled, false, label);
+      assert.match(h.get("voice-result").textContent, notice, label);
+    }
+  });
+
   it("gives up without inventing a reason when sessions end with no error code", () => {
     const h = harness();
     h.enable();
