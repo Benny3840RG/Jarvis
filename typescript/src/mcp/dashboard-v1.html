@@ -4093,6 +4093,7 @@
               unavailable: "Conversation unavailable. Please try again.",
               timeout: "Conversation timed out. Please try again.",
               "tool-limit": "Conversation reached its query limit. Please ask a shorter question.",
+              ungrounded: "Conversation unavailable. The reply quoted figures no record supplied.",
             };
             return { label: notices[dispatch.conversationReason] || "Conversation unavailable.", tone: "warn", notice: true };
           }

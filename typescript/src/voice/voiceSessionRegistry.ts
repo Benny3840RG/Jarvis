@@ -17,6 +17,7 @@ import { VoiceSession } from "./voiceSession.js";
 
 const DEFAULT_TTL_MS = 30 * 60_000;
 const DEFAULT_MAX_SESSIONS = 256;
+const DEFAULT_SWEEP_INTERVAL_MS = 60_000;
 
 export type VoiceSessionRegistryOptions = Readonly<{
   provider: VoiceActuationProvider;
@@ -30,6 +31,12 @@ export type VoiceSessionRegistryOptions = Readonly<{
   interpretNaturalLanguage?: boolean;
   /** Id generator (tests). */
   idFactory?: () => string;
+  /**
+   * How often expired sessions are swept so removal listeners run without waiting for
+   * another registry call (default 60 s; 0 disables the timer). The timer never holds
+   * the process open.
+   */
+  sweepIntervalMs?: number;
 }>;
 
 type Entry = { session: VoiceSession; expiresAt: number };
@@ -60,6 +67,13 @@ export class VoiceSessionRegistry {
     this.#confirmationTtlMs = options.confirmationTtlMs;
     this.#interpretNaturalLanguage = options.interpretNaturalLanguage ?? false;
     this.#idFactory = options.idFactory ?? randomUUID;
+    const sweepIntervalMs = options.sweepIntervalMs ?? DEFAULT_SWEEP_INTERVAL_MS;
+    if (sweepIntervalMs > 0) setInterval(() => this.sweep(), sweepIntervalMs).unref();
+  }
+
+  /** Remove every expired session now, notifying the removal listener for each. */
+  sweep(): void {
+    this.#evictExpired(this.#clock());
   }
 
   create(profile: VoiceProfile): { id: string; profile: VoiceProfile; expiresAt: number } {

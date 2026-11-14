@@ -216,6 +216,7 @@ describe("voice HTTP boundary", () => {
       "unavailable",
       "timeout",
       "tool-limit",
+      "ungrounded",
     ] as const;
     let index = 0;
     const reasoner: VoiceConversationReasoner = {
@@ -511,5 +512,45 @@ describe("voice HTTP boundary", () => {
     const sessionId = await openSession(app, "client");
     const badUtterance = await utter(app, sessionId, { transcript: 42, isFinal: "yes" });
     assert.equal(badUtterance.statusCode, 422);
+  });
+
+  it("ends an in-flight conversation when a concurrent utterance arms a confirmation", async () => {
+    let modelCalls = 0;
+    let queries = 0;
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let entered!: () => void;
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const reasoner: VoiceConversationReasoner = {
+      reply: async (input) => {
+        modelCalls += 1;
+        entered();
+        await gate;
+        if ((await input.query("trailer.status")).status === "answered") queries += 1;
+        if (input.reserveNextCall()) modelCalls += 1;
+        return { status: "answered", reply: "Too late." };
+      },
+    };
+    const app = await makeApp("10.0.0.5", new VoiceConversationService({ reasoner }));
+    const sessionId = await openSession(app, "trailer");
+    const chat = utter(app, sessionId, { transcript: "Nolan tell me a joke", isFinal: true });
+    await started;
+    const armed = (
+      await utter(app, sessionId, { transcript: "Nolan winch up", isFinal: true })
+    ).json();
+    assert.equal(armed.dispatch.decision, "awaiting-confirmation");
+    release();
+    const late = (await chat).json();
+    assert.deepEqual(late.dispatch, {
+      decision: "conversation-unavailable",
+      conversationReason: "unavailable",
+    });
+    assert.equal(modelCalls, 1);
+    assert.equal(queries, 0);
+    assert.deepEqual(late.pending, armed.pending);
   });
 });

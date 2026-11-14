@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { it } from "node:test";
 
 import {
+  NOT_DONE_REPLY,
   VoiceConversationService,
   spokenReply,
   type VoiceConversationReasoner,
@@ -141,6 +142,95 @@ it("drops context when a voice session ends, expires or is evicted", async () =>
   await service.respond({ session: s3, transcript: "hello" });
   registry.create("client");
   assert.deepEqual(service.history(s3), []);
+});
+
+it("clears history at TTL expiry through the sweep, with no later registry call", async () => {
+  let now = 100;
+  const service = new VoiceConversationService({
+    reasoner: { reply: async () => ({ status: "answered", reply: "Hello." }) },
+  });
+  const registry = new VoiceSessionRegistry({
+    provider: new AbsentHardwareProvider(),
+    clock: () => now,
+    ttlMs: 10,
+    sweepIntervalMs: 5,
+  });
+  registry.onRemove((s) => service.clear(s));
+  const created = registry.create("client");
+  const s = registry.get(created.id)!;
+  await service.respond({ session: s, transcript: "hello" });
+  assert.equal(service.history(s).length, 2);
+  now += 100;
+  await new Promise((resolve) => setTimeout(resolve, 40));
+  assert.equal(registry.size(), 0);
+  assert.deepEqual(service.history(s), []);
+});
+
+it("never speaks an action claim or a figure no successful query returned", async () => {
+  const replies: string[] = [];
+  let queried = false;
+  const service = new VoiceConversationService({
+    reasoner: {
+      reply: async (input) => {
+        if (queried) await input.query("client.unpaid-invoices");
+        return { status: "answered", reply: replies.shift()! };
+      },
+    },
+  });
+  const s = new VoiceSession({
+    profile: "client",
+    provider: new AbsentHardwareProvider(),
+    queries: {
+      answer: async () => ({ status: "answered", answer: "You have 3 unpaid invoices." }),
+    },
+  });
+  replies.push("I sent the quote. You owe $999.");
+  assert.deepEqual(await service.respond({ session: s, transcript: "send the quote" }), {
+    status: "unavailable",
+    reason: "ungrounded",
+  });
+  replies.push("I've gone ahead and added that task.");
+  assert.deepEqual(await service.respond({ session: s, transcript: "add a task" }), {
+    status: "answered",
+    reply: NOT_DONE_REPLY,
+  });
+  replies.push("You have 3 unpaid invoices.");
+  assert.equal((await service.respond({ session: s, transcript: "owe?" })).status, "unavailable");
+  queried = true;
+  replies.push("You have 3 unpaid invoices, Benny.", "You have 4 unpaid invoices.");
+  assert.deepEqual(await service.respond({ session: s, transcript: "owe?" }), {
+    status: "answered",
+    reply: "You have 3 unpaid invoices, Benny.",
+  });
+  assert.deepEqual(await service.respond({ session: s, transcript: "owe?" }), {
+    status: "unavailable",
+    reason: "ungrounded",
+  });
+  // Advice and refusals stay free text.
+  replies.push("I haven't sent anything. Say send the quote to stage it.");
+  assert.equal((await service.respond({ session: s, transcript: "send it" })).status, "answered");
+});
+
+it("denies queries and further model calls once the turn is no longer live", async () => {
+  let live = true;
+  const outcomes: unknown[] = [];
+  const service = new VoiceConversationService({
+    reasoner: {
+      reply: async (input) => {
+        live = false;
+        outcomes.push(
+          (await input.query("client.unpaid-invoices")).status,
+          input.reserveNextCall(),
+        );
+        return { status: "answered", reply: "Hello." };
+      },
+    },
+  });
+  assert.deepEqual(
+    await service.respond({ session: session(), transcript: "hi", live: () => live }),
+    { status: "unavailable", reason: "unavailable" },
+  );
+  assert.deepEqual(outcomes, ["unavailable", false]);
 });
 
 it("aborts an in-flight reasoner when its session context is cleared", async () => {

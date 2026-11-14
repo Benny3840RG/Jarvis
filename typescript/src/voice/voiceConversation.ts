@@ -9,7 +9,8 @@ export type ConversationReason =
   | "too-long"
   | "unavailable"
   | "timeout"
-  | "tool-limit";
+  | "tool-limit"
+  | "ungrounded";
 
 export type ConversationResult =
   | Readonly<{ status: "answered"; reply: string }>
@@ -71,6 +72,13 @@ export class VoiceConversationService {
     return [...(this.#contexts.get(session)?.messages ?? [])];
   }
 
+  /** Abandon any in-flight reply for this session without dropping its history. */
+  interrupt(session: VoiceSession): void {
+    const context = this.#contexts.get(session);
+    context?.controller?.abort();
+    if (context) context.controller = undefined;
+  }
+
   clear(session: VoiceSession): void {
     const context = this.#contexts.get(session);
     if (context) {
@@ -107,6 +115,14 @@ export class VoiceConversationService {
       : controller.signal;
     const catalog = VOICE_COMMANDS.filter((command) => command.profile === session.profile);
     const allowed = new Set(catalog.filter((command) => command.kind === "query").map((c) => c.id));
+    const stillLive = () =>
+      !signal.aborted &&
+      activeContext.active &&
+      this.#contexts.get(session) === activeContext &&
+      session.profile === activeContext.profile &&
+      input.live?.() !== false;
+    // Only answers the server itself returned this turn may ground figures in the reply.
+    const groundedAnswers: string[] = [];
     let result: ConversationResult;
     try {
       result = await this.#reasoner.reply({
@@ -115,19 +131,16 @@ export class VoiceConversationService {
         catalog,
         history: [...context.messages],
         query: async (commandId) => {
-          if (
-            signal.aborted ||
-            !activeContext.active ||
-            this.#contexts.get(session) !== activeContext ||
-            input.live?.() === false
-          ) {
+          if (!stillLive()) {
             return { status: "unavailable", reason: "Voice session unavailable." };
           }
           if (!allowed.has(commandId))
             return { status: "unavailable", reason: "Voice query unavailable." };
-          return session.readOnlyQuery(commandId);
+          const answer = await session.readOnlyQuery(commandId);
+          if (answer.status === "answered") groundedAnswers.push(answer.answer);
+          return answer;
         },
-        reserveNextCall: () => !signal.aborted && activeContext.active && this.#reserveCall(),
+        reserveNextCall: () => stillLive() && this.#reserveCall(),
         signal,
       });
     } catch {
@@ -135,18 +148,15 @@ export class VoiceConversationService {
     } finally {
       if (activeContext.controller === controller) activeContext.controller = undefined;
     }
-    if (
-      !activeContext.active ||
-      this.#contexts.get(session) !== activeContext ||
-      session.profile !== activeContext.profile ||
-      signal.aborted ||
-      input.live?.() === false
-    ) {
-      return { status: "unavailable", reason: "unavailable" };
-    }
+    if (!stillLive()) return { status: "unavailable", reason: "unavailable" };
     if (result.status !== "answered") return result;
-    const reply = spokenReply(result.reply, this.#maxReplyLength);
-    if (!reply) return { status: "unavailable", reason: "provider-error" };
+    const trimmed = spokenReply(result.reply, this.#maxReplyLength);
+    if (!trimmed) return { status: "unavailable", reason: "provider-error" };
+    // Deterministic guards: the model has no authority, so it may never claim an action, and
+    // it may only repeat figures that a successful read-only query returned this turn.
+    if (!figuresGrounded(trimmed, groundedAnswers))
+      return { status: "unavailable", reason: "ungrounded" };
+    const reply = claimsAction(trimmed) ? NOT_DONE_REPLY : trimmed;
     activeContext.messages.push(
       { role: "user", content: transcript },
       { role: "assistant", content: reply },
@@ -165,6 +175,42 @@ export class VoiceConversationService {
     this.#calls.push(now);
     return true;
   }
+}
+
+export const NOT_DONE_REPLY =
+  "I haven't done anything. Say the catalogue command when you want it done.";
+
+const ACTION_VERBS =
+  "sent|send|sending|approved|approve|approving|confirmed|confirm|confirming|staged|stage|" +
+  "added|add|adding|created|create|creating|scheduled|schedule|booked|book|cancell?ed|cancel|" +
+  "started|start|starting|stopped|stop|stopping|moved|move|deleted|delete|paid|pay|emailed|" +
+  "email|actioned|updated|update|logged|log|set|turned|switched|raised|lowered|recorded|" +
+  "saved|done|completed|finished|lodged|submitted|submit|issued|issue|queued|queue|arranged|" +
+  "organised|organized|reminded|remind|notified|notify|texted|called|rang|ordered|order";
+const ACTION_CLAIM = new RegExp(
+  String.raw`\b(?:i|we)(?:'ve|'ll|'m| have| will| am| just| now| already)*\s+` +
+    String.raw`(?:just\s+|now\s+|already\s+|gone ahead and\s+|went ahead and\s+|going to\s+)*` +
+    String.raw`(?:${ACTION_VERBS})\b|\b(?:that's|that is|it's|it is|all|that has been|it has been)` +
+    String.raw`\s+(?:now\s+)?(?:done|sent|sorted|booked|` +
+    String.raw`approved|confirmed|staged|scheduled|cancell?ed|added|created|paid|lodged|actioned)\b`,
+  "i",
+);
+
+/** True when the reply asserts or promises an action the conversation cannot perform. */
+export function claimsAction(reply: string): boolean {
+  return ACTION_CLAIM.test(reply.replace(/[\u2018\u2019]/g, "'"));
+}
+
+function figures(text: string): string[] {
+  return (text.match(/\d[\d,.:/-]*\d|\d/g) ?? []).map((token) => token.replace(/,/g, ""));
+}
+
+/** Every figure in the reply must appear in a successful query answer from this turn. */
+export function figuresGrounded(reply: string, answers: readonly string[]): boolean {
+  const known = new Set(answers.flatMap(figures));
+  const replyFigures = figures(reply);
+  if (!replyFigures.length) return !/[$€£¥]/.test(reply) || answers.some((a) => /[$€£¥]/.test(a));
+  return replyFigures.every((token) => known.has(token));
 }
 
 export function spokenReply(raw: string, limit: number): string {

@@ -8317,8 +8317,8 @@
           "reply": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 600,
-            "description": "Spoken conversational reply. Present only for conversation."
+            "maxLength": 2000,
+            "description": "Spoken conversational reply. Present only for conversation. Bounded by JARVIS_VOICE_CONVERSATION_MAX_REPLY_CHARS (default 600, at most 2000)."
           },
           "conversationReason": {
             "type": "string",
@@ -8329,7 +8329,8 @@
               "too-long",
               "unavailable",
               "timeout",
-              "tool-limit"
+              "tool-limit",
+              "ungrounded"
             ],
             "description": "Fixed public failure code for conversation-unavailable; never provider text."
           },

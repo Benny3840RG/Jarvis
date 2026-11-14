@@ -111,6 +111,8 @@ export class VoiceController {
     }
     const session = this.registry.get(sessionId);
     if (!session) throw sessionNotFound();
+    // A later final utterance supersedes any conversation still in flight on this session.
+    if (parsed.isFinal) this.conversation?.interrupt(session);
     const hadPending = session.pending() !== undefined || session.hasPendingClarification();
     const prepared = voiceUtteranceForSession(parsed);
     const dispatch = await session.handle({
@@ -137,7 +139,12 @@ export class VoiceController {
           session,
           transcript: prepared.transcript,
           signal: abort.signal,
-          live: () => this.registry.get(sessionId) === session,
+          // Re-checked before every query, extra model call and the reply: a confirmation or
+          // clarification armed by a concurrent utterance ends this conversation turn.
+          live: () =>
+            this.registry.get(sessionId) === session &&
+            session.pending() === undefined &&
+            !session.hasPendingClarification(),
         });
         return {
           dispatch:
