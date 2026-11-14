@@ -124,7 +124,7 @@ describe("voice HTTP boundary", () => {
     const reasoner: VoiceConversationReasoner = {
       reply: async ({ transcript }) => {
         calls.push(transcript);
-        return { status: "answered", reply: "Hello, Benny." };
+        return { status: "answered", reply: "Hello." };
       },
     };
     const app = await makeApp("10.0.0.5", new VoiceConversationService({ reasoner }));
@@ -136,7 +136,7 @@ describe("voice HTTP boundary", () => {
     assert.equal((await send("Nolan any unpaid invoices")).dispatch.decision, "answered");
     assert.equal((await send("Nolan confirm")).dispatch.decision, "confirmation-not-pending");
     assert.equal((await send("Nolan cancel")).dispatch.decision, "confirmation-not-pending");
-    assert.equal((await send("Nolan tell me a joke")).dispatch.reply, "Hello, Benny.");
+    assert.equal((await send("Nolan tell me a joke")).dispatch.reply, "Hello.");
     assert.deepEqual(calls, ["tell me a joke"]);
   });
 

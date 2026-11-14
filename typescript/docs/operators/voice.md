@@ -38,9 +38,10 @@ request timeout. The first five limits can be adjusted with
 `JARVIS_VOICE_CONVERSATION_TIMEOUT_MS`. Invalid limits disable conversation.
 History is discarded when the voice session ends, expires (an expiry sweep runs
 at least once a minute), is evicted, or switches profile. Before a reply is
-spoken, every figure in it must come from a read-only answer looked up in that
-turn, or the HUD shows a notice instead; a reply that claims an action is
-replaced with "I haven't done anything". A later utterance, or a confirmation
+spoken, it is either the exact answer a read-only query returned that turn
+(the model's own wording is discarded), or, with no query answer, only a bare
+greeting or single short question; anything else is replaced with "I haven't
+done anything". A later utterance, or a confirmation
 armed meanwhile, cancels a reply still in progress. A limit or provider failure appears as a plain notice; the
 browser does not speak a fabricated answer.
 

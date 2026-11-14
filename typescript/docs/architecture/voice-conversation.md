@@ -21,17 +21,19 @@ have?` may prompt the model to call the single `voice_query` tool with
 which uses the same provider and spoken result as the catalogue command. An
 unavailable source is sent as the tool result and relayed verbatim.
 
-Model text is checked deterministically before it is spoken. Every figure in the
-reply (digits, spelled-out numbers, or a currency sign) must appear, with the
-same unit class (money, percent, formatted, count), in a read-only answer the
-service itself returned during that turn, so "3 unpaid invoices" never grounds
-"$3"; otherwise the result is
-`conversation-unavailable` with reason `ungrounded`. A reply that claims or
-promises an action ("I've sent", "I'll book", "that's done") is replaced with
-fixed wording that nothing was done, as is a passive completion ("has been
-sent", "is booked") unless a query answer this turn used that same participle. These checks are pattern-based: they block
-the obvious failure shapes, not every possible phrasing, which is why the model
-also holds no capability to act.
+Speech is bounded by one small, non-semantic rule (`boundedSpeech`). If any
+read-only query answered during the turn, the model's text is discarded and the
+exact authoritative answer(s) are spoken verbatim, in query order, duplicates
+removed; the model only chooses which query to run, so it cannot change
+polarity, entity, status, number, currency, unit or add a clause. If no query
+answered (none made, or the source was unavailable), the model text is spoken
+only when it is a bare greeting or a single short question (interrogative
+opener from a closed list, one trailing "?", no digits, no commas or other
+clause-chaining punctuation or conjunctions); anything else is replaced with a
+fixed "I haven't done anything" reply. No fact, amount, schedule or action
+outcome can be spoken without an authoritative answer. The model also holds no
+capability to act. Reply length remains capped; truncation is at sentence
+boundaries of the authoritative text.
 
 The Anthropic adapter is the only current reasoner. Configuration is explicit
 opt-in, and its request loop, timeout, call quota, input size and spoken output
