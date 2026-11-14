@@ -4,7 +4,6 @@ import { it } from "node:test";
 import {
   NOT_DONE_REPLY,
   VoiceConversationService,
-  claimsUngroundedOutcome,
   spokenReply,
   type VoiceConversationReasoner,
 } from "../src/voice/voiceConversation.js";
@@ -260,14 +259,16 @@ it("aborts an in-flight reasoner when its session context is cleared", async () 
   assert.deepEqual(service.history(s), []);
 });
 
-it("rejects passive claims and unit-shifted or spelled-out figures (review probes)", async () => {
-  const replies: string[] = [];
+it("fails closed on completion claims and detached figures (second review probes)", async () => {
+  let answer = "You have 3 unpaid invoices.";
   let queried = false;
+  let reply = "";
+  let queries = 0;
   const service = new VoiceConversationService({
     reasoner: {
       reply: async (input) => {
         if (queried) await input.query("client.unpaid-invoices");
-        return { status: "answered", reply: replies.shift()! };
+        return { status: "answered", reply };
       },
     },
   });
@@ -275,37 +276,60 @@ it("rejects passive claims and unit-shifted or spelled-out figures (review probe
     profile: "client",
     provider: new AbsentHardwareProvider(),
     queries: {
-      answer: async () => ({ status: "answered", answer: "You have 3 unpaid invoices." }),
+      answer: async () => {
+        queries += 1;
+        return { status: "answered", answer };
+      },
     },
   });
-  const ask = () => service.respond({ session: s, transcript: "status?" });
-  // No query this turn: passive outcome claims never speak as fact.
-  for (const claim of ["Your quote has been sent.", "The task is now booked.", "It got done."]) {
-    replies.push(claim);
-    assert.deepEqual(await ask(), { status: "answered", reply: NOT_DONE_REPLY }, claim);
+  const ask = async (text: string) => {
+    reply = text;
+    return service.respond({ session: s, transcript: "status?" });
+  };
+  const notDone = { status: "answered", reply: NOT_DONE_REPLY };
+  const ungrounded = { status: "unavailable", reason: "ungrounded" };
+  // Exact probes, zero queries: nothing can ground an outcome.
+  for (const claim of [
+    "Your quote has gone out.",
+    "The payment went through.",
+    "It has been taken care of.",
+    "Done and dusted, the email went out.",
+  ]) {
+    assert.deepEqual(await ask(claim), notDone, claim);
   }
-  // Number words need grounding exactly like digits.
-  replies.push("You have three unpaid invoices.");
-  assert.deepEqual(await ask(), { status: "unavailable", reason: "ungrounded" });
+  assert.equal(queries, 0);
+  // Subject-swapped passive: the participle is in the source, the entity is not.
+  answer = "3 invoices were sent.";
   queried = true;
-  // Same figure, different unit: "$3" is not "3 unpaid invoices".
-  for (const bad of ["Your outstanding balance is $3.", "You owe three dollars.", "That is 3%."]) {
-    replies.push(bad);
-    assert.deepEqual(await ask(), { status: "unavailable", reason: "ungrounded" }, bad);
+  assert.deepEqual(await ask("Your quote was sent."), notDone);
+  assert.deepEqual(await ask("3 invoices were sent."), {
+    status: "answered",
+    reply: "3 invoices were sent.",
+  });
+  // Entity and unit binding.
+  answer = "You have 3 unpaid invoices.";
+  assert.deepEqual(await ask("You have 3 overdue tasks."), ungrounded);
+  assert.deepEqual(await ask("You have three overdue tasks."), ungrounded);
+  assert.deepEqual(await ask("You have 3."), ungrounded);
+  answer = "You owe 3 dollars.";
+  assert.deepEqual(await ask("You owe 3 pounds."), ungrounded);
+  assert.deepEqual(await ask("You owe £3."), ungrounded);
+  assert.deepEqual(await ask("You owe three pounds."), ungrounded);
+  for (const good of ["You owe 3 dollars.", "You owe $3.", "You owe three dollars."]) {
+    assert.deepEqual(await ask(good), { status: "answered", reply: good }, good);
   }
-  // Grounded read-only answers survive, including spelled-out figures that match.
-  for (const good of ["You have 3 unpaid invoices.", "You have three unpaid invoices."]) {
-    replies.push(good);
-    assert.deepEqual(await ask(), { status: "answered", reply: good });
+  answer = "You have 3 unpaid invoices.";
+  for (const good of [
+    "You have 3 unpaid invoices.",
+    "You have three unpaid invoices.",
+    "3 invoices are unpaid.",
+  ]) {
+    assert.deepEqual(await ask(good), { status: "answered", reply: good }, good);
   }
-  replies.push("Which one do you want to look at? I can check that one.");
-  assert.equal((await ask()).status, "answered");
-});
-
-it("claimsUngroundedOutcome lets a participle through only when a query used it", () => {
-  assert.equal(claimsUngroundedOutcome("Your quote has been sent.", []), true);
-  assert.equal(claimsUngroundedOutcome("Your quote has been sent.", ["Quote 4 was sent."]), false);
-  assert.equal(claimsUngroundedOutcome("You have 3 unpaid invoices.", []), false);
+  // Read-only state with no figures or outcome words, and a pronoun "one", still speak.
+  queried = false;
+  const plain = "Which one do you want to look at? I can check that one.";
+  assert.deepEqual(await ask(plain), { status: "answered", reply: plain });
 });
 
 it("sweeps expiry only while sessions exist and disposal stops the timer", async () => {

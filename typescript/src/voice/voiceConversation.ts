@@ -287,59 +287,132 @@ const PRONOUN_ONE_NEXT = new Set([
   "sentence",
 ]);
 const PRONOUN_ONE_PREV = new Set(["the", "that", "this", "which", "any", "each", "every", "no"]);
-const CURRENCY_WORDS = /^\s*(?:dollars?|bucks|pounds?|euros?|cents?|quid)\b/i;
+const STOP_WORDS = new Set(
+  (
+    "a an the and or but so of to in on at by for with from as is are was were be been being am " +
+    "has have had do does did you your yours i me my we our they them their it its this that " +
+    "these those there here which who what when how then than also just now already still " +
+    "not no can could will would should may might must"
+  ).split(" "),
+);
+const CURRENCY_NAMES: Readonly<Record<string, string>> = {
+  $: "dollar",
+  "€": "euro",
+  "£": "pound",
+  "¥": "yen",
+};
+// Past/perfect forms that do not end in "-ed". Fixed, tiny, and only used to *find* claims;
+// the decision is always "same clause grounded in a source sentence", never an allowlist.
+const IRREGULAR_PAST = new Set(
+  (
+    "been gone went done did made sent paid put sold given gave taken took got left built cut " +
+    "shut bought brought begun began came run ran won lost kept held told said set"
+  ).split(" "),
+);
 
-/** A figure plus its semantic unit class, so "3 unpaid invoices" never grounds "$3". */
-function quantities(text: string): string[] {
-  const normal = digitiseNumberWords(text);
-  const found: string[] = [];
-  for (const match of normal.matchAll(/([$€£¥])?\s?(\d[\d,.:/-]*\d|\d)/g)) {
-    const value = match[2]!.replace(/,/g, "");
-    const after = normal.slice(match.index + match[0].length);
-    const unit =
-      match[1] || CURRENCY_WORDS.test(after)
-        ? "money"
-        : /^\s*(?:%|percent\b)/i.test(after)
-          ? "percent"
-          : /[:/-]/.test(value)
-            ? "formatted"
-            : "count";
-    found.push(`${unit}:${value}`);
+type Token = { readonly text: string; readonly numeric: boolean };
+
+/** Lower-cased words and numbers; digits for number words, currency symbols as unit words. */
+function tokenise(text: string): Token[] {
+  const normal = digitiseNumberWords(text.replace(/[\u2018\u2019]/g, "'"))
+    .replace(
+      /([$€£¥])\s?(\d[\d,.]*\d|\d)/g,
+      (_m, c: string, n: string) => `${n} ${CURRENCY_NAMES[c]}`,
+    )
+    .replace(/%/g, " percent ");
+  const out: Token[] = [];
+  for (const m of normal.toLowerCase().matchAll(/\d[\d,.:/-]*\d|\d|[a-z]+/g)) {
+    const numeric = /^\d/.test(m[0]);
+    out.push({ text: numeric ? m[0].replace(/,/g, "") : stem(m[0]), numeric });
   }
+  return out;
+}
+
+function stem(word: string): string {
+  return word.length > 3 && word.endsWith("s") && !word.endsWith("ss") ? word.slice(0, -1) : word;
+}
+
+const SIGNIFICANT = (t: Token) => t.numeric || !STOP_WORDS.has(t.text);
+const WINDOW = 3;
+
+/**
+ * Each figure with the words around it (up to WINDOW significant words each side, stopping at
+ * a neighbouring figure), so a number stays bound to its entity and unit.
+ */
+function figureContexts(text: string): Array<{ value: string; words: Set<string> }> {
+  return splitClauses(text).flatMap(clauseFigureContexts);
+}
+
+/** Punctuation ends a clause only before whitespace, so "1,000" and "3.5" stay whole. */
+function splitClauses(text: string): string[] {
+  return text.split(/[.!?;:,]+(?=\s|$)|\n|\b(?:and|but|so|then)\b/i);
+}
+
+function clauseFigureContexts(clause: string): Array<{ value: string; words: Set<string> }> {
+  const tokens = tokenise(clause).filter(SIGNIFICANT);
+  const found: Array<{ value: string; words: Set<string> }> = [];
+  tokens.forEach((token, index) => {
+    if (!token.numeric) return;
+    const words = new Set<string>();
+    for (const step of [-1, 1]) {
+      for (
+        let i = index + step, n = 0;
+        n < WINDOW && tokens[i] && !tokens[i]!.numeric;
+        i += step, n++
+      )
+        words.add(tokens[i]!.text);
+    }
+    found.push({ value: token.text, words });
+  });
   return found;
 }
 
-/** Every figure (value and unit class) in the reply must come from a query answer this turn. */
+/**
+ * Every figure in the reply must match a figure in a query answer from this turn with the same
+ * value, and the reply's words around it must all occur around that same source figure. A
+ * figure with no surrounding words is rejected: it is detached from any fact.
+ */
 export function figuresGrounded(reply: string, answers: readonly string[]): boolean {
-  const known = new Set(answers.flatMap(quantities));
-  const replyQuantities = quantities(reply);
-  if (!replyQuantities.length) {
-    return !/[$€£¥]/.test(reply) || answers.some((a) => /[$€£¥]/.test(a));
-  }
-  return replyQuantities.every((q) => known.has(q));
+  const known = answers.flatMap(figureContexts);
+  return figureContexts(reply).every(
+    (figure) =>
+      figure.words.size > 0 &&
+      known.some(
+        (source) =>
+          source.value === figure.value && [...figure.words].every((w) => source.words.has(w)),
+      ),
+  );
 }
 
-const PARTICIPLE =
-  "\\w{3,}ed|sent|done|made|set|paid|put|sold|given|taken|got|left|built|cut|shut|bought|brought";
-const PASSIVE_CLAIM = new RegExp(
-  String.raw`\b(?:(?:has|have|had)\s+(?:(?:now|already|just|successfully)\s+)*been|` +
-    String.raw`(?:is|are|was|were|got|gets)\s+(?:(?:now|already|just|successfully)\s+)*)` +
-    String.raw`\s*(${PARTICIPLE})\b`,
-  "gi",
-);
+function isOutcomeWord(token: Token): boolean {
+  if (token.numeric) return false;
+  return (
+    IRREGULAR_PAST.has(token.text) ||
+    (token.text.length > 3 && token.text.endsWith("ed") && !token.text.endsWith("eed"))
+  );
+}
+
+function clauses(text: string): Token[][] {
+  return splitClauses(text)
+    .map((c) => tokenise(c))
+    .filter((c) => c.length > 0);
+}
 
 /**
- * True when the reply uses a passive completion form ("has been sent", "is booked") whose
- * participle no query answer this turn used. Reading an existing state back is fine;
- * announcing an outcome nothing produced is not.
+ * Fail-closed invariant: the conversation never acts, so any clause that reads as a completed
+ * event (past/perfect/passive) must be fully covered, subject and object included, by one clause
+ * of a read-only answer returned this turn. "Your quote has gone out" and "3 invoices were sent"
+ * -> "Your quote was sent" are both rejected: the clause is not inside a source clause.
  */
 export function claimsUngroundedOutcome(reply: string, answers: readonly string[]): boolean {
-  const known = new Set(answers.flatMap((a) => a.toLowerCase().match(/[a-z]+/g) ?? []));
-  const text = reply.replace(/[\u2018\u2019]/g, "'").replace(/'s\b/g, " is");
-  for (const match of text.matchAll(PASSIVE_CLAIM)) {
-    if (!known.has(match[1]!.toLowerCase())) return true;
-  }
-  return false;
+  const sources = answers.flatMap((a) =>
+    clauses(a).map((c) => new Set(c.filter((t) => !t.numeric).map((t) => t.text))),
+  );
+  return clauses(reply).some((clause) => {
+    if (!clause.some(isOutcomeWord)) return false;
+    const words = clause.filter((t) => !t.numeric && !STOP_WORDS.has(t.text));
+    return !sources.some((source) => words.every((w) => source.has(w.text)));
+  });
 }
 
 export function spokenReply(raw: string, limit: number): string {
