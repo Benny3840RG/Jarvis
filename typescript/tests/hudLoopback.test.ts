@@ -151,7 +151,7 @@ describe("loopback Console 02 HUD", () => {
     assert.match(String(page.headers["content-security-policy"]), /connect-src 'self'/);
     assert.match(String(page.headers["content-security-policy"]), /font-src data:/);
     assert.match(page.body, /CONSOLE 02/);
-    assert.match(page.body, /JARVIS TOTALITY/);
+    assert.match(page.body, /NOLAN TOTALITY/);
     assert.doesNotMatch(page.body, new RegExp(SERVICE_TOKEN));
     assert.equal(page.headers["cache-control"], "no-store");
 
