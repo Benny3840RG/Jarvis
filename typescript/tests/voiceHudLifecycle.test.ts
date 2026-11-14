@@ -379,6 +379,19 @@ describe("voice HUD clarification prompt (#567)", () => {
     assert.equal(h.spoken.length, 0);
   });
 
+  it("shows a reply-too-long notice without speaking any part of the answer", async () => {
+    const h = harness({
+      conversationDispatch: {
+        decision: "conversation-unavailable",
+        conversationReason: "reply-too-long",
+      },
+    });
+    h.type("Nolan tell me a joke");
+    await flush();
+    assert.match(h.get("voice-result").textContent, /too long to speak in full/i);
+    assert.equal(h.spoken.length, 0);
+  });
+
   it("ignores a conversational reply arriving after Stop", async () => {
     const h = harness({ conversationDispatch: { decision: "conversation", reply: "Too late." } });
     const release = h.pause("/sessions/s1/utterances", "response");

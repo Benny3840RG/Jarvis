@@ -37,11 +37,13 @@ request timeout. The first five limits can be adjusted with
 `JARVIS_VOICE_CONVERSATION_HISTORY_MESSAGES`, and
 `JARVIS_VOICE_CONVERSATION_TIMEOUT_MS`. Invalid limits disable conversation.
 History is discarded when the voice session ends, expires (an expiry sweep runs
-at least once a minute), is evicted, or switches profile. Before a reply is
-spoken, it is either the exact answer a read-only query returned that turn
-(the model's own wording is discarded), or, with no query answer, only a bare
-greeting or single short question; anything else is replaced with "I haven't
-done anything". A later utterance, or a confirmation
+at least once a minute), is evicted, or switches profile. Spoken text is never
+model-authored: with no read-only query the fixed "I haven't done anything. Ask
+a catalogue question or say a catalogue command." is spoken; with exactly one
+successful query its exact answer is spoken. Several queries, an unavailable
+source, or an answer longer than the reply limit give a plain
+conversation-unavailable notice (`tool-limit`, `unavailable`, `reply-too-long`);
+the answer is never truncated. A later utterance, or a confirmation
 armed meanwhile, cancels a reply still in progress. A limit or provider failure appears as a plain notice; the
 browser does not speak a fabricated answer.
 

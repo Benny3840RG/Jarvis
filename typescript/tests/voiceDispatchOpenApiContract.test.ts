@@ -19,6 +19,7 @@ it("validates inferred voice dispatch metadata against its decision and confiden
     { decision: "conversation", reply: "G'day." },
     { decision: "conversation-unavailable", conversationReason: "provider-error" },
     { decision: "conversation-unavailable", conversationReason: "ungrounded" },
+    { decision: "conversation-unavailable", conversationReason: "reply-too-long" },
     // The largest reply JARVIS_VOICE_CONVERSATION_MAX_REPLY_CHARS may permit.
     { decision: "conversation", reply: "a".repeat(2000) },
   ])

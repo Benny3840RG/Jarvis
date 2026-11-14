@@ -4,11 +4,11 @@ import { it } from "node:test";
 import {
   NOT_DONE_REPLY,
   VoiceConversationService,
-  spokenReply,
   type VoiceConversationReasoner,
 } from "../src/voice/voiceConversation.js";
 import { resolveVoiceConversationStatus } from "../src/voice/voiceConversationFactory.js";
 import { AbsentHardwareProvider } from "../src/voice/voiceHardware.js";
+import type { VoiceQueryAnswer } from "../src/voice/voiceQuery.js";
 import { VoiceSession } from "../src/voice/voiceSession.js";
 import { VoiceSessionRegistry } from "../src/voice/voiceSessionRegistry.js";
 
@@ -70,8 +70,7 @@ it("bounds utterances, rolling calls, replies, context and read-only query acces
         status: "answered",
         answer: "No unpaid invoices.",
       });
-      assert.equal((await input.query("trailer.status")).status, "unavailable");
-      return { status: "answered", reply: "One sentence. A second sentence that is too long." };
+      return { status: "answered", reply: "Model text that is never spoken." };
     },
   };
   const service = new VoiceConversationService({
@@ -108,7 +107,6 @@ it("bounds utterances, rolling calls, replies, context and read-only query acces
   assert.equal((await service.respond({ session: s, transcript: "three" })).status, "answered");
   service.clear(s);
   assert.deepEqual(service.history(s), []);
-  assert.equal(spokenReply("A sentence. Another one.", 13), "A sentence.");
 });
 
 it("drops context when a voice session ends, expires or is evicted", async () => {
@@ -214,10 +212,14 @@ it("aborts an in-flight reasoner when its session context is cleared", async () 
   assert.deepEqual(service.history(s), []);
 });
 
-/** Drives the real service end to end with a stubbed reasoner and a stubbed read model. */
-function harness(answer: () => string) {
-  const state = { reply: "", queries: [] as string[], queried: [] as string[] };
+/** Drives the real service end to end with a stubbed reasoner and per-command read model. */
+function harness(
+  model: Record<string, () => VoiceQueryAnswer> = {},
+  options: { maxReplyLength?: number } = {},
+) {
+  const state = { reply: "", queried: [] as string[], reads: [] as string[] };
   const service = new VoiceConversationService({
+    ...options,
     reasoner: {
       reply: async (input) => {
         for (const id of state.queried) await input.query(id);
@@ -230,8 +232,10 @@ function harness(answer: () => string) {
     provider: new AbsentHardwareProvider(),
     queries: {
       answer: async ({ commandId }) => {
-        state.queries.push(commandId);
-        return { status: "answered", answer: answer() };
+        state.reads.push(commandId);
+        return (
+          model[commandId]?.() ?? { status: "unavailable", reason: `${commandId} unreadable.` }
+        );
       },
     },
   });
@@ -245,105 +249,86 @@ function harness(answer: () => string) {
 
 const SAFE = { status: "answered", reply: NOT_DONE_REPLY };
 const UNPAID = "client.unpaid-invoices";
+const SCHEDULE = "client.todays-schedule";
+const ok = (answer: string) => (): VoiceQueryAnswer => ({ status: "answered", answer });
+const down = (reason: string) => (): VoiceQueryAnswer => ({ status: "unavailable", reason });
 
-it("speaks the exact authoritative answer and never the model's paraphrase", async () => {
-  let answer = "";
-  const { ask } = harness(() => answer);
-  // Review 6873333150 probes: each model paraphrase is discarded for the exact answer.
-  const probes: Array<[string, string, string]> = [
-    ["No jobs booked for today.", "Jobs booked for today.", "negation reversal"],
-    ["Your quote was not sent.", "Your quote was sent.", "negation reversal"],
-    [
-      "3 unpaid invoices, balance due 200.00. INV-001.",
-      "3 unpaid invoices. They are overdue.",
-      "punctuation-separated addition",
-    ],
-    ["You owe 3 dollars.", "You owe 3. It's in pounds.", "detached unit"],
-    ["You owe 3 dollars.", "You owe 3 pounds.", "unit swap"],
-    ["You owe 3 dollars.", "You owe £3.", "currency swap"],
-    ["You have 3 unpaid invoices.", "You have three overdue tasks.", "entity swap"],
-    ["3 invoices were sent.", "Your quote was sent.", "subject swap"],
-    ["No unpaid invoices.", "No unpaid invoices. The payment is complete.", "added clause"],
-  ];
-  for (const [authoritative, modelText, label] of probes) {
-    answer = authoritative;
-    assert.deepEqual(
-      await ask(modelText, [UNPAID]),
-      { status: "answered", reply: authoritative },
-      label,
-    );
-  }
-  // Legitimate readbacks stay useful: model wording differences do not matter.
-  answer = "You have 3 unpaid invoices.";
-  assert.deepEqual(await ask("Sure thing, Benny.", [UNPAID]), {
-    status: "answered",
-    reply: answer,
-  });
-  // Several queries speak each distinct answer once, in order, still verbatim.
-  answer = "No unpaid invoices.";
-  assert.deepEqual(await ask("Both clear.", [UNPAID, UNPAID]), {
-    status: "answered",
-    reply: "No unpaid invoices.",
-  });
-});
-
-it("fails closed on free-form assertions when no read-only query answered", async () => {
-  const { ask, state } = harness(() => "You have 3 unpaid invoices.");
-  for (const claim of [
-    "The payment is complete.",
-    "Your quote is on its way.",
-    "Your quote has gone out.",
-    "The payment went through.",
-    "It has been taken care of.",
-    "You have 3 unpaid invoices.",
-    "You owe $999.",
-    "Your next job is Tuesday at nine.",
-    "Invoice 12 is overdue.",
-    "I sent the quote.",
-    "I've gone ahead and added that task.",
-    "Hello. Your payment is complete.",
-    "Hello, your quote is on its way.",
-    "Which invoice? Your payment is complete.",
-    "Which invoice, since your payment is complete?",
-    "Which invoice and your payment is complete?",
-    "Is invoice 12 paid?",
-    "I haven't sent anything. Say send the quote to stage it.",
-    "",
-  ]) {
-    assert.deepEqual(await ask(claim), SAFE, claim);
-  }
-  assert.deepEqual(state.queries, [], "no read-model call was made");
-});
-
-it("keeps bare greetings and single clarifying questions defined", async () => {
-  const { ask } = harness(() => "No unpaid invoices.");
-  for (const ok of [
+it("zero queries: always the fixed reply, whatever the model wrote", async () => {
+  const { ask, state } = harness({ [UNPAID]: ok("You have 3 unpaid invoices.") });
+  for (const text of [
     "Hello.",
     "Hi!",
-    "Good morning",
-    "Which one do you want to look at?",
     "Which invoice do you mean?",
-    "Could you say that again?",
+    "What I know is you owe one million dollars?",
+    "What I know is your quote was sent?",
+    "Is invoice 12 paid?",
+    "The payment is complete.",
+    "I sent the quote.",
+    "",
   ]) {
-    assert.deepEqual(await ask(ok), { status: "answered", reply: ok }, ok);
+    assert.deepEqual(await ask(text), SAFE, text);
+  }
+  assert.deepEqual(state.reads, [], "no read-model call was made");
+});
+
+it("one successful query: the exact answer, never the model's wording", async () => {
+  let answer = "";
+  const { ask } = harness({ [UNPAID]: () => ({ status: "answered", answer }) });
+  for (const [authoritative, modelText] of [
+    ["No jobs booked for today.", "Jobs booked for today."],
+    ["You owe 3 dollars.", "You owe £3."],
+    ["No unpaid invoices.", "No unpaid invoices. The payment is complete."],
+    ["You have 3 unpaid invoices.", "Sure thing, Benny."],
+  ] as const) {
+    answer = authoritative;
+    assert.deepEqual(await ask(modelText, [UNPAID]), { status: "answered", reply: authoritative });
   }
 });
 
-it("treats an unavailable query as no authoritative answer", async () => {
-  const service = new VoiceConversationService({
-    reasoner: {
-      reply: async (input) => {
-        await input.query(UNPAID);
-        return { status: "answered", reply: "You have 3 unpaid invoices." };
-      },
-    },
+it("an answer exactly at the reply limit is spoken verbatim", async () => {
+  const answer = `No jobs booked for today. ${"x".repeat(10)}`;
+  const { ask } = harness({ [UNPAID]: ok(answer) }, { maxReplyLength: answer.length });
+  assert.deepEqual(await ask("ignored", [UNPAID]), { status: "answered", reply: answer });
+});
+
+it("an answer over the reply limit is never truncated: reply-too-long", async () => {
+  const answer = `No jobs booked for today. ${"x".repeat(639 - 26)}`;
+  assert.equal(answer.length, 639);
+  const { ask, service, s } = harness({ [SCHEDULE]: ok(answer) });
+  assert.deepEqual(await ask("No jobs booked for today.", [SCHEDULE]), {
+    status: "unavailable",
+    reason: "reply-too-long",
   });
-  const s = new VoiceSession({
-    profile: "client",
-    provider: new AbsentHardwareProvider(),
-    queries: { answer: async () => ({ status: "unavailable", reason: "Invoices unreadable." }) },
+  assert.deepEqual(service.history(s), [], "nothing is recorded for a turn that spoke nothing");
+});
+
+it("more than one query attempt fails closed, including a repeated one", async () => {
+  const { ask } = harness({ [UNPAID]: ok("No unpaid invoices."), [SCHEDULE]: ok("No jobs.") });
+  const unavailable = { status: "unavailable", reason: "tool-limit" };
+  assert.deepEqual(await ask("Both clear.", [UNPAID, SCHEDULE]), unavailable);
+  assert.deepEqual(await ask("Both clear.", [UNPAID, UNPAID]), unavailable);
+});
+
+it("invoice answer then unavailable schedule never speaks the invoice answer", async () => {
+  const { ask } = harness({
+    [UNPAID]: ok("No unpaid invoices."),
+    [SCHEDULE]: down("Schedule unreadable."),
   });
-  assert.deepEqual(await service.respond({ session: s, transcript: "owe?" }), SAFE);
+  assert.deepEqual(await ask("What's today's schedule?", [UNPAID, SCHEDULE]), {
+    status: "unavailable",
+    reason: "tool-limit",
+  });
+  assert.deepEqual(await ask("What's today's schedule?", [SCHEDULE, UNPAID]), {
+    status: "unavailable",
+    reason: "tool-limit",
+  });
+});
+
+it("a lone unavailable or disallowed query is unavailable, not the fixed reply", async () => {
+  const { ask } = harness({ [SCHEDULE]: down("Schedule unreadable.") });
+  const unavailable = { status: "unavailable", reason: "unavailable" };
+  assert.deepEqual(await ask("You have jobs.", [SCHEDULE]), unavailable);
+  assert.deepEqual(await ask("Trailer is fine.", ["trailer.status"]), unavailable);
 });
 
 it("sweeps expiry only while sessions exist and disposal stops the timer", async () => {

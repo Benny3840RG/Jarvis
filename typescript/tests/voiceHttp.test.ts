@@ -11,6 +11,7 @@ import type { HttpAppConfig } from "../src/http/config.js";
 import type { PersistenceProvider } from "../src/persistence/persistence.js";
 import { captureCredentials, type CredentialsRuntime } from "../src/settings/credentialsStatus.js";
 import {
+  NOT_DONE_REPLY,
   VoiceConversationService,
   type VoiceConversationReasoner,
 } from "../src/voice/voiceConversation.js";
@@ -136,7 +137,7 @@ describe("voice HTTP boundary", () => {
     assert.equal((await send("Nolan any unpaid invoices")).dispatch.decision, "answered");
     assert.equal((await send("Nolan confirm")).dispatch.decision, "confirmation-not-pending");
     assert.equal((await send("Nolan cancel")).dispatch.decision, "confirmation-not-pending");
-    assert.equal((await send("Nolan tell me a joke")).dispatch.reply, "Hello.");
+    assert.equal((await send("Nolan tell me a joke")).dispatch.reply, NOT_DONE_REPLY);
     assert.deepEqual(calls, ["tell me a joke"]);
   });
 
@@ -213,6 +214,7 @@ describe("voice HTTP boundary", () => {
       "refused",
       "rate-limited",
       "too-long",
+      "reply-too-long",
       "unavailable",
       "timeout",
       "tool-limit",

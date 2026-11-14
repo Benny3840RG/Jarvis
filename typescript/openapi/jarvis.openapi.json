@@ -8327,6 +8327,7 @@
               "refused",
               "rate-limited",
               "too-long",
+              "reply-too-long",
               "unavailable",
               "timeout",
               "tool-limit",

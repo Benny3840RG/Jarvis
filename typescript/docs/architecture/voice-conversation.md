@@ -19,21 +19,24 @@ query, every extra model call and the reply. For example, an unknown `Nolan how 
 have?` may prompt the model to call the single `voice_query` tool with
 `client.unpaid-invoices`. The answer comes from `VoiceSession.readOnlyQuery`,
 which uses the same provider and spoken result as the catalogue command. An
-unavailable source is sent as the tool result and relayed verbatim.
+unavailable source is sent to the model as the tool result, but the turn then
+fails closed (see below); the model's wording is never spoken.
 
-Speech is bounded by one small, non-semantic rule (`boundedSpeech`). If any
-read-only query answered during the turn, the model's text is discarded and the
-exact authoritative answer(s) are spoken verbatim, in query order, duplicates
-removed; the model only chooses which query to run, so it cannot change
-polarity, entity, status, number, currency, unit or add a clause. If no query
-answered (none made, or the source was unavailable), the model text is spoken
-only when it is a bare greeting or a single short question (interrogative
-opener from a closed list, one trailing "?", no digits, no commas or other
-clause-chaining punctuation or conjunctions); anything else is replaced with a
-fixed "I haven't done anything" reply. No fact, amount, schedule or action
-outcome can be spoken without an authoritative answer. The model also holds no
-capability to act. Reply length remains capped; truncation is at sentence
-boundaries of the authoritative text.
+Speech is bounded by one non-semantic rule (`speechDecision`). Model text is
+never spoken; the model only chooses which read-only query to run.
+
+| Query attempts this turn                   | Outcome                                           |
+| ------------------------------------------ | ------------------------------------------------- |
+| none                                       | fixed "I haven't done anything" reply, `answered` |
+| more than one (any outcome)                | `unavailable`, `tool-limit`                       |
+| one, source unavailable or refused         | `unavailable`, `unavailable`                      |
+| one, answered, longer than the reply limit | `unavailable`, `reply-too-long`                   |
+| one, answered, within the limit            | the exact answer, verbatim                        |
+
+An authoritative answer is never truncated, shortened or reworded, and an
+earlier unrelated answer cannot stand in for a later failed one. The model also
+holds no capability to act. The HUD shows a fixed notice for each unavailable
+reason.
 
 The Anthropic adapter is the only current reasoner. Configuration is explicit
 opt-in, and its request loop, timeout, call quota, input size and spoken output
