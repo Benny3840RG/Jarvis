@@ -36,7 +36,7 @@ describe("Team Board HUD", () => {
     assert.match(widget, /SYSTEM LOAD/);
     assert.match(widget, /SYSTEM EFFICIENCY/);
     assert.match(widget, /TACTICAL OVERLAY/);
-    assert.match(widget, /HEXTRICK NAMS/);
+    assert.match(widget, /AUX TELEMETRY/);
     assert.match(widget, /class="tac-chart"/);
     assert.match(widget, /class="chart-grid"/);
     assert.match(widget, /No waveform signal/);
