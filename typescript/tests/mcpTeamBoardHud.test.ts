@@ -25,7 +25,7 @@ describe("Team Board HUD", () => {
     assert.match(widget, /Next 3/);
     assert.match(widget, /active\.slice\(1, 4\)/);
     assert.match(widget, /registerHudPanel/);
-    assert.match(widget, /JARVIS TOTALITY/);
+    assert.match(widget, /NOLAN TOTALITY/);
     assert.match(widget, /CONSOLE 02/);
     assert.match(widget, /OPTIMIZED TOTALITY STATE/);
     assert.match(widget, /PREDICTOR CORE/);
