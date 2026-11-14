@@ -30,9 +30,11 @@ import {
 } from "./voiceCommands.js";
 import type { VoiceActuationProvider } from "./voiceHardware.js";
 import { resolveClarification } from "./voiceDialogueResolver.js";
+import { parseVoiceDictation } from "./voiceDictation.js";
 import { interpretIntent } from "./voiceIntentInterpreter.js";
 import { parseUtterance } from "./voiceParser.js";
 import type { VoiceQueryProvider } from "./voiceQuery.js";
+import type { VoiceWriteCapture } from "./voiceSafeWrite.js";
 
 const DEFAULT_HISTORY_LIMIT = 20;
 const DEFAULT_CONFIRMATION_TTL_MS = 30_000;
@@ -144,6 +146,11 @@ export type PendingConfirmation = Readonly<{
   command: VoiceCommand;
   issuedAt: number;
   expiresAt: number;
+  /**
+   * Spoken capture (title, task category) parsed by the dictation grammar. It is
+   * read back to the owner and only travels with this single-use confirmation.
+   */
+  capture?: VoiceWriteCapture;
 }>;
 
 type PendingClarification = Readonly<{
@@ -172,11 +179,13 @@ export type VoiceDispatch =
       inferred?: true;
       /** Interpreter confidence (0..1) for an inferred command. */
       confidence?: number;
+      /** Dictated safe-write fields awaiting the spoken read-back confirmation. */
+      capture?: VoiceWriteCapture;
     }>
   | Readonly<{ decision: "confirmation-not-pending" }>
   | Readonly<{ decision: "confirmation-expired"; command: VoiceCommand }>
   | Readonly<{ decision: "cancelled"; command: VoiceCommand }>
-  | Readonly<{ decision: "proposed"; command: VoiceCommand }>
+  | Readonly<{ decision: "proposed"; command: VoiceCommand; capture?: VoiceWriteCapture }>
   | Readonly<{
       decision: "actuation-unavailable";
       command: VoiceCommand;
@@ -436,6 +445,10 @@ export class VoiceSession {
     // An expired offer has no authority over this turn. Clear it, then parse
     // the current request through the ordinary guarded interpreter below.
     if (clarification) this.#clarification = undefined;
+    if (input.wakeAuthorized === true) {
+      const dictated = this.#handleDictation(now, normalizedTranscript, input);
+      if (dictated) return dictated;
+    }
     if (this.#interpret && input.wakeAuthorized === true) {
       const intent = interpretIntent({
         transcript: input.transcript,
@@ -493,6 +506,51 @@ export class VoiceSession {
     return { decision: "unrecognized", normalizedTranscript };
   }
 
+  /**
+   * Spoken capture for a safe write ("add a task: order bar oil"). Only runs on
+   * wake-authorised final speech. A dictation never dispatches: it always arms
+   * the single-use confirmation so the owner hears the captured text first.
+   * Any recogniser alternative that is a control phrase or dictates a different
+   * command makes the turn ambiguous instead (fail closed).
+   */
+  #handleDictation(
+    now: number,
+    normalizedTranscript: string,
+    input: VoiceSessionInput,
+  ): VoiceDispatch | undefined {
+    const dictation = parseVoiceDictation(input.transcript, this.#profile);
+    if (!dictation) return undefined;
+    const controls = controlAlternativeCandidates(input.alternatives);
+    const conflicting: string[] = [];
+    for (const alternative of input.alternatives ?? []) {
+      const other = parseVoiceDictation(alternative, this.#profile);
+      if (other && other.command.id !== dictation.command.id) conflicting.push(other.command.id);
+    }
+    if (controls.length > 0 || conflicting.length > 0) {
+      const candidates = Object.freeze(
+        [...new Set([dictation.command.id, ...controls, ...conflicting])].sort(),
+      );
+      this.#invalidatePending();
+      this.#record(now, normalizedTranscript, "ambiguous");
+      return { decision: "ambiguous", candidates };
+    }
+    this.#invalidatePending();
+    this.#record(now, normalizedTranscript, "dictated", dictation.command.id);
+    const expiresAt = now + this.#confirmationTtlMs;
+    this.#pending = {
+      command: dictation.command,
+      issuedAt: now,
+      expiresAt,
+      capture: dictation.capture,
+    };
+    return {
+      decision: "awaiting-confirmation",
+      command: dictation.command,
+      expiresAt,
+      capture: dictation.capture,
+    };
+  }
+
   #handleRecognized(
     now: number,
     normalizedTranscript: string,
@@ -518,6 +576,10 @@ export class VoiceSession {
     this.#pending = undefined;
     if (now >= pending.expiresAt) {
       return { decision: "confirmation-expired", command: pending.command };
+    }
+    if (pending.capture && pending.command.kind === "propose") {
+      // A dictated capture is the exact text the owner just heard read back.
+      return { decision: "proposed", command: pending.command, capture: pending.capture };
     }
     return this.#dispatch(pending.command, now);
   }
