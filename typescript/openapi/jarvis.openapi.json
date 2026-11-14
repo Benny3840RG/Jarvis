@@ -8267,6 +8267,8 @@
               "ignored-interim",
               "empty",
               "unrecognized",
+              "conversation",
+              "conversation-unavailable",
               "ambiguous",
               "answered",
               "query-unavailable",
@@ -8312,6 +8314,27 @@
             "minLength": 1,
             "description": "Spoken read-only answer derived from an existing Jarvis read model. Present only when decision is answered. Empty healthy data is stated as none or zero. This field is never a guess for a missing or failed source."
           },
+          "reply": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000,
+            "description": "Spoken conversational reply. Present only for conversation. Bounded by JARVIS_VOICE_CONVERSATION_MAX_REPLY_CHARS (default 600, at most 2000)."
+          },
+          "conversationReason": {
+            "type": "string",
+            "enum": [
+              "provider-error",
+              "refused",
+              "rate-limited",
+              "too-long",
+              "reply-too-long",
+              "unavailable",
+              "timeout",
+              "tool-limit",
+              "ungrounded"
+            ],
+            "description": "Fixed public failure code for conversation-unavailable; never provider text."
+          },
           "expiresAt": {
             "type": "integer",
             "description": "When an armed confirmation lapses."
@@ -8329,6 +8352,30 @@
           }
         },
         "allOf": [
+          {
+            "if": {
+              "properties": { "decision": { "const": "conversation" } },
+              "required": ["decision"]
+            },
+            "then": { "required": ["reply"], "properties": { "reply": {} } },
+            "else": { "not": { "required": ["reply"], "properties": { "reply": {} } } }
+          },
+          {
+            "if": {
+              "properties": { "decision": { "const": "conversation-unavailable" } },
+              "required": ["decision"]
+            },
+            "then": {
+              "required": ["conversationReason"],
+              "properties": { "conversationReason": {} }
+            },
+            "else": {
+              "not": {
+                "required": ["conversationReason"],
+                "properties": { "conversationReason": {} }
+              }
+            }
+          },
           {
             "if": { "properties": { "inferred": {} }, "required": ["inferred"] },
             "then": {
@@ -8682,6 +8729,7 @@
           "reconciliation",
           "integrations",
           "reasoning",
+          "voiceConversation",
           "timezone",
           "layers",
           "zState",
@@ -8717,6 +8765,9 @@
           },
           "reasoning": {
             "$ref": "#/components/schemas/ReasoningStatus"
+          },
+          "voiceConversation": {
+            "$ref": "#/components/schemas/VoiceConversationStatus"
           },
           "timezone": {
             "type": "string",
@@ -13786,6 +13837,21 @@
             "required": ["stage", "status"]
           }
         ]
+      },
+      "VoiceConversationStatus": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["status", "provider", "model", "reason"],
+        "properties": {
+          "status": { "type": "string", "enum": ["configured", "not-configured"] },
+          "provider": {
+            "oneOf": [{ "type": "string", "enum": ["anthropic"] }, { "type": "null" }]
+          },
+          "model": {
+            "oneOf": [{ "type": "string", "minLength": 1, "maxLength": 128 }, { "type": "null" }]
+          },
+          "reason": { "type": "string", "minLength": 1, "maxLength": 500 }
+        }
       },
       "ReasoningStatus": {
         "type": "object",

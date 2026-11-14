@@ -9,12 +9,17 @@ import {
   Optional,
   Param,
   Post,
+  Req,
+  Res,
+  type OnModuleDestroy,
 } from "@nestjs/common";
+import type { FastifyReply, FastifyRequest } from "fastify";
 
 import type { ToolActionService } from "../actions/toolActions.js";
 import { VOICE_COMMANDS, VOICE_PROFILES } from "../voice/voiceCommands.js";
 import { stageVoiceSafeWrite, voiceUtteranceForSession } from "../voice/voiceSafeWrite.js";
 import type { VoiceSessionRegistry } from "../voice/voiceSessionRegistry.js";
+import type { VoiceConversationService } from "../voice/voiceConversation.js";
 import { LocalLoopbackRoute } from "./localLoopbackRoute.js";
 import { JarvisProblem } from "./problemDetails.js";
 import {
@@ -22,7 +27,7 @@ import {
   parseSwitchVoiceProfile,
   parseVoiceUtterance,
 } from "./voiceRequest.js";
-import { HTTP_TOOL_ACTIONS, HTTP_VOICE_REGISTRY } from "./tokens.js";
+import { HTTP_TOOL_ACTIONS, HTTP_VOICE_CONVERSATION, HTTP_VOICE_REGISTRY } from "./tokens.js";
 
 function invalid(detail: string): JarvisProblem {
   return new JarvisProblem(
@@ -54,13 +59,23 @@ function sessionNotFound(): JarvisProblem {
  */
 @Controller("api/v1/voice")
 @LocalLoopbackRoute()
-export class VoiceController {
+export class VoiceController implements OnModuleDestroy {
   constructor(
     @Inject(HTTP_VOICE_REGISTRY) private readonly registry: VoiceSessionRegistry,
     @Optional()
     @Inject(HTTP_TOOL_ACTIONS)
     private readonly toolActions?: ToolActionService | null,
-  ) {}
+    @Optional()
+    @Inject(HTTP_VOICE_CONVERSATION)
+    private readonly conversation?: VoiceConversationService | null,
+  ) {
+    if (this.conversation) this.registry.onRemove((session) => this.conversation?.clear(session));
+  }
+
+  /** App close releases the sweep timer and drops live sessions (and their history). */
+  onModuleDestroy(): void {
+    this.registry.dispose();
+  }
 
   @Get("catalog")
   catalog() {
@@ -88,7 +103,12 @@ export class VoiceController {
 
   @Post("sessions/:sessionId/utterances")
   @HttpCode(HttpStatus.OK)
-  async dispatch(@Param("sessionId") sessionId: string, @Body() body: unknown) {
+  async dispatch(
+    @Param("sessionId") sessionId: string,
+    @Body() body: unknown,
+    @Req() request: FastifyRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ) {
     let parsed;
     try {
       parsed = parseVoiceUtterance(body);
@@ -97,6 +117,9 @@ export class VoiceController {
     }
     const session = this.registry.get(sessionId);
     if (!session) throw sessionNotFound();
+    // A later final utterance supersedes any conversation still in flight on this session.
+    if (parsed.isFinal) this.conversation?.interrupt(session);
+    const hadPending = session.pending() !== undefined || session.hasPendingClarification();
     const prepared = voiceUtteranceForSession(parsed);
     const dispatch = await session.handle({
       transcript: prepared.transcript,
@@ -104,6 +127,46 @@ export class VoiceController {
       wakeAuthorized: prepared.wakeAuthorized,
       ...(prepared.alternatives ? { alternatives: prepared.alternatives } : {}),
     });
+    if (
+      this.conversation &&
+      dispatch.decision === "unrecognized" &&
+      parsed.isFinal &&
+      prepared.wakeAuthorized &&
+      !hadPending &&
+      !session.pending() &&
+      !session.hasPendingClarification()
+    ) {
+      const abort = new AbortController();
+      const onClose = () => abort.abort();
+      reply.raw.once("close", onClose);
+      request.raw.once("aborted", onClose);
+      try {
+        const outcome = await this.conversation.respond({
+          session,
+          transcript: prepared.transcript,
+          signal: abort.signal,
+          // Re-checked before every query, extra model call and the reply: a confirmation or
+          // clarification armed by a concurrent utterance ends this conversation turn.
+          live: () =>
+            this.registry.get(sessionId) === session &&
+            session.pending() === undefined &&
+            !session.hasPendingClarification(),
+        });
+        return {
+          dispatch:
+            outcome.status === "answered"
+              ? { decision: "conversation" as const, reply: outcome.reply }
+              : {
+                  decision: "conversation-unavailable" as const,
+                  conversationReason: outcome.reason,
+                },
+          pending: session.pending() ?? null,
+        };
+      } finally {
+        reply.raw.off("close", onClose);
+        request.raw.off("aborted", onClose);
+      }
+    }
     if (dispatch.decision !== "proposed") {
       return { dispatch, pending: session.pending() ?? null };
     }
@@ -142,6 +205,7 @@ export class VoiceController {
     }
     const session = this.registry.get(sessionId);
     if (!session) throw sessionNotFound();
+    this.conversation?.clear(session);
     session.setProfile(parsed.profile);
     // get() just resolved this session, so its expiry is defined.
     const expiresAt = this.registry.expiresAt(sessionId) ?? 0;

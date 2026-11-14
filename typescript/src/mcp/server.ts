@@ -576,6 +576,12 @@ const statusSchema = z.object({
     model: z.string().nullable(),
     reason: z.string(),
   }),
+  voiceConversation: z.object({
+    status: z.enum(["not-configured", "configured"]),
+    provider: z.literal("anthropic").nullable(),
+    model: z.string().nullable(),
+    reason: z.string(),
+  }),
   timezone: z.string(),
   layers: z.object({
     runtime: layerSchema,

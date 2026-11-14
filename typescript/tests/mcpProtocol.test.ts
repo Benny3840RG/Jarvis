@@ -29,6 +29,12 @@ const STATUS: SystemStatus = {
     model: null,
     reason: "OPENAI_API_KEY is not set.",
   },
+  voiceConversation: {
+    status: "not-configured",
+    provider: null,
+    model: null,
+    reason: "Voice conversation is disabled.",
+  },
   timezone: "Australia/Melbourne",
   layers: {
     runtime: { status: "ready" },
@@ -197,6 +203,9 @@ describe("Jarvis MCP preview protocol", () => {
       assert.ok(names.includes("delete_task"));
       assert.ok(names.includes("list_quotes"));
       assert.ok(names.includes("get_quote"));
+      const statusTool = tools.tools.find((tool) => tool.name === "get_jarvis_status");
+      assert.ok(statusTool?.outputSchema);
+      assert.ok(JSON.stringify(statusTool.outputSchema).includes("voiceConversation"));
 
       const result = await client.callTool({
         name: "show_jarvis_dashboard",

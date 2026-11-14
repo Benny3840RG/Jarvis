@@ -33,6 +33,7 @@ import { resolveClarification } from "./voiceDialogueResolver.js";
 import { interpretIntent } from "./voiceIntentInterpreter.js";
 import { parseUtterance } from "./voiceParser.js";
 import type { VoiceQueryProvider } from "./voiceQuery.js";
+import type { VoiceQueryAnswer } from "./voiceQuery.js";
 
 const DEFAULT_HISTORY_LIMIT = 20;
 const DEFAULT_CONFIRMATION_TTL_MS = 30_000;
@@ -254,6 +255,23 @@ export class VoiceSession {
 
   pending(): PendingConfirmation | undefined {
     return this.#pending;
+  }
+
+  /** Read-only observation for the HTTP conversation gate. */
+  hasPendingClarification(now = this.#clock()): boolean {
+    return this.#clarification !== undefined && now < this.#clarification.expiresAt;
+  }
+
+  /** Uses the same authoritative query path and spoken result as catalogue dispatch. */
+  async readOnlyQuery(commandId: string): Promise<VoiceQueryAnswer> {
+    const command = COMMAND_BY_ID.get(commandId);
+    if (!command || command.profile !== this.#profile || command.kind !== "query") {
+      return { status: "unavailable", reason: "Voice query unavailable." };
+    }
+    const result = await this.#query(command, this.#clock());
+    return result.decision === "answered"
+      ? { status: "answered", answer: result.answer }
+      : { status: "unavailable", reason: result.reason };
   }
 
   history(): readonly VoiceHistoryEntry[] {
@@ -541,7 +559,10 @@ export class VoiceSession {
     }
   }
 
-  async #query(command: VoiceCommand, now: number): Promise<VoiceDispatch> {
+  async #query(
+    command: VoiceCommand,
+    now: number,
+  ): Promise<Extract<VoiceDispatch, { decision: "answered" | "query-unavailable" }>> {
     if (!this.#queries) {
       return {
         decision: "query-unavailable",

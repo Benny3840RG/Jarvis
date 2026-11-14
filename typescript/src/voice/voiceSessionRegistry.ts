@@ -17,6 +17,7 @@ import { VoiceSession } from "./voiceSession.js";
 
 const DEFAULT_TTL_MS = 30 * 60_000;
 const DEFAULT_MAX_SESSIONS = 256;
+const DEFAULT_SWEEP_INTERVAL_MS = 60_000;
 
 export type VoiceSessionRegistryOptions = Readonly<{
   provider: VoiceActuationProvider;
@@ -30,6 +31,12 @@ export type VoiceSessionRegistryOptions = Readonly<{
   interpretNaturalLanguage?: boolean;
   /** Id generator (tests). */
   idFactory?: () => string;
+  /**
+   * How often expired sessions are swept so removal listeners run without waiting for
+   * another registry call (default 60 s; 0 disables the timer). The timer never holds
+   * the process open.
+   */
+  sweepIntervalMs?: number;
 }>;
 
 type Entry = { session: VoiceSession; expiresAt: number };
@@ -44,6 +51,14 @@ export class VoiceSessionRegistry {
   readonly #interpretNaturalLanguage: boolean;
   readonly #idFactory: () => string;
   readonly #sessions = new Map<string, Entry>();
+  readonly #sweepIntervalMs: number;
+  #timer: ReturnType<typeof setInterval> | undefined;
+  #removalListener: ((session: VoiceSession) => void) | undefined;
+
+  /** Observe disposal without giving the observer control over session decisions. */
+  onRemove(listener: (session: VoiceSession) => void): void {
+    this.#removalListener = listener;
+  }
 
   constructor(options: VoiceSessionRegistryOptions) {
     this.#provider = options.provider;
@@ -54,6 +69,34 @@ export class VoiceSessionRegistry {
     this.#confirmationTtlMs = options.confirmationTtlMs;
     this.#interpretNaturalLanguage = options.interpretNaturalLanguage ?? false;
     this.#idFactory = options.idFactory ?? randomUUID;
+    this.#sweepIntervalMs = options.sweepIntervalMs ?? DEFAULT_SWEEP_INTERVAL_MS;
+  }
+
+  /**
+   * Stop the sweep timer and drop every session (notifying the removal listener). Idempotent;
+   * the registry stays usable, and a later create() re-arms the timer.
+   */
+  dispose(): void {
+    this.#stopTimer();
+    for (const id of [...this.#sessions.keys()]) this.#delete(id);
+  }
+
+  // The timer exists only while sessions do, so an idle or abandoned registry is never
+  // referenced by a timer; it is unref'd so it never holds the process open either.
+  #armTimer(): void {
+    if (this.#timer || this.#sweepIntervalMs <= 0 || this.#sessions.size === 0) return;
+    this.#timer = setInterval(() => this.sweep(), this.#sweepIntervalMs);
+    this.#timer.unref();
+  }
+
+  #stopTimer(): void {
+    if (this.#timer) clearInterval(this.#timer);
+    this.#timer = undefined;
+  }
+
+  /** Remove every expired session now, notifying the removal listener for each. */
+  sweep(): void {
+    this.#evictExpired(this.#clock());
   }
 
   create(profile: VoiceProfile): { id: string; profile: VoiceProfile; expiresAt: number } {
@@ -73,6 +116,7 @@ export class VoiceSessionRegistry {
     });
     const expiresAt = now + this.#ttlMs;
     this.#sessions.set(id, { session, expiresAt });
+    this.#armTimer();
     return { id, profile, expiresAt };
   }
 
@@ -82,7 +126,7 @@ export class VoiceSessionRegistry {
     const entry = this.#sessions.get(id);
     if (!entry) return undefined;
     if (now >= entry.expiresAt) {
-      this.#sessions.delete(id);
+      this.#delete(id);
       return undefined;
     }
     entry.expiresAt = now + this.#ttlMs;
@@ -99,10 +143,10 @@ export class VoiceSessionRegistry {
     const entry = this.#sessions.get(id);
     if (!entry) return false;
     if (now >= entry.expiresAt) {
-      this.#sessions.delete(id);
+      this.#delete(id);
       return false;
     }
-    return this.#sessions.delete(id);
+    return this.#delete(id);
   }
 
   size(): number {
@@ -111,7 +155,7 @@ export class VoiceSessionRegistry {
 
   #evictExpired(now: number): void {
     for (const [id, entry] of this.#sessions) {
-      if (now >= entry.expiresAt) this.#sessions.delete(id);
+      if (now >= entry.expiresAt) this.#delete(id);
     }
   }
 
@@ -126,6 +170,15 @@ export class VoiceSessionRegistry {
         oldestId = id;
       }
     }
-    if (oldestId !== undefined) this.#sessions.delete(oldestId);
+    if (oldestId !== undefined) this.#delete(oldestId);
+  }
+
+  #delete(id: string): boolean {
+    const entry = this.#sessions.get(id);
+    if (!entry) return false;
+    this.#sessions.delete(id);
+    if (this.#sessions.size === 0) this.#stopTimer();
+    this.#removalListener?.(entry.session);
+    return true;
   }
 }

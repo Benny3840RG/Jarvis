@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
 
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
+import type { ToolActionService } from "../src/actions/toolActions.js";
 
 import { createJarvisHttpApp } from "../src/http/app.js";
 import { InMemoryInvoiceStore } from "../src/invoices/inMemoryInvoiceStore.js";
@@ -9,6 +10,13 @@ import type { InvoiceStore } from "../src/invoices/invoice.js";
 import type { HttpAppConfig } from "../src/http/config.js";
 import type { PersistenceProvider } from "../src/persistence/persistence.js";
 import { captureCredentials, type CredentialsRuntime } from "../src/settings/credentialsStatus.js";
+import {
+  NOT_DONE_REPLY,
+  VoiceConversationService,
+  type VoiceConversationReasoner,
+} from "../src/voice/voiceConversation.js";
+import { VoiceSessionRegistry } from "../src/voice/voiceSessionRegistry.js";
+import { AbsentHardwareProvider } from "../src/voice/voiceHardware.js";
 
 /** A non-loopback bind: serveLocalPage=false, so voice routes require a token. */
 function credentials(host: string): CredentialsRuntime {
@@ -61,13 +69,20 @@ afterEach(async () => {
   await Promise.all(openApps.splice(0).map((app) => app.close()));
 });
 
-async function makeApp(host = "10.0.0.5"): Promise<NestFastifyApplication> {
+async function makeApp(
+  host = "10.0.0.5",
+  voiceConversation?: VoiceConversationService,
+  extra: { registry?: VoiceSessionRegistry; toolActions?: ToolActionService } = {},
+): Promise<NestFastifyApplication> {
   const app = await createJarvisHttpApp({
     persistence: persistence(),
     providerName: "json",
     config: CONFIG,
     credentialsRuntime: credentials(host),
     logger: false,
+    ...(voiceConversation ? { voiceConversation } : {}),
+    ...(extra.registry ? { voiceSessionRegistry: extra.registry } : {}),
+    ...(extra.toolActions ? { toolActionService: extra.toolActions } : {}),
   });
   openApps.push(app);
   return app;
@@ -94,6 +109,172 @@ function utter(app: NestFastifyApplication, sessionId: string, payload: Record<s
 }
 
 describe("voice HTTP boundary", () => {
+  it("keeps the exact legacy unrecognised payload when conversation is disabled", async () => {
+    const app = await makeApp();
+    const sessionId = await openSession(app, "client");
+    const result = (
+      await utter(app, sessionId, { transcript: "Nolan tell me a joke", isFinal: true })
+    ).json();
+    assert.deepEqual(result, {
+      dispatch: { decision: "unrecognized", normalizedTranscript: "tell me a joke" },
+      pending: null,
+    });
+  });
+  it("hands only final wake-authorised unrecognised speech to conversation", async () => {
+    const calls: string[] = [];
+    const reasoner: VoiceConversationReasoner = {
+      reply: async ({ transcript }) => {
+        calls.push(transcript);
+        return { status: "answered", reply: "Hello." };
+      },
+    };
+    const app = await makeApp("10.0.0.5", new VoiceConversationService({ reasoner }));
+    const sessionId = await openSession(app, "client");
+    const send = async (transcript: string, isFinal = true) =>
+      (await utter(app, sessionId, { transcript, isFinal })).json();
+    assert.equal((await send("Nolan tell me a joke", false)).dispatch.decision, "ignored-interim");
+    assert.equal((await send("tell me a joke")).dispatch.decision, "unrecognized");
+    assert.equal((await send("Nolan any unpaid invoices")).dispatch.decision, "answered");
+    assert.equal((await send("Nolan confirm")).dispatch.decision, "confirmation-not-pending");
+    assert.equal((await send("Nolan cancel")).dispatch.decision, "confirmation-not-pending");
+    assert.equal((await send("Nolan tell me a joke")).dispatch.reply, NOT_DONE_REPLY);
+    assert.deepEqual(calls, ["tell me a joke"]);
+  });
+
+  it("does not converse while confirmation is pending or after a profile switch", async () => {
+    const calls: string[] = [];
+    const histories: number[] = [];
+    const reasoner: VoiceConversationReasoner = {
+      reply: async ({ transcript, history }) => {
+        calls.push(transcript);
+        histories.push(history.length);
+        return { status: "answered", reply: "No action taken." };
+      },
+    };
+    const app = await makeApp("10.0.0.5", new VoiceConversationService({ reasoner }));
+    const sessionId = await openSession(app, "trailer");
+    assert.equal(
+      (await utter(app, sessionId, { transcript: "Nolan tell me a joke", isFinal: true })).json()
+        .dispatch.decision,
+      "conversation",
+    );
+    const armed = (
+      await utter(app, sessionId, { transcript: "Nolan winch up", isFinal: true })
+    ).json();
+    assert.equal(armed.dispatch.decision, "awaiting-confirmation");
+    const pending = (
+      await utter(app, sessionId, { transcript: "Nolan tell me a joke", isFinal: true })
+    ).json();
+    assert.equal(pending.dispatch.decision, "unrecognized");
+    assert.deepEqual(pending.pending, armed.pending);
+    assert.deepEqual(calls, ["tell me a joke"]);
+    await app.inject({
+      method: "POST",
+      url: `/api/v1/voice/sessions/${sessionId}/profile`,
+      headers: AUTH,
+      payload: { profile: "client" },
+    });
+    const response = (
+      await utter(app, sessionId, { transcript: "Nolan tell me a joke", isFinal: true })
+    ).json();
+    assert.equal(response.dispatch.decision, "conversation");
+    assert.equal(response.pending, null);
+    assert.deepEqual(calls, ["tell me a joke", "tell me a joke"]);
+    assert.deepEqual(histories, [0, 0], "profile switch discards the old conversation");
+  });
+
+  it("does not hand an ambiguous result or its one-shot clarification to the reasoner", async () => {
+    const calls: string[] = [];
+    const reasoner: VoiceConversationReasoner = {
+      reply: async ({ transcript }) => {
+        calls.push(transcript);
+        return { status: "answered", reply: "Hello." };
+      },
+    };
+    const app = await makeApp("10.0.0.5", new VoiceConversationService({ reasoner }));
+    const sessionId = await openSession(app, "crawler");
+    const offered = (
+      await utter(app, sessionId, {
+        transcript: "Nolan crawler forward and turn crawler lights on",
+        isFinal: true,
+      })
+    ).json();
+    assert.equal(offered.dispatch.decision, "ambiguous");
+    const followUp = (
+      await utter(app, sessionId, { transcript: "Nolan what is the weather", isFinal: true })
+    ).json();
+    assert.equal(followUp.dispatch.decision, "unrecognized");
+    assert.deepEqual(calls, []);
+    assert.equal(followUp.pending, null);
+  });
+
+  it("maps every reasoner failure to a fixed public code", async () => {
+    const reasons = [
+      "provider-error",
+      "refused",
+      "rate-limited",
+      "too-long",
+      "reply-too-long",
+      "unavailable",
+      "timeout",
+      "tool-limit",
+      "ungrounded",
+    ] as const;
+    let index = 0;
+    const reasoner: VoiceConversationReasoner = {
+      reply: async () => ({ status: "unavailable", reason: reasons[index++]! }),
+    };
+    const app = await makeApp("10.0.0.5", new VoiceConversationService({ reasoner }));
+    const sessionId = await openSession(app, "client");
+    for (const reason of reasons) {
+      const result = (
+        await utter(app, sessionId, { transcript: "Nolan tell me a joke", isFinal: true })
+      ).json();
+      assert.deepEqual(result.dispatch, {
+        decision: "conversation-unavailable",
+        conversationReason: reason,
+      });
+      assert.equal(result.pending, null);
+    }
+  });
+
+  it("a model reply cannot stage, arm, confirm, cancel, actuate or switch a profile", async () => {
+    let stages = 0;
+    const toolActions = {
+      stage: async () => {
+        stages += 1;
+        throw new Error("must not stage");
+      },
+    } as unknown as ToolActionService;
+    const registry = new VoiceSessionRegistry({ provider: new AbsentHardwareProvider() });
+    const reasoner: VoiceConversationReasoner = {
+      reply: async () => ({ status: "answered", reply: "I have not done anything." }),
+    };
+    const service = new VoiceConversationService({ reasoner });
+    const app = await makeApp("10.0.0.5", service, { registry, toolActions });
+    const sessionId = await openSession(app, "client");
+    const session = registry.get(sessionId)!;
+    const before = { profile: session.profile, pending: session.pending() };
+    const result = (
+      await utter(app, sessionId, { transcript: "Nolan tell me a joke", isFinal: true })
+    ).json();
+    assert.equal(result.dispatch.decision, "conversation");
+    assert.equal(result.dispatch.toolActionId, undefined);
+    assert.equal(stages, 0);
+    assert.deepEqual({ profile: session.profile, pending: session.pending() }, before);
+    assert.equal(
+      (await utter(app, sessionId, { transcript: "Nolan confirm", isFinal: true })).json().dispatch
+        .decision,
+      "confirmation-not-pending",
+    );
+    assert.equal(
+      (await utter(app, sessionId, { transcript: "Nolan cancel", isFinal: true })).json().dispatch
+        .decision,
+      "confirmation-not-pending",
+    );
+    assert.equal(stages, 0);
+  });
+
   it("leaves no pending HTTP action after unsafe inferred speech", async () => {
     const app = await makeApp();
     for (const [profile, transcript, alternatives] of [
@@ -333,5 +514,45 @@ describe("voice HTTP boundary", () => {
     const sessionId = await openSession(app, "client");
     const badUtterance = await utter(app, sessionId, { transcript: 42, isFinal: "yes" });
     assert.equal(badUtterance.statusCode, 422);
+  });
+
+  it("ends an in-flight conversation when a concurrent utterance arms a confirmation", async () => {
+    let modelCalls = 0;
+    let queries = 0;
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let entered!: () => void;
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const reasoner: VoiceConversationReasoner = {
+      reply: async (input) => {
+        modelCalls += 1;
+        entered();
+        await gate;
+        if ((await input.query("trailer.status")).status === "answered") queries += 1;
+        if (input.reserveNextCall()) modelCalls += 1;
+        return { status: "answered", reply: "Too late." };
+      },
+    };
+    const app = await makeApp("10.0.0.5", new VoiceConversationService({ reasoner }));
+    const sessionId = await openSession(app, "trailer");
+    const chat = utter(app, sessionId, { transcript: "Nolan tell me a joke", isFinal: true });
+    await started;
+    const armed = (
+      await utter(app, sessionId, { transcript: "Nolan winch up", isFinal: true })
+    ).json();
+    assert.equal(armed.dispatch.decision, "awaiting-confirmation");
+    release();
+    const late = (await chat).json();
+    assert.deepEqual(late.dispatch, {
+      decision: "conversation-unavailable",
+      conversationReason: "unavailable",
+    });
+    assert.equal(modelCalls, 1);
+    assert.equal(queries, 0);
+    assert.deepEqual(late.pending, armed.pending);
   });
 });

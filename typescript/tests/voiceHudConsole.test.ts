@@ -21,7 +21,7 @@ function loadVoiceLogic(): {
   ) => { transcript: string; isFinal: boolean; alternatives: string[] } | null;
   finalVoiceRecognition: (event: unknown) => { transcript: string; alternatives: string[] } | null;
   describeVoiceDispatch: (
-    dispatch: { decision: string; answer?: string; reason?: string } | null,
+    dispatch: { decision: string; answer?: string; reason?: string; reply?: string } | null,
   ) => { label: string; tone: string };
   voiceLatencyMs: (startedAt: unknown, endedAt: unknown) => number | null;
 } {
@@ -182,6 +182,17 @@ describe("voice HUD console logic (extracted from dashboard-v1.html)", () => {
       });
       assert.match(info.label, /wake word/i);
       assert.doesNotMatch(info.label, /approved|executed/i);
+    });
+
+    it("preserves authoritative reply bytes, including a trailing space", () => {
+      const reply = `${"x".repeat(599)} `;
+      const info = logic.describeVoiceDispatch({ decision: "conversation", reply });
+      assert.equal(info.label, reply);
+      assert.equal(info.label.length, 600);
+      assert.equal(
+        logic.describeVoiceDispatch({ decision: "conversation", reply: "  " }).tone,
+        "warn",
+      );
     });
 
     it("falls back safely for an unknown decision", () => {
