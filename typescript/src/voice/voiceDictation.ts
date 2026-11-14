@@ -93,9 +93,16 @@ const NEGATION =
   /(?:^|[^\p{L}\p{N}'’])(?:not|never|nothing|cannot|no longer|(?:do|does|did|can|could|would|should|will|is|are|was|were|have|has|had)n['’]?t|don['’]?t|won['’]?t|can['’]?t)(?![\p{L}\p{N}])/u;
 const DECLARATIVE =
   /^(?:i|we|he|she|they|it|you|i['’]?ve|we['’]?ve|i['’]?m|we['’]?re)\s|\b(?:already|(?:is|was|been|got) (?:done|finished|completed|sent|ordered))\b/;
-/** A conjunction that chains a second action onto the title. */
+/**
+ * A conjunction that chains a second action onto the title. Bounded safety rule,
+ * not an NLP classifier: a conjunction or separator followed directly by a verb
+ * from a closed list of common action verbs (outbound/destructive, commerce,
+ * contact, scheduling and creation) rejects the title. Anything else, such as a
+ * noun conjunction ("buy oil and grease"), is left alone. Unlisted verbs are not
+ * detected; a title is still only ever a read-back, confirmed task/reminder text.
+ */
 const COMPOUND_ACTION =
-  /(?:\band|\bthen|\balso|\bplus|\bbut|\bor|\bafterwards?|\bafter that|[;|&])\s*(?:then\s+|also\s+|please\s+)?(?:send|resend|email|e-mail|mail|forward|submit|post|publish|share|text|message|dm|pay|wire|transfer|delete|remove|erase|wipe|approve|execute|run|start|stop|open|close|lock|unlock|turn|switch|activate|deactivate|shut|fire|launch|actuate|move|drive|nolan|jarvis|confirm|cancel)\b/;
+  /(?:\band|\bthen|\balso|\bplus|\bbut|\bor|\bafterwards?|\bafter that|[;|&])\s*(?:then\s+|also\s+|please\s+)?(?:send|resend|email|e-mail|mail|forward|submit|post|publish|share|text|message|dm|pay|wire|transfer|delete|remove|erase|wipe|approve|execute|run|start|stop|open|close|lock|unlock|turn|switch|activate|deactivate|shut|fire|launch|actuate|move|drive|nolan|jarvis|confirm|cancel|call|phone|ring|order|reorder|book|reserve|schedule|create|make|add|buy|purchase|hire|arrange|organi[sz]e|set up|sign|install|download|upload|apply|register|subscribe|ship|deliver|invite|notify|tell|ask|reply|respond|update|edit|change|reset|restart|reboot|enable|disable|cut|burn|unplug|power|raise|lower|dial|ping)\b/;
 
 /** True when the raw (pre-normalisation) text carries a forbidden control/format character. */
 export function hasUnsafeVoiceCharacters(raw: string): boolean {

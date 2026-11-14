@@ -81,3 +81,36 @@ describe("HTTP safe-write preparation keeps raw control whitespace for dictation
     );
   });
 });
+
+describe("HTTP preparation keeps raw control whitespace in ASR alternatives", () => {
+  it("passes dictated alternatives unnormalised so they classify as rejected", () => {
+    for (const alternative of [
+      "Nolan, add a task: buy oil\nand more",
+      "add a task: buy\toil",
+      "Nolan, add a task: buy oil\rand more",
+      "Nolan, remind me to call\nDave",
+      "remind me to call\tDave",
+      "remind me to call Dave\rtomorrow",
+    ]) {
+      const prepared = voiceUtteranceForSession({
+        transcript: "Nolan, add a task: order oil",
+        alternatives: [alternative],
+      });
+      const [out] = prepared.alternatives ?? [];
+      assert.equal(classifyVoiceDictation(out ?? "", "client").status, "rejected", alternative);
+      assert.ok(!/^nolan/i.test(out ?? ""), "wake word stripped");
+    }
+  });
+
+  it("still strips wake words and normalises benign alternatives", () => {
+    const prepared = voiceUtteranceForSession({
+      transcript: "Nolan, what is on today",
+      alternatives: ["Nolan,  add a task:   order oil \n", "what is\non today", "jarvis status"],
+    });
+    assert.equal(
+      classifyVoiceDictation(prepared.alternatives?.[0] ?? "", "client").status,
+      "captured",
+    );
+    assert.deepEqual(prepared.alternatives?.slice(1), ["what is on today", "status"]);
+  });
+});

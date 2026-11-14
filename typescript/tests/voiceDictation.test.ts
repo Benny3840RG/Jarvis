@@ -8,6 +8,7 @@ import {
   parseVoiceDictation,
 } from "../src/voice/voiceDictation.js";
 import { AbsentHardwareProvider } from "../src/voice/voiceHardware.js";
+import { voiceUtteranceForSession } from "../src/voice/voiceSafeWrite.js";
 import { VoiceSession } from "../src/voice/voiceSession.js";
 
 describe("voice dictation grammar", () => {
@@ -472,6 +473,90 @@ describe("voice session conflicting hypotheses and unsafe dictation", () => {
       assert.equal(s.pending(), undefined, JSON.stringify(utterance));
       assert.equal((await turn(s, "confirm", 1_200)).decision, "confirmation-not-pending");
       assert.equal(s.history().at(-2)?.outcome, "dictation-rejected", JSON.stringify(utterance));
+    }
+  });
+});
+
+describe("voice dictation compound action titles", () => {
+  const compound = [
+    "buy oil and call Dave",
+    "buy oil then order fuel",
+    "call Dave and book an appointment",
+    "order oil and create a quote",
+  ];
+
+  it("classifier rejects chained action clauses for both task and reminder dictation", () => {
+    for (const title of compound) {
+      for (const prefix of ["add a task: ", "remind me to "]) {
+        const utterance = prefix + title;
+        assert.equal(parseVoiceDictation(utterance, "client"), undefined, utterance);
+        assert.equal(classifyVoiceDictation(utterance, "client").status, "rejected", utterance);
+      }
+    }
+  });
+
+  it("keeps noun conjunctions and single-action titles", () => {
+    for (const [utterance, title] of [
+      ["add a task: buy oil and grease", "Buy oil and grease"],
+      ["add a task: call Dave", "Call dave"],
+      ["add a task: order bar oil", "Order bar oil"],
+      ["remind me to book the van", "Book the van"],
+      ["remind me to buy salt or pepper", "Buy salt or pepper"],
+    ] as const) {
+      const out = classifyVoiceDictation(utterance, "client");
+      assert.equal(out.status, "captured", utterance);
+      if (out.status === "captured") assert.equal(out.dictation.capture.title, title);
+    }
+  });
+
+  it("session leaves no pending and does not infer for a rejected compound title", async () => {
+    for (const title of compound) {
+      const s = session();
+      const out = await turn(s, `add a task: ${title}`, 1_000);
+      assert.equal(out.decision, "unrecognized", title);
+      assert.equal(s.pending(), undefined, title);
+      assert.equal((await turn(s, "confirm", 1_100)).decision, "confirmation-not-pending");
+      assert.equal(s.history().at(-2)?.outcome, "dictation-rejected", title);
+    }
+  });
+});
+
+describe("voice session with control characters in prepared ASR alternatives", () => {
+  const cases = [
+    "Nolan, add a task: order\noil",
+    "add a task: order\toil",
+    "Nolan, add a task: order oil\rtoday",
+    "remind me to call\nDave",
+    "Nolan, remind me to call\tDave",
+    "remind me to call Dave\rtomorrow",
+  ];
+
+  it("an unsafe alternative stops a fresh dictation from arming", async () => {
+    for (const alternative of cases) {
+      const s = session();
+      const prepared = voiceUtteranceForSession({
+        transcript: "Nolan, add a task: order oil",
+        alternatives: [alternative],
+      });
+      const out = await turn(s, prepared.transcript, 1_000, prepared.alternatives);
+      assert.notEqual(out.decision, "awaiting-confirmation", JSON.stringify(alternative));
+      assert.equal(s.pending(), undefined, JSON.stringify(alternative));
+      assert.equal((await turn(s, "confirm", 1_100)).decision, "confirmation-not-pending");
+    }
+  });
+
+  it("an unsafe alternative on confirm voids the pending capture", async () => {
+    for (const alternative of cases) {
+      const s = session();
+      const armed = await turn(s, "add a task: order oil", 1_000);
+      assert.equal(armed.decision, "awaiting-confirmation");
+      const prepared = voiceUtteranceForSession({
+        transcript: "confirm",
+        alternatives: [alternative],
+      });
+      const out = await turn(s, prepared.transcript, 1_100, prepared.alternatives);
+      assert.notEqual(out.decision, "proposed", JSON.stringify(alternative));
+      assert.equal(s.pending(), undefined, JSON.stringify(alternative));
     }
   });
 });

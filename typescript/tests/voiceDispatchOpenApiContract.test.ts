@@ -55,6 +55,7 @@ it("binds capture to awaiting-confirmation/proposed on the two safe-write comman
     requiresSpokenConfirmation: false,
     ...(proposes ? { proposes } : {}),
   });
+  const withoutProfile = ({ profile: _profile, ...rest }: ReturnType<typeof command>) => rest;
   const task = command("client.capture-task", { tool: "tasks", operation: "create" });
   const reminder = command("client.follow-up-reminder", { tool: "reminders", operation: "create" });
   const taskCapture = { title: "Order oil", category: "work" };
@@ -116,6 +117,15 @@ it("binds capture to awaiting-confirmation/proposed on the two safe-write comman
     },
     { decision: "awaiting-confirmation", command: task, capture: reminderCapture },
     { decision: "awaiting-confirmation", command: reminder, capture: taskCapture },
+    // A captured command must carry profile exactly "client".
+    { decision: "proposed", command: { ...task, profile: "nolan" }, capture: taskCapture },
+    { decision: "proposed", command: { ...reminder, profile: "owner" }, capture: reminderCapture },
+    { decision: "awaiting-confirmation", command: withoutProfile(task), capture: taskCapture },
+    {
+      decision: "awaiting-confirmation",
+      command: withoutProfile(reminder),
+      capture: reminderCapture,
+    },
   ])
     assert.equal(validateDispatch(value), false, JSON.stringify(value));
 
@@ -127,6 +137,10 @@ it("binds capture to awaiting-confirmation/proposed on the two safe-write comman
   ])
     assert.equal(validatePending(value), true, JSON.stringify(validatePending.errors));
   for (const value of [
+    { ...pending, command: { ...task, profile: "nolan" }, capture: taskCapture },
+    { ...pending, command: { ...reminder, profile: "owner" }, capture: reminderCapture },
+    { ...pending, command: withoutProfile(task), capture: taskCapture },
+    { ...pending, command: withoutProfile(reminder), capture: reminderCapture },
     { ...pending, command: task, capture: { title: "X" } },
     { ...pending, command: reminder, capture: { title: "X", category: "work" } },
     { ...pending, command: command("client.status"), capture: reminderCapture },

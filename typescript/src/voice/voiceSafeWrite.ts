@@ -69,9 +69,13 @@ export function voiceUtteranceForSession(input: {
   // Normalisation collapses newline/tab/CR into spaces. A dictation that carried
   // them must reach the session unnormalised so it is rejected, not armed.
   const rawCommand = unnormalisedDictation(input.transcript, direct.heard);
-  const alternatives = input.alternatives?.map(
-    (alternative) => splitVoiceWakeWord(alternative).rest,
-  );
+  // Alternatives get the same treatment: a dictated alternative carrying raw
+  // control characters is passed through stripped-but-unnormalised so the
+  // session sees it and fails closed. Benign alternatives are unchanged.
+  const alternatives = input.alternatives?.map((alternative) => {
+    const split = splitVoiceWakeWord(alternative);
+    return unnormalisedDictation(alternative, split.heard) ?? split.rest;
+  });
   return {
     wakeAuthorized,
     transcript: rawCommand ?? commandTranscript,

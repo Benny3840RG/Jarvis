@@ -8283,9 +8283,10 @@
               "properties": {
                 "command": {
                   "properties": {
-                    "id": { "enum": ["client.capture-task", "client.follow-up-reminder"] }
+                    "id": { "enum": ["client.capture-task", "client.follow-up-reminder"] },
+                    "profile": { "const": "client" }
                   },
-                  "required": ["id"]
+                  "required": ["id", "profile"]
                 }
               }
             }
@@ -8454,9 +8455,10 @@
               "properties": {
                 "command": {
                   "properties": {
-                    "id": { "enum": ["client.capture-task", "client.follow-up-reminder"] }
+                    "id": { "enum": ["client.capture-task", "client.follow-up-reminder"] },
+                    "profile": { "const": "client" }
                   },
-                  "required": ["id"]
+                  "required": ["id", "profile"]
                 },
                 "decision": { "enum": ["awaiting-confirmation", "proposed"] }
               },
