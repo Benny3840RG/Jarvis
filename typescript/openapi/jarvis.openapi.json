@@ -8302,7 +8302,21 @@
               "required": ["command", "capture"]
             },
             "then": {
+              "required": ["command"],
               "properties": {
+                "command": {
+                  "properties": {
+                    "kind": { "const": "propose" },
+                    "proposes": {
+                      "properties": {
+                        "tool": { "const": "tasks" },
+                        "operation": { "const": "create" }
+                      },
+                      "required": ["tool", "operation"]
+                    }
+                  },
+                  "required": ["kind", "proposes"]
+                },
                 "capture": {
                   "properties": { "title": {}, "category": {} },
                   "required": ["title", "category"]
@@ -8322,7 +8336,21 @@
               "required": ["command", "capture"]
             },
             "then": {
+              "required": ["command"],
               "properties": {
+                "command": {
+                  "properties": {
+                    "kind": { "const": "propose" },
+                    "proposes": {
+                      "properties": {
+                        "tool": { "const": "reminders" },
+                        "operation": { "const": "create" }
+                      },
+                      "required": ["tool", "operation"]
+                    }
+                  },
+                  "required": ["kind", "proposes"]
+                },
                 "capture": {
                   "properties": { "title": {}, "category": {} },
                   "not": { "properties": { "category": {} }, "required": ["category"] }
@@ -8431,6 +8459,12 @@
                   "required": ["id"]
                 },
                 "decision": { "enum": ["awaiting-confirmation", "proposed"] }
+              },
+              "not": {
+                "anyOf": [
+                  { "properties": { "inferred": {} }, "required": ["inferred"] },
+                  { "properties": { "confidence": {} }, "required": ["confidence"] }
+                ]
               }
             }
           },
@@ -8446,7 +8480,21 @@
               "required": ["command", "capture"]
             },
             "then": {
+              "required": ["command"],
               "properties": {
+                "command": {
+                  "properties": {
+                    "kind": { "const": "propose" },
+                    "proposes": {
+                      "properties": {
+                        "tool": { "const": "tasks" },
+                        "operation": { "const": "create" }
+                      },
+                      "required": ["tool", "operation"]
+                    }
+                  },
+                  "required": ["kind", "proposes"]
+                },
                 "capture": {
                   "properties": { "title": {}, "category": {} },
                   "required": ["title", "category"]
@@ -8466,7 +8514,21 @@
               "required": ["command", "capture"]
             },
             "then": {
+              "required": ["command"],
               "properties": {
+                "command": {
+                  "properties": {
+                    "kind": { "const": "propose" },
+                    "proposes": {
+                      "properties": {
+                        "tool": { "const": "reminders" },
+                        "operation": { "const": "create" }
+                      },
+                      "required": ["tool", "operation"]
+                    }
+                  },
+                  "required": ["kind", "proposes"]
+                },
                 "capture": {
                   "properties": { "title": {}, "category": {} },
                   "not": { "properties": { "category": {} }, "required": ["category"] }

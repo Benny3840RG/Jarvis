@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { JARVIS_INSTRUCTIONS, JARVIS_PERSONA_MARKDOWN } from "../src/mcp/persona.js";
+import { classifyVoiceDictation } from "../src/voice/voiceDictation.js";
 import { splitVoiceWakeWord, voiceUtteranceForSession } from "../src/voice/voiceSafeWrite.js";
 
 describe("NOLAN identity and guarded voice compatibility", () => {
@@ -52,6 +53,31 @@ describe("NOLAN identity and guarded voice compatibility", () => {
         heardTranscript: "Nolan, delete everything",
       }).wakeAuthorized,
       false,
+    );
+  });
+});
+
+describe("HTTP safe-write preparation keeps raw control whitespace for dictation", () => {
+  it("does not let newline, tab or CR be normalised away before the unsafe check", () => {
+    for (const transcript of [
+      "Nolan, add a task: buy oil\nand more",
+      "Nolan, add a task: buy\toil",
+      "Nolan, add a task: buy oil\rand more",
+      "Nolan, remind me to call\nDave",
+    ]) {
+      const prepared = voiceUtteranceForSession({ transcript });
+      assert.equal(prepared.wakeAuthorized, true);
+      assert.equal(
+        classifyVoiceDictation(prepared.transcript, "client").status,
+        "rejected",
+        JSON.stringify(transcript),
+      );
+    }
+    const safe = voiceUtteranceForSession({ transcript: "Nolan,  add a task:   order oil \n" });
+    assert.equal(classifyVoiceDictation(safe.transcript, "client").status, "captured");
+    assert.equal(
+      voiceUtteranceForSession({ transcript: "Nolan, what is\non today" }).transcript,
+      "what is on today",
     );
   });
 });

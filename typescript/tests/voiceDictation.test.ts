@@ -129,6 +129,28 @@ describe("voice dictation unsafe titles", () => {
     }
   });
 
+  it("rejects control whitespace inside the raw dictated text before it is normalised", () => {
+    for (const utterance of [
+      "add a task: buy oil\nand more",
+      "add a task: buy\toil",
+      "add a task: buy oil\rand more",
+      "remind me to call\nDave",
+      "remind me to call\tDave",
+      "remind me to call Dave\rtomorrow",
+      "add a work task: quote\nthe fence",
+    ]) {
+      assert.equal(parseVoiceDictation(utterance, "client"), undefined, JSON.stringify(utterance));
+      assert.equal(
+        classifyVoiceDictation(utterance, "client").status,
+        "rejected",
+        JSON.stringify(utterance),
+      );
+    }
+    // Surrounding whitespace is still just whitespace; non-dictations stay none.
+    assert.equal(classifyVoiceDictation("  add a task: order oil \n", "client").status, "captured");
+    assert.equal(classifyVoiceDictation("what is\non today", "client").status, "none");
+  });
+
   it("keeps ordinary natural titles working", () => {
     for (const [utterance, title] of [
       ["add a task: order bar oil", "Order bar oil"],
@@ -433,6 +455,23 @@ describe("voice session conflicting hypotheses and unsafe dictation", () => {
       assert.equal(s.pending(), undefined, utterance);
       assert.equal((await turn(s, "confirm", 1_200)).decision, "confirmation-not-pending");
       assert.equal(s.history().at(-2)?.outcome, "dictation-rejected", utterance);
+    }
+  });
+
+  it("control whitespace inside a dictated title never arms, infers, or leaves pending state", async () => {
+    for (const utterance of [
+      "add a task: buy oil\nand more",
+      "add a task: buy\toil",
+      "add a task: buy oil\rand more",
+      "remind me to call\nDave",
+    ]) {
+      const s = session();
+      await turn(s, "remind me to call Dave", 1_000);
+      const out = await turn(s, utterance, 1_100);
+      assert.equal(out.decision, "unrecognized", JSON.stringify(utterance));
+      assert.equal(s.pending(), undefined, JSON.stringify(utterance));
+      assert.equal((await turn(s, "confirm", 1_200)).decision, "confirmation-not-pending");
+      assert.equal(s.history().at(-2)?.outcome, "dictation-rejected", JSON.stringify(utterance));
     }
   });
 });

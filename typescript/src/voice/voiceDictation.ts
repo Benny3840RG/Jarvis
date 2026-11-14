@@ -97,6 +97,11 @@ const DECLARATIVE =
 const COMPOUND_ACTION =
   /(?:\band|\bthen|\balso|\bplus|\bbut|\bor|\bafterwards?|\bafter that|[;|&])\s*(?:then\s+|also\s+|please\s+)?(?:send|resend|email|e-mail|mail|forward|submit|post|publish|share|text|message|dm|pay|wire|transfer|delete|remove|erase|wipe|approve|execute|run|start|stop|open|close|lock|unlock|turn|switch|activate|deactivate|shut|fire|launch|actuate|move|drive|nolan|jarvis|confirm|cancel)\b/;
 
+/** True when the raw (pre-normalisation) text carries a forbidden control/format character. */
+export function hasUnsafeVoiceCharacters(raw: string): boolean {
+  return UNSAFE_CHARACTERS.test(raw.trim());
+}
+
 function cleanTitle(raw: string): string | undefined {
   if (UNSAFE_CHARACTERS.test(raw)) return undefined;
   const title = raw
@@ -134,9 +139,13 @@ export function classifyVoiceDictation(
   if (profile !== "client") return NONE;
   const text = normalizeUtterance(transcript);
   if (text.length === 0) return NONE;
+  // Whitespace normalisation would turn an embedded newline, tab or CR into a
+  // plain space, so the unsafe check must see the original text.
+  const rawUnsafe = hasUnsafeVoiceCharacters(transcript);
 
   const task = TASK_PATTERN.exec(text);
   if (task) {
+    if (rawUnsafe) return REJECTED;
     const command = COMMAND_BY_ID.get(TASK_COMMAND_ID);
     if (!command) return REJECTED;
     const categoryWord = task[1];
@@ -157,6 +166,7 @@ export function classifyVoiceDictation(
 
   const reminder = REMINDER_PATTERN.exec(text);
   if (reminder) {
+    if (rawUnsafe) return REJECTED;
     const command = COMMAND_BY_ID.get(REMINDER_COMMAND_ID);
     if (!command) return REJECTED;
     const title = cleanTitle(reminder[1] ?? "");
