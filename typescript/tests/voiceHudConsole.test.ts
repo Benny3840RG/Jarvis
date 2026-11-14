@@ -95,6 +95,23 @@ describe("voice HUD console logic (extracted from dashboard-v1.html)", () => {
       }
     });
 
+    it("wakes on the spoken NOLAN wake word from the microphone, keeping legacy Jarvis", () => {
+      for (const raw of ["Nolan, add a task: order bar oil", "nolan add a task: order bar oil"]) {
+        const gate = logic.voiceWakeGate(raw, true);
+        assert.equal(gate.status, "command", raw);
+        assert.equal(gate.transcript, "add a task: order bar oil", raw);
+      }
+      assert.equal(logic.voiceWakeGate("Nolan", true).status, "awake");
+      assert.equal(logic.voiceWakeGate("Jarvis winch up", true).status, "command");
+      assert.equal(logic.voiceWakeGate("Nolanx add a task", true).status, "idle");
+      assert.equal(logic.voiceWakeGate("nolanland tour", true).status, "idle");
+      const prepared = logic.prepareVoiceDispatch("Nolan, any unpaid invoices?", true, [
+        "Nolan any unpaid invoices",
+      ]);
+      assert.equal(prepared?.transcript, "any unpaid invoices");
+      assert.deepEqual(prepared?.alternatives, ["any unpaid invoices"]);
+    });
+
     it("never prepares a bare confirm or cancel for microphone dispatch", () => {
       assert.equal(logic.prepareVoiceDispatch("confirm", true), null);
       assert.equal(logic.prepareVoiceDispatch("cancel", true), null);
@@ -214,5 +231,51 @@ describe("voice HUD console logic (extracted from dashboard-v1.html)", () => {
     assert.ok(start >= 0 && end > start, "inline script not found");
     const script = html.slice(start + openingTag.length, end);
     assert.doesNotThrow(() => new Function(script), "inline dashboard script must parse");
+  });
+});
+
+describe("voice HUD dictation read-back", () => {
+  const logic = loadVoiceLogic();
+  const taskCommand = {
+    id: "client.capture-task",
+    proposes: { tool: "tasks", operation: "create" },
+  };
+  const reminderCommand = {
+    id: "client.follow-up-reminder",
+    proposes: { tool: "reminders", operation: "create" },
+  };
+
+  it("reads the captured task back before anything is staged", () => {
+    const info = logic.describeVoiceDispatch({
+      decision: "awaiting-confirmation",
+      command: taskCommand,
+      capture: { title: "Order bar oil", category: "work" },
+    } as never);
+    assert.equal(info.tone, "pending");
+    assert.match(info.label, /^Add task “Order bar oil” \(work\)\?/);
+    assert.match(info.label, /Nolan confirm/);
+  });
+
+  it("says a confirmed dictation is staged for approval, not done", () => {
+    const info = logic.describeVoiceDispatch({
+      decision: "proposed",
+      command: reminderCommand,
+      capture: { title: "Call dave" },
+      toolActionId: "voice-safe-write:v1:abc",
+    } as never);
+    assert.equal(info.tone, "ok");
+    assert.match(info.label, /Staged reminder “Call dave” for your approval/);
+    assert.match(info.label, /Nothing is created until you approve it/);
+  });
+
+  it("still surfaces the not-staged reason for a confirmed dictation", () => {
+    const info = logic.describeVoiceDispatch({
+      decision: "proposed",
+      command: taskCommand,
+      capture: { title: "Order bar oil", category: "personal" },
+      reason: "Safe write was not staged: the tool-action target is not commissioned.",
+    } as never);
+    assert.equal(info.tone, "warn");
+    assert.match(info.label, /not commissioned/);
   });
 });

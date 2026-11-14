@@ -116,7 +116,13 @@ export class VoiceController {
       ...(parsed.expectedRevision === undefined
         ? {}
         : { expectedRevision: parsed.expectedRevision }),
-      ...(parsed.capture === undefined ? {} : { capture: parsed.capture }),
+      // A dictated capture is exactly what the owner heard read back and
+      // confirmed; a request-body capture can never replace it.
+      ...(dispatch.capture !== undefined
+        ? { capture: dispatch.capture }
+        : parsed.capture === undefined
+          ? {}
+          : { capture: parsed.capture }),
     });
     if (!staged) return { dispatch, pending: session.pending() ?? null };
     if ("toolActionId" in staged) {

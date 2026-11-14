@@ -8205,7 +8205,7 @@
           },
           "capture": {
             "type": "object",
-            "description": "Bounded fields for a safe write. Whole-utterance matching stays exact; these fields are not parsed out of the transcript.",
+            "description": "Bounded fields for a safe write supplied by the client (for example the HUD capture form). Exact whole-utterance commands never parse fields from speech; the separate dictation grammar may (see VoiceWriteCapture), and a dictated capture the owner confirmed always takes precedence over this field.",
             "additionalProperties": false,
             "properties": {
               "title": {
@@ -8235,9 +8235,28 @@
           }
         }
       },
+      "VoiceWriteCapture": {
+        "type": "object",
+        "description": "Safe-write fields captured from speech by the dictation grammar, for example “Nolan, add a work task: order bar oil”. They are read back to the owner and staged only after an explicit spoken confirmation. Staging never approves or executes.",
+        "required": ["title"],
+        "additionalProperties": false,
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "Dictated title for tasks/create or reminders/create."
+          },
+          "category": {
+            "type": "string",
+            "enum": ["personal", "work", "builds", "money", "life"],
+            "description": "Task category. Present for a dictated task; personal when no category was spoken."
+          }
+        }
+      },
       "VoicePendingConfirmation": {
         "type": "object",
-        "description": "A critical command awaiting a spoken confirmation.",
+        "description": "A command awaiting a spoken confirmation: a critical command, an inferred command, or a dictated safe write whose captured fields are read back first.",
         "required": ["command", "issuedAt", "expiresAt"],
         "additionalProperties": false,
         "properties": {
@@ -8251,8 +8270,96 @@
           "expiresAt": {
             "type": "integer",
             "description": "Epoch milliseconds the confirmation lapses."
+          },
+          "capture": {
+            "$ref": "#/components/schemas/VoiceWriteCapture"
           }
-        }
+        },
+        "allOf": [
+          {
+            "if": { "properties": { "capture": {} }, "required": ["capture"] },
+            "then": {
+              "required": ["command"],
+              "properties": {
+                "command": {
+                  "properties": {
+                    "id": { "enum": ["client.capture-task", "client.follow-up-reminder"] },
+                    "profile": { "const": "client" }
+                  },
+                  "required": ["id", "profile"]
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "command": {
+                  "properties": { "id": { "const": "client.capture-task" } },
+                  "required": ["id"]
+                },
+                "capture": {}
+              },
+              "required": ["command", "capture"]
+            },
+            "then": {
+              "required": ["command"],
+              "properties": {
+                "command": {
+                  "properties": {
+                    "kind": { "const": "propose" },
+                    "proposes": {
+                      "properties": {
+                        "tool": { "const": "tasks" },
+                        "operation": { "const": "create" }
+                      },
+                      "required": ["tool", "operation"]
+                    }
+                  },
+                  "required": ["kind", "proposes"]
+                },
+                "capture": {
+                  "properties": { "title": {}, "category": {} },
+                  "required": ["title", "category"]
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "command": {
+                  "properties": { "id": { "const": "client.follow-up-reminder" } },
+                  "required": ["id"]
+                },
+                "capture": {}
+              },
+              "required": ["command", "capture"]
+            },
+            "then": {
+              "required": ["command"],
+              "properties": {
+                "command": {
+                  "properties": {
+                    "kind": { "const": "propose" },
+                    "proposes": {
+                      "properties": {
+                        "tool": { "const": "reminders" },
+                        "operation": { "const": "create" }
+                      },
+                      "required": ["tool", "operation"]
+                    }
+                  },
+                  "required": ["kind", "proposes"]
+                },
+                "capture": {
+                  "properties": { "title": {}, "category": {} },
+                  "not": { "properties": { "category": {} }, "required": ["category"] }
+                }
+              }
+            }
+          }
+        ]
       },
       "VoiceDispatch": {
         "type": "object",
@@ -8326,6 +8433,10 @@
             "minimum": 0,
             "maximum": 1,
             "description": "Interpreter confidence (0..1) for an inferred awaiting-confirmation decision. Advisory only; it never substitutes for the spoken confirmation."
+          },
+          "capture": {
+            "$ref": "#/components/schemas/VoiceWriteCapture",
+            "description": "Dictated safe-write fields. Present on awaiting-confirmation for a dictation (the read-back) and on the proposed decision that follows its confirmation. A request-body capture never replaces it."
           }
         },
         "allOf": [
@@ -8336,6 +8447,96 @@
               "properties": { "decision": { "const": "awaiting-confirmation" }, "confidence": {} }
             },
             "else": { "not": { "properties": { "confidence": {} }, "required": ["confidence"] } }
+          },
+          {
+            "if": { "properties": { "capture": {} }, "required": ["capture"] },
+            "then": {
+              "required": ["command"],
+              "properties": {
+                "command": {
+                  "properties": {
+                    "id": { "enum": ["client.capture-task", "client.follow-up-reminder"] },
+                    "profile": { "const": "client" }
+                  },
+                  "required": ["id", "profile"]
+                },
+                "decision": { "enum": ["awaiting-confirmation", "proposed"] }
+              },
+              "not": {
+                "anyOf": [
+                  { "properties": { "inferred": {} }, "required": ["inferred"] },
+                  { "properties": { "confidence": {} }, "required": ["confidence"] }
+                ]
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "command": {
+                  "properties": { "id": { "const": "client.capture-task" } },
+                  "required": ["id"]
+                },
+                "capture": {}
+              },
+              "required": ["command", "capture"]
+            },
+            "then": {
+              "required": ["command"],
+              "properties": {
+                "command": {
+                  "properties": {
+                    "kind": { "const": "propose" },
+                    "proposes": {
+                      "properties": {
+                        "tool": { "const": "tasks" },
+                        "operation": { "const": "create" }
+                      },
+                      "required": ["tool", "operation"]
+                    }
+                  },
+                  "required": ["kind", "proposes"]
+                },
+                "capture": {
+                  "properties": { "title": {}, "category": {} },
+                  "required": ["title", "category"]
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "command": {
+                  "properties": { "id": { "const": "client.follow-up-reminder" } },
+                  "required": ["id"]
+                },
+                "capture": {}
+              },
+              "required": ["command", "capture"]
+            },
+            "then": {
+              "required": ["command"],
+              "properties": {
+                "command": {
+                  "properties": {
+                    "kind": { "const": "propose" },
+                    "proposes": {
+                      "properties": {
+                        "tool": { "const": "reminders" },
+                        "operation": { "const": "create" }
+                      },
+                      "required": ["tool", "operation"]
+                    }
+                  },
+                  "required": ["kind", "proposes"]
+                },
+                "capture": {
+                  "properties": { "title": {}, "category": {} },
+                  "not": { "properties": { "category": {} }, "required": ["category"] }
+                }
+              }
+            }
           }
         ]
       },

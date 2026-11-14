@@ -833,10 +833,11 @@ describe("voice safe writes", () => {
     const sessionId = await openSession(app);
     const capture = { title: "Call the client" };
 
-    // A natural phrasing the exact parser declines. It is interpreted but held
-    // for confirmation — nothing is staged yet.
+    // A natural phrasing the exact parser declines and the dictation grammar
+    // does not claim ("remind me to …" is now dictated with its own title).
+    // It is interpreted but held for confirmation — nothing is staged yet.
     const first = await utter(app, sessionId, {
-      transcript: "jarvis remind me to chase this up",
+      transcript: "jarvis set a follow up reminder",
       isFinal: true,
       ...TARGET,
       capture,
@@ -879,6 +880,124 @@ describe("voice safe writes", () => {
     });
     assert.equal(out.statusCode, 200);
     assert.equal(out.json().dispatch.decision, "unrecognized");
+    assert.equal(actions.rows.size, 0);
+  });
+});
+
+describe("voice dictated safe writes", () => {
+  it("reads back a spoken task, stages it only after confirm, and the owner approval creates it", async () => {
+    const actions = new MemoryActions();
+    const tasks = new MemoryTasks();
+    const reminders = new MemoryReminders();
+    const execution = new ToolExecutionService([
+      createTaskToolDefinition(tasks),
+      createReminderToolDefinition(reminders),
+    ]);
+    const app = await makeApp(actions);
+    const sessionId = await openSession(app);
+
+    const spoken = await utter(app, sessionId, {
+      transcript: "Nolan, add a work task: order bar oil",
+      isFinal: true,
+      ...TARGET,
+    });
+    assert.equal(spoken.statusCode, 200);
+    const readBack = spoken.json();
+    assert.equal(readBack.dispatch.decision, "awaiting-confirmation");
+    assert.deepEqual(readBack.dispatch.capture, { title: "Order bar oil", category: "work" });
+    assert.deepEqual(readBack.pending.capture, { title: "Order bar oil", category: "work" });
+    assert.equal(actions.rows.size, 0, "a read-back stages nothing");
+
+    // A body capture on the confirm turn can never replace what was read back.
+    const confirmed = await utter(app, sessionId, {
+      transcript: "Nolan confirm",
+      isFinal: true,
+      ...TARGET,
+      capture: { title: "Something else entirely", category: "money" },
+    });
+    assert.equal(confirmed.statusCode, 200);
+    const dispatch = confirmed.json().dispatch;
+    assert.equal(dispatch.decision, "proposed");
+    assert.deepEqual(dispatch.capture, { title: "Order bar oil", category: "work" });
+    assert.equal(typeof dispatch.toolActionId, "string");
+    const staged = actions.rows.get(dispatch.toolActionId);
+    assert.ok(staged);
+    assert.equal(staged.state, "proposed");
+    assert.deepEqual(staged.arguments, { title: "Order bar oil", category: "work" });
+    assert.equal(actions.approveCalls, 0, "voice never approves");
+    assert.equal(tasks.records.length, 0, "staging must not execute");
+
+    const approved = await actions.approve({
+      actionId: staged.actionId,
+      projectId: "project-1",
+      expectedRevision: 1,
+      approvalToken: "owner-token",
+    });
+    const receipt = await executeLive(execution, approved);
+    assert.equal(receipt.status, "succeeded");
+    assert.equal(tasks.records.length, 1);
+    assert.equal(tasks.records[0]?.title, "Order bar oil");
+    assert.equal(tasks.records[0]?.category, "work");
+
+    const replay = await utter(app, sessionId, {
+      transcript: "Nolan confirm",
+      isFinal: true,
+      ...TARGET,
+    });
+    assert.equal(replay.json().dispatch.decision, "confirmation-not-pending");
+    assert.equal(actions.rows.size, 1);
+  });
+
+  it("stages a dictated reminder after confirm", async () => {
+    const actions = new MemoryActions();
+    const app = await makeApp(actions);
+    const sessionId = await openSession(app);
+    await utter(app, sessionId, {
+      transcript: "nolan remind me to call Dave about the fence",
+      isFinal: true,
+      ...TARGET,
+    });
+    const confirmed = await utter(app, sessionId, {
+      transcript: "nolan confirm",
+      isFinal: true,
+      ...TARGET,
+    });
+    const dispatch = confirmed.json().dispatch;
+    assert.equal(dispatch.decision, "proposed");
+    const staged = actions.rows.get(dispatch.toolActionId);
+    assert.deepEqual(staged?.arguments, { title: "Call dave about the fence" });
+    assert.equal(staged?.tool, "reminders");
+  });
+
+  it("stages nothing for a dictation without the wake word", async () => {
+    const actions = new MemoryActions();
+    const app = await makeApp(actions);
+    const sessionId = await openSession(app);
+    const spoken = await utter(app, sessionId, {
+      transcript: "add a task: order bar oil",
+      isFinal: true,
+      ...TARGET,
+    });
+    assert.equal(spoken.json().dispatch.decision, "unrecognized");
+    const confirm = await utter(app, sessionId, {
+      transcript: "nolan confirm",
+      isFinal: true,
+      ...TARGET,
+    });
+    assert.equal(confirm.json().dispatch.decision, "confirmation-not-pending");
+    assert.equal(actions.rows.size, 0);
+  });
+
+  it("reports an uncommissioned target honestly after a confirmed dictation", async () => {
+    const actions = new MemoryActions();
+    const app = await makeApp(actions);
+    const sessionId = await openSession(app);
+    await utter(app, sessionId, { transcript: "nolan add a task: order bar oil", isFinal: true });
+    const confirmed = await utter(app, sessionId, { transcript: "nolan confirm", isFinal: true });
+    const dispatch = confirmed.json().dispatch;
+    assert.equal(dispatch.decision, "proposed");
+    assert.equal(dispatch.toolActionId, undefined);
+    assert.match(dispatch.reason, /not commissioned/);
     assert.equal(actions.rows.size, 0);
   });
 });

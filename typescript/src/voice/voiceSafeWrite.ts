@@ -8,6 +8,7 @@
 import { canonicalJson } from "../actions/canonicalJson.js";
 import { sha256Hex } from "../actions/sha256.js";
 import type { ToolActionService } from "../actions/toolActions.js";
+import { classifyVoiceDictation, hasUnsafeVoiceCharacters } from "./voiceDictation.js";
 import { normalizeUtterance, type VoiceCommand } from "./voiceCommands.js";
 
 /** NOLAN is the approved public wake word. Keep Jarvis temporarily for legacy clients. */
@@ -41,6 +42,17 @@ export function splitVoiceWakeWord(raw: string): { heard: boolean; rest: string 
   return { heard: false, rest: text };
 }
 
+function unnormalisedDictation(raw: string, wakeHeard: boolean): string | undefined {
+  if (!hasUnsafeVoiceCharacters(raw)) return undefined;
+  let text = raw.trim();
+  if (wakeHeard) {
+    const lower = text.toLowerCase();
+    const wake = WAKE_WORDS.find((word) => lower.startsWith(word));
+    if (wake) text = text.slice(wake.length).replace(WAKE_SEPARATOR, "");
+  }
+  return classifyVoiceDictation(text, "client").status === "rejected" ? text : undefined;
+}
+
 export function voiceUtteranceForSession(input: {
   transcript: string;
   heardTranscript?: string;
@@ -54,12 +66,19 @@ export function voiceUtteranceForSession(input: {
     wakeAuthorized =
       heard.heard && heard.rest === commandTranscript && commandTranscript.length > 0;
   }
-  const alternatives = input.alternatives?.map(
-    (alternative) => splitVoiceWakeWord(alternative).rest,
-  );
+  // Normalisation collapses newline/tab/CR into spaces. A dictation that carried
+  // them must reach the session unnormalised so it is rejected, not armed.
+  const rawCommand = unnormalisedDictation(input.transcript, direct.heard);
+  // Alternatives get the same treatment: a dictated alternative carrying raw
+  // control characters is passed through stripped-but-unnormalised so the
+  // session sees it and fails closed. Benign alternatives are unchanged.
+  const alternatives = input.alternatives?.map((alternative) => {
+    const split = splitVoiceWakeWord(alternative);
+    return unnormalisedDictation(alternative, split.heard) ?? split.rest;
+  });
   return {
     wakeAuthorized,
-    transcript: commandTranscript,
+    transcript: rawCommand ?? commandTranscript,
     ...(alternatives ? { alternatives } : {}),
   };
 }
