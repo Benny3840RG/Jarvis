@@ -377,3 +377,49 @@ it("sweeps expiry only while sessions exist and disposal stops the timer", async
     globalThis.clearInterval = realClear;
   }
 });
+
+it("two allowed queries then a reasoner provider-error is still tool-limit", async () => {
+  const service = new VoiceConversationService({
+    reasoner: {
+      reply: async (input) => {
+        await input.query(UNPAID);
+        await input.query(SCHEDULE);
+        return { status: "unavailable", reason: "provider-error" };
+      },
+    },
+  });
+  const s = new VoiceSession({
+    profile: "client",
+    provider: new AbsentHardwareProvider(),
+    queries: { answer: async () => ({ status: "answered", answer: "Fine." }) },
+  });
+  assert.deepEqual(await service.respond({ session: s, transcript: "status?" }), {
+    status: "unavailable",
+    reason: "tool-limit",
+  });
+});
+
+it("a disallowed trailer.status query is an attempt answered unavailable by the service", async () => {
+  const seen: VoiceQueryAnswer[] = [];
+  const service = new VoiceConversationService({
+    reasoner: {
+      reply: async (input) => {
+        seen.push(await input.query("trailer.status"));
+        return { status: "answered", reply: "ignored" };
+      },
+    },
+  });
+  const s = new VoiceSession({
+    profile: "client",
+    provider: new AbsentHardwareProvider(),
+    queries: { answer: async () => ({ status: "answered", answer: "leak" }) },
+  });
+  assert.deepEqual(await service.respond({ session: s, transcript: "status?" }), {
+    status: "unavailable",
+    reason: "unavailable",
+  });
+  assert.deepEqual(
+    seen.map((a) => a.status),
+    ["unavailable"],
+  );
+});

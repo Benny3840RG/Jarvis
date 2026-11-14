@@ -184,3 +184,62 @@ it("handles refusal, truncated output, tool-loop limit, timeout and rate-limit e
     assert.deepEqual(await reasoner.reply(input()), { status: "unavailable", reason });
   }
 });
+
+const toolUse = (id: string, commandId: string) => ({
+  type: "tool_use",
+  id,
+  name: "voice_query",
+  input: { commandId },
+});
+
+it("counts a second tool request after an unavailable first query (service sees both)", async () => {
+  const seen: string[] = [];
+  const reasoner = createAnthropicVoiceReasoner(
+    { apiKey: "test-only", model: "claude-opus-5-5", timeoutMs: 20_000 },
+    {
+      client: client(
+        [
+          { stop_reason: "tool_use", content: [toolUse("a", "client.unpaid-invoices")] },
+          { stop_reason: "tool_use", content: [toolUse("b", "client.todays-schedule")] },
+          { stop_reason: "end_turn", content: [{ type: "text", text: "x" }] },
+        ],
+        [],
+      ),
+    },
+  );
+  await reasoner.reply(
+    input({
+      query: async (id) => {
+        seen.push(id);
+        return { status: "unavailable", reason: "Down." };
+      },
+    }),
+  );
+  assert.deepEqual(seen, ["client.unpaid-invoices", "client.todays-schedule"]);
+});
+
+it("forwards a disallowed voice_query id to the service instead of provider-error", async () => {
+  const seen: string[] = [];
+  const reasoner = createAnthropicVoiceReasoner(
+    { apiKey: "test-only", model: "claude-opus-5-5", timeoutMs: 20_000 },
+    {
+      client: client(
+        [
+          { stop_reason: "tool_use", content: [toolUse("a", "trailer.status")] },
+          { stop_reason: "end_turn", content: [{ type: "text", text: "x" }] },
+        ],
+        [],
+      ),
+    },
+  );
+  const result = await reasoner.reply(
+    input({
+      query: async (id) => {
+        seen.push(id);
+        return { status: "unavailable", reason: "Voice query unavailable." };
+      },
+    }),
+  );
+  assert.deepEqual(seen, ["trailer.status"]);
+  assert.deepEqual(result, { status: "answered", reply: "Voice query unavailable." });
+});

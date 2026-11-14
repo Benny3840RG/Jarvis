@@ -4079,8 +4079,8 @@
               : { label: "Query unavailable — no authoritative answer was returned.", tone: "warn" };
           }
           if (dispatch && dispatch.decision === "conversation") {
-            var reply = typeof dispatch.reply === "string" ? dispatch.reply.trim() : "";
-            return reply
+            var reply = typeof dispatch.reply === "string" ? dispatch.reply : "";
+            return reply.trim()
               ? { label: reply, tone: "ok" }
               : { label: "Conversation unavailable.", tone: "warn", notice: true };
           }

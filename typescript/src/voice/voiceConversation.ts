@@ -152,6 +152,8 @@ export class VoiceConversationService {
       if (activeContext.controller === controller) activeContext.controller = undefined;
     }
     if (!stillLive()) return { status: "unavailable", reason: "unavailable" };
+    // Attempt count outranks every reasoner outcome (provider-error, unavailable, order).
+    if (attempts.length > 1) return { status: "unavailable", reason: "tool-limit" };
     if (result.status !== "answered") return result;
     const decision = speechDecision(attempts, this.#maxReplyLength);
     if (decision.status !== "answered") return decision;

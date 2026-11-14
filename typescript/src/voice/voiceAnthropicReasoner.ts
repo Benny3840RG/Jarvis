@@ -42,10 +42,14 @@ function systemPrompt(input: ConversationReasonerInput): string {
   );
 }
 
-function parsedCommandId(value: unknown, allowed: ReadonlySet<string>): string | null {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
+/**
+ * The model's requested id, forwarded verbatim (or "" when malformed) so the service, which owns
+ * the active-profile allowlist, counts the attempt and answers a disallowed one as unavailable.
+ */
+function requestedCommandId(value: unknown): string {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return "";
   const commandId = (value as Record<string, unknown>).commandId;
-  return typeof commandId === "string" && allowed.has(commandId) ? commandId : null;
+  return typeof commandId === "string" ? commandId : "";
 }
 
 export function createAnthropicVoiceReasoner(
@@ -59,7 +63,6 @@ export function createAnthropicVoiceReasoner(
   return {
     async reply(input) {
       const ids = input.catalog.filter((command) => command.kind === "query").map((c) => c.id);
-      const allowed = new Set(ids);
       const messages: BetaMessageParam[] = [
         ...input.history.map((message) => ({ role: message.role, content: message.content })),
         { role: "user", content: input.transcript },
@@ -119,16 +122,14 @@ export function createAnthropicVoiceReasoner(
           }
           if (response.stop_reason !== "tool_use")
             return { status: "unavailable", reason: "provider-error" };
-          if (unavailableSource) return { status: "answered", reply: unavailableSource };
           const uses = response.content.filter((block) => block.type === "tool_use");
-          if (!uses.length || toolCalls + uses.length > 4)
-            return { status: "unavailable", reason: "tool-limit" };
+          if (!uses.length) return { status: "unavailable", reason: "tool-limit" };
+          // Every request is counted by the service (via input.query) before any terminal
+          // reason is chosen, so no early return may skip a request block.
           const results: BetaToolResultBlockParam[] = [];
           for (const use of uses) {
-            if (use.name !== "voice_query")
-              return { status: "unavailable", reason: "provider-error" };
-            const commandId = parsedCommandId(use.input, allowed);
-            if (!commandId) return { status: "unavailable", reason: "provider-error" };
+            if (toolCalls >= 4) return { status: "unavailable", reason: "tool-limit" };
+            const commandId = use.name === "voice_query" ? requestedCommandId(use.input) : "";
             const answer = await input.query(commandId);
             if (answer.status === "unavailable") unavailableSource ??= answer.reason;
             results.push({
