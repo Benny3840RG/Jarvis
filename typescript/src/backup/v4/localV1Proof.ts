@@ -55,6 +55,8 @@ export type LocalV1ProofRequest = {
   restore: LocalV1RestoreRequest;
   /** Live data directory whose bytes must be unchanged by the proof. */
   liveDirectory: string;
+  /** Exact source supplied to capture, which may differ from business JSON. */
+  ownerDecisionLedgerDirectory: string;
   /** Second read of the isolated targets, including a restarted HTTP process. */
   readIsolated: () => Promise<IsolatedRead>;
 };
@@ -323,6 +325,22 @@ async function assertOwnerDecisions(
   if (status !== expected)
     throw new LocalV1ProofError("Local V1 proof ledger result disagrees with capture.");
   if (status === "not-captured") return;
+  if (status === "absent") {
+    const directory = await fs.stat(source).catch((error: unknown) => {
+      throw new LocalV1ProofError(
+        "Local V1 proof owner decision ledger source directory is unavailable.",
+        {
+          cause: error,
+        },
+      );
+    });
+    if (!directory.isDirectory()) {
+      throw new LocalV1ProofError(
+        "Local V1 proof owner decision ledger source directory is not a directory.",
+      );
+    }
+    await verifyLocalV1Ledger(source, { state: "absent" });
+  }
   const file = path.join(target, LOCAL_V1_LEDGER_FILE);
   const checkpoint = path.join(target, LOCAL_V1_CHECKPOINT_FILE);
   if (status === "present") {
@@ -420,7 +438,7 @@ export async function proveLocalV1Recovery(
     await assertJsonRestore(restored.jsonDirectory, restored.archive);
     await assertOwnerDecisions(
       capture,
-      request.liveDirectory,
+      request.ownerDecisionLedgerDirectory,
       restored.jsonDirectory,
       restored.ledger,
       restored.archive,

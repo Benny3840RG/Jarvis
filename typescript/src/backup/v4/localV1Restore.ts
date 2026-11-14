@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+import { constants } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 
@@ -15,8 +17,15 @@ import {
   LOCAL_V1_S6_FILE,
 } from "./localV1Capture.js";
 import { LOCAL_V1_RECEIPT_CAPTURE_VERSION, LOCAL_V1_RECEIPT_TABLES } from "./localV1Receipts.js";
-import { restoreLocalV1Ledger } from "./localV1Ledger.js";
-import { restoreArchiveV4 } from "./restore.js";
+import {
+  LOCAL_V1_CHECKPOINT_FILE,
+  LOCAL_V1_LEDGER_FILE,
+  readVerifiedLocalV1Ledger,
+} from "./localV1Ledger.js";
+import { MAX_MARKER_BYTES } from "./limits.js";
+import { restoreArchiveV4, verifyCompletedRestore } from "./restore.js";
+
+const ACTION_STARTED_MARKER = ".jarvis-local-v1-action-started.json";
 import { S6_CAPTURE_VERSION, S6_TABLES } from "./s6MutableQuotes.js";
 
 export class LocalV1RestoreError extends Error {
@@ -43,7 +52,7 @@ export type LocalV1RestoreClient = {
 export type LocalV1RestoreRequest = {
   /** Directory written by `captureLocalV1Archive`. Read only. */
   captureDirectory: string;
-  /** New directory for the JSON half. Must not already exist. */
+  /** New directory for the JSON half, or an interrupted restore with resume. */
   jsonDirectory: string;
   /** Empty `convex-test` client. This function never constructs one from `CONVEX_URL`. */
   client: LocalV1RestoreClient;
@@ -59,6 +68,13 @@ export type LocalV1RestoreRequest = {
   liveDataDir?: string;
   forbiddenUrls?: readonly string[];
   forbiddenWriteRoots?: readonly string[];
+  resume?: boolean;
+  /** Test-only interruption after the checkpoint or ledger file. */
+  injectAfterLedgerFile?: "checkpoint" | "ledger";
+  /** Test-only interruption after the isolated action returns. */
+  injectAfterAction?: boolean;
+  /** Test-only interruption after JSON completion, before marker cleanup. */
+  injectAfterCompletion?: boolean;
 };
 
 export type LocalV1RestoreResult = {
@@ -157,7 +173,7 @@ async function assertJsonDestination(request: LocalV1RestoreRequest): Promise<st
     if (error instanceof Error && "code" in error && error.code === "ENOENT") return null;
     throw error;
   });
-  if (stat !== null)
+  if (stat !== null && !request.resume)
     throw new LocalV1RestoreError(`Local V1 restore JSON directory already exists: ${destination}`);
   return destination;
 }
@@ -166,9 +182,10 @@ async function readSidecar(
   filePath: string,
   version: string,
   tables: readonly string[],
-): Promise<{ tables: unknown[]; tombstones: unknown[] }> {
-  const raw = await fs.readFile(filePath, "utf8");
-  if (new TextEncoder().encode(raw).length > S4_MAX_PAYLOAD_BYTES) {
+): Promise<{ tables: unknown[]; tombstones: unknown[]; rawBytes: Buffer }> {
+  const rawBytes = await fs.readFile(filePath);
+  const raw = rawBytes.toString("utf8");
+  if (rawBytes.length > S4_MAX_PAYLOAD_BYTES) {
     throw new LocalV1RestoreError("Local V1 restore sidecar exceeds its payload byte limit.");
   }
   let parsed: unknown;
@@ -215,7 +232,72 @@ async function readSidecar(
   return {
     tables: payload.tables,
     tombstones: Array.isArray(payload.tombstones) ? payload.tombstones : [],
+    rawBytes,
   };
+}
+
+function captureFingerprint(parts: readonly Buffer[]): string {
+  const hash = createHash("sha256");
+  for (const part of parts) {
+    hash.update(`${String(part.length)}:`);
+    hash.update(part);
+  }
+  return `sha256:${hash.digest("hex")}`;
+}
+
+async function markActionStarted(destination: string, fingerprint: string): Promise<void> {
+  const handle = await fs.open(path.join(destination, ACTION_STARTED_MARKER), "wx", 0o600);
+  try {
+    await handle.chmod(0o600);
+    await handle.writeFile(`${JSON.stringify({ fingerprint, state: "outcome-ambiguous" })}\n`);
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
+  const directory = await fs.open(destination, "r");
+  try {
+    await directory.sync();
+  } finally {
+    await directory.close();
+  }
+}
+
+async function actionMarkerMatches(target: string, fingerprint: string): Promise<boolean> {
+  const entry = await fs.lstat(target).catch((error: unknown) => {
+    if (isNodeError(error) && error.code === "ENOENT") return null;
+    throw error;
+  });
+  if (
+    !entry?.isFile() ||
+    entry.nlink !== 1 ||
+    (entry.mode & 0o777) !== 0o600 ||
+    entry.size > MAX_MARKER_BYTES
+  )
+    return false;
+  try {
+    const handle = await fs.open(target, constants.O_RDONLY | constants.O_NOFOLLOW);
+    try {
+      const actual = await handle.stat();
+      if (
+        !actual.isFile() ||
+        actual.ino !== entry.ino ||
+        actual.dev !== entry.dev ||
+        actual.size > MAX_MARKER_BYTES
+      )
+        return false;
+      const value: unknown = JSON.parse(await handle.readFile("utf8"));
+      return (
+        object(value) &&
+        Object.keys(value).length === 2 &&
+        value.fingerprint === fingerprint &&
+        value.state === "outcome-ambiguous"
+      );
+    } finally {
+      await handle.close();
+    }
+  } catch {
+    return false;
+  }
 }
 
 function quoteIds(tables: unknown[]): {
@@ -355,27 +437,91 @@ export async function restoreLocalV1Archive(
     receiptTombstones: receiptSidecar.tombstones,
   });
 
+  const verifiedLedger = await readVerifiedLocalV1Ledger(
+    capture,
+    archive.manifest.localV1OwnerDecisionLedger,
+  );
+  const extraFiles =
+    verifiedLedger.status === "present"
+      ? [
+          { name: LOCAL_V1_CHECKPOINT_FILE, bytes: verifiedLedger.pair.checkpoint },
+          { name: LOCAL_V1_LEDGER_FILE, bytes: verifiedLedger.pair.ledger },
+        ]
+      : [];
+  const fingerprint = captureFingerprint([
+    Buffer.from(JSON.stringify(archive)),
+    s6Sidecar.rawBytes,
+    receiptSidecar.rawBytes,
+    ...blobs.map((blob) => Buffer.from(blob.bytes)),
+    ...extraFiles.map((file) => file.bytes),
+    Buffer.from(JSON.stringify({ convexUrl: request.convexUrl, now: request.now })),
+  ]);
+  const actionMarkerPath = path.join(destination, ACTION_STARTED_MARKER);
+  const actionMarker = await fs.lstat(actionMarkerPath).catch((error: unknown) => {
+    if (isNodeError(error) && error.code === "ENOENT") return null;
+    throw error;
+  });
+  if (actionMarker !== null) {
+    if (
+      request.resume &&
+      (await actionMarkerMatches(actionMarkerPath, fingerprint)) &&
+      (await verifyCompletedRestore(destination, archive, extraFiles, fingerprint, {
+        name: ACTION_STARTED_MARKER,
+        bytes: Buffer.from(`${JSON.stringify({ fingerprint, state: "outcome-ambiguous" })}\n`),
+      }))
+    ) {
+      throw new LocalV1RestoreError(
+        "Local V1 restore already completed; the retained action marker is historical. Use the completed destination; no action was replayed.",
+      );
+    }
+    throw new LocalV1RestoreError(
+      "Isolated restore action outcome is ambiguous; operator reconciliation is required before retry.",
+    );
+  }
+  let maps: LocalV1RestoreMaps | undefined;
   await restoreArchiveV4(archive, destination, {
     allowPartial: true,
     liveDataDir: request.liveDataDir ?? JARVIS_DATA_DIR,
     now: () => new Date(request.now),
+    resume: request.resume,
+    resumeFingerprint: fingerprint,
+    extraFiles,
+    injectAfterExtraFile:
+      request.injectAfterLedgerFile === "checkpoint"
+        ? LOCAL_V1_CHECKPOINT_FILE
+        : request.injectAfterLedgerFile === "ledger"
+          ? LOCAL_V1_LEDGER_FILE
+          : undefined,
+    injectAfterBeforeCompletion: request.injectAfterAction,
+    beforeCompletion: async () => {
+      await markActionStarted(destination, fingerprint);
+      maps = await request.client.action(restoreLocalV1Action, {
+        serviceToken: request.serviceToken,
+        approvalToken: request.approvalToken,
+        now: request.now,
+        payloadJson,
+        blobs,
+      });
+    },
   });
-  try {
-    const ledger = await restoreLocalV1Ledger(
-      capture,
-      destination,
-      archive.manifest.localV1OwnerDecisionLedger,
+  if (maps === undefined)
+    throw new LocalV1RestoreError("Local V1 restore action did not return maps.");
+  if (request.injectAfterCompletion) {
+    throw new LocalV1RestoreError(
+      "Injected failure after JSON completion, before action marker cleanup.",
     );
-    const maps = await request.client.action(restoreLocalV1Action, {
-      serviceToken: request.serviceToken,
-      approvalToken: request.approvalToken,
-      now: request.now,
-      payloadJson,
-      blobs,
-    });
-    return { jsonDirectory: destination, archive, maps, ledger };
-  } catch (error: unknown) {
-    await fs.rm(destination, { recursive: true, force: true });
-    throw error;
   }
+  if (!(await actionMarkerMatches(actionMarkerPath, fingerprint))) {
+    throw new LocalV1RestoreError(
+      "Completed restore action marker changed; operator reconciliation is required.",
+    );
+  }
+  await fs.rm(actionMarkerPath);
+  const directory = await fs.open(destination, "r");
+  try {
+    await directory.sync();
+  } finally {
+    await directory.close();
+  }
+  return { jsonDirectory: destination, archive, maps, ledger: verifiedLedger.status };
 }

@@ -244,10 +244,11 @@ const INJECTION_POINTS = [
   "businessSettings",
 ] as const;
 
-async function captureFixture(): Promise<ArchiveV4> {
+async function captureFixture(omitBusinessSettings = false): Promise<ArchiveV4> {
   const dir = await scratch();
   const paths = pathsIn(dir);
   for (const [key, target] of Object.entries(paths)) {
+    if (omitBusinessSettings && key === "businessSettings") continue;
     await writeFile(target, `${JSON.stringify(SOURCE[key], null, 2)}\n`, "utf8");
   }
   return buildArchiveV4(await captureJsonGroups(paths), CREATED_AT);
@@ -376,6 +377,66 @@ describe("archive v4 restore — an interruption is recoverable, not just refuse
 });
 
 describe("archive v4 restore — recovery never touches what it did not write", () => {
+  it("refuses restore-owned extra filenames before creating a fresh destination", async () => {
+    const archive = await captureFixture();
+    const dir = await scratch();
+    for (const name of [
+      "manifest.json",
+      RESTORE_MARKER,
+      RESTORE_IN_PROGRESS_MARKER,
+      ...RESTORE_ORDER,
+    ]) {
+      const destination = path.join(dir, `restore-${name}`);
+      await assert.rejects(
+        restoreArchiveV4(archive, destination, {
+          allowPartial: true,
+          extraFiles: [{ name, bytes: Buffer.from("untrusted bytes\n") }],
+        }),
+        /Restore extra file name is invalid or duplicated/,
+        name,
+      );
+      assert.equal(await exists(destination), false, name);
+    }
+  });
+
+  it("reserves an internal filename even when that document is absent from this archive", async () => {
+    const archive = await captureFixture(true);
+    const destination = path.join(await scratch(), "restore");
+    await assert.rejects(
+      restoreArchiveV4(archive, destination, {
+        allowPartial: true,
+        extraFiles: [{ name: "jarvis-business-settings.json", bytes: Buffer.from("{}\n") }],
+      }),
+      /Restore extra file name is invalid or duplicated/,
+    );
+    assert.equal(await exists(destination), false);
+  });
+
+  it("refuses a reserved manifest extra on resume before accepting replaced manifest bytes", async () => {
+    const archive = await captureFixture();
+    const destination = path.join(await scratch(), "restore");
+    const extraFiles = [{ name: "manifest.json", bytes: Buffer.from("untrusted bytes\n") }];
+    await assert.rejects(
+      restoreArchiveV4(archive, destination, {
+        allowPartial: true,
+        injectAfterVerify: true,
+      }),
+      /Injected failure after verification/,
+    );
+    const markerPath = path.join(destination, RESTORE_IN_PROGRESS_MARKER);
+    const marker = JSON.parse(await readFile(markerPath, "utf8")) as { plannedFiles: string[] };
+    marker.plannedFiles.push("manifest.json");
+    await writeFile(markerPath, `${JSON.stringify(marker, null, 2)}\n`);
+    await writeFile(path.join(destination, "manifest.json"), extraFiles[0]!.bytes);
+    const before = await contentsOf(destination);
+    await assert.rejects(
+      restoreArchiveV4(archive, destination, { allowPartial: true, extraFiles, resume: true }),
+      /Restore extra file name is invalid or duplicated/,
+    );
+    assert.deepEqual(await contentsOf(destination), before);
+    assert.equal(await exists(path.join(destination, RESTORE_MARKER)), false);
+  });
+
   for (const alteration of ["extra-file", "missing-file", "duplicate-file", "contract-version"]) {
     it(`refuses a changed recovery marker (${alteration}) without deleting any files`, async () => {
       const archive = await captureFixture();

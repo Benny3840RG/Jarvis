@@ -3,6 +3,7 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 
 import {
+  LOCAL_V1_LEDGER_CONTRACT_VERSION,
   ArchiveManifestError,
   buildManifest,
   groupChecksum,
@@ -143,6 +144,7 @@ export function sealVerifiedArchive(
   verifiedAt: Date,
 ): ArchiveV4 {
   const manifest = buildManifest({
+    contractVersion: archive.manifest.contractVersion,
     createdAt: new Date(archive.manifest.createdAt),
     groups: archive.manifest.groups,
     dependencies: archive.manifest.dependencies,
@@ -311,6 +313,31 @@ export async function readArchiveV4File(
     );
   }
   const archive = parseArchiveV4(parsed);
+  const directory = path.dirname(target);
+  const exists = async (name: string): Promise<boolean> =>
+    fs.lstat(path.join(directory, name)).then(
+      () => true,
+      (error: unknown) => {
+        if (error instanceof Error && "code" in error && error.code === "ENOENT") return false;
+        throw error;
+      },
+    );
+  // PR #806 initially wrote Local V1 captures with the older v4:1 contract.
+  // A post-merge capture without its ledger claim cannot be treated as a
+  // pre-feature archive merely because that field was removed. This date is
+  // the exact merge boundary, not an estimate of runtime state.
+  if (
+    archive.manifest.contractVersion !== LOCAL_V1_LEDGER_CONTRACT_VERSION &&
+    archive.manifest.localV1OwnerDecisionLedger === undefined &&
+    ((await exists("jarvis-owner-decisions.jsonl")) ||
+      (await exists("jarvis-owner-decisions.jsonl.checkpoint.json")) ||
+      (Date.parse(archive.manifest.createdAt) >= Date.parse("2026-11-13T00:05:34.000Z") &&
+        (await exists("convex-s6.json"))))
+  ) {
+    throw new StrictBackupError(
+      "Local V1 archive created after owner-ledger capture began requires localV1OwnerDecisionLedger.",
+    );
+  }
   if (archive.manifest.localV1OwnerDecisionLedger !== undefined) {
     await verifyLocalV1Ledger(path.dirname(target), archive.manifest.localV1OwnerDecisionLedger);
   }
