@@ -51,6 +51,8 @@ export class VoiceSessionRegistry {
   readonly #interpretNaturalLanguage: boolean;
   readonly #idFactory: () => string;
   readonly #sessions = new Map<string, Entry>();
+  readonly #sweepIntervalMs: number;
+  #timer: ReturnType<typeof setInterval> | undefined;
   #removalListener: ((session: VoiceSession) => void) | undefined;
 
   /** Observe disposal without giving the observer control over session decisions. */
@@ -67,8 +69,29 @@ export class VoiceSessionRegistry {
     this.#confirmationTtlMs = options.confirmationTtlMs;
     this.#interpretNaturalLanguage = options.interpretNaturalLanguage ?? false;
     this.#idFactory = options.idFactory ?? randomUUID;
-    const sweepIntervalMs = options.sweepIntervalMs ?? DEFAULT_SWEEP_INTERVAL_MS;
-    if (sweepIntervalMs > 0) setInterval(() => this.sweep(), sweepIntervalMs).unref();
+    this.#sweepIntervalMs = options.sweepIntervalMs ?? DEFAULT_SWEEP_INTERVAL_MS;
+  }
+
+  /**
+   * Stop the sweep timer and drop every session (notifying the removal listener). Idempotent;
+   * the registry stays usable, and a later create() re-arms the timer.
+   */
+  dispose(): void {
+    this.#stopTimer();
+    for (const id of [...this.#sessions.keys()]) this.#delete(id);
+  }
+
+  // The timer exists only while sessions do, so an idle or abandoned registry is never
+  // referenced by a timer; it is unref'd so it never holds the process open either.
+  #armTimer(): void {
+    if (this.#timer || this.#sweepIntervalMs <= 0 || this.#sessions.size === 0) return;
+    this.#timer = setInterval(() => this.sweep(), this.#sweepIntervalMs);
+    this.#timer.unref();
+  }
+
+  #stopTimer(): void {
+    if (this.#timer) clearInterval(this.#timer);
+    this.#timer = undefined;
   }
 
   /** Remove every expired session now, notifying the removal listener for each. */
@@ -93,6 +116,7 @@ export class VoiceSessionRegistry {
     });
     const expiresAt = now + this.#ttlMs;
     this.#sessions.set(id, { session, expiresAt });
+    this.#armTimer();
     return { id, profile, expiresAt };
   }
 
@@ -153,6 +177,7 @@ export class VoiceSessionRegistry {
     const entry = this.#sessions.get(id);
     if (!entry) return false;
     this.#sessions.delete(id);
+    if (this.#sessions.size === 0) this.#stopTimer();
     this.#removalListener?.(entry.session);
     return true;
   }

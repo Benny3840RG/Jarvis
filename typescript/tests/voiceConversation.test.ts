@@ -4,6 +4,7 @@ import { it } from "node:test";
 import {
   NOT_DONE_REPLY,
   VoiceConversationService,
+  claimsUngroundedOutcome,
   spokenReply,
   type VoiceConversationReasoner,
 } from "../src/voice/voiceConversation.js";
@@ -257,4 +258,99 @@ it("aborts an in-flight reasoner when its session context is cleared", async () 
   finish();
   assert.deepEqual(await pending, { status: "unavailable", reason: "unavailable" });
   assert.deepEqual(service.history(s), []);
+});
+
+it("rejects passive claims and unit-shifted or spelled-out figures (review probes)", async () => {
+  const replies: string[] = [];
+  let queried = false;
+  const service = new VoiceConversationService({
+    reasoner: {
+      reply: async (input) => {
+        if (queried) await input.query("client.unpaid-invoices");
+        return { status: "answered", reply: replies.shift()! };
+      },
+    },
+  });
+  const s = new VoiceSession({
+    profile: "client",
+    provider: new AbsentHardwareProvider(),
+    queries: {
+      answer: async () => ({ status: "answered", answer: "You have 3 unpaid invoices." }),
+    },
+  });
+  const ask = () => service.respond({ session: s, transcript: "status?" });
+  // No query this turn: passive outcome claims never speak as fact.
+  for (const claim of ["Your quote has been sent.", "The task is now booked.", "It got done."]) {
+    replies.push(claim);
+    assert.deepEqual(await ask(), { status: "answered", reply: NOT_DONE_REPLY }, claim);
+  }
+  // Number words need grounding exactly like digits.
+  replies.push("You have three unpaid invoices.");
+  assert.deepEqual(await ask(), { status: "unavailable", reason: "ungrounded" });
+  queried = true;
+  // Same figure, different unit: "$3" is not "3 unpaid invoices".
+  for (const bad of ["Your outstanding balance is $3.", "You owe three dollars.", "That is 3%."]) {
+    replies.push(bad);
+    assert.deepEqual(await ask(), { status: "unavailable", reason: "ungrounded" }, bad);
+  }
+  // Grounded read-only answers survive, including spelled-out figures that match.
+  for (const good of ["You have 3 unpaid invoices.", "You have three unpaid invoices."]) {
+    replies.push(good);
+    assert.deepEqual(await ask(), { status: "answered", reply: good });
+  }
+  replies.push("Which one do you want to look at? I can check that one.");
+  assert.equal((await ask()).status, "answered");
+});
+
+it("claimsUngroundedOutcome lets a participle through only when a query used it", () => {
+  assert.equal(claimsUngroundedOutcome("Your quote has been sent.", []), true);
+  assert.equal(claimsUngroundedOutcome("Your quote has been sent.", ["Quote 4 was sent."]), false);
+  assert.equal(claimsUngroundedOutcome("You have 3 unpaid invoices.", []), false);
+});
+
+it("sweeps expiry only while sessions exist and disposal stops the timer", async () => {
+  const realSet = globalThis.setInterval;
+  const realClear = globalThis.clearInterval;
+  const live = new Set<object>();
+  let unref = 0;
+  globalThis.setInterval = ((fn: () => void) => {
+    const handle = { fn, unref: () => ((unref += 1), handle) };
+    live.add(handle);
+    return handle;
+  }) as unknown as typeof setInterval;
+  globalThis.clearInterval = ((handle: object) => void live.delete(handle)) as typeof clearInterval;
+  try {
+    let now = 0;
+    const removed: unknown[] = [];
+    const registry = new VoiceSessionRegistry({
+      provider: new AbsentHardwareProvider(),
+      clock: () => now,
+      ttlMs: 10,
+      sweepIntervalMs: 5,
+    });
+    registry.onRemove((x) => removed.push(x));
+    assert.equal(live.size, 0, "an idle registry holds no timer");
+    registry.create("client");
+    assert.equal(live.size, 1);
+    assert.equal(unref, 1, "timer never keeps the process alive");
+    registry.create("client");
+    assert.equal(live.size, 1, "one timer for many sessions");
+    const [timer] = [...live] as { fn: () => void }[];
+    now = 11;
+    timer!.fn();
+    assert.equal(removed.length, 2);
+    assert.equal(registry.size(), 0);
+    assert.equal(live.size, 0, "timer released once the last session expires");
+    registry.create("client");
+    assert.equal(live.size, 1);
+    registry.dispose();
+    assert.equal(live.size, 0);
+    assert.equal(registry.size(), 0);
+    assert.equal(removed.length, 3, "dispose notifies the removal listener");
+    registry.dispose();
+    assert.equal(live.size, 0);
+  } finally {
+    globalThis.setInterval = realSet;
+    globalThis.clearInterval = realClear;
+  }
 });

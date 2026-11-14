@@ -11,6 +11,7 @@ import {
   Post,
   Req,
   Res,
+  type OnModuleDestroy,
 } from "@nestjs/common";
 import type { FastifyReply, FastifyRequest } from "fastify";
 
@@ -58,7 +59,7 @@ function sessionNotFound(): JarvisProblem {
  */
 @Controller("api/v1/voice")
 @LocalLoopbackRoute()
-export class VoiceController {
+export class VoiceController implements OnModuleDestroy {
   constructor(
     @Inject(HTTP_VOICE_REGISTRY) private readonly registry: VoiceSessionRegistry,
     @Optional()
@@ -69,6 +70,11 @@ export class VoiceController {
     private readonly conversation?: VoiceConversationService | null,
   ) {
     if (this.conversation) this.registry.onRemove((session) => this.conversation?.clear(session));
+  }
+
+  /** App close releases the sweep timer and drops live sessions (and their history). */
+  onModuleDestroy(): void {
+    this.registry.dispose();
   }
 
   @Get("catalog")

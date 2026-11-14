@@ -156,7 +156,10 @@ export class VoiceConversationService {
     // it may only repeat figures that a successful read-only query returned this turn.
     if (!figuresGrounded(trimmed, groundedAnswers))
       return { status: "unavailable", reason: "ungrounded" };
-    const reply = claimsAction(trimmed) ? NOT_DONE_REPLY : trimmed;
+    const reply =
+      claimsAction(trimmed) || claimsUngroundedOutcome(trimmed, groundedAnswers)
+        ? NOT_DONE_REPLY
+        : trimmed;
     activeContext.messages.push(
       { role: "user", content: transcript },
       { role: "assistant", content: reply },
@@ -201,16 +204,142 @@ export function claimsAction(reply: string): boolean {
   return ACTION_CLAIM.test(reply.replace(/[\u2018\u2019]/g, "'"));
 }
 
-function figures(text: string): string[] {
-  return (text.match(/\d[\d,.:/-]*\d|\d/g) ?? []).map((token) => token.replace(/,/g, ""));
+const NUMBER_WORDS: Readonly<Record<string, number>> = {
+  zero: 0,
+  one: 1,
+  two: 2,
+  three: 3,
+  four: 4,
+  five: 5,
+  six: 6,
+  seven: 7,
+  eight: 8,
+  nine: 9,
+  ten: 10,
+  eleven: 11,
+  twelve: 12,
+  thirteen: 13,
+  fourteen: 14,
+  fifteen: 15,
+  sixteen: 16,
+  seventeen: 17,
+  eighteen: 18,
+  nineteen: 19,
+  twenty: 20,
+  thirty: 30,
+  forty: 40,
+  fifty: 50,
+  sixty: 60,
+  seventy: 70,
+  eighty: 80,
+  ninety: 90,
+  dozen: 12,
+  couple: 2,
+};
+const NUMBER_WORD = `(?:${[...Object.keys(NUMBER_WORDS), "hundred", "thousand", "million", "billion"].join("|")})`;
+const NUMBER_PHRASE = new RegExp(
+  String.raw`\b${NUMBER_WORD}(?:(?:[\s-]+and)?[\s-]+${NUMBER_WORD})*\b`,
+  "gi",
+);
+
+/** Rewrite spelled-out numbers ("twenty five") as digits so words cannot evade the guard. */
+function digitiseNumberWords(text: string): string {
+  return text.replace(NUMBER_PHRASE, (phrase, offset: number) => {
+    const words = phrase
+      .toLowerCase()
+      .split(/[\s-]+/)
+      .filter((w) => w !== "and");
+    // A pronoun-style "one" ("that one", "one of them", "one sentence") is not a figure.
+    if (words.length === 1 && words[0] === "one") {
+      const next = /^\s+([a-z]+)/i.exec(text.slice(offset + phrase.length))?.[1]?.toLowerCase();
+      const prev = /([a-z]+)\s+$/i.exec(text.slice(0, offset))?.[1]?.toLowerCase();
+      if (
+        !next ||
+        PRONOUN_ONE_NEXT.has(next) ||
+        (prev !== undefined && PRONOUN_ONE_PREV.has(prev))
+      ) {
+        return phrase;
+      }
+    }
+    let total = 0;
+    let current = 0;
+    for (const word of words) {
+      if (word === "hundred") current = (current || 1) * 100;
+      else if (word === "thousand" || word === "million" || word === "billion") {
+        const scale = word === "thousand" ? 1e3 : word === "million" ? 1e6 : 1e9;
+        total += (current || 1) * scale;
+        current = 0;
+      } else if (word === "dozen") current = (current || 1) * 12;
+      else current += NUMBER_WORDS[word] ?? 0;
+    }
+    return String(total + current);
+  });
 }
 
-/** Every figure in the reply must appear in a successful query answer from this turn. */
+const PRONOUN_ONE_NEXT = new Set([
+  "of",
+  "more",
+  "moment",
+  "thing",
+  "that",
+  "for",
+  "to",
+  "sentence",
+]);
+const PRONOUN_ONE_PREV = new Set(["the", "that", "this", "which", "any", "each", "every", "no"]);
+const CURRENCY_WORDS = /^\s*(?:dollars?|bucks|pounds?|euros?|cents?|quid)\b/i;
+
+/** A figure plus its semantic unit class, so "3 unpaid invoices" never grounds "$3". */
+function quantities(text: string): string[] {
+  const normal = digitiseNumberWords(text);
+  const found: string[] = [];
+  for (const match of normal.matchAll(/([$€£¥])?\s?(\d[\d,.:/-]*\d|\d)/g)) {
+    const value = match[2]!.replace(/,/g, "");
+    const after = normal.slice(match.index + match[0].length);
+    const unit =
+      match[1] || CURRENCY_WORDS.test(after)
+        ? "money"
+        : /^\s*(?:%|percent\b)/i.test(after)
+          ? "percent"
+          : /[:/-]/.test(value)
+            ? "formatted"
+            : "count";
+    found.push(`${unit}:${value}`);
+  }
+  return found;
+}
+
+/** Every figure (value and unit class) in the reply must come from a query answer this turn. */
 export function figuresGrounded(reply: string, answers: readonly string[]): boolean {
-  const known = new Set(answers.flatMap(figures));
-  const replyFigures = figures(reply);
-  if (!replyFigures.length) return !/[$€£¥]/.test(reply) || answers.some((a) => /[$€£¥]/.test(a));
-  return replyFigures.every((token) => known.has(token));
+  const known = new Set(answers.flatMap(quantities));
+  const replyQuantities = quantities(reply);
+  if (!replyQuantities.length) {
+    return !/[$€£¥]/.test(reply) || answers.some((a) => /[$€£¥]/.test(a));
+  }
+  return replyQuantities.every((q) => known.has(q));
+}
+
+const PARTICIPLE =
+  "\\w{3,}ed|sent|done|made|set|paid|put|sold|given|taken|got|left|built|cut|shut|bought|brought";
+const PASSIVE_CLAIM = new RegExp(
+  String.raw`\b(?:(?:has|have|had)\s+(?:(?:now|already|just|successfully)\s+)*been|` +
+    String.raw`(?:is|are|was|were|got|gets)\s+(?:(?:now|already|just|successfully)\s+)*)` +
+    String.raw`\s*(${PARTICIPLE})\b`,
+  "gi",
+);
+
+/**
+ * True when the reply uses a passive completion form ("has been sent", "is booked") whose
+ * participle no query answer this turn used. Reading an existing state back is fine;
+ * announcing an outcome nothing produced is not.
+ */
+export function claimsUngroundedOutcome(reply: string, answers: readonly string[]): boolean {
+  const known = new Set(answers.flatMap((a) => a.toLowerCase().match(/[a-z]+/g) ?? []));
+  const text = reply.replace(/[\u2018\u2019]/g, "'").replace(/'s\b/g, " is");
+  for (const match of text.matchAll(PASSIVE_CLAIM)) {
+    if (!known.has(match[1]!.toLowerCase())) return true;
+  }
+  return false;
 }
 
 export function spokenReply(raw: string, limit: number): string {
