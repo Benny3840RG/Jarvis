@@ -30,7 +30,7 @@ import {
 } from "./voiceCommands.js";
 import type { VoiceActuationProvider } from "./voiceHardware.js";
 import { resolveClarification } from "./voiceDialogueResolver.js";
-import { parseVoiceDictation } from "./voiceDictation.js";
+import { classifyVoiceDictation, voiceDictationKey } from "./voiceDictation.js";
 import { interpretIntent } from "./voiceIntentInterpreter.js";
 import { parseUtterance } from "./voiceParser.js";
 import type { VoiceQueryProvider } from "./voiceQuery.js";
@@ -109,7 +109,7 @@ function controlCandidates(
   profile: VoiceProfile,
   topIntent: VoiceControlIntent,
   alternatives: readonly string[] | undefined,
-): readonly string[] {
+): string[] {
   const candidates = new Set<string>([`control.${topIntent}`]);
   for (const alternative of alternatives ?? []) {
     const normalized = normalizeUtterance(alternative);
@@ -121,7 +121,7 @@ function controlCandidates(
     const command = findVoiceCommand(profile, normalized);
     if (command) candidates.add(command.id);
   }
-  return Object.freeze([...candidates].sort());
+  return [...candidates].sort();
 }
 
 function controlAlternativeCandidates(
@@ -131,6 +131,29 @@ function controlAlternativeCandidates(
   for (const alternative of alternatives ?? []) {
     const intent = controlIntent(normalizeUtterance(alternative));
     if (intent) candidates.add(`control.${intent}`);
+  }
+  return Object.freeze([...candidates].sort());
+}
+
+/**
+ * Candidates raised by alternative hypotheses that dictate (or try to dictate) a
+ * safe write. A rejected/unsafe dictation counts: it is a competing hypothesis
+ * the session must not silently drop.
+ */
+function dictationAlternativeCandidates(
+  profile: VoiceProfile,
+  alternatives: readonly string[] | undefined,
+  topKey?: string,
+): readonly string[] {
+  const candidates = new Set<string>();
+  for (const alternative of alternatives ?? []) {
+    const result = classifyVoiceDictation(alternative, profile);
+    if (result.status === "rejected") candidates.add("dictation.rejected");
+    else if (result.status === "captured") {
+      if (topKey === undefined || voiceDictationKey(result.dictation) !== topKey) {
+        candidates.add(result.dictation.command.id);
+      }
+    }
   }
   return Object.freeze([...candidates].sort());
 }
@@ -301,6 +324,14 @@ export class VoiceSession {
     const intent = controlIntent(normalized);
     if (intent) {
       const candidates = controlCandidates(this.#profile, intent, input.alternatives);
+      // A confirm must be unanimous: any alternative that dictates a write (even
+      // the pending one) is a conflicting intent and voids the pending capture.
+      if (intent === "confirm") {
+        for (const id of dictationAlternativeCandidates(this.#profile, input.alternatives)) {
+          if (!candidates.includes(id)) candidates.push(id);
+        }
+        candidates.sort();
+      }
       if (candidates.length > 1) {
         this.#record(now, normalized, "ambiguous");
         this.#invalidatePending();
@@ -308,7 +339,10 @@ export class VoiceSession {
       }
     } else {
       const topCommand = findVoiceCommand(this.#profile, normalized);
-      const controlAlternatives = controlAlternativeCandidates(input.alternatives);
+      const controlAlternatives = [
+        ...controlAlternativeCandidates(input.alternatives),
+        ...dictationAlternativeCandidates(this.#profile, input.alternatives),
+      ];
       if (topCommand && controlAlternatives.length > 0) {
         const candidates = Object.freeze([topCommand.id, ...controlAlternatives].sort());
         this.#record(now, normalized, "ambiguous");
@@ -518,18 +552,29 @@ export class VoiceSession {
     normalizedTranscript: string,
     input: VoiceSessionInput,
   ): VoiceDispatch | undefined {
-    const dictation = parseVoiceDictation(input.transcript, this.#profile);
-    if (!dictation) return undefined;
-    const controls = controlAlternativeCandidates(input.alternatives);
-    const conflicting: string[] = [];
-    for (const alternative of input.alternatives ?? []) {
-      const other = parseVoiceDictation(alternative, this.#profile);
-      if (other && other.command.id !== dictation.command.id) conflicting.push(other.command.id);
+    const top = classifyVoiceDictation(input.transcript, this.#profile);
+    if (top.status === "none") return undefined;
+    if (top.status === "rejected") {
+      // Unsafe or malformed dictation: fail closed here. It must not arm a
+      // pending confirmation and must not fall through to inference.
+      this.#invalidatePending();
+      this.#record(now, normalizedTranscript, "dictation-rejected");
+      return { decision: "unrecognized", normalizedTranscript };
     }
-    if (controls.length > 0 || conflicting.length > 0) {
-      const candidates = Object.freeze(
-        [...new Set([dictation.command.id, ...controls, ...conflicting])].sort(),
-      );
+    const dictation = top.dictation;
+    const topKey = voiceDictationKey(dictation);
+    const conflicting = new Set<string>([
+      ...controlAlternativeCandidates(input.alternatives),
+      ...dictationAlternativeCandidates(this.#profile, input.alternatives, topKey),
+    ]);
+    for (const alternative of input.alternatives ?? []) {
+      const normalizedAlternative = normalizeUtterance(alternative);
+      if (classifyVoiceDictation(alternative, this.#profile).status !== "none") continue;
+      const other = findVoiceCommand(this.#profile, normalizedAlternative);
+      if (other) conflicting.add(other.id);
+    }
+    if (conflicting.size > 0) {
+      const candidates = Object.freeze([...new Set([dictation.command.id, ...conflicting])].sort());
       this.#invalidatePending();
       this.#record(now, normalizedTranscript, "ambiguous");
       return { decision: "ambiguous", candidates };

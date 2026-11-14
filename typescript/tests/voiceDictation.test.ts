@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { VOICE_COMMANDS } from "../src/voice/voiceCommands.js";
-import { describeVoiceDictation, parseVoiceDictation } from "../src/voice/voiceDictation.js";
+import {
+  classifyVoiceDictation,
+  describeVoiceDictation,
+  parseVoiceDictation,
+} from "../src/voice/voiceDictation.js";
 import { AbsentHardwareProvider } from "../src/voice/voiceHardware.js";
 import { VoiceSession } from "../src/voice/voiceSession.js";
 
@@ -92,6 +96,56 @@ describe("voice dictation grammar", () => {
     assert.ok(task && reminder);
     assert.equal(describeVoiceDictation(task), "Add task “Order bar oil” (work)");
     assert.equal(describeVoiceDictation(reminder), "Add reminder “Call dave”");
+  });
+});
+
+describe("voice dictation unsafe titles", () => {
+  const unsafe = [
+    "add a task: buy oil and confirm",
+    "remind me to call Dave then cancel",
+    "add a task: do not order oil",
+    "add a task: don't order oil",
+    "add a task: never order oil",
+    "add a task: I already ordered oil",
+    "add a task: we ordered oil",
+    "add a task: buy oil and send the quote",
+    "remind me to call Dave and send the quote",
+    "add a task: buy oil then email Dave",
+    "add a task: buy oil, then cancel",
+    "add a task: buy oil and unlock the shed",
+    "add a task: buy oil and nolan stop",
+    "add a task: oil, jarvis confirm",
+    "add a task: buy oil\u202eX",
+    "add a task: buy oil\u0000",
+    "add a task: buy\u200boil",
+    "remind me to call\u2066Dave",
+    "remind me to call Dave\u0007",
+  ];
+
+  it("rejects embedded control, negated, declarative, compound and control-character titles", () => {
+    for (const utterance of unsafe) {
+      assert.equal(parseVoiceDictation(utterance, "client"), undefined, utterance);
+      assert.equal(classifyVoiceDictation(utterance, "client").status, "rejected", utterance);
+    }
+  });
+
+  it("keeps ordinary natural titles working", () => {
+    for (const [utterance, title] of [
+      ["add a task: order bar oil", "Order bar oil"],
+      ["add a task: call Dave about the quote", "Call dave about the quote"],
+      ["add a work task: quote the Smith fence", "Quote the smith fence"],
+      ["add a task: pay the rego", "Pay the rego"],
+      ["remind me to send the invoice to Dave", "Send the invoice to dave"],
+      ["remind me to renew the car insurance", "Renew the car insurance"],
+      ["add a task: buy oil and grease", "Buy oil and grease"],
+    ] as const) {
+      assert.equal(parseVoiceDictation(utterance, "client")?.capture.title, title, utterance);
+    }
+  });
+
+  it("classifies non-dictation as none", () => {
+    assert.equal(classifyVoiceDictation("open tasks", "client").status, "none");
+    assert.equal(classifyVoiceDictation("add a task: oil", "crawler").status, "none");
   });
 });
 
@@ -252,5 +306,133 @@ describe("voice session dictation", () => {
     assert.equal(out.decision, "proposed");
     assert.ok(out.decision === "proposed");
     assert.equal(out.capture, undefined);
+  });
+});
+
+function turn(
+  s: VoiceSession,
+  transcript: string,
+  now: number,
+  alternatives?: readonly string[],
+): ReturnType<VoiceSession["handle"]> {
+  return s.handle({
+    transcript,
+    isFinal: true,
+    wakeAuthorized: true,
+    now,
+    ...(alternatives ? { alternatives } : {}),
+  });
+}
+
+describe("voice session conflicting hypotheses and unsafe dictation", () => {
+  it("confirm with an alternative dictation of a different capture voids pending (review repro)", async () => {
+    const s = session();
+    const armed = await turn(s, "add a task: order oil", 1_000);
+    assert.equal(armed.decision, "awaiting-confirmation");
+    const out = await turn(s, "confirm", 1_100, ["add a task: order fuel"]);
+    assert.equal(out.decision, "ambiguous");
+    assert.equal(s.pending(), undefined);
+    assert.equal((await turn(s, "confirm", 1_200)).decision, "confirmation-not-pending");
+  });
+
+  it("confirm with the same dictation, a rejected dictation, a command or cancel alternative is ambiguous", async () => {
+    for (const alternative of [
+      "add a task: order oil",
+      "add a task: order oil and confirm",
+      "remind me to order oil",
+      "cancel",
+      "open tasks",
+    ]) {
+      const s = session();
+      await turn(s, "add a task: order oil", 1_000);
+      const out = await turn(s, "confirm", 1_100, [alternative]);
+      assert.equal(out.decision, "ambiguous", alternative);
+      assert.equal(s.pending(), undefined, alternative);
+    }
+  });
+
+  it("confirm with unrelated noise alternatives still proposes the pending capture", async () => {
+    const s = session();
+    await turn(s, "add a task: order oil", 1_000);
+    const out = await turn(s, "confirm", 1_100, ["comfort", "con firm"]);
+    assert.equal(out.decision, "proposed");
+  });
+
+  it("does not arm when alternatives disagree on title, category or command (review repro)", async () => {
+    const cases: Array<[string, string]> = [
+      ["add a task: order oil", "add a task: order fuel"],
+      ["add a task: order oil", "add a work task: order oil"],
+      ["remind me to call Dave", "remind me to call Dan"],
+      ["add a task: order oil", "remind me to order oil"],
+      ["add a task: order oil", "add a task: order oil and send the quote"],
+      ["add a task: order oil", "confirm"],
+      ["add a task: order oil", "cancel"],
+      ["add a task: order oil", "open tasks"],
+    ];
+    for (const [top, alternative] of cases) {
+      const s = session();
+      const out = await turn(s, top, 1_000, [alternative]);
+      assert.equal(out.decision, "ambiguous", `${top} | ${alternative}`);
+      assert.equal(s.pending(), undefined, `${top} | ${alternative}`);
+    }
+  });
+
+  it("arms when every hypothesis agrees on command and capture", async () => {
+    const s = session();
+    const out = await turn(s, "add a task: order oil", 1_000, [
+      "Add a task order oil",
+      "add a task: Order oil.",
+    ]);
+    assert.equal(out.decision, "awaiting-confirmation");
+  });
+
+  it("a conflicting turn invalidates an earlier pending", async () => {
+    const s = session();
+    await turn(s, "add a task: order oil", 1_000);
+    const out = await turn(s, "remind me to call Dave", 1_100, ["remind me to call Dan"]);
+    assert.equal(out.decision, "ambiguous");
+    assert.equal(s.pending(), undefined);
+  });
+
+  it("an exact command with a dictation alternative is ambiguous", async () => {
+    const s = session();
+    const out = await turn(s, "open tasks", 1_000, ["add a task: order oil"]);
+    assert.equal(out.decision, "ambiguous");
+    assert.equal(s.pending(), undefined);
+  });
+
+  it("expiry and profile switch still drop a dictated capture", async () => {
+    const expired = session();
+    await turn(expired, "add a task: order oil", 1_000);
+    assert.equal((await turn(expired, "confirm", 31_000)).decision, "confirmation-expired");
+    assert.equal((await turn(expired, "confirm", 31_100)).decision, "confirmation-not-pending");
+
+    const switched = session();
+    await turn(switched, "add a task: order oil", 1_000);
+    switched.setProfile("workshop");
+    assert.equal(switched.pending(), undefined);
+    switched.setProfile("client");
+    assert.equal((await turn(switched, "confirm", 1_100)).decision, "confirmation-not-pending");
+  });
+
+  it("rejected unsafe dictations never arm, never infer, and void an earlier pending", async () => {
+    const unsafe = [
+      "add a task: buy oil and confirm",
+      "remind me to call Dave then cancel",
+      "add a task: do not order oil",
+      "add a task: I already ordered oil",
+      "add a task: buy oil and send the quote",
+      "add a task: buy oil\u202eX",
+      "add a task: buy oil\u0000",
+    ];
+    for (const utterance of unsafe) {
+      const s = session();
+      await turn(s, "remind me to call Dave", 1_000);
+      const out = await turn(s, utterance, 1_100);
+      assert.equal(out.decision, "unrecognized", utterance);
+      assert.equal(s.pending(), undefined, utterance);
+      assert.equal((await turn(s, "confirm", 1_200)).decision, "confirmation-not-pending");
+      assert.equal(s.history().at(-2)?.outcome, "dictation-rejected", utterance);
+    }
   });
 });

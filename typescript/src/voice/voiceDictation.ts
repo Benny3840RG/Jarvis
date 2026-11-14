@@ -84,7 +84,21 @@ export type VoiceDictation = Readonly<{
   capture: Readonly<Required<Pick<VoiceWriteCapture, "title">> & VoiceWriteCapture>;
 }>;
 
+/** Unicode control, format (incl. bidi), line/paragraph separator, private-use and surrogate characters. */
+const UNSAFE_CHARACTERS = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\p{Co}\p{Cs}]/u;
+/** Embedded control words: the dictated text is data and may never carry confirm/cancel. */
+const EMBEDDED_CONTROL = /\b(?:confirm|confirmed|cancel|cancelled|canceled)\b/;
+/** Negated or declarative wording is not a request to add a task. */
+const NEGATION =
+  /(?:^|[^\p{L}\p{N}'’])(?:not|never|nothing|cannot|no longer|(?:do|does|did|can|could|would|should|will|is|are|was|were|have|has|had)n['’]?t|don['’]?t|won['’]?t|can['’]?t)(?![\p{L}\p{N}])/u;
+const DECLARATIVE =
+  /^(?:i|we|he|she|they|it|you|i['’]?ve|we['’]?ve|i['’]?m|we['’]?re)\s|\b(?:already|(?:is|was|been|got) (?:done|finished|completed|sent|ordered))\b/;
+/** A conjunction that chains a second action onto the title. */
+const COMPOUND_ACTION =
+  /(?:\band|\bthen|\balso|\bplus|\bbut|\bor|\bafterwards?|\bafter that|[;|&])\s*(?:then\s+|also\s+|please\s+)?(?:send|resend|email|e-mail|mail|forward|submit|post|publish|share|text|message|dm|pay|wire|transfer|delete|remove|erase|wipe|approve|execute|run|start|stop|open|close|lock|unlock|turn|switch|activate|deactivate|shut|fire|launch|actuate|move|drive|nolan|jarvis|confirm|cancel)\b/;
+
 function cleanTitle(raw: string): string | undefined {
+  if (UNSAFE_CHARACTERS.test(raw)) return undefined;
   const title = raw
     .replace(/^[\s:,;.-]+/, "")
     .replace(/[\s:,;.-]+$/, "")
@@ -94,9 +108,66 @@ function cleanTitle(raw: string): string | undefined {
   if (!/[\p{L}\p{N}]/u.test(title)) return undefined;
   if (WAKE_TOKEN.test(title)) return undefined;
   if (CONTROL_PHRASES.has(title)) return undefined;
-  const firstWord = title.split(" ", 1)[0] ?? "";
-  if (firstWord === "confirm" || firstWord === "cancel") return undefined;
+  if (EMBEDDED_CONTROL.test(title)) return undefined;
+  if (NEGATION.test(title) || DECLARATIVE.test(title)) return undefined;
+  if (COMPOUND_ACTION.test(title)) return undefined;
   return title.charAt(0).toUpperCase() + title.slice(1);
+}
+
+/**
+ * `none` — not a dictation at all (never reached the grammar).
+ * `rejected` — it matched a dictation prefix but the text is unsafe/invalid. The
+ * session must fail closed on this and must not fall through to inference.
+ */
+export type VoiceDictationClassification =
+  | Readonly<{ status: "none" }>
+  | Readonly<{ status: "rejected" }>
+  | Readonly<{ status: "captured"; dictation: VoiceDictation }>;
+
+const NONE: VoiceDictationClassification = Object.freeze({ status: "none" });
+const REJECTED: VoiceDictationClassification = Object.freeze({ status: "rejected" });
+
+export function classifyVoiceDictation(
+  transcript: string,
+  profile: VoiceProfile,
+): VoiceDictationClassification {
+  if (profile !== "client") return NONE;
+  const text = normalizeUtterance(transcript);
+  if (text.length === 0) return NONE;
+
+  const task = TASK_PATTERN.exec(text);
+  if (task) {
+    const command = COMMAND_BY_ID.get(TASK_COMMAND_ID);
+    if (!command) return REJECTED;
+    const categoryWord = task[1];
+    let category: VoiceTaskCategory = DEFAULT_VOICE_TASK_CATEGORY;
+    if (categoryWord !== undefined && !CATEGORY_FILLERS.has(categoryWord)) {
+      const mapped = CATEGORY_ALIASES.get(categoryWord);
+      // An unknown word before "task" is not guessed into a category.
+      if (!mapped) return REJECTED;
+      category = mapped;
+    }
+    const title = cleanTitle(task[2] ?? "");
+    if (!title) return REJECTED;
+    return {
+      status: "captured",
+      dictation: { command, capture: Object.freeze({ title, category }) },
+    };
+  }
+
+  const reminder = REMINDER_PATTERN.exec(text);
+  if (reminder) {
+    const command = COMMAND_BY_ID.get(REMINDER_COMMAND_ID);
+    if (!command) return REJECTED;
+    const title = cleanTitle(reminder[1] ?? "");
+    if (!title) return REJECTED;
+    return {
+      status: "captured",
+      dictation: { command, capture: Object.freeze({ title }) },
+    };
+  }
+
+  return NONE;
 }
 
 /**
@@ -107,37 +178,17 @@ export function parseVoiceDictation(
   transcript: string,
   profile: VoiceProfile,
 ): VoiceDictation | undefined {
-  if (profile !== "client") return undefined;
-  const text = normalizeUtterance(transcript);
-  if (text.length === 0) return undefined;
+  const result = classifyVoiceDictation(transcript, profile);
+  return result.status === "captured" ? result.dictation : undefined;
+}
 
-  const task = TASK_PATTERN.exec(text);
-  if (task) {
-    const command = COMMAND_BY_ID.get(TASK_COMMAND_ID);
-    if (!command) return undefined;
-    const categoryWord = task[1];
-    let category: VoiceTaskCategory = DEFAULT_VOICE_TASK_CATEGORY;
-    if (categoryWord !== undefined && !CATEGORY_FILLERS.has(categoryWord)) {
-      const mapped = CATEGORY_ALIASES.get(categoryWord);
-      // An unknown word before "task" is not guessed into a category.
-      if (!mapped) return undefined;
-      category = mapped;
-    }
-    const title = cleanTitle(task[2] ?? "");
-    if (!title) return undefined;
-    return { command, capture: Object.freeze({ title, category }) };
-  }
-
-  const reminder = REMINDER_PATTERN.exec(text);
-  if (reminder) {
-    const command = COMMAND_BY_ID.get(REMINDER_COMMAND_ID);
-    if (!command) return undefined;
-    const title = cleanTitle(reminder[1] ?? "");
-    if (!title) return undefined;
-    return { command, capture: Object.freeze({ title }) };
-  }
-
-  return undefined;
+/** Stable comparison key: command plus canonical capture fields. */
+export function voiceDictationKey(dictation: VoiceDictation): string {
+  return JSON.stringify([
+    dictation.command.id,
+    dictation.capture.title.toLowerCase(),
+    dictation.capture.category ?? null,
+  ]);
 }
 
 /** One-line read-back the HUD shows and speaks before anything is staged. */

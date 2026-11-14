@@ -8274,7 +8274,63 @@
           "capture": {
             "$ref": "#/components/schemas/VoiceWriteCapture"
           }
-        }
+        },
+        "allOf": [
+          {
+            "if": { "properties": { "capture": {} }, "required": ["capture"] },
+            "then": {
+              "required": ["command"],
+              "properties": {
+                "command": {
+                  "properties": {
+                    "id": { "enum": ["client.capture-task", "client.follow-up-reminder"] }
+                  },
+                  "required": ["id"]
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "command": {
+                  "properties": { "id": { "const": "client.capture-task" } },
+                  "required": ["id"]
+                },
+                "capture": {}
+              },
+              "required": ["command", "capture"]
+            },
+            "then": {
+              "properties": {
+                "capture": {
+                  "properties": { "title": {}, "category": {} },
+                  "required": ["title", "category"]
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "command": {
+                  "properties": { "id": { "const": "client.follow-up-reminder" } },
+                  "required": ["id"]
+                },
+                "capture": {}
+              },
+              "required": ["command", "capture"]
+            },
+            "then": {
+              "properties": {
+                "capture": {
+                  "properties": { "title": {}, "category": {} },
+                  "not": { "properties": { "category": {} }, "required": ["category"] }
+                }
+              }
+            }
+          }
+        ]
       },
       "VoiceDispatch": {
         "type": "object",
@@ -8362,6 +8418,61 @@
               "properties": { "decision": { "const": "awaiting-confirmation" }, "confidence": {} }
             },
             "else": { "not": { "properties": { "confidence": {} }, "required": ["confidence"] } }
+          },
+          {
+            "if": { "properties": { "capture": {} }, "required": ["capture"] },
+            "then": {
+              "required": ["command"],
+              "properties": {
+                "command": {
+                  "properties": {
+                    "id": { "enum": ["client.capture-task", "client.follow-up-reminder"] }
+                  },
+                  "required": ["id"]
+                },
+                "decision": { "enum": ["awaiting-confirmation", "proposed"] }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "command": {
+                  "properties": { "id": { "const": "client.capture-task" } },
+                  "required": ["id"]
+                },
+                "capture": {}
+              },
+              "required": ["command", "capture"]
+            },
+            "then": {
+              "properties": {
+                "capture": {
+                  "properties": { "title": {}, "category": {} },
+                  "required": ["title", "category"]
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "command": {
+                  "properties": { "id": { "const": "client.follow-up-reminder" } },
+                  "required": ["id"]
+                },
+                "capture": {}
+              },
+              "required": ["command", "capture"]
+            },
+            "then": {
+              "properties": {
+                "capture": {
+                  "properties": { "title": {}, "category": {} },
+                  "not": { "properties": { "category": {} }, "required": ["category"] }
+                }
+              }
+            }
           }
         ]
       },
