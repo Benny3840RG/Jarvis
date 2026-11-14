@@ -43,13 +43,14 @@ function systemPrompt(input: ConversationReasonerInput): string {
 }
 
 /**
- * The model's requested id, forwarded verbatim (or "" when malformed) so the service, which owns
- * the active-profile allowlist, counts the attempt and answers a disallowed one as unavailable.
+ * The requested id, forwarded verbatim so the service (which owns the active-profile allowlist)
+ * counts it and answers a disallowed one as unavailable. Undefined means the request is malformed.
  */
-function requestedCommandId(value: unknown): string {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return "";
+function requestedCommandId(name: string, value: unknown): string | undefined {
+  if (name !== "voice_query") return undefined;
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
   const commandId = (value as Record<string, unknown>).commandId;
-  return typeof commandId === "string" ? commandId : "";
+  return typeof commandId === "string" ? commandId : undefined;
 }
 
 export function createAnthropicVoiceReasoner(
@@ -127,9 +128,17 @@ export function createAnthropicVoiceReasoner(
           // Every request is counted by the service (via input.query) before any terminal
           // reason is chosen, so no early return may skip a request block.
           const results: BetaToolResultBlockParam[] = [];
+          let malformed = false;
           for (const use of uses) {
             if (toolCalls >= 4) return { status: "unavailable", reason: "tool-limit" };
-            const commandId = use.name === "voice_query" ? requestedCommandId(use.input) : "";
+            const commandId = requestedCommandId(use.name, use.input);
+            if (commandId === undefined) {
+              // Counted but never executed; input.query is not called for it.
+              input.rejectMalformedRequest();
+              malformed = true;
+              toolCalls += 1;
+              continue;
+            }
             const answer = await input.query(commandId);
             if (answer.status === "unavailable") unavailableSource ??= answer.reason;
             results.push({
@@ -139,6 +148,7 @@ export function createAnthropicVoiceReasoner(
             });
             toolCalls += 1;
           }
+          if (malformed) return { status: "unavailable", reason: "provider-error" };
           // Append the assistant turn exactly as returned. Its thinking blocks are bound to
           // this conversation and must precede the tool results unchanged; dropping or
           // rebuilding them is a history edit the current models reject.

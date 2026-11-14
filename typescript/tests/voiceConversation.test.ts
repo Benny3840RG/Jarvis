@@ -4,6 +4,8 @@ import { it } from "node:test";
 import {
   NOT_DONE_REPLY,
   VoiceConversationService,
+  type ConversationReasonerInput,
+  type ConversationResult,
   type VoiceConversationReasoner,
 } from "../src/voice/voiceConversation.js";
 import { resolveVoiceConversationStatus } from "../src/voice/voiceConversationFactory.js";
@@ -422,4 +424,45 @@ it("a disallowed trailer.status query is an attempt answered unavailable by the 
     seen.map((a) => a.status),
     ["unavailable"],
   );
+});
+
+it("classifies a lone malformed request provider-error and any second request tool-limit", async () => {
+  let reads = 0;
+  const respond = (script: (input: ConversationReasonerInput) => Promise<ConversationResult>) => {
+    const s = session();
+    const original = s.readOnlyQuery.bind(s);
+    s.readOnlyQuery = async (id) => {
+      reads += 1;
+      return original(id);
+    };
+    return new VoiceConversationService({ reasoner: { reply: script } }).respond({
+      session: s,
+      transcript: "hi",
+    });
+  };
+  assert.deepEqual(
+    await respond(async (i) => {
+      i.rejectMalformedRequest();
+      return { status: "unavailable", reason: "provider-error" };
+    }),
+    { status: "unavailable", reason: "provider-error" },
+  );
+  assert.equal(reads, 0);
+  assert.deepEqual(
+    await respond(async (i) => {
+      await i.query("trailer.status");
+      return { status: "answered", reply: "x" };
+    }),
+    { status: "unavailable", reason: "unavailable" },
+  );
+  assert.equal(reads, 0);
+  assert.deepEqual(
+    await respond(async (i) => {
+      i.rejectMalformedRequest();
+      await i.query("client.unpaid-invoices");
+      return { status: "unavailable", reason: "provider-error" };
+    }),
+    { status: "unavailable", reason: "tool-limit" },
+  );
+  assert.equal(reads, 1);
 });

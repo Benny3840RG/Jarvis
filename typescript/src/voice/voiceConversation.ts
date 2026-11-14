@@ -25,6 +25,8 @@ export type ConversationReasonerInput = Readonly<{
   catalog: readonly VoiceCommand[];
   history: readonly ConversationMessage[];
   query: (commandId: string) => Promise<VoiceQueryAnswer>;
+  /** Count a malformed provider tool request (no read is made) toward attempt precedence. */
+  rejectMalformedRequest: () => void;
   reserveNextCall: () => boolean;
   signal?: AbortSignal;
 }>;
@@ -142,6 +144,9 @@ export class VoiceConversationService {
           }
           attempts.push(answer);
           return answer;
+        },
+        rejectMalformedRequest: () => {
+          attempts.push({ status: "unavailable", reason: "Malformed tool request." });
         },
         reserveNextCall: () => stillLive() && this.#reserveCall(),
         signal,

@@ -17,6 +17,7 @@ function input(overrides: Partial<ConversationReasonerInput> = {}): Conversation
     catalog: VOICE_COMMANDS.filter((command) => command.profile === "client"),
     history: [],
     query: async () => ({ status: "answered", answer: "No unpaid invoices." }),
+    rejectMalformedRequest: () => {},
     reserveNextCall: () => true,
     ...overrides,
   };
@@ -242,4 +243,62 @@ it("forwards a disallowed voice_query id to the service instead of provider-erro
   );
   assert.deepEqual(seen, ["trailer.status"]);
   assert.deepEqual(result, { status: "answered", reply: "Voice query unavailable." });
+});
+
+function malformedHarness(content: object[]) {
+  const seen: string[] = [];
+  let malformed = 0;
+  const reasoner = createAnthropicVoiceReasoner(
+    { apiKey: "test-only", model: "claude-opus-5-5", timeoutMs: 20_000 },
+    {
+      client: client(
+        [
+          { stop_reason: "tool_use", content },
+          { stop_reason: "end_turn", content: [{ type: "text", text: "x" }] },
+        ],
+        [],
+      ),
+    },
+  );
+  const run = () =>
+    reasoner.reply(
+      input({
+        query: async (id) => {
+          seen.push(id);
+          return { status: "answered", answer: "No unpaid invoices." };
+        },
+        rejectMalformedRequest: () => {
+          malformed += 1;
+        },
+      }),
+    );
+  return { run, seen, malformed: () => malformed };
+}
+
+it("treats a wrong tool name as a counted provider-error with no read", async () => {
+  const h = malformedHarness([
+    { type: "tool_use", id: "a", name: "other_tool", input: { query: "client.unpaid-invoices" } },
+  ]);
+  assert.deepEqual(await h.run(), { status: "unavailable", reason: "provider-error" });
+  assert.deepEqual(h.seen, []);
+  assert.equal(h.malformed(), 1);
+});
+
+it("treats malformed voice_query input as a counted provider-error with no read", async () => {
+  for (const bad of [null, [], "client.unpaid-invoices", {}, { commandId: 3 }, { query: "x" }]) {
+    const h = malformedHarness([{ type: "tool_use", id: "a", name: "voice_query", input: bad }]);
+    assert.deepEqual(await h.run(), { status: "unavailable", reason: "provider-error" });
+    assert.deepEqual(h.seen, []);
+    assert.equal(h.malformed(), 1);
+  }
+});
+
+it("counts a malformed request alongside a valid one without reading the malformed one", async () => {
+  const h = malformedHarness([
+    { type: "tool_use", id: "a", name: "other_tool", input: {} },
+    toolUse("b", "client.unpaid-invoices"),
+  ]);
+  await h.run();
+  assert.deepEqual(h.seen, ["client.unpaid-invoices"]);
+  assert.equal(h.malformed(), 1);
 });
