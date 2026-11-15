@@ -56,6 +56,10 @@ This runbook commissions the browser/HUD voice path from speech or typed input t
 3. Start the local preview with `npm run start:preview` and open the HUD on the loopback address it reports.
 4. Do not expose the preview to a non-loopback interface merely to test voice. Off-loopback voice routes retain normal service-token/OIDC authentication.
 
+## Approving staged changes
+
+Open `/settings/approvals` (linked from the HUD Approvals panel) on the loopback HUD host. Type the service token and the approval token; they stay in the page only until you leave it and are never written to browser storage. **Load staged actions** lists everything waiting on the `nolan-voice` project (or another project key), each with NOLAN's read-back (`Mark task “Order bar oil” done`) and the exact operation and arguments. **Approve and run** approves that one action with your approval token and then runs it once; **Reject** discards it. Approved actions can be run again safely: a repeat returns the original result and changes nothing. The page uses only the existing tool-action routes and adds no authority; off loopback it is not served.
+
 ## Browser and typed checks
 
 1. Open **Voice**. Record browser/OS and whether the HUD reports **MIC AVAILABLE** or **TYPED ONLY**.
