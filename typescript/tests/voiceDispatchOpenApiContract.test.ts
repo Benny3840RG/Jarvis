@@ -49,8 +49,22 @@ it("validates inferred voice dispatch metadata against its decision and confiden
       },
       reason: "No reminder matches “Sprocket”.",
     },
+    // The spoken daily rundown is a non-catalog read-only query.
+    {
+      decision: "answered",
+      command: {
+        id: "client.daily-rundown",
+        profile: "client",
+        phrases: [],
+        summary: "s",
+        kind: "query",
+        criticality: "routine",
+        requiresSpokenConfirmation: false,
+      },
+      answer: "Here's your day. No jobs booked for today.",
+    },
   ])
-    assert.equal(validate(value), true, JSON.stringify(value));
+    assert.equal(validate(value), true, JSON.stringify(validate.errors));
   for (const value of [
     { decision: "awaiting-confirmation", inferred: true },
     { decision: "awaiting-confirmation", confidence: 0.5 },

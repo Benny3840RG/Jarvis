@@ -2004,3 +2004,28 @@ describe("voice spoken reminder reschedule (AM-017, planned)", () => {
     assert.equal(actions.rows.size, 0);
   });
 });
+
+describe("voice daily rundown over HTTP", () => {
+  it("answers a woken rundown phrase from the authoritative reads and stages nothing", async () => {
+    const actions = new MemoryActions();
+    const app = await makeApp(actions);
+    const sessionId = await openSession(app);
+    const response = await utter(app, sessionId, {
+      transcript: "Nolan, give me the rundown",
+      isFinal: true,
+    });
+    assert.equal(response.statusCode, 200);
+    const dispatch = response.json().dispatch;
+    assert.equal(dispatch.decision, "answered");
+    assert.equal(dispatch.command.id, "client.daily-rundown");
+    assert.match(dispatch.answer, /^Here's your day\./);
+    assert.equal(response.json().pending, null);
+    assert.equal(actions.rows.size, 0);
+
+    const unwoken = await utter(app, sessionId, {
+      transcript: "give me the rundown",
+      isFinal: true,
+    });
+    assert.notEqual(unwoken.json().dispatch.decision, "answered");
+  });
+});

@@ -45,6 +45,7 @@ import {
   VOICE_RESCHEDULE_DISABLED_REASON,
   type VoiceCompletionResolver,
 } from "./voiceCompletion.js";
+import { matchVoiceRundown } from "./voiceRundown.js";
 import { interpretIntent } from "./voiceIntentInterpreter.js";
 import { parseUtterance } from "./voiceParser.js";
 import type { VoiceQueryProvider } from "./voiceQuery.js";
@@ -562,6 +563,9 @@ export class VoiceSession {
     // the current request through the ordinary guarded interpreter below.
     if (clarification) this.#clarification = undefined;
     if (input.wakeAuthorized === true) {
+      // The daily rundown is a read-only query outside the pinned catalog.
+      const rundown = matchVoiceRundown(input.transcript, this.#profile);
+      if (rundown) return this.#handleRecognized(now, normalizedTranscript, rundown);
       const dictated = this.#handleDictation(now, normalizedTranscript, input);
       if (dictated) return dictated;
     }
