@@ -25,7 +25,7 @@ import type { QuoteRepository } from "../quotes/quoteRepository.js";
 import type { ControlledReminderStore } from "../reminders/controlledReminder.js";
 import type { ControlledTaskStore } from "../tasks/controlledTask.js";
 import { createNoteToolDefinition } from "./createNoteTool.js";
-import { createErrandToolDefinition } from "./errandTools.js";
+import { createErrandToolDefinitions } from "./errandTools.js";
 import type { ErrandStore } from "../errands/errand.js";
 import { JsonErrandStore } from "../errands/jsonErrandStore.js";
 import {
@@ -85,7 +85,7 @@ export function createToolExecutionDefinitions(
     ...(googleHomeAnnouncementProvider === undefined
       ? []
       : [createHomeAnnouncementToolDefinition(googleHomeAnnouncementProvider)]),
-    ...(errandStore === undefined ? [] : [createErrandToolDefinition(errandStore)]),
+    ...(errandStore === undefined ? [] : createErrandToolDefinitions(errandStore)),
   ];
 }
 

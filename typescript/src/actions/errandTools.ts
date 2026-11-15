@@ -66,3 +66,36 @@ export function createErrandToolDefinition(store: ErrandStore): ToolExecutionDef
     },
   };
 }
+
+export const COMPLETE_ERRAND_OPERATION = "complete";
+
+export const completeErrandArgumentsSchema = z
+  .object({
+    errandId: z.string().trim().min(1).max(200),
+  })
+  .strict();
+
+/**
+ * Marks one errand done. Completing an errand that is already done returns it
+ * unchanged, so a retried execution is harmless; a missing errand fails.
+ */
+export function completeErrandToolDefinition(store: ErrandStore): ToolExecutionDefinition {
+  return {
+    tool: ERRAND_TOOL,
+    operation: COMPLETE_ERRAND_OPERATION,
+    schema: completeErrandArgumentsSchema,
+    async execute(argumentsValue) {
+      const parsed = completeErrandArgumentsSchema.parse(argumentsValue);
+      const errand = await store.get(parsed.errandId);
+      if (errand === null) throw new Error("Errand was not found.");
+      if (errand.status === "done") return errand;
+      const completed = await store.update(parsed.errandId, { status: "done" });
+      if (completed === null) throw new Error("Errand was not found.");
+      return completed;
+    },
+  };
+}
+
+export function createErrandToolDefinitions(store: ErrandStore): ToolExecutionDefinition[] {
+  return [createErrandToolDefinition(store), completeErrandToolDefinition(store)];
+}

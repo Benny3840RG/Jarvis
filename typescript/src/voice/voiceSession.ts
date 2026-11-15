@@ -30,7 +30,18 @@ import {
 } from "./voiceCommands.js";
 import type { VoiceActuationProvider } from "./voiceHardware.js";
 import { resolveClarification } from "./voiceDialogueResolver.js";
-import { classifyVoiceDictation, voiceDictationKey } from "./voiceDictation.js";
+import {
+  COMPLETE_ERRAND_COMMAND,
+  COMPLETE_TASK_COMMAND,
+  classifyVoiceDictation,
+  voiceCompletionKind,
+  voiceDictationKey,
+  type VoiceDictation,
+} from "./voiceDictation.js";
+import {
+  VOICE_COMPLETION_UNAVAILABLE_REASON,
+  type VoiceCompletionResolver,
+} from "./voiceCompletion.js";
 import { interpretIntent } from "./voiceIntentInterpreter.js";
 import { parseUtterance } from "./voiceParser.js";
 import type { VoiceQueryProvider } from "./voiceQuery.js";
@@ -213,6 +224,11 @@ export type VoiceDispatch =
   | Readonly<{ decision: "confirmation-expired"; command: VoiceCommand }>
   | Readonly<{ decision: "cancelled"; command: VoiceCommand }>
   | Readonly<{ decision: "proposed"; command: VoiceCommand; capture?: VoiceWriteCapture }>
+  /**
+   * A spoken completion ("tick off bar oil") that did not name exactly one
+   * open, completable item. Nothing is armed; `reason` says why.
+   */
+  | Readonly<{ decision: "completion-unresolved"; command: VoiceCommand; reason: string }>
   | Readonly<{
       decision: "actuation-unavailable";
       command: VoiceCommand;
@@ -251,6 +267,11 @@ export type VoiceSessionOptions = Readonly<{
    * the machine zone). If neither resolves, due phrases stay in the title.
    */
   timezone?: string;
+  /**
+   * Resolves a spoken completion to exactly one open task or errand. Absent
+   * means spoken completions are refused as unavailable.
+   */
+  completions?: VoiceCompletionResolver;
 }>;
 
 export type VoiceSessionInput = Readonly<{
@@ -277,6 +298,7 @@ export class VoiceSession {
   readonly #clock: () => number;
   readonly #interpret: boolean;
   readonly #timezone: string | undefined;
+  readonly #completions: VoiceCompletionResolver | undefined;
   readonly #history: VoiceHistoryEntry[] = [];
   #pending: PendingConfirmation | undefined;
   #clarification: PendingClarification | undefined;
@@ -291,6 +313,7 @@ export class VoiceSession {
     this.#clock = options.clock ?? Date.now;
     this.#interpret = options.interpretNaturalLanguage ?? false;
     this.#timezone = options.timezone;
+    this.#completions = options.completions;
   }
 
   #dueContext(now: number): SpokenDueContext | undefined {
@@ -447,7 +470,7 @@ export class VoiceSession {
     now: number,
     normalizedTranscript: string,
     input: VoiceSessionInput,
-  ): VoiceDispatch {
+  ): VoiceDispatch | Promise<VoiceDispatch> {
     const clarification = this.#clarification;
     if (clarification && now < clarification.expiresAt) {
       // A clarification gets exactly one final follow-up. Consume it before
@@ -600,7 +623,7 @@ export class VoiceSession {
     now: number,
     normalizedTranscript: string,
     input: VoiceSessionInput,
-  ): VoiceDispatch | undefined {
+  ): VoiceDispatch | Promise<VoiceDispatch> | undefined {
     const due = this.#dueContext(now);
     const top = classifyVoiceDictation(input.transcript, this.#profile, due);
     if (top.status === "none") return undefined;
@@ -631,6 +654,13 @@ export class VoiceSession {
       return { decision: "ambiguous", candidates };
     }
     this.#invalidatePending();
+    if (voiceCompletionKind(dictation.command) !== undefined) {
+      return this.#handleCompletion(now, normalizedTranscript, dictation);
+    }
+    return this.#arm(now, normalizedTranscript, dictation);
+  }
+
+  #arm(now: number, normalizedTranscript: string, dictation: VoiceDictation): VoiceDispatch {
     this.#record(now, normalizedTranscript, "dictated", dictation.command.id);
     const expiresAt = now + this.#confirmationTtlMs;
     this.#pending = {
@@ -645,6 +675,39 @@ export class VoiceSession {
       expiresAt,
       capture: dictation.capture,
     };
+  }
+
+  /**
+   * A spoken completion arms only after the reference resolves to exactly one
+   * open, completable item. The read-back then names that item's full title,
+   * and the capture carries its id from the authoritative record, never from
+   * the request.
+   */
+  async #handleCompletion(
+    now: number,
+    normalizedTranscript: string,
+    dictation: VoiceDictation,
+  ): Promise<VoiceDispatch> {
+    const kind = voiceCompletionKind(dictation.command) ?? "any";
+    const unresolved = (reason: string): VoiceDispatch => {
+      this.#record(now, normalizedTranscript, "completion-unresolved", dictation.command.id);
+      return { decision: "completion-unresolved", command: dictation.command, reason };
+    };
+    if (!this.#completions) return unresolved(VOICE_COMPLETION_UNAVAILABLE_REASON);
+    let resolution;
+    try {
+      resolution = await this.#completions.resolve({ kind, reference: dictation.capture.title });
+    } catch {
+      return unresolved(VOICE_COMPLETION_UNAVAILABLE_REASON);
+    }
+    if (resolution.status !== "found") return unresolved(resolution.reason);
+    // Anything armed while the records were read is void: this turn replaces it.
+    this.#invalidatePending();
+    const { target } = resolution;
+    return this.#arm(now, normalizedTranscript, {
+      command: target.kind === "task" ? COMPLETE_TASK_COMMAND : COMPLETE_ERRAND_COMMAND,
+      capture: Object.freeze({ title: target.title, targetId: target.id }),
+    });
   }
 
   #handleRecognized(

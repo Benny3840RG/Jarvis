@@ -9,10 +9,14 @@ import {
 } from "../src/actions/toolExecution.js";
 import type { ToolAction, ToolActionService } from "../src/actions/toolActions.js";
 import {
+  completeTaskToolDefinition,
   createReminderToolDefinition,
   createTaskToolDefinition,
 } from "../src/actions/taskReminderTools.js";
-import { createErrandToolDefinition } from "../src/actions/errandTools.js";
+import {
+  completeErrandToolDefinition,
+  createErrandToolDefinition,
+} from "../src/actions/errandTools.js";
 import { createJarvisHttpApp } from "../src/http/app.js";
 import type { HttpAppConfig } from "../src/http/config.js";
 import type { ErrandStore } from "../src/errands/errand.js";
@@ -21,7 +25,11 @@ import type { PersistenceProvider } from "../src/persistence/persistence.js";
 import type { ControlledReminderRecord } from "../src/reminders/controlledReminder.js";
 import { captureCredentials, type CredentialsRuntime } from "../src/settings/credentialsStatus.js";
 import type { ControlledTaskRecord } from "../src/tasks/controlledTask.js";
-import { splitVoiceWakeWord, voiceUtteranceForSession } from "../src/voice/voiceSafeWrite.js";
+import {
+  splitVoiceWakeWord,
+  VOICE_COMPLETION_TARGET_REASON,
+  voiceUtteranceForSession,
+} from "../src/voice/voiceSafeWrite.js";
 import { VoiceWriteTarget } from "../src/voice/voiceWriteTarget.js";
 
 function credentials(host: string): CredentialsRuntime {
@@ -251,9 +259,10 @@ async function makeApp(
   actions?: ToolActionService,
   errandStore?: ErrandStore,
   voiceWriteTarget?: VoiceWriteTarget,
+  persistenceProvider: PersistenceProvider = persistence(),
 ): Promise<NestFastifyApplication> {
   const app = await createJarvisHttpApp({
-    persistence: persistence(),
+    persistence: persistenceProvider,
     providerName: "json",
     config: CONFIG,
     credentialsRuntime: credentials("10.0.0.5"),
@@ -1377,5 +1386,201 @@ describe("voice dictated errands", () => {
     assert.equal(dispatch.decision, "proposed");
     assert.equal(actions.rows.size, 1);
     assert.deepEqual(actions.rows.get(dispatch.toolActionId)?.arguments, { title: "Bar oil" });
+  });
+});
+
+/** One task table seen both ways: the resolver lists it, the executor completes it. */
+class TaskTable {
+  readonly rows: Array<ControlledTaskRecord & { projectId?: string }> = [];
+
+  add(title: string, projectId?: string): string {
+    const id = `task-${this.rows.length + 1}`;
+    this.rows.push({
+      id,
+      title,
+      category: "personal",
+      completed: false,
+      createdAt: 1,
+      updatedAt: 1,
+      revision: 1,
+      projectId: projectId as string,
+    });
+    return id;
+  }
+
+  provider(): PersistenceProvider {
+    return { ...persistence(), listTasks: async () => this.rows.map((row) => ({ ...row })) };
+  }
+
+  async create(): Promise<ControlledTaskRecord> {
+    throw new Error("not used");
+  }
+
+  async complete(input: {
+    projectId: string;
+    taskId: string;
+  }): Promise<ControlledTaskRecord | null> {
+    const row = this.rows.find((r) => r.id === input.taskId && r.projectId === input.projectId);
+    if (!row) return null;
+    row.completed = true;
+    row.completedAt = 2;
+    return { ...row };
+  }
+
+  async get(): Promise<ControlledTaskRecord | null> {
+    return null;
+  }
+
+  async cleanup(): Promise<boolean> {
+    return false;
+  }
+}
+
+describe("voice spoken completions", () => {
+  async function completionApp(table: TaskTable, errands = new InMemoryErrandStore()) {
+    const actions = new MemoryActions();
+    const revisions = new VoiceProjectRevisions(new Map([["nolan-voice", 4]]));
+    const app = await makeApp(
+      actions,
+      errands,
+      new VoiceWriteTarget("nolan-voice", revisions),
+      table.provider(),
+    );
+    return { actions, app, sessionId: await openSession(app) };
+  }
+
+  it("ticks off a voice-captured task by part of its title, after read-back, confirm and approval", async () => {
+    const table = new TaskTable();
+    const taskId = table.add("Order bar oil", "nolan-voice");
+    table.add("Quote the Smith fence", "nolan-voice");
+    const { actions, app, sessionId } = await completionApp(table);
+
+    const spoken = await utter(app, sessionId, {
+      transcript: "Nolan, tick off bar oil",
+      isFinal: true,
+    });
+    const readBack = spoken.json().dispatch;
+    assert.equal(readBack.decision, "awaiting-confirmation");
+    assert.equal(readBack.command.id, "client.complete-task");
+    assert.deepEqual(readBack.command.proposes, { tool: "tasks", operation: "complete" });
+    // The read-back names the full stored title and the server-resolved id.
+    assert.deepEqual(readBack.capture, { title: "Order bar oil", targetId: taskId });
+    assert.equal(actions.rows.size, 0);
+    assert.equal(table.rows[0]?.completed, false);
+
+    const confirmed = await utter(app, sessionId, { transcript: "Nolan confirm", isFinal: true });
+    const dispatch = confirmed.json().dispatch;
+    assert.equal(dispatch.decision, "proposed");
+    const staged = actions.rows.get(dispatch.toolActionId);
+    assert.ok(staged);
+    assert.equal(staged.tool, "tasks");
+    assert.equal(staged.operation, "complete");
+    assert.equal(staged.projectId, "nolan-voice");
+    assert.equal(staged.baseRevision, 4);
+    assert.deepEqual(staged.arguments, { taskId });
+    assert.equal(actions.approveCalls, 0, "voice never approves");
+    assert.equal(table.rows[0]?.completed, false, "staging never executes");
+
+    const approved = await actions.approve({
+      actionId: staged.actionId,
+      projectId: "nolan-voice",
+      expectedRevision: 4,
+      approvalToken: "owner-token",
+    });
+    const execution = new ToolExecutionService([completeTaskToolDefinition(table)]);
+    assert.equal((await executeLive(execution, approved)).status, "succeeded");
+    assert.equal(table.rows[0]?.completed, true);
+    assert.equal(table.rows[1]?.completed, false);
+  });
+
+  it("marks one open errand done, and only after approval and execution", async () => {
+    const errands = new InMemoryErrandStore();
+    await errands.add({ title: "Silicone for the deck" });
+    const milk = await errands.add({ title: "Milk" });
+    const { actions, app, sessionId } = await completionApp(new TaskTable(), errands);
+
+    const spoken = await utter(app, sessionId, {
+      transcript: "Nolan mark the errand milk as done",
+      isFinal: true,
+    });
+    assert.equal(spoken.json().dispatch.decision, "awaiting-confirmation");
+    assert.deepEqual(spoken.json().dispatch.capture, { title: "Milk", targetId: milk.id });
+
+    const confirmed = await utter(app, sessionId, { transcript: "Nolan confirm", isFinal: true });
+    const staged = actions.rows.get(confirmed.json().dispatch.toolActionId);
+    assert.ok(staged);
+    assert.equal(`${staged.tool}:${staged.operation}`, "errands:complete");
+    assert.deepEqual(staged.arguments, { errandId: milk.id });
+    assert.equal((await errands.get(milk.id))?.status, "open");
+
+    const approved = await actions.approve({
+      actionId: staged.actionId,
+      projectId: "nolan-voice",
+      expectedRevision: 4,
+      approvalToken: "owner-token",
+    });
+    const execution = new ToolExecutionService([completeErrandToolDefinition(errands)]);
+    assert.equal((await executeLive(execution, approved)).status, "succeeded");
+    assert.equal((await errands.get(milk.id))?.status, "done");
+    const open = (await errands.list()).filter((errand) => errand.status === "open");
+    assert.deepEqual(
+      open.map((errand) => errand.title),
+      ["Silicone for the deck"],
+    );
+  });
+
+  it("arms nothing when the reference is missing, ambiguous or not completable by voice", async () => {
+    const table = new TaskTable();
+    table.add("Order bar oil", "nolan-voice");
+    table.add("Change the oil filter", "nolan-voice");
+    table.add("Order chain", undefined); // captured on the HUD, outside the voice project
+    const { actions, app, sessionId } = await completionApp(table);
+
+    const cases: Array<[string, RegExp]> = [
+      ["Nolan tick off oil", /2 open items match “Oil”\. Say more of the title\./],
+      ["Nolan tick off the sprocket", /No open task or errand matches “Sprocket”/],
+      ["Nolan tick off order chain", /“Order chain” was not captured by voice/],
+      ["Nolan mark the errand bar oil done", /No open errand matches “Bar oil”/],
+    ];
+    for (const [transcript, reason] of cases) {
+      const response = await utter(app, sessionId, { transcript, isFinal: true });
+      const dispatch = response.json().dispatch;
+      assert.equal(dispatch.decision, "completion-unresolved", transcript);
+      assert.match(dispatch.reason, reason, transcript);
+      assert.equal(dispatch.capture, undefined, transcript);
+      assert.equal(response.json().pending, null, transcript);
+      const confirm = await utter(app, sessionId, { transcript: "Nolan confirm", isFinal: true });
+      assert.equal(confirm.json().dispatch.decision, "confirmation-not-pending", transcript);
+    }
+    assert.equal(actions.rows.size, 0);
+    assert.equal(table.rows.filter((row) => row.completed).length, 0);
+  });
+
+  it("stages a completion only on the voice project, never on a request-supplied target", async () => {
+    const table = new TaskTable();
+    table.add("Order bar oil", "nolan-voice");
+    const { actions, app, sessionId } = await completionApp(table);
+    await utter(app, sessionId, { transcript: "Nolan tick off bar oil", isFinal: true });
+    const confirmed = await utter(app, sessionId, {
+      transcript: "Nolan confirm",
+      isFinal: true,
+      ...TARGET,
+    });
+    assert.equal(confirmed.json().dispatch.toolActionId, undefined);
+    assert.equal(confirmed.json().dispatch.reason, VOICE_COMPLETION_TARGET_REASON);
+    assert.equal(actions.rows.size, 0);
+  });
+
+  it("never takes a completion target from the request body", async () => {
+    const table = new TaskTable();
+    table.add("Order bar oil", "nolan-voice");
+    const { actions, app, sessionId } = await completionApp(table);
+    const response = await utter(app, sessionId, {
+      transcript: "Nolan add a task",
+      isFinal: true,
+      capture: { title: "Order bar oil", targetId: "task-1" },
+    });
+    assert.equal(response.statusCode, 422);
+    assert.equal(actions.rows.size, 0);
   });
 });

@@ -22,6 +22,19 @@ it("validates inferred voice dispatch metadata against its decision and confiden
     { decision: "conversation-unavailable", conversationReason: "reply-too-long" },
     // The largest reply JARVIS_VOICE_CONVERSATION_MAX_REPLY_CHARS may permit.
     { decision: "conversation", reply: "a".repeat(2000) },
+    {
+      decision: "completion-unresolved",
+      command: {
+        id: "client.complete-item",
+        profile: "client",
+        phrases: [],
+        summary: "s",
+        kind: "propose",
+        criticality: "routine",
+        requiresSpokenConfirmation: false,
+      },
+      reason: "No open task or errand matches “Sprocket”.",
+    },
   ])
     assert.equal(validate(value), true, JSON.stringify(value));
   for (const value of [
@@ -69,6 +82,12 @@ it("binds capture to awaiting-confirmation/proposed on the three safe-write comm
   const task = command("client.capture-task", { tool: "tasks", operation: "create" });
   const reminder = command("client.follow-up-reminder", { tool: "reminders", operation: "create" });
   const errand = command("client.capture-errand", { tool: "errands", operation: "create" });
+  const completeTask = command("client.complete-task", { tool: "tasks", operation: "complete" });
+  const completeErrand = command("client.complete-errand", {
+    tool: "errands",
+    operation: "complete",
+  });
+  const completionCapture = { title: "Order bar oil", targetId: "t1" };
   const taskCapture = { title: "Order oil", category: "work" };
   const reminderCapture = { title: "Call Dave" };
   const datedReminderCapture = {
@@ -85,6 +104,8 @@ it("binds capture to awaiting-confirmation/proposed on the three safe-write comm
       { decision, command: reminder, capture: datedReminderCapture },
       { decision, command: reminder, capture: { title: "Pay rego", dueRaw: "by friday" } },
       { decision, command: errand, capture: { title: "Silicone for the deck" } },
+      { decision, command: completeTask, capture: completionCapture },
+      { decision, command: completeErrand, capture: { title: "Milk", targetId: "e1" } },
     ])
       assert.equal(validateDispatch(value), true, JSON.stringify(validateDispatch.errors));
   }
@@ -157,6 +178,39 @@ it("binds capture to awaiting-confirmation/proposed on the three safe-write comm
     },
     { decision: "proposed", command: command(errand.id), capture: { title: "X" } },
     { decision: "proposed", command: withoutProfile(errand), capture: { title: "X" } },
+    // A completion carries a resolved target and nothing else; a create never does.
+    { decision: "proposed", command: completeTask, capture: { title: "X" } },
+    {
+      decision: "proposed",
+      command: completeTask,
+      capture: { ...completionCapture, category: "work" },
+    },
+    {
+      decision: "proposed",
+      command: completeErrand,
+      capture: { ...completionCapture, dueRaw: "x" },
+    },
+    {
+      decision: "proposed",
+      command: command(completeTask.id, { tool: "tasks", operation: "create" }),
+      capture: completionCapture,
+    },
+    {
+      decision: "proposed",
+      command: command(completeErrand.id, { tool: "tasks", operation: "complete" }),
+      capture: completionCapture,
+    },
+    { decision: "proposed", command: task, capture: { ...taskCapture, targetId: "t1" } },
+    { decision: "proposed", command: errand, capture: { title: "X", targetId: "e1" } },
+    { decision: "proposed", command: reminder, capture: { title: "X", targetId: "r1" } },
+    { decision: "completion-unresolved", command: completeTask },
+    { decision: "completion-unresolved", command: task, reason: "x" },
+    {
+      decision: "completion-unresolved",
+      command: completeTask,
+      reason: "x",
+      capture: completionCapture,
+    },
     // A captured command must carry profile exactly "client".
     { decision: "proposed", command: { ...task, profile: "nolan" }, capture: taskCapture },
     { decision: "proposed", command: { ...reminder, profile: "owner" }, capture: reminderCapture },
@@ -175,6 +229,7 @@ it("binds capture to awaiting-confirmation/proposed on the three safe-write comm
     { ...pending, command: task, capture: taskCapture },
     { ...pending, command: reminder, capture: reminderCapture },
     { ...pending, command: errand, capture: { title: "Bar oil" } },
+    { ...pending, command: completeTask, capture: completionCapture },
   ])
     assert.equal(validatePending(value), true, JSON.stringify(validatePending.errors));
   for (const value of [
@@ -199,6 +254,8 @@ it("binds capture to awaiting-confirmation/proposed on the three safe-write comm
     },
     { ...pending, command: command(reminder.id), capture: reminderCapture },
     { ...pending, command: errand, capture: taskCapture },
+    { ...pending, command: completeErrand, capture: { title: "Milk" } },
+    { ...pending, command: errand, capture: { title: "Milk", targetId: "e1" } },
     {
       ...pending,
       command: command(errand.id, { tool: "errands", operation: "delete" }),

@@ -5,6 +5,7 @@ import path from "node:path";
 import { describe, it } from "node:test";
 
 import {
+  completeErrandToolDefinition,
   createErrandArgumentsSchema,
   createErrandToolDefinition,
   errandIdForToolAction,
@@ -182,5 +183,42 @@ describe("errands:create executor", () => {
       new InMemoryErrandStore(),
     );
     assert.equal(keys(withErrands).includes("errands:create"), true);
+    assert.equal(keys(withErrands).includes("errands:complete"), true);
+  });
+});
+
+describe("errands:complete executor", () => {
+  it("marks one open errand done, harmlessly again on retry, and refuses a missing errand", async () => {
+    const store = new InMemoryErrandStore();
+    const milk = await store.add({ title: "Milk" });
+    const bread = await store.add({ title: "Bread" });
+    const service = new ToolExecutionService([completeErrandToolDefinition(store)]);
+    const action = approvedAction({
+      operation: "complete",
+      arguments: { errandId: milk.id },
+    });
+    assert.equal((await execute(service, action)).status, "succeeded");
+    assert.equal((await store.get(milk.id))?.status, "done");
+    assert.equal((await store.get(bread.id))?.status, "open");
+
+    // Already done: returned unchanged, even through a fresh execution key.
+    const definition = completeErrandToolDefinition(store);
+    const done = await definition.execute(
+      { errandId: milk.id },
+      new AbortController().signal,
+      {} as Parameters<typeof definition.execute>[2],
+    );
+    assert.equal((done as { status: string }).status, "done");
+
+    const missing = approvedAction({
+      actionId: "voice-safe-write:v1:missing",
+      requestId: "voice-safe-write:v1:missing",
+      operation: "complete",
+      arguments: { errandId: "nope" },
+    });
+    assert.notEqual((await execute(service, missing)).status, "succeeded");
+    for (const value of [{}, { errandId: "" }, { errandId: "x", title: "Milk" }]) {
+      assert.equal(definition.schema.safeParse(value).success, false, JSON.stringify(value));
+    }
   });
 });

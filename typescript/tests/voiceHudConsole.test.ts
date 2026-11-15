@@ -291,6 +291,42 @@ describe("voice HUD dictation read-back", () => {
     assert.match(staged.label, /^Staged errand “Silicone for the deck” for your approval/);
   });
 
+  it("reads a spoken completion back and says when nothing was marked done", () => {
+    const completeTask = {
+      id: "client.complete-task",
+      proposes: { tool: "tasks", operation: "complete" },
+    };
+    const ask = logic.describeVoiceDispatch({
+      decision: "awaiting-confirmation",
+      command: completeTask,
+      capture: { title: "Order bar oil", targetId: "t1" },
+    } as never);
+    assert.equal(ask.tone, "pending");
+    assert.match(ask.label, /^Mark task “Order bar oil” done\? Say “Nolan confirm”/);
+    const staged = logic.describeVoiceDispatch({
+      decision: "proposed",
+      command: {
+        id: "client.complete-errand",
+        proposes: { tool: "errands", operation: "complete" },
+      },
+      capture: { title: "Milk", targetId: "e1" },
+      toolActionId: "voice-safe-write:v1:abc",
+    } as never);
+    assert.match(
+      staged.label,
+      /^Staged completing errand “Milk” for your approval\. Nothing changes/,
+    );
+    const unresolved = logic.describeVoiceDispatch({
+      decision: "completion-unresolved",
+      reason: "2 open items match “Oil”. Say more of the title.",
+    } as never);
+    assert.equal(unresolved.tone, "warn");
+    assert.equal(
+      unresolved.label,
+      "Nothing marked done. 2 open items match “Oil”. Say more of the title.",
+    );
+  });
+
   it("says a confirmed dictation is staged for approval, not done", () => {
     const info = logic.describeVoiceDispatch({
       decision: "proposed",

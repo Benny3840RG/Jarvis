@@ -4122,9 +4122,16 @@
         }
         function voiceCaptureWhat(command, capture) {
           var tool = command && command.proposes ? command.proposes.tool : "";
-          if (tool === "tasks") return "task “" + capture.title + "”" + (capture.category ? " (" + capture.category + ")" : "");
-          if (tool === "errands") return "errand “" + capture.title + "”";
-          return "reminder “" + capture.title + "”" + voiceCaptureDue(capture);
+          var operation = command && command.proposes ? command.proposes.operation : "";
+          if (operation === "complete") {
+            var item = (tool === "tasks" ? "task" : "errand") + " “" + capture.title + "”";
+            return { ask: "Mark " + item + " done", staged: "completing " + item, pending: "mark " + item + " done", effect: "changes" };
+          }
+          var what;
+          if (tool === "tasks") what = "task “" + capture.title + "”" + (capture.category ? " (" + capture.category + ")" : "");
+          else if (tool === "errands") what = "errand “" + capture.title + "”";
+          else what = "reminder “" + capture.title + "”" + voiceCaptureDue(capture);
+          return { ask: "Add " + what, staged: what, pending: "add " + what, effect: "is created" };
         }
         function describeVoiceDispatch(dispatch, catalog, profile) {
           if (dispatch && dispatch.decision === "ambiguous") {
@@ -4134,11 +4141,15 @@
           if (capture) {
             var what = voiceCaptureWhat(dispatch.command, capture);
             if (dispatch.decision === "awaiting-confirmation") {
-              return { label: "Add " + what + "? Say “Nolan confirm” to stage it for your approval, or “Nolan cancel”.", tone: "pending" };
+              return { label: what.ask + "? Say “Nolan confirm” to stage it for your approval, or “Nolan cancel”.", tone: "pending" };
             }
             if (dispatch.decision === "proposed" && typeof dispatch.toolActionId === "string" && dispatch.toolActionId) {
-              return { label: "Staged " + what + " for your approval. Nothing is created until you approve it.", tone: "ok" };
+              return { label: "Staged " + what.staged + " for your approval. Nothing " + what.effect + " until you approve it.", tone: "ok" };
             }
+          }
+          if (dispatch && dispatch.decision === "completion-unresolved") {
+            var unresolved = typeof dispatch.reason === "string" ? dispatch.reason.trim() : "";
+            return { label: unresolved ? "Nothing marked done. " + unresolved : "Nothing marked done.", tone: "warn" };
           }
           if (dispatch && dispatch.decision === "answered") {
             var answer = typeof dispatch.answer === "string" ? dispatch.answer.trim() : "";
@@ -4276,7 +4287,7 @@
               el.hidden = false;
               var pendingCapture = pending.capture && typeof pending.capture.title === "string" ? pending.capture : null;
               var pendingWhat = pendingCapture
-                ? "add " + voiceCaptureWhat(pending.command, pendingCapture)
+                ? voiceCaptureWhat(pending.command, pendingCapture).pending
                 : pending.command.summary;
               el.textContent = "Awaiting confirm: " + pendingWhat + " — say “Nolan confirm” or “Nolan cancel”.";
             } else {

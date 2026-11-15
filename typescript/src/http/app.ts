@@ -86,6 +86,7 @@ import {
 } from "../settings/credentialsStatus.js";
 import { createAuthoritativeVoiceQueries } from "../voice/authoritativeVoiceQuery.js";
 import { AbsentHardwareProvider } from "../voice/voiceHardware.js";
+import { AuthoritativeVoiceCompletionResolver } from "../voice/voiceCompletion.js";
 import { VoiceSessionRegistry } from "../voice/voiceSessionRegistry.js";
 import { createVoiceWriteTargetFromEnv, type VoiceWriteTarget } from "../voice/voiceWriteTarget.js";
 import {
@@ -520,6 +521,13 @@ export async function createJarvisHttpApp(
         new VoiceSessionRegistry({
           provider: new AbsentHardwareProvider(),
           timezone: config.timezone,
+          // Spoken completions resolve against the same records the queries
+          // read; tasks are only offered inside the dedicated voice project.
+          completions: new AuthoritativeVoiceCompletionResolver({
+            tasks: persistence,
+            errands: errandStore,
+            voiceProject: voiceWriteTarget,
+          }),
           queries: createAuthoritativeVoiceQueries({
             timezone: config.timezone,
             tasks: persistence,
