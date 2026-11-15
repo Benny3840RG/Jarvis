@@ -268,6 +268,26 @@ describe("voice HUD dictation read-back", () => {
     assert.match(info.label, /Nothing is created until you approve it/);
   });
 
+  it("reads a reminder's resolved due time back, or says no time is set", () => {
+    const dated = logic.describeVoiceDispatch({
+      decision: "awaiting-confirmation",
+      command: reminderCommand,
+      capture: {
+        title: "Call dave",
+        dueRaw: "tomorrow at 7 am",
+        dueAt: Date.parse("2026-11-15T20:00:00.000Z"),
+        dueTimezone: "Australia/Melbourne",
+      },
+    } as never);
+    assert.match(dated.label, /^Add reminder “Call dave” due Mon,? 16 Nov,? 7:00\s?am\?/i);
+    const undated = logic.describeVoiceDispatch({
+      decision: "awaiting-confirmation",
+      command: reminderCommand,
+      capture: { title: "Check the oven", dueRaw: "at 7" },
+    } as never);
+    assert.match(undated.label, /due “at 7” \(no time set — say am or pm\)/);
+  });
+
   it("still surfaces the not-staged reason for a confirmed dictation", () => {
     const info = logic.describeVoiceDispatch({
       decision: "proposed",

@@ -35,6 +35,8 @@ import { interpretIntent } from "./voiceIntentInterpreter.js";
 import { parseUtterance } from "./voiceParser.js";
 import type { VoiceQueryProvider } from "./voiceQuery.js";
 import type { VoiceWriteCapture } from "./voiceSafeWrite.js";
+import type { SpokenDueContext } from "./voiceReminderDue.js";
+import { resolveReminderTimezone } from "../reminders/due.js";
 
 const DEFAULT_HISTORY_LIMIT = 20;
 const DEFAULT_CONFIRMATION_TTL_MS = 30_000;
@@ -144,10 +146,11 @@ function dictationAlternativeCandidates(
   profile: VoiceProfile,
   alternatives: readonly string[] | undefined,
   topKey?: string,
+  due?: SpokenDueContext,
 ): readonly string[] {
   const candidates = new Set<string>();
   for (const alternative of alternatives ?? []) {
-    const result = classifyVoiceDictation(alternative, profile);
+    const result = classifyVoiceDictation(alternative, profile, due);
     if (result.status === "rejected") candidates.add("dictation.rejected");
     else if (result.status === "captured") {
       if (topKey === undefined || voiceDictationKey(result.dictation) !== topKey) {
@@ -241,6 +244,12 @@ export type VoiceSessionOptions = Readonly<{
    * Defaults to false: with it off the session behaves exactly as before.
    */
   interpretNaturalLanguage?: boolean;
+  /**
+   * Owner timezone for spoken reminder due times ("remind me to … tomorrow at
+   * 7 am"). Defaults to the configured reminder timezone (JARVIS_TIMEZONE or
+   * the machine zone). If neither resolves, due phrases stay in the title.
+   */
+  timezone?: string;
 }>;
 
 export type VoiceSessionInput = Readonly<{
@@ -266,6 +275,7 @@ export class VoiceSession {
   readonly #confirmationTtlMs: number;
   readonly #clock: () => number;
   readonly #interpret: boolean;
+  readonly #timezone: string | undefined;
   readonly #history: VoiceHistoryEntry[] = [];
   #pending: PendingConfirmation | undefined;
   #clarification: PendingClarification | undefined;
@@ -278,6 +288,15 @@ export class VoiceSession {
     this.#confirmationTtlMs = options.confirmationTtlMs ?? DEFAULT_CONFIRMATION_TTL_MS;
     this.#clock = options.clock ?? Date.now;
     this.#interpret = options.interpretNaturalLanguage ?? false;
+    this.#timezone = options.timezone;
+  }
+
+  #dueContext(now: number): SpokenDueContext | undefined {
+    try {
+      return { now, timezone: resolveReminderTimezone(this.#timezone) };
+    } catch {
+      return undefined;
+    }
   }
 
   get profile(): VoiceProfile {
@@ -552,7 +571,8 @@ export class VoiceSession {
     normalizedTranscript: string,
     input: VoiceSessionInput,
   ): VoiceDispatch | undefined {
-    const top = classifyVoiceDictation(input.transcript, this.#profile);
+    const due = this.#dueContext(now);
+    const top = classifyVoiceDictation(input.transcript, this.#profile, due);
     if (top.status === "none") return undefined;
     if (top.status === "rejected") {
       // Unsafe or malformed dictation: fail closed here. It must not arm a
@@ -565,11 +585,11 @@ export class VoiceSession {
     const topKey = voiceDictationKey(dictation);
     const conflicting = new Set<string>([
       ...controlAlternativeCandidates(input.alternatives),
-      ...dictationAlternativeCandidates(this.#profile, input.alternatives, topKey),
+      ...dictationAlternativeCandidates(this.#profile, input.alternatives, topKey, due),
     ]);
     for (const alternative of input.alternatives ?? []) {
       const normalizedAlternative = normalizeUtterance(alternative);
-      if (classifyVoiceDictation(alternative, this.#profile).status !== "none") continue;
+      if (classifyVoiceDictation(alternative, this.#profile, due).status !== "none") continue;
       const other = findVoiceCommand(this.#profile, normalizedAlternative);
       if (other) conflicting.add(other.id);
     }

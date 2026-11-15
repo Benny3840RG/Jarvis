@@ -510,6 +510,7 @@ export async function createJarvisHttpApp(
         options.voiceSessionRegistry ??
         new VoiceSessionRegistry({
           provider: new AbsentHardwareProvider(),
+          timezone: config.timezone,
           queries: createAuthoritativeVoiceQueries({
             timezone: config.timezone,
             tasks: persistence,

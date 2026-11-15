@@ -8240,6 +8240,10 @@
         "description": "Safe-write fields captured from speech by the dictation grammar, for example “Nolan, add a work task: order bar oil”. They are read back to the owner and staged only after an explicit spoken confirmation. Staging never approves or executes.",
         "required": ["title"],
         "additionalProperties": false,
+        "dependentRequired": {
+          "dueAt": ["dueRaw", "dueTimezone"],
+          "dueTimezone": ["dueAt"]
+        },
         "properties": {
           "title": {
             "type": "string",
@@ -8251,6 +8255,22 @@
             "type": "string",
             "enum": ["personal", "work", "builds", "money", "life"],
             "description": "Task category. Present for a dictated task; personal when no category was spoken."
+          },
+          "dueRaw": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500,
+            "description": "Dictated reminders only: the spoken due phrase exactly as heard, for example “tomorrow at 7 am”. Present without dueAt when the phrase names no time or an hour without am/pm; no time is guessed."
+          },
+          "dueAt": {
+            "type": "number",
+            "description": "Dictated reminders only: the resolved due instant in milliseconds since the Unix epoch, read back to the owner before confirmation. Always paired with dueTimezone and dueRaw."
+          },
+          "dueTimezone": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "description": "Dictated reminders only: the owner timezone dueAt was resolved in (JARVIS_TIMEZONE)."
           }
         }
       },
@@ -8320,7 +8340,14 @@
                 },
                 "capture": {
                   "properties": { "title": {}, "category": {} },
-                  "required": ["title", "category"]
+                  "required": ["title", "category"],
+                  "not": {
+                    "anyOf": [
+                      { "properties": { "dueRaw": {} }, "required": ["dueRaw"] },
+                      { "properties": { "dueAt": {} }, "required": ["dueAt"] },
+                      { "properties": { "dueTimezone": {} }, "required": ["dueTimezone"] }
+                    ]
+                  }
                 }
               }
             }
@@ -8499,7 +8526,14 @@
                 },
                 "capture": {
                   "properties": { "title": {}, "category": {} },
-                  "required": ["title", "category"]
+                  "required": ["title", "category"],
+                  "not": {
+                    "anyOf": [
+                      { "properties": { "dueRaw": {} }, "required": ["dueRaw"] },
+                      { "properties": { "dueAt": {} }, "required": ["dueAt"] },
+                      { "properties": { "dueTimezone": {} }, "required": ["dueTimezone"] }
+                    ]
+                  }
                 }
               }
             }

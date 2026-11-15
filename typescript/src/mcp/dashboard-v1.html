@@ -4095,6 +4095,17 @@
             tone: "warn",
           };
         }
+        function voiceCaptureDue(capture) {
+          if (!capture || typeof capture.dueRaw !== "string" || !capture.dueRaw) return "";
+          if (typeof capture.dueAt === "number" && typeof capture.dueTimezone === "string") {
+            try {
+              return " due " + new Intl.DateTimeFormat("en-AU", { timeZone: capture.dueTimezone, weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit", hour12: true }).format(new Date(capture.dueAt));
+            } catch (error) {
+              return " due “" + capture.dueRaw + "”";
+            }
+          }
+          return " due “" + capture.dueRaw + "” (no time set" + (/\d/.test(capture.dueRaw) ? " — say am or pm" : "") + ")";
+        }
         function describeVoiceDispatch(dispatch, catalog, profile) {
           if (dispatch && dispatch.decision === "ambiguous") {
             return describeVoiceClarification(dispatch.candidates, catalog, profile);
@@ -4104,7 +4115,7 @@
             var isTask = !!(dispatch.command && dispatch.command.proposes && dispatch.command.proposes.tool === "tasks");
             var what = isTask
               ? "task “" + capture.title + "”" + (capture.category ? " (" + capture.category + ")" : "")
-              : "reminder “" + capture.title + "”";
+              : "reminder “" + capture.title + "”" + voiceCaptureDue(capture);
             if (dispatch.decision === "awaiting-confirmation") {
               return { label: "Add " + what + "? Say “Nolan confirm” to stage it for your approval, or “Nolan cancel”.", tone: "pending" };
             }
@@ -4230,7 +4241,7 @@
               var pendingWhat = pendingCapture
                 ? (pending.command.proposes && pending.command.proposes.tool === "tasks"
                   ? "add task “" + pendingCapture.title + "”" + (pendingCapture.category ? " (" + pendingCapture.category + ")" : "")
-                  : "add reminder “" + pendingCapture.title + "”")
+                  : "add reminder “" + pendingCapture.title + "”" + voiceCaptureDue(pendingCapture))
                 : pending.command.summary;
               el.textContent = "Awaiting confirm: " + pendingWhat + " — say “Nolan confirm” or “Nolan cancel”.";
             } else {

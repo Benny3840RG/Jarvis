@@ -204,11 +204,20 @@ class MemoryTasks {
 class MemoryReminders {
   readonly records: ControlledReminderRecord[] = [];
 
-  async create(input: { projectId: string; title: string }): Promise<ControlledReminderRecord> {
+  async create(input: {
+    projectId: string;
+    title: string;
+    dueRaw?: string;
+    dueAt?: number;
+    dueTimezone?: string;
+  }): Promise<ControlledReminderRecord> {
     const record: ControlledReminderRecord = {
       id: `reminder-${this.records.length + 1}`,
       projectId: input.projectId,
       title: input.title,
+      ...(input.dueRaw === undefined ? {} : { dueRaw: input.dueRaw }),
+      ...(input.dueAt === undefined ? {} : { dueAt: input.dueAt }),
+      ...(input.dueTimezone === undefined ? {} : { dueTimezone: input.dueTimezone }),
       createdAt: 1,
       updatedAt: 1,
       revision: 1,
@@ -1134,6 +1143,72 @@ describe("voice writes on the dedicated voice project", () => {
     assert.equal(unwoken.json().dispatch.toolActionId, undefined);
     await utter(app, sessionId, { transcript: "nolan open tasks", isFinal: true });
     assert.equal(revisions.reads, 0);
+    assert.equal(actions.rows.size, 0);
+  });
+});
+
+describe("voice dictated reminder due times", () => {
+  it("stages the spoken due time with the reminder and the approved reminder is dated", async () => {
+    const actions = new MemoryActions();
+    const reminders = new MemoryReminders();
+    const execution = new ToolExecutionService([createReminderToolDefinition(reminders)]);
+    const app = await makeApp(actions);
+    const sessionId = await openSession(app);
+
+    const before = Date.now();
+    const spoken = await utter(app, sessionId, {
+      transcript: "Nolan, remind me to call Dave tomorrow at 7 am",
+      isFinal: true,
+      ...TARGET,
+    });
+    const readBack = spoken.json().dispatch;
+    assert.equal(readBack.decision, "awaiting-confirmation");
+    assert.equal(readBack.capture.title, "Call dave");
+    assert.equal(readBack.capture.dueRaw, "tomorrow at 7 am");
+    assert.equal(readBack.capture.dueTimezone, "Australia/Melbourne");
+    assert.ok(readBack.capture.dueAt > before, "tomorrow is in the future");
+    assert.ok(readBack.capture.dueAt < before + 2 * 24 * 60 * 60 * 1_000);
+    assert.equal(actions.rows.size, 0);
+
+    const confirmed = await utter(app, sessionId, {
+      transcript: "Nolan confirm",
+      isFinal: true,
+      ...TARGET,
+    });
+    const dispatch = confirmed.json().dispatch;
+    const staged = actions.rows.get(dispatch.toolActionId);
+    assert.ok(staged);
+    assert.deepEqual(staged.arguments, {
+      title: "Call dave",
+      dueRaw: "tomorrow at 7 am",
+      dueAt: readBack.capture.dueAt,
+      dueTimezone: "Australia/Melbourne",
+    });
+
+    const approved = await actions.approve({
+      actionId: staged.actionId,
+      projectId: "project-1",
+      expectedRevision: 1,
+      approvalToken: "owner-token",
+    });
+    const receipt = await executeLive(execution, approved);
+    assert.equal(receipt.status, "succeeded");
+    assert.equal(reminders.records.length, 1);
+    assert.equal(reminders.records[0]?.dueAt, readBack.capture.dueAt);
+    assert.equal(reminders.records[0]?.dueRaw, "tomorrow at 7 am");
+  });
+
+  it("a request-body capture cannot add a due time to a voice reminder", async () => {
+    const actions = new MemoryActions();
+    const app = await makeApp(actions);
+    const sessionId = await openSession(app);
+    const response = await utter(app, sessionId, {
+      transcript: "jarvis remind me to follow up",
+      isFinal: true,
+      ...TARGET,
+      capture: { title: "Follow up", dueAt: 1, dueTimezone: "UTC", dueRaw: "x" },
+    });
+    assert.equal(response.statusCode, 422);
     assert.equal(actions.rows.size, 0);
   });
 });

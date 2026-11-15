@@ -60,16 +60,33 @@ it("binds capture to awaiting-confirmation/proposed on the two safe-write comman
   const reminder = command("client.follow-up-reminder", { tool: "reminders", operation: "create" });
   const taskCapture = { title: "Order oil", category: "work" };
   const reminderCapture = { title: "Call Dave" };
+  const datedReminderCapture = {
+    title: "Call Dave",
+    dueRaw: "tomorrow at 7 am",
+    dueAt: 1_763_236_800_000,
+    dueTimezone: "Australia/Melbourne",
+  };
 
   for (const decision of ["awaiting-confirmation", "proposed"]) {
     for (const value of [
       { decision, command: task, capture: taskCapture },
       { decision, command: reminder, capture: reminderCapture },
+      { decision, command: reminder, capture: datedReminderCapture },
+      { decision, command: reminder, capture: { title: "Pay rego", dueRaw: "by friday" } },
     ])
       assert.equal(validateDispatch(value), true, JSON.stringify(validateDispatch.errors));
   }
   for (const value of [
     { decision: "answered", capture: { title: "X" } },
+    // Due fields belong to reminders only, and a resolved time is always paired.
+    { decision: "proposed", command: task, capture: { ...taskCapture, dueRaw: "tomorrow" } },
+    { decision: "proposed", command: reminder, capture: { title: "X", dueAt: 1 } },
+    { decision: "proposed", command: reminder, capture: { title: "X", dueTimezone: "UTC" } },
+    {
+      decision: "proposed",
+      command: reminder,
+      capture: { title: "X", dueAt: 1, dueTimezone: "UTC" },
+    },
     { decision: "answered", command: task, capture: taskCapture },
     { decision: "unrecognized", capture: taskCapture },
     { decision: "ambiguous", command: task, capture: taskCapture },
