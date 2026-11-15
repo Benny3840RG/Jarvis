@@ -30,10 +30,16 @@ const SAFE_EXECUTORS = new Set([
   "tasks:complete",
   "errands:complete",
   "reminders:cancel",
+  "errands:remove",
 ]);
 
 /** Completions act on a resolved record, so they only ever stage on the voice project. */
-const COMPLETION_EXECUTORS = new Set(["tasks:complete", "errands:complete", "reminders:cancel"]);
+const COMPLETION_EXECUTORS = new Set([
+  "tasks:complete",
+  "errands:complete",
+  "reminders:cancel",
+  "errands:remove",
+]);
 
 export const VOICE_COMPLETION_TARGET_REASON =
   "Safe write was not staged: a spoken completion stages only on the dedicated voice project.";
@@ -186,7 +192,7 @@ function safeWriteArguments(
       return undefined;
     }
     if (key === "tasks:complete") return { taskId: targetId };
-    if (key === "errands:complete") return { errandId: targetId };
+    if (key === "errands:complete" || key === "errands:remove") return { errandId: targetId };
     return { reminderId: targetId };
   }
   if (key === "errands:create") {

@@ -8276,7 +8276,7 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 200,
-            "description": "Spoken completions and reminder cancellations only (client.complete-task, client.complete-errand, client.cancel-reminder): the id of the one open task, errand or reminder the server resolved from the spoken reference. title is then that item's full stored title. Never accepted in a request body."
+            "description": "Spoken completions and reminder cancellations only (client.complete-task, client.complete-errand, client.cancel-reminder, client.remove-errand): the id of the one open task, errand or reminder the server resolved from the spoken reference. title is then that item's full stored title. Never accepted in a request body."
           }
         }
       },
@@ -8432,6 +8432,55 @@
             "if": {
               "properties": {
                 "command": {
+                  "properties": { "id": { "const": "client.remove-errand" } },
+                  "required": ["id"]
+                },
+                "capture": {}
+              },
+              "required": ["command", "capture"]
+            },
+            "then": {
+              "required": ["command"],
+              "properties": {
+                "command": {
+                  "properties": {
+                    "kind": { "const": "propose" },
+                    "proposes": {
+                      "properties": {
+                        "tool": { "const": "errands" },
+                        "operation": { "const": "remove" }
+                      },
+                      "required": ["tool", "operation"]
+                    }
+                  },
+                  "required": ["kind", "proposes"]
+                },
+                "capture": {
+                  "properties": {
+                    "title": {},
+                    "targetId": {},
+                    "category": {},
+                    "dueRaw": {},
+                    "dueAt": {},
+                    "dueTimezone": {}
+                  },
+                  "required": ["title", "targetId"],
+                  "not": {
+                    "anyOf": [
+                      { "properties": { "category": {} }, "required": ["category"] },
+                      { "properties": { "dueRaw": {} }, "required": ["dueRaw"] },
+                      { "properties": { "dueAt": {} }, "required": ["dueAt"] },
+                      { "properties": { "dueTimezone": {} }, "required": ["dueTimezone"] }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "command": {
                   "properties": { "id": { "const": "client.cancel-reminder" } },
                   "required": ["id"]
                 },
@@ -8491,7 +8540,8 @@
                         "client.capture-errand",
                         "client.complete-task",
                         "client.complete-errand",
-                        "client.cancel-reminder"
+                        "client.cancel-reminder",
+                        "client.remove-errand"
                       ]
                     },
                     "profile": { "const": "client" }
@@ -8743,6 +8793,7 @@
                         "client.complete-task",
                         "client.complete-errand",
                         "client.cancel-reminder",
+                        "client.remove-errand",
                         "client.complete-item"
                       ]
                     },
@@ -8885,6 +8936,55 @@
             "if": {
               "properties": {
                 "command": {
+                  "properties": { "id": { "const": "client.remove-errand" } },
+                  "required": ["id"]
+                },
+                "capture": {}
+              },
+              "required": ["command", "capture"]
+            },
+            "then": {
+              "required": ["command"],
+              "properties": {
+                "command": {
+                  "properties": {
+                    "kind": { "const": "propose" },
+                    "proposes": {
+                      "properties": {
+                        "tool": { "const": "errands" },
+                        "operation": { "const": "remove" }
+                      },
+                      "required": ["tool", "operation"]
+                    }
+                  },
+                  "required": ["kind", "proposes"]
+                },
+                "capture": {
+                  "properties": {
+                    "title": {},
+                    "targetId": {},
+                    "category": {},
+                    "dueRaw": {},
+                    "dueAt": {},
+                    "dueTimezone": {}
+                  },
+                  "required": ["title", "targetId"],
+                  "not": {
+                    "anyOf": [
+                      { "properties": { "category": {} }, "required": ["category"] },
+                      { "properties": { "dueRaw": {} }, "required": ["dueRaw"] },
+                      { "properties": { "dueAt": {} }, "required": ["dueAt"] },
+                      { "properties": { "dueTimezone": {} }, "required": ["dueTimezone"] }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "command": {
                   "properties": { "id": { "const": "client.cancel-reminder" } },
                   "required": ["id"]
                 },
@@ -8976,7 +9076,8 @@
                         "client.capture-errand",
                         "client.complete-task",
                         "client.complete-errand",
-                        "client.cancel-reminder"
+                        "client.cancel-reminder",
+                        "client.remove-errand"
                       ]
                     },
                     "profile": { "const": "client" }

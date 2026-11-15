@@ -358,6 +358,35 @@ describe("voice HUD dictation read-back", () => {
     assert.equal(unresolved.label, "Nothing cancelled. No reminder matches “Sprocket”.");
   });
 
+  it("reads a spoken errand removal back and says when nothing was removed", () => {
+    const removeErrand = {
+      id: "client.remove-errand",
+      proposes: { tool: "errands", operation: "remove" },
+    };
+    const ask = logic.describeVoiceDispatch({
+      decision: "awaiting-confirmation",
+      command: removeErrand,
+      capture: { title: "Milk", targetId: "e1" },
+    } as never);
+    assert.match(ask.label, /^Remove errand “Milk” from the list\? Say “Nolan confirm”/);
+    const staged = logic.describeVoiceDispatch({
+      decision: "proposed",
+      command: removeErrand,
+      capture: { title: "Milk", targetId: "e1" },
+      toolActionId: "voice-safe-write:v1:abc",
+    } as never);
+    assert.match(
+      staged.label,
+      /^Staged removing errand “Milk” for your approval\. Nothing changes/,
+    );
+    const unresolved = logic.describeVoiceDispatch({
+      decision: "completion-unresolved",
+      command: removeErrand,
+      reason: "No open errand matches “Sprocket”.",
+    } as never);
+    assert.equal(unresolved.label, "Nothing removed. No open errand matches “Sprocket”.");
+  });
+
   it("says a confirmed dictation is staged for approval, not done", () => {
     const info = logic.describeVoiceDispatch({
       decision: "proposed",

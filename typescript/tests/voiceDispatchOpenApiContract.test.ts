@@ -105,6 +105,7 @@ it("binds capture to awaiting-confirmation/proposed on the three safe-write comm
     tool: "reminders",
     operation: "cancel",
   });
+  const removeErrand = command("client.remove-errand", { tool: "errands", operation: "remove" });
   const completionCapture = { title: "Order bar oil", targetId: "t1" };
   const taskCapture = { title: "Order oil", category: "work" };
   const reminderCapture = { title: "Call Dave" };
@@ -125,6 +126,7 @@ it("binds capture to awaiting-confirmation/proposed on the three safe-write comm
       { decision, command: completeTask, capture: completionCapture },
       { decision, command: completeErrand, capture: { title: "Milk", targetId: "e1" } },
       { decision, command: cancelReminder, capture: { title: "Call Dave", targetId: "r1" } },
+      { decision, command: removeErrand, capture: { title: "Milk", targetId: "e1" } },
     ])
       assert.equal(validateDispatch(value), true, JSON.stringify(validateDispatch.errors));
   }
@@ -239,6 +241,18 @@ it("binds capture to awaiting-confirmation/proposed on the three safe-write comm
       command: command(cancelReminder.id, { tool: "reminders", operation: "delete" }),
       capture: completionCapture,
     },
+    // An errand removal is a resolved target on errands:remove, nothing else.
+    { decision: "proposed", command: removeErrand, capture: { title: "Milk" } },
+    {
+      decision: "proposed",
+      command: removeErrand,
+      capture: { ...completionCapture, category: "work" },
+    },
+    {
+      decision: "proposed",
+      command: command(removeErrand.id, { tool: "errands", operation: "complete" }),
+      capture: completionCapture,
+    },
     { decision: "completion-unresolved", command: completeTask },
     { decision: "completion-unresolved", command: task, reason: "x" },
     {
@@ -267,6 +281,7 @@ it("binds capture to awaiting-confirmation/proposed on the three safe-write comm
     { ...pending, command: errand, capture: { title: "Bar oil" } },
     { ...pending, command: completeTask, capture: completionCapture },
     { ...pending, command: cancelReminder, capture: completionCapture },
+    { ...pending, command: removeErrand, capture: completionCapture },
   ])
     assert.equal(validatePending(value), true, JSON.stringify(validatePending.errors));
   for (const value of [
@@ -293,6 +308,7 @@ it("binds capture to awaiting-confirmation/proposed on the three safe-write comm
     { ...pending, command: errand, capture: taskCapture },
     { ...pending, command: completeErrand, capture: { title: "Milk" } },
     { ...pending, command: cancelReminder, capture: { title: "Call Dave" } },
+    { ...pending, command: removeErrand, capture: { title: "Milk" } },
     { ...pending, command: errand, capture: { title: "Milk", targetId: "e1" } },
     {
       ...pending,

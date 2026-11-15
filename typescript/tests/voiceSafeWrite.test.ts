@@ -17,6 +17,7 @@ import {
 import {
   completeErrandToolDefinition,
   createErrandToolDefinition,
+  removeErrandToolDefinition,
 } from "../src/actions/errandTools.js";
 import { createJarvisHttpApp } from "../src/http/app.js";
 import type { HttpAppConfig } from "../src/http/config.js";
@@ -1757,6 +1758,98 @@ describe("voice spoken reminder cancellations", () => {
     table.add("Order bar oil", "nolan-voice");
     const { actions, app, sessionId } = await cancelApp(table);
     await utter(app, sessionId, { transcript: "Nolan cancel the bar oil reminder", isFinal: true });
+    const confirmed = await utter(app, sessionId, {
+      transcript: "Nolan confirm",
+      isFinal: true,
+      ...TARGET,
+    });
+    assert.equal(confirmed.json().dispatch.toolActionId, undefined);
+    assert.equal(confirmed.json().dispatch.reason, VOICE_COMPLETION_TARGET_REASON);
+    assert.equal(actions.rows.size, 0);
+  });
+});
+
+describe("voice spoken errand removal", () => {
+  async function removalApp(errands: InMemoryErrandStore) {
+    const actions = new MemoryActions();
+    const revisions = new VoiceProjectRevisions(new Map([["nolan-voice", 4]]));
+    const app = await makeApp(actions, errands, new VoiceWriteTarget("nolan-voice", revisions));
+    return { actions, app, sessionId: await openSession(app) };
+  }
+
+  it("removes one open errand, after read-back, confirm and approval", async () => {
+    const errands = new InMemoryErrandStore();
+    const milk = await errands.add({ title: "Milk" });
+    await errands.add({ title: "Silicone for the deck" });
+    const { actions, app, sessionId } = await removalApp(errands);
+
+    const spoken = await utter(app, sessionId, {
+      transcript: "Nolan, take milk off the shopping list",
+      isFinal: true,
+    });
+    const readBack = spoken.json().dispatch;
+    assert.equal(readBack.decision, "awaiting-confirmation");
+    assert.equal(readBack.command.id, "client.remove-errand");
+    assert.deepEqual(readBack.command.proposes, { tool: "errands", operation: "remove" });
+    assert.deepEqual(readBack.capture, { title: "Milk", targetId: milk.id });
+    assert.equal(actions.rows.size, 0);
+
+    const confirmed = await utter(app, sessionId, { transcript: "Nolan confirm", isFinal: true });
+    const staged = actions.rows.get(confirmed.json().dispatch.toolActionId);
+    assert.ok(staged);
+    assert.equal(`${staged.tool}:${staged.operation}`, "errands:remove");
+    assert.equal(staged.projectId, "nolan-voice");
+    assert.deepEqual(staged.arguments, { errandId: milk.id });
+    assert.equal(actions.approveCalls, 0, "voice never approves");
+    assert.equal((await errands.list()).length, 2, "staging never executes");
+
+    const approved = await actions.approve({
+      actionId: staged.actionId,
+      projectId: "nolan-voice",
+      expectedRevision: 4,
+      approvalToken: "owner-token",
+    });
+    const execution = new ToolExecutionService([removeErrandToolDefinition(errands)]);
+    assert.equal((await executeLive(execution, approved)).status, "succeeded");
+    assert.deepEqual(
+      (await errands.list()).map((errand) => errand.title),
+      ["Silicone for the deck"],
+    );
+  });
+
+  it("arms nothing for a tie, no match or a done errand", async () => {
+    const errands = new InMemoryErrandStore();
+    await errands.add({ title: "Bar oil" });
+    await errands.add({ title: "Chain oil" });
+    const screws = await errands.add({ title: "Screws" });
+    await errands.update(screws.id, { status: "done" });
+    const { actions, app, sessionId } = await removalApp(errands);
+
+    const cases: Array<[string, RegExp]> = [
+      ["Nolan remove oil from the errands", /2 open items match “Oil”\. Say more of the title\./],
+      ["Nolan remove the sprocket from the errands", /No open errand matches “Sprocket”/],
+      ["Nolan delete the errand screws", /No open errand matches “Screws”/],
+    ];
+    for (const [transcript, reason] of cases) {
+      const response = await utter(app, sessionId, { transcript, isFinal: true });
+      const dispatch = response.json().dispatch;
+      assert.equal(dispatch.decision, "completion-unresolved", transcript);
+      assert.equal(dispatch.command.id, "client.remove-errand", transcript);
+      assert.match(dispatch.reason, reason, transcript);
+      assert.equal(response.json().pending, null, transcript);
+    }
+    assert.equal(actions.rows.size, 0);
+    assert.equal((await errands.list()).length, 3);
+  });
+
+  it("stages a removal only on the voice project, never on a request-supplied target", async () => {
+    const errands = new InMemoryErrandStore();
+    await errands.add({ title: "Milk" });
+    const { actions, app, sessionId } = await removalApp(errands);
+    await utter(app, sessionId, {
+      transcript: "Nolan remove milk from the errands",
+      isFinal: true,
+    });
     const confirmed = await utter(app, sessionId, {
       transcript: "Nolan confirm",
       isFinal: true,
