@@ -46,6 +46,7 @@ async function writeExclusive(filePath: string, bytes: Buffer): Promise<void> {
     0o600,
   );
   try {
+    await handle.chmod(0o600);
     await handle.writeFile(bytes);
     await handle.sync();
   } finally {
@@ -57,6 +58,7 @@ async function writeExclusive(filePath: string, bytes: Buffer): Promise<void> {
 async function validate(ledger: Buffer, checkpoint: Buffer): Promise<number> {
   const temp = await fs.mkdtemp(path.join(os.tmpdir(), "jarvis-lv1-ledger-verify-"));
   try {
+    await fs.chmod(temp, 0o700);
     const file = path.join(temp, LOCAL_V1_LEDGER_FILE);
     await writeExclusive(file, ledger);
     await writeExclusive(`${file}.checkpoint.json`, checkpoint);
@@ -86,7 +88,31 @@ export async function captureLocalV1Ledger(
   sourceDirectory: string,
   captureDirectory: string,
 ): Promise<LocalV1OwnerDecisionLedger> {
-  const pair = await readPair(sourceDirectory);
+  const source = await fs.stat(sourceDirectory).catch((error: unknown) => {
+    throw new Error("Owner decision ledger source directory does not exist or is unreadable.", {
+      cause: error,
+    });
+  });
+  if (!source.isDirectory())
+    throw new Error("Owner decision ledger source directory is not a directory.");
+  let pair = await readPair(sourceDirectory);
+  // A writer can advance between the checkpoint and ledger reads. Retry only
+  // when the bytes moved; a stable damaged pair remains a hard refusal.
+  for (let attempt = 0; attempt < 3 && pair !== null; attempt += 1) {
+    try {
+      await validate(pair.ledger, pair.checkpoint);
+      break;
+    } catch (error: unknown) {
+      const next = await readPair(sourceDirectory);
+      if (
+        next === null ||
+        (pair.ledger.equals(next.ledger) && pair.checkpoint.equals(next.checkpoint)) ||
+        attempt === 2
+      )
+        throw error;
+      pair = next;
+    }
+  }
   if (pair === null) return { state: "absent" };
   const recordCount = await validate(pair.ledger, pair.checkpoint);
   const state: LocalV1OwnerDecisionLedger = {
@@ -101,7 +127,7 @@ export async function captureLocalV1Ledger(
 }
 
 /** Re-checks archive bytes and the canonical ledger invariants. */
-async function verifiedCapture(
+export async function readVerifiedLocalV1Ledger(
   captureDirectory: string,
   state: LocalV1OwnerDecisionLedger | undefined,
 ): Promise<
@@ -136,32 +162,5 @@ export async function verifyLocalV1Ledger(
   captureDirectory: string,
   state: LocalV1OwnerDecisionLedger | undefined,
 ): Promise<"not-captured" | "absent" | "present"> {
-  return (await verifiedCapture(captureDirectory, state)).status;
-}
-
-/** Writes checkpoint first: interruption can leave only a damaged checkpoint, never a valid shorter history. */
-export async function restoreLocalV1Ledger(
-  captureDirectory: string,
-  targetDirectory: string,
-  state: LocalV1OwnerDecisionLedger | undefined,
-): Promise<"not-captured" | "absent" | "present"> {
-  const verified = await verifiedCapture(captureDirectory, state);
-  const ledgerPath = path.join(targetDirectory, LOCAL_V1_LEDGER_FILE);
-  const checkpointPath = path.join(targetDirectory, LOCAL_V1_CHECKPOINT_FILE);
-  for (const file of [ledgerPath, checkpointPath]) {
-    if (
-      await fs.lstat(file).then(
-        () => true,
-        (error: unknown) => {
-          if (missing(error)) return false;
-          throw error;
-        },
-      )
-    )
-      throw new Error(`Target owner decision ledger file already exists: ${path.basename(file)}.`);
-  }
-  if (verified.status !== "present") return verified.status;
-  await writeExclusive(checkpointPath, verified.pair.checkpoint);
-  await writeExclusive(ledgerPath, verified.pair.ledger);
-  return "present";
+  return (await readVerifiedLocalV1Ledger(captureDirectory, state)).status;
 }

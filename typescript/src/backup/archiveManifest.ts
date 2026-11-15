@@ -18,6 +18,8 @@ import { createHash } from "node:crypto";
  */
 
 export const V4_CONTRACT_VERSION = "jarvis-archive-v4:1" as const;
+/** Local V1 captures from the owner-ledger feature onward require the ledger claim. */
+export const LOCAL_V1_LEDGER_CONTRACT_VERSION = "jarvis-archive-v4:2" as const;
 
 /**
  * Domain groups, in the staged order they land. Every group is *required* for a
@@ -145,7 +147,7 @@ export type LocalV1OwnerDecisionLedger =
   | { state: "present"; ledgerSha256: string; checkpointSha256: string; recordCount: number };
 
 export type ArchiveManifest = {
-  contractVersion: typeof V4_CONTRACT_VERSION;
+  contractVersion: typeof V4_CONTRACT_VERSION | typeof LOCAL_V1_LEDGER_CONTRACT_VERSION;
   createdAt: string;
   groups: ArchiveGroupEntry[];
   coverage: {
@@ -270,6 +272,7 @@ export function groupChecksum(payload: unknown): string {
 }
 
 export type BuildManifestInput = {
+  contractVersion?: ArchiveManifest["contractVersion"];
   createdAt: Date;
   groups: ArchiveGroupEntry[];
   dependencies?: ArchiveDependency[];
@@ -285,6 +288,12 @@ export type BuildManifestInput = {
 };
 
 export function buildManifest(input: BuildManifestInput): ArchiveManifest {
+  if (
+    input.contractVersion === LOCAL_V1_LEDGER_CONTRACT_VERSION &&
+    input.localV1OwnerDecisionLedger === undefined
+  ) {
+    fail("manifest.localV1OwnerDecisionLedger is required for this contract version.");
+  }
   const present = input.groups.map((entry) => entry.group);
   const duplicates = present.filter((entry, index) => present.indexOf(entry) !== index);
   if (duplicates.length > 0) {
@@ -296,7 +305,7 @@ export function buildManifest(input: BuildManifestInput): ArchiveManifest {
     assertVerificationMatchesGroups(verification, input.groups);
   }
   return {
-    contractVersion: V4_CONTRACT_VERSION,
+    contractVersion: input.contractVersion ?? V4_CONTRACT_VERSION,
     createdAt: input.createdAt.toISOString(),
     groups: input.groups,
     coverage: {
@@ -510,9 +519,12 @@ export function parseManifest(value: unknown): ArchiveManifest {
     ],
     "manifest",
   );
-  if (value.contractVersion !== V4_CONTRACT_VERSION) {
+  if (
+    value.contractVersion !== V4_CONTRACT_VERSION &&
+    value.contractVersion !== LOCAL_V1_LEDGER_CONTRACT_VERSION
+  ) {
     fail(
-      `manifest.contractVersion must be "${V4_CONTRACT_VERSION}", got ${String(value.contractVersion)}.`,
+      `manifest.contractVersion must be "${V4_CONTRACT_VERSION}" or "${LOCAL_V1_LEDGER_CONTRACT_VERSION}", got ${String(value.contractVersion)}.`,
     );
   }
   const createdAt = text(value.createdAt, "manifest.createdAt");
@@ -530,6 +542,12 @@ export function parseManifest(value: unknown): ArchiveManifest {
     value.localV1OwnerDecisionLedger === undefined
       ? undefined
       : parseLocalV1OwnerDecisionLedger(value.localV1OwnerDecisionLedger);
+  if (
+    value.contractVersion === LOCAL_V1_LEDGER_CONTRACT_VERSION &&
+    localV1OwnerDecisionLedger === undefined
+  ) {
+    fail("manifest.localV1OwnerDecisionLedger is required for this contract version.");
+  }
   const unresolvedReferences = array(
     value.unresolvedReferences,
     "manifest.unresolvedReferences",
@@ -574,7 +592,7 @@ export function parseManifest(value: unknown): ArchiveManifest {
   }
 
   return {
-    contractVersion: V4_CONTRACT_VERSION,
+    contractVersion: value.contractVersion,
     createdAt: new Date(createdAt).toISOString(),
     groups,
     coverage: { required: [...ARCHIVE_GROUPS], present, absent: expectedAbsent },

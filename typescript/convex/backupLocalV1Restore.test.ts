@@ -525,6 +525,7 @@ it("restores a partial capture into scratch JSON and an empty convex-test, then 
         liveDataDir: live,
       },
       liveDirectory: live,
+      ownerDecisionLedgerDirectory: live,
       readIsolated: async () => {
         const convex = clientFor(target);
         const listedClients = await new JsonClientStore(
@@ -1274,7 +1275,8 @@ it("fails closed on a missing PDF, a live target, an executable approval, and a 
         liveDataDir: live,
       }),
     ).rejects.toThrow(/executable/);
-    await expect(readdir(executableDir)).rejects.toThrow();
+    expect(await readdir(executableDir)).toContain(".jarvis-local-v1-action-started.json");
+    expect(await readdir(executableDir)).toContain(".jarvis-archive-v4-in-progress.json");
 
     const occupied = convexTest(schema, modules);
     await occupied.run(async (ctx) => {
@@ -1308,7 +1310,9 @@ it("fails closed on a missing PDF, a live target, an executable approval, and a 
         liveDataDir: live,
       }),
     ).rejects.toThrow(/empty database/);
-    await expect(readdir(path.join(root, "occupied"))).rejects.toThrow();
+    expect(await readdir(path.join(root, "occupied"))).toContain(
+      ".jarvis-local-v1-action-started.json",
+    );
     expect(
       await occupied.run(async (ctx) =>
         (await ctx.db.query("tasks").collect()).map((row) => row.title),
@@ -1362,7 +1366,7 @@ it("fails closed on a missing PDF, a live target, an executable approval, and a 
           liveDataDir: live,
         }),
       ).rejects.toThrow(/not terminal/);
-      await expect(readdir(blockedDir)).rejects.toThrow();
+      expect(await readdir(blockedDir)).toContain(".jarvis-local-v1-action-started.json");
       expect(
         await blocked.run(async (ctx) => ctx.db.query("quoteDeliveryAttempts").collect()),
       ).toEqual([]);
