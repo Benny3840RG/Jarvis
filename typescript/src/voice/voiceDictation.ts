@@ -28,6 +28,11 @@ import {
   type VoiceCommand,
   type VoiceProfile,
 } from "./voiceCommands.js";
+import {
+  describeSpokenReminderDue,
+  splitSpokenReminderDue,
+  type SpokenDueContext,
+} from "./voiceReminderDue.js";
 import type { VoiceWriteCapture } from "./voiceSafeWrite.js";
 
 /** Task categories the HUD capture form offers. */
@@ -64,6 +69,9 @@ const TASK_PATTERN =
 /** "remind me to X", "add a reminder to X", "set a reminder to X", "reminder to X". */
 const REMINDER_PATTERN =
   /^(?:remind me to|(?:add|set|make|create) (?:a |me a )?reminder to|reminder to|new reminder to)[\s:,-]+(.+)$/;
+
+/** "remind me tomorrow at 7 am to X": a due phrase before the title. */
+const REMINDER_DUE_FIRST_PATTERN = /^remind me[\s,]+(?!to\b)(.+)$/;
 
 /** Words that may sit before "task" without naming a category. */
 const CATEGORY_FILLERS: ReadonlySet<string> = new Set(["new", "quick"]);
@@ -142,6 +150,8 @@ const REJECTED: VoiceDictationClassification = Object.freeze({ status: "rejected
 export function classifyVoiceDictation(
   transcript: string,
   profile: VoiceProfile,
+  /** Owner clock and timezone. Without it a spoken due time stays in the title. */
+  due?: SpokenDueContext,
 ): VoiceDictationClassification {
   if (profile !== "client") return NONE;
   const text = normalizeUtterance(transcript);
@@ -172,15 +182,33 @@ export function classifyVoiceDictation(
   }
 
   const reminder = REMINDER_PATTERN.exec(text);
-  if (reminder) {
+  const dueFirst = reminder || !due ? null : REMINDER_DUE_FIRST_PATTERN.exec(text);
+  if (reminder || dueFirst) {
     if (rawUnsafe) return REJECTED;
     const command = COMMAND_BY_ID.get(REMINDER_COMMAND_ID);
     if (!command) return REJECTED;
-    const title = cleanTitle(reminder[1] ?? "");
+    let body = (reminder ? reminder[1] : dueFirst?.[1]) ?? "";
+    let spoken: VoiceWriteCapture = {};
+    if (due) {
+      const split = splitSpokenReminderDue(body, due, reminder ? "suffix" : "prefix");
+      if (split.status === "rejected") return REJECTED;
+      // "remind me <something>" with no leading due phrase is not a dictation.
+      if (split.status === "none" && !reminder) return NONE;
+      if (split.status === "due") {
+        body = split.title;
+        spoken = {
+          dueRaw: split.due.dueRaw,
+          ...(split.due.dueAt === undefined
+            ? {}
+            : { dueAt: split.due.dueAt, dueTimezone: split.due.dueTimezone }),
+        };
+      }
+    }
+    const title = cleanTitle(body);
     if (!title) return REJECTED;
     return {
       status: "captured",
-      dictation: { command, capture: Object.freeze({ title }) },
+      dictation: { command, capture: Object.freeze({ title, ...spoken }) },
     };
   }
 
@@ -194,8 +222,9 @@ export function classifyVoiceDictation(
 export function parseVoiceDictation(
   transcript: string,
   profile: VoiceProfile,
+  due?: SpokenDueContext,
 ): VoiceDictation | undefined {
-  const result = classifyVoiceDictation(transcript, profile);
+  const result = classifyVoiceDictation(transcript, profile, due);
   return result.status === "captured" ? result.dictation : undefined;
 }
 
@@ -205,6 +234,8 @@ export function voiceDictationKey(dictation: VoiceDictation): string {
     dictation.command.id,
     dictation.capture.title.toLowerCase(),
     dictation.capture.category ?? null,
+    dictation.capture.dueRaw ?? null,
+    dictation.capture.dueAt ?? null,
   ]);
 }
 
@@ -216,5 +247,12 @@ export function describeVoiceDictation(
   if (command.id === TASK_COMMAND_ID) {
     return `Add task “${capture.title}” (${capture.category ?? DEFAULT_VOICE_TASK_CATEGORY})`;
   }
-  return `Add reminder “${capture.title}”`;
+  if (capture.dueRaw === undefined) return `Add reminder “${capture.title}”`;
+  const due = describeSpokenReminderDue({
+    dueRaw: capture.dueRaw,
+    ...(capture.dueAt === undefined || capture.dueTimezone === undefined
+      ? {}
+      : { dueAt: capture.dueAt, dueTimezone: capture.dueTimezone }),
+  });
+  return `Add reminder “${capture.title}” due ${due}`;
 }

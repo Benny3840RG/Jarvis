@@ -7,6 +7,7 @@
 
 import { canonicalJson } from "../actions/canonicalJson.js";
 import { sha256Hex } from "../actions/sha256.js";
+import { createReminderArgumentsSchema } from "../actions/taskReminderTools.js";
 import type { ToolActionService } from "../actions/toolActions.js";
 import { classifyVoiceDictation, hasUnsafeVoiceCharacters } from "./voiceDictation.js";
 import { normalizeUtterance, type VoiceCommand } from "./voiceCommands.js";
@@ -29,6 +30,11 @@ export const VOICE_WRITE_INCOMPLETE_REASON =
 export type VoiceWriteCapture = Readonly<{
   title?: string;
   category?: string;
+  /** Spoken due text, preserved exactly as heard (dictated reminders only). */
+  dueRaw?: string;
+  /** Resolved due instant (ms since epoch); always paired with dueTimezone and dueRaw. */
+  dueAt?: number;
+  dueTimezone?: string;
 }>;
 
 export function splitVoiceWakeWord(raw: string): { heard: boolean; rest: string } {
@@ -105,7 +111,15 @@ function safeWriteArguments(
   if (key === "reminders:create") {
     const title = capture?.title?.trim() ?? "";
     if (title.length < 1 || title.length > 200) return undefined;
-    return { title };
+    const candidate = {
+      title,
+      ...(capture?.dueRaw === undefined ? {} : { dueRaw: capture.dueRaw }),
+      ...(capture?.dueAt === undefined ? {} : { dueAt: capture.dueAt }),
+      ...(capture?.dueTimezone === undefined ? {} : { dueTimezone: capture.dueTimezone }),
+    };
+    // The executor's own schema decides: a due value that the executor would
+    // refuse (dueAt without timezone or raw text) is never staged.
+    return createReminderArgumentsSchema.safeParse(candidate).success ? candidate : undefined;
   }
   return undefined;
 }
