@@ -62,6 +62,13 @@ export interface ErrandStore {
   list(): Promise<Errand[]>;
   get(id: string): Promise<Errand | null>;
   add(input: ErrandInput): Promise<Errand>;
+  /**
+   * Add an errand under a caller-chosen id, at most once. If a row with that
+   * id already exists it is returned unchanged (`created: false`) when it
+   * carries the same title, and refused otherwise. The governed ToolAction
+   * executor uses this so a retried execution never writes a second errand.
+   */
+  addOnce(id: string, input: ErrandInput): Promise<{ errand: Errand; created: boolean }>;
   update(id: string, update: ErrandUpdate): Promise<Errand | null>;
   remove(id: string): Promise<Errand | null>;
 }

@@ -270,6 +270,27 @@ describe("voice HUD dictation read-back", () => {
     assert.match(info.label, /Nolan confirm/);
   });
 
+  it("reads a dictated errand back as an errand, not a reminder", () => {
+    const errandCommand = {
+      id: "client.capture-errand",
+      proposes: { tool: "errands", operation: "create" },
+    };
+    const pending = logic.describeVoiceDispatch({
+      decision: "awaiting-confirmation",
+      command: errandCommand,
+      capture: { title: "Silicone for the deck" },
+    } as never);
+    assert.equal(pending.tone, "pending");
+    assert.match(pending.label, /^Add errand “Silicone for the deck”\? Say “Nolan confirm”/);
+    const staged = logic.describeVoiceDispatch({
+      decision: "proposed",
+      command: errandCommand,
+      capture: { title: "Silicone for the deck" },
+      toolActionId: "voice-safe-write:v1:abc",
+    } as never);
+    assert.match(staged.label, /^Staged errand “Silicone for the deck” for your approval/);
+  });
+
   it("says a confirmed dictation is staged for approval, not done", () => {
     const info = logic.describeVoiceDispatch({
       decision: "proposed",

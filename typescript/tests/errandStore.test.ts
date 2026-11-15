@@ -27,6 +27,20 @@ afterEach(async () => {
 
 for (const { name, make } of stores()) {
   describe(name, () => {
+    it("adds an errand under a chosen id at most once", async () => {
+      const store = make();
+      const first = await store.addOnce("fixed-id", { title: "Bar oil" });
+      assert.equal(first.created, true);
+      assert.equal(first.errand.id, "fixed-id");
+      assert.equal(first.errand.status, "open");
+      const again = await store.addOnce("fixed-id", { title: "Bar oil" });
+      assert.equal(again.created, false);
+      assert.deepEqual(again.errand, first.errand);
+      await assert.rejects(store.addOnce("fixed-id", { title: "Chain" }), /already used/);
+      await assert.rejects(store.addOnce(" ", { title: "Chain" }), /id cannot be empty/);
+      assert.equal((await store.list()).length, 1);
+    });
+
     it("adds an errand with defaults and trims text", async () => {
       const store = make();
       const errand = await store.add({ title: "  We need milk  " });

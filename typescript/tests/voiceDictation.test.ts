@@ -63,7 +63,17 @@ describe("voice dictation grammar", () => {
       "remind me to cancel",
       "remind me to confirm the booking",
       "send the quote",
-      "add an errand pick up oil", // errands have no executor
+      "add an errand",
+      "add an errand:",
+      "don't add an errand milk",
+      "add an errand nolan send the quote",
+      "add an errand: confirm",
+      "add an errand: milk and send the quote",
+      "add an errand: we already got milk",
+      "add to the errands",
+      "add milk to the errand", // only the list forms below
+      "milk to the errands",
+      `add an errand: ${"x".repeat(201)}`,
       `add a task ${"x".repeat(201)}`,
     ];
     for (const utterance of rejected) {
@@ -77,18 +87,60 @@ describe("voice dictation grammar", () => {
     }
   });
 
-  it("only ever reaches the two safe-write commands", () => {
+  it("only ever reaches the three safe-write commands", () => {
     const ids = new Set(
-      ["add a task: a", "add a work task: b", "remind me to c", "set a reminder to d"].map(
-        (utterance) => parseVoiceDictation(utterance, "client")?.command.id,
-      ),
+      [
+        "add a task: a",
+        "add a work task: b",
+        "remind me to c",
+        "set a reminder to d",
+        "add an errand: e",
+        "add f to the errands",
+      ].map((utterance) => parseVoiceDictation(utterance, "client")?.command.id),
     );
-    assert.deepEqual([...ids].sort(), ["client.capture-task", "client.follow-up-reminder"]);
+    assert.deepEqual([...ids].sort(), [
+      "client.capture-errand",
+      "client.capture-task",
+      "client.follow-up-reminder",
+    ]);
     for (const id of ids) {
       const command = VOICE_COMMANDS.find((entry) => entry.id === id);
       assert.equal(command?.kind, "propose");
       assert.equal(command?.criticality, "routine");
     }
+  });
+
+  it("captures an errand title, bound to the errands:create executor", () => {
+    const cases: Array<[string, string]> = [
+      ["add an errand: silicone for the Smith deck", "Silicone for the Smith deck"],
+      ["add an errand pick up bar oil", "Pick up bar oil"],
+      ["add an errand to pick up the trailer from Dave", "Pick up the trailer from Dave"],
+      ["new errand, 2 tubes of silicone", "2 tubes of silicone"],
+      ["capture an errand: drop the chainsaw at Stihl", "Drop the chainsaw at Stihl"],
+      ["add milk to the errands", "Milk"],
+      ["put screws on my errand list", "Screws"],
+      ["add WD-40 to the shopping list", "WD-40"],
+    ];
+    for (const [utterance, title] of cases) {
+      const dictation = parseVoiceDictation(utterance, "client");
+      assert.equal(dictation?.command.id, "client.capture-errand", utterance);
+      assert.deepEqual(dictation?.command.proposes, { tool: "errands", operation: "create" });
+      assert.deepEqual(dictation?.capture, { title }, utterance);
+    }
+    // The archived catalog entry is unchanged: the bare phrase names create_errand.
+    const catalog = VOICE_COMMANDS.find((entry) => entry.id === "client.capture-errand");
+    assert.deepEqual(catalog?.proposes, { tool: "create_errand", operation: "errands:create" });
+  });
+
+  it("never reads a task or reminder as an errand", () => {
+    assert.equal(
+      parseVoiceDictation("add a task to the errands", "client")?.command.id,
+      "client.capture-task",
+    );
+    assert.equal(
+      parseVoiceDictation("remind me to add milk to the errands", "client")?.command.id,
+      "client.follow-up-reminder",
+    );
   });
 
   it("reads the capture back in one line", () => {
@@ -97,6 +149,9 @@ describe("voice dictation grammar", () => {
     assert.ok(task && reminder);
     assert.equal(describeVoiceDictation(task), "Add task “Order bar oil” (work)");
     assert.equal(describeVoiceDictation(reminder), "Add reminder “Call Dave”");
+    const errand = parseVoiceDictation("add an errand: bar oil", "client");
+    assert.ok(errand);
+    assert.equal(describeVoiceDictation(errand), "Add errand “Bar oil”");
   });
 });
 
@@ -316,6 +371,17 @@ describe("voice session dictation", () => {
     assert.ok(b.decision === "ambiguous");
     assert.deepEqual([...b.candidates], ["client.capture-task", "client.follow-up-reminder"]);
     assert.equal(other.pending(), undefined);
+
+    const errandOrTask = session();
+    const c = await errandOrTask.handle({
+      transcript: "add an errand: bar oil",
+      alternatives: ["add a task: bar oil"],
+      isFinal: true,
+      wakeAuthorized: true,
+      now: 1_000,
+    });
+    assert.equal(c.decision, "ambiguous");
+    assert.equal(errandOrTask.pending(), undefined);
   });
 
   it("leaves exact catalog phrases on the exact path", async () => {

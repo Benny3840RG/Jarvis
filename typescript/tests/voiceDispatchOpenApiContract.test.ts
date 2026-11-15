@@ -40,7 +40,7 @@ it("validates inferred voice dispatch metadata against its decision and confiden
     assert.equal(validate(value), false, JSON.stringify(value));
 });
 
-it("binds capture to awaiting-confirmation/proposed on the two safe-write commands", () => {
+it("binds capture to awaiting-confirmation/proposed on the three safe-write commands", () => {
   const document = JSON.parse(
     readFileSync(new URL("../openapi/jarvis.openapi.json", import.meta.url), "utf8"),
   );
@@ -68,6 +68,7 @@ it("binds capture to awaiting-confirmation/proposed on the two safe-write comman
   const withoutProfile = ({ profile: _profile, ...rest }: ReturnType<typeof command>) => rest;
   const task = command("client.capture-task", { tool: "tasks", operation: "create" });
   const reminder = command("client.follow-up-reminder", { tool: "reminders", operation: "create" });
+  const errand = command("client.capture-errand", { tool: "errands", operation: "create" });
   const taskCapture = { title: "Order oil", category: "work" };
   const reminderCapture = { title: "Call Dave" };
   const datedReminderCapture = {
@@ -83,6 +84,7 @@ it("binds capture to awaiting-confirmation/proposed on the two safe-write comman
       { decision, command: reminder, capture: reminderCapture },
       { decision, command: reminder, capture: datedReminderCapture },
       { decision, command: reminder, capture: { title: "Pay rego", dueRaw: "by friday" } },
+      { decision, command: errand, capture: { title: "Silicone for the deck" } },
     ])
       assert.equal(validateDispatch(value), true, JSON.stringify(validateDispatch.errors));
   }
@@ -144,6 +146,17 @@ it("binds capture to awaiting-confirmation/proposed on the two safe-write comman
     },
     { decision: "awaiting-confirmation", command: task, capture: reminderCapture },
     { decision: "awaiting-confirmation", command: reminder, capture: taskCapture },
+    // An errand carries only its title, on the governed errands:create executor.
+    { decision: "proposed", command: errand, capture: taskCapture },
+    { decision: "proposed", command: errand, capture: { title: "X", dueRaw: "tomorrow" } },
+    { decision: "proposed", command: errand, capture: datedReminderCapture },
+    {
+      decision: "proposed",
+      command: command(errand.id, { tool: "create_errand", operation: "errands:create" }),
+      capture: { title: "X" },
+    },
+    { decision: "proposed", command: command(errand.id), capture: { title: "X" } },
+    { decision: "proposed", command: withoutProfile(errand), capture: { title: "X" } },
     // A captured command must carry profile exactly "client".
     { decision: "proposed", command: { ...task, profile: "nolan" }, capture: taskCapture },
     { decision: "proposed", command: { ...reminder, profile: "owner" }, capture: reminderCapture },
@@ -161,6 +174,7 @@ it("binds capture to awaiting-confirmation/proposed on the two safe-write comman
     { ...pending, command: task },
     { ...pending, command: task, capture: taskCapture },
     { ...pending, command: reminder, capture: reminderCapture },
+    { ...pending, command: errand, capture: { title: "Bar oil" } },
   ])
     assert.equal(validatePending(value), true, JSON.stringify(validatePending.errors));
   for (const value of [
@@ -184,6 +198,12 @@ it("binds capture to awaiting-confirmation/proposed on the two safe-write comman
       capture: reminderCapture,
     },
     { ...pending, command: command(reminder.id), capture: reminderCapture },
+    { ...pending, command: errand, capture: taskCapture },
+    {
+      ...pending,
+      command: command(errand.id, { tool: "errands", operation: "delete" }),
+      capture: { title: "X" },
+    },
     {
       ...pending,
       command: command(reminder.id, { tool: "reminders", operation: "delete" }),

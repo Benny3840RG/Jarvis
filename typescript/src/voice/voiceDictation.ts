@@ -4,13 +4,13 @@
  * The guarded catalog matches whole utterances exactly, so "Nolan, add a task:
  * order bar oil" used to lose everything after "add a task" and could never
  * stage anything. This module adds a deliberately narrow, deterministic
- * dictation grammar for the two safe writes that already have ToolAction
- * executors (`tasks:create`, `reminders:create`) and nothing else.
+ * dictation grammar for the three safe writes that have ToolAction executors
+ * (`tasks:create`, `reminders:create`, `errands:create`) and nothing else.
  *
  * Safety contract:
  *   - Pure and side-effect free. It returns a capture proposal only.
  *   - Only the client profile's safe-write commands can be dictated. Queries,
- *     actuation, quote send/draft and errands (no executor) are never reachable.
+ *     actuation and quote send/draft are never reachable.
  *   - The command prefix is anchored at the start of the utterance; a sentence
  *     can never smuggle a dictation in from the middle ("don't add a task ...").
  *   - The dictated text is data, never a command: it may not contain a wake
@@ -46,6 +46,7 @@ const MAX_TITLE_LENGTH = 200;
 
 const TASK_COMMAND_ID = "client.capture-task";
 const REMINDER_COMMAND_ID = "client.follow-up-reminder";
+const ERRAND_COMMAND_ID = "client.capture-errand";
 
 const CATEGORY_ALIASES: ReadonlyMap<string, VoiceTaskCategory> = new Map([
   ["personal", "personal"],
@@ -70,6 +71,14 @@ const TASK_PATTERN =
 const REMINDER_PATTERN =
   /^(?:remind me to|(?:add|set|make|create) (?:a |me a )?reminder to|reminder to|new reminder to)[\s:,-]+(.+)$/d;
 
+/** "add an errand: X", "new errand, X", "add an errand to pick up X". Group 1 is the title. */
+const ERRAND_PATTERN =
+  /^(?:(?:add|capture|create|make|put)(?: (?:a|an|another|me an?))?|new) errand(?: (?:to|for|called|saying))?[\s:,-]+(.+)$/d;
+
+/** "add X to the errands", "put X on my shopping list". Group 1 is the title. */
+const ERRAND_LIST_PATTERN =
+  /^(?:add|put) (.+?) (?:on|to) (?:the |my )?(?:errands|errand list|errands list|shopping list)$/d;
+
 /** "remind me tomorrow at 7 am to X": a due phrase before the title. */
 const REMINDER_DUE_FIRST_PATTERN = /^remind me[\s,]+(?!to\b)(.+)$/d;
 
@@ -86,6 +95,24 @@ const CONTROL_PHRASES: ReadonlySet<string> = new Set([
 const COMMAND_BY_ID: ReadonlyMap<string, VoiceCommand> = new Map(
   VOICE_COMMANDS.map((entry) => [entry.id, entry]),
 );
+
+/**
+ * The dictated errand command. The archived catalog entry for "add an errand"
+ * predates the executor and still only names `create_errand`, so the bare
+ * phrase stays unstaged. A dictated errand (one that carries its title) is the
+ * same command bound to the governed `errands:create` executor; like every
+ * dictation it is read back and only staged after a spoken confirmation.
+ */
+const ERRAND_DICTATION_COMMAND: VoiceCommand | undefined = (() => {
+  const catalog = COMMAND_BY_ID.get(ERRAND_COMMAND_ID);
+  if (!catalog) return undefined;
+  return Object.freeze({
+    ...catalog,
+    summary:
+      "Stage an errand on the existing ToolAction path. Voice does not approve or execute it.",
+    proposes: Object.freeze({ tool: "errands", operation: "create" }),
+  });
+})();
 
 export type VoiceDictation = Readonly<{
   command: VoiceCommand;
@@ -265,6 +292,18 @@ export function classifyVoiceDictation(
     };
   }
 
+  const errand = ERRAND_PATTERN.exec(text) ?? ERRAND_LIST_PATTERN.exec(text);
+  if (errand) {
+    if (rawUnsafe) return REJECTED;
+    if (!ERRAND_DICTATION_COMMAND) return REJECTED;
+    const title = cleanTitle(errand[1] ?? "", casedGroup(errand, 1, cased));
+    if (!title) return REJECTED;
+    return {
+      status: "captured",
+      dictation: { command: ERRAND_DICTATION_COMMAND, capture: Object.freeze({ title }) },
+    };
+  }
+
   return NONE;
 }
 
@@ -300,6 +339,7 @@ export function describeVoiceDictation(
   if (command.id === TASK_COMMAND_ID) {
     return `Add task “${capture.title}” (${capture.category ?? DEFAULT_VOICE_TASK_CATEGORY})`;
   }
+  if (command.id === ERRAND_COMMAND_ID) return `Add errand “${capture.title}”`;
   if (capture.dueRaw === undefined) return `Add reminder “${capture.title}”`;
   const due = describeSpokenReminderDue({
     dueRaw: capture.dueRaw,
