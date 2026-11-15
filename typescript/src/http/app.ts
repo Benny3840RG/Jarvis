@@ -526,6 +526,7 @@ export async function createJarvisHttpApp(
           completions: new AuthoritativeVoiceCompletionResolver({
             tasks: persistence,
             errands: errandStore,
+            reminders: persistence,
             voiceProject: voiceWriteTarget,
           }),
           queries: createAuthoritativeVoiceQueries({

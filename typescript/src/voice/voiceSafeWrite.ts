@@ -29,10 +29,11 @@ const SAFE_EXECUTORS = new Set([
   "errands:create",
   "tasks:complete",
   "errands:complete",
+  "reminders:cancel",
 ]);
 
 /** Completions act on a resolved record, so they only ever stage on the voice project. */
-const COMPLETION_EXECUTORS = new Set(["tasks:complete", "errands:complete"]);
+const COMPLETION_EXECUTORS = new Set(["tasks:complete", "errands:complete", "reminders:cancel"]);
 
 export const VOICE_COMPLETION_TARGET_REASON =
   "Safe write was not staged: a spoken completion stages only on the dedicated voice project.";
@@ -52,8 +53,9 @@ export type VoiceWriteCapture = Readonly<{
   dueAt?: number;
   dueTimezone?: string;
   /**
-   * Spoken completions only: the id of the one open task or errand the server
-   * resolved and read back by its full title. Never accepted from a request.
+   * Spoken completions and reminder cancellations only: the id of the one
+   * open task, errand or reminder the server resolved and read back by its
+   * full title. Never accepted from a request.
    */
   targetId?: string;
 }>;
@@ -169,7 +171,7 @@ function safeWriteArguments(
     // refuse (dueAt without timezone or raw text) is never staged.
     return createReminderArgumentsSchema.safeParse(candidate).success ? candidate : undefined;
   }
-  if (key === "tasks:complete" || key === "errands:complete") {
+  if (COMPLETION_EXECUTORS.has(key)) {
     const title = capture?.title?.trim() ?? "";
     const targetId = capture?.targetId?.trim() ?? "";
     if (
@@ -183,7 +185,9 @@ function safeWriteArguments(
     ) {
       return undefined;
     }
-    return key === "tasks:complete" ? { taskId: targetId } : { errandId: targetId };
+    if (key === "tasks:complete") return { taskId: targetId };
+    if (key === "errands:complete") return { errandId: targetId };
+    return { reminderId: targetId };
   }
   if (key === "errands:create") {
     // A spoken errand carries only its title; task and reminder fields never apply.

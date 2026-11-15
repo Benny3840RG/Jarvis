@@ -14,6 +14,9 @@
  *     `tasks:complete` executor, which acts on tasks inside one project, so a
  *     task is only offered when it belongs to the owner's dedicated voice
  *     project. Any other task is named and refused, with where to complete it.
+ *   - Reminders ("cancel the bar oil reminder") resolve the same way, through
+ *     the governed `reminders:cancel` executor, so only reminders inside the
+ *     dedicated voice project are offered.
  *   - Any source failure fails closed with a plain reason.
  */
 
@@ -23,7 +26,7 @@ import type { VoiceCompletionKind } from "./voiceDictation.js";
 import type { VoiceWriteTarget } from "./voiceWriteTarget.js";
 
 export type VoiceCompletionTarget = Readonly<{
-  kind: "task" | "errand";
+  kind: "task" | "errand" | "reminder";
   id: string;
   /** The item's full stored title, read back to the owner. */
   title: string;
@@ -42,6 +45,8 @@ export interface VoiceCompletionResolver {
 
 export const VOICE_COMPLETION_UNAVAILABLE_REASON =
   "Voice completion is unavailable: no task or errand source is connected.";
+export const VOICE_REMINDER_CANCEL_UNAVAILABLE_REASON =
+  "Voice reminder cancellation is unavailable: no reminder source is connected.";
 
 /** Lower-case words only, so "Bar-oil," and "bar oil" compare equal. */
 export function completionMatchKey(text: string): string {
@@ -61,30 +66,45 @@ export function completionMatchRank(reference: string, title: string): 0 | 1 | 2
 }
 
 type Candidate = Readonly<{
-  kind: "task" | "errand";
+  kind: "task" | "errand" | "reminder";
   id: string;
   title: string;
-  /** Tasks only: whether the governed executor can complete it. */
+  /** Whether the governed executor can act on it (tasks and reminders: voice project only). */
   completable: boolean;
 }>;
 
 function noun(kind: VoiceCompletionKind): string {
-  return kind === "task" ? "task" : kind === "errand" ? "errand" : "task or errand";
+  if (kind === "any") return "task or errand";
+  return kind;
+}
+
+function notVoiceCaptured(match: Candidate, voiceProjectReason: string | undefined): string {
+  if (match.kind === "reminder") {
+    return voiceProjectReason
+      ? `Reminder “${match.title}” cannot be cancelled by voice: ${voiceProjectReason}`
+      : `Reminder “${match.title}” was not captured by voice, so voice cannot cancel it. Cancel it on the HUD.`;
+  }
+  return voiceProjectReason
+    ? `Task “${match.title}” cannot be completed by voice: ${voiceProjectReason}`
+    : `Task “${match.title}” was not captured by voice, so voice cannot complete it. Complete it on the HUD.`;
 }
 
 export class AuthoritativeVoiceCompletionResolver implements VoiceCompletionResolver {
   readonly #tasks: Pick<PersistenceProvider, "listTasks"> | undefined;
   readonly #errands: Pick<ErrandStore, "list"> | undefined;
+  readonly #reminders: Pick<PersistenceProvider, "listReminders"> | undefined;
   readonly #voiceProject: Pick<VoiceWriteTarget, "resolve"> | null | undefined;
 
   constructor(sources: {
     tasks?: Pick<PersistenceProvider, "listTasks">;
     errands?: Pick<ErrandStore, "list">;
+    reminders?: Pick<PersistenceProvider, "listReminders">;
     /** The dedicated voice project; tasks outside it are never offered. */
     voiceProject?: Pick<VoiceWriteTarget, "resolve"> | null;
   }) {
     this.#tasks = sources.tasks;
     this.#errands = sources.errands;
+    this.#reminders = sources.reminders;
     this.#voiceProject = sources.voiceProject;
   }
 
@@ -92,15 +112,19 @@ export class AuthoritativeVoiceCompletionResolver implements VoiceCompletionReso
     kind: VoiceCompletionKind;
     reference: string;
   }): Promise<VoiceCompletionResolution> {
-    const wantTasks = input.kind !== "errand";
-    const wantErrands = input.kind !== "task";
+    const wantReminders = input.kind === "reminder";
+    const wantTasks = input.kind === "task" || input.kind === "any";
+    const wantErrands = input.kind === "errand" || input.kind === "any";
+    if (wantReminders && !this.#reminders) {
+      return { status: "unresolved", reason: VOICE_REMINDER_CANCEL_UNAVAILABLE_REASON };
+    }
     if ((wantTasks && !this.#tasks) || (wantErrands && !this.#errands)) {
       return { status: "unresolved", reason: VOICE_COMPLETION_UNAVAILABLE_REASON };
     }
 
     let voiceProjectId: string | undefined;
     let voiceProjectReason: string | undefined;
-    if (wantTasks) {
+    if (wantTasks || wantReminders) {
       if (this.#voiceProject) {
         try {
           const resolved = await this.#voiceProject.resolve();
@@ -132,6 +156,25 @@ export class AuthoritativeVoiceCompletionResolver implements VoiceCompletionReso
         });
       }
     }
+    if (wantReminders) {
+      let reminders;
+      try {
+        reminders = await (
+          this.#reminders as Pick<PersistenceProvider, "listReminders">
+        ).listReminders();
+      } catch {
+        return { status: "unresolved", reason: "Reminder records are unavailable." };
+      }
+      // A cancelled reminder is removed from the list, so every listed one is live.
+      for (const reminder of reminders) {
+        candidates.push({
+          kind: "reminder",
+          id: reminder.id,
+          title: reminder.title,
+          completable: voiceProjectId !== undefined && reminder.projectId === voiceProjectId,
+        });
+      }
+    }
     if (wantErrands) {
       let errands;
       try {
@@ -157,26 +200,22 @@ export class AuthoritativeVoiceCompletionResolver implements VoiceCompletionReso
       matches.push(candidate);
     }
 
+    const open = wantReminders ? "" : "open ";
     if (matches.length === 0) {
       return {
         status: "unresolved",
-        reason: `No open ${noun(input.kind)} matches “${input.reference}”.`,
+        reason: `No ${open}${noun(input.kind)} matches “${input.reference}”.`,
       };
     }
     if (matches.length > 1) {
       return {
         status: "unresolved",
-        reason: `${matches.length} open items match “${input.reference}”. Say more of the title.`,
+        reason: `${matches.length} ${wantReminders ? "reminders" : "open items"} match “${input.reference}”. Say more of the title.`,
       };
     }
     const [match] = matches as [Candidate];
     if (!match.completable) {
-      return {
-        status: "unresolved",
-        reason: voiceProjectReason
-          ? `Task “${match.title}” cannot be completed by voice: ${voiceProjectReason}`
-          : `Task “${match.title}” was not captured by voice, so voice cannot complete it. Complete it on the HUD.`,
-      };
+      return { status: "unresolved", reason: notVoiceCaptured(match, voiceProjectReason) };
     }
     return { status: "found", target: { kind: match.kind, id: match.id, title: match.title } };
   }

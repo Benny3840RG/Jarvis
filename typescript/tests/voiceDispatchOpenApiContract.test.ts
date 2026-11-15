@@ -35,6 +35,20 @@ it("validates inferred voice dispatch metadata against its decision and confiden
       },
       reason: "No open task or errand matches “Sprocket”.",
     },
+    {
+      decision: "completion-unresolved",
+      command: {
+        id: "client.cancel-reminder",
+        profile: "client",
+        phrases: [],
+        summary: "s",
+        kind: "propose",
+        criticality: "routine",
+        requiresSpokenConfirmation: false,
+        proposes: { tool: "reminders", operation: "cancel" },
+      },
+      reason: "No reminder matches “Sprocket”.",
+    },
   ])
     assert.equal(validate(value), true, JSON.stringify(value));
   for (const value of [
@@ -87,6 +101,10 @@ it("binds capture to awaiting-confirmation/proposed on the three safe-write comm
     tool: "errands",
     operation: "complete",
   });
+  const cancelReminder = command("client.cancel-reminder", {
+    tool: "reminders",
+    operation: "cancel",
+  });
   const completionCapture = { title: "Order bar oil", targetId: "t1" };
   const taskCapture = { title: "Order oil", category: "work" };
   const reminderCapture = { title: "Call Dave" };
@@ -106,6 +124,7 @@ it("binds capture to awaiting-confirmation/proposed on the three safe-write comm
       { decision, command: errand, capture: { title: "Silicone for the deck" } },
       { decision, command: completeTask, capture: completionCapture },
       { decision, command: completeErrand, capture: { title: "Milk", targetId: "e1" } },
+      { decision, command: cancelReminder, capture: { title: "Call Dave", targetId: "r1" } },
     ])
       assert.equal(validateDispatch(value), true, JSON.stringify(validateDispatch.errors));
   }
@@ -203,6 +222,23 @@ it("binds capture to awaiting-confirmation/proposed on the three safe-write comm
     { decision: "proposed", command: task, capture: { ...taskCapture, targetId: "t1" } },
     { decision: "proposed", command: errand, capture: { title: "X", targetId: "e1" } },
     { decision: "proposed", command: reminder, capture: { title: "X", targetId: "r1" } },
+    // A reminder cancellation is a resolved target on reminders:cancel, nothing else.
+    { decision: "proposed", command: cancelReminder, capture: { title: "Call Dave" } },
+    {
+      decision: "proposed",
+      command: cancelReminder,
+      capture: { ...datedReminderCapture, targetId: "r1" },
+    },
+    {
+      decision: "proposed",
+      command: command(cancelReminder.id, { tool: "reminders", operation: "create" }),
+      capture: completionCapture,
+    },
+    {
+      decision: "proposed",
+      command: command(cancelReminder.id, { tool: "reminders", operation: "delete" }),
+      capture: completionCapture,
+    },
     { decision: "completion-unresolved", command: completeTask },
     { decision: "completion-unresolved", command: task, reason: "x" },
     {
@@ -230,6 +266,7 @@ it("binds capture to awaiting-confirmation/proposed on the three safe-write comm
     { ...pending, command: reminder, capture: reminderCapture },
     { ...pending, command: errand, capture: { title: "Bar oil" } },
     { ...pending, command: completeTask, capture: completionCapture },
+    { ...pending, command: cancelReminder, capture: completionCapture },
   ])
     assert.equal(validatePending(value), true, JSON.stringify(validatePending.errors));
   for (const value of [
@@ -255,6 +292,7 @@ it("binds capture to awaiting-confirmation/proposed on the three safe-write comm
     { ...pending, command: command(reminder.id), capture: reminderCapture },
     { ...pending, command: errand, capture: taskCapture },
     { ...pending, command: completeErrand, capture: { title: "Milk" } },
+    { ...pending, command: cancelReminder, capture: { title: "Call Dave" } },
     { ...pending, command: errand, capture: { title: "Milk", targetId: "e1" } },
     {
       ...pending,
