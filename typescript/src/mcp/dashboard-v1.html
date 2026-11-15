@@ -3978,6 +3978,17 @@
             .replace(/^[\s.,!?;:]+/, "")
             .replace(/[\s.,!?;:]+$/, "");
         }
+        // Like normalizeVoicePhrase but keeps the speaker's casing, so a dictated
+        // title reaches the server as "call Dave", not "call dave". Matching on the
+        // server is still case-insensitive. Null when the two forms cannot align.
+        function voicePhrasePreservingCase(raw) {
+          var cased = String(raw == null ? "" : raw)
+            .trim()
+            .replace(/\s+/g, " ")
+            .replace(/^[\s.,!?;:]+/, "")
+            .replace(/[\s.,!?;:]+$/, "");
+          return cased.toLowerCase() === normalizeVoicePhrase(raw) ? cased : null;
+        }
         function voiceCapabilities(view) {
           var w = view || (typeof window !== "undefined" ? window : {});
           return {
@@ -3991,6 +4002,7 @@
           var words = (Array.isArray(wakeWord) ? wakeWord : wakeWord ? [wakeWord] : VOICE_WAKE_WORDS)
             .map(normalizeVoicePhrase);
           var text = normalizeVoicePhrase(raw);
+          var cased = voicePhrasePreservingCase(raw);
           for (var i = 0; i < words.length; i += 1) {
             var word = words[i];
             if (!word) continue;
@@ -4001,7 +4013,9 @@
             if (!separator) continue;
             var rest = after.slice(separator[0].length).trim();
             if (!rest) return { status: "awake" };
-            return { status: "command", transcript: rest, isFinal: !!isFinal };
+            var casedRest = cased === null ? null : cased.slice(word.length + separator[0].length).trim();
+            if (casedRest === null || casedRest.toLowerCase() !== rest) casedRest = rest;
+            return { status: "command", transcript: casedRest, isFinal: !!isFinal };
           }
           return { status: "idle" };
         }
@@ -4014,14 +4028,14 @@
             var alternativeGate = voiceWakeGate(alternative, true, wakeWord);
             var prepared = alternativeGate.status === "command"
               ? alternativeGate.transcript
-              : normalizeVoicePhrase(alternative);
+              : (voicePhrasePreservingCase(alternative) || normalizeVoicePhrase(alternative));
             if (prepared && preparedAlternatives.indexOf(prepared) < 0) preparedAlternatives.push(prepared);
           });
           return {
             transcript: gate.transcript,
             isFinal: true,
             alternatives: preparedAlternatives,
-            heardTranscript: normalizeVoicePhrase(raw),
+            heardTranscript: voicePhrasePreservingCase(raw) || normalizeVoicePhrase(raw),
           };
         }
         function finalVoiceRecognition(event) {

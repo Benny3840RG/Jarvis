@@ -9,7 +9,11 @@ import { canonicalJson } from "../actions/canonicalJson.js";
 import { sha256Hex } from "../actions/sha256.js";
 import { createReminderArgumentsSchema } from "../actions/taskReminderTools.js";
 import type { ToolActionService } from "../actions/toolActions.js";
-import { classifyVoiceDictation, hasUnsafeVoiceCharacters } from "./voiceDictation.js";
+import {
+  classifyVoiceDictation,
+  hasUnsafeVoiceCharacters,
+  normalizeUtterancePreservingCase,
+} from "./voiceDictation.js";
 import { normalizeUtterance, type VoiceCommand } from "./voiceCommands.js";
 import type { VoiceWriteTarget } from "./voiceWriteTarget.js";
 
@@ -37,16 +41,38 @@ export type VoiceWriteCapture = Readonly<{
   dueTimezone?: string;
 }>;
 
-export function splitVoiceWakeWord(raw: string): { heard: boolean; rest: string } {
+/**
+ * Split the wake word off an utterance. `rest` is normalised and lower-cased
+ * for matching; `restCased` is the same span with the speaker's casing kept
+ * (it equals `rest` whenever the two forms cannot be aligned safely).
+ */
+export function splitVoiceWakeWord(raw: string): {
+  heard: boolean;
+  rest: string;
+  restCased: string;
+} {
   const text = normalizeUtterance(raw);
+  const cased = normalizeUtterancePreservingCase(raw);
+  const casedSlice = (start: number, rest: string): string => {
+    if (cased === undefined) return rest;
+    const slice = cased.slice(start).trim();
+    return slice.toLowerCase() === rest ? slice : rest;
+  };
   for (const wakeWord of WAKE_WORDS) {
-    if (text === wakeWord) return { heard: true, rest: "" };
+    if (text === wakeWord) return { heard: true, rest: "", restCased: "" };
     if (!text.startsWith(wakeWord)) continue;
     const after = text.slice(wakeWord.length);
     const separator = WAKE_SEPARATOR.exec(after);
-    if (separator) return { heard: true, rest: after.slice(separator[0].length).trim() };
+    if (separator) {
+      const rest = after.slice(separator[0].length).trim();
+      return {
+        heard: true,
+        rest,
+        restCased: casedSlice(wakeWord.length + separator[0].length, rest),
+      };
+    }
   }
-  return { heard: false, rest: text };
+  return { heard: false, rest: text, restCased: casedSlice(0, text) };
 }
 
 function unnormalisedDictation(raw: string, wakeHeard: boolean): string | undefined {
@@ -67,6 +93,9 @@ export function voiceUtteranceForSession(input: {
 }): { wakeAuthorized: boolean; transcript: string; alternatives?: string[] } {
   const direct = splitVoiceWakeWord(input.transcript);
   const commandTranscript = direct.heard ? direct.rest : normalizeUtterance(input.transcript);
+  // The session matches on its own lower-cased normalisation; it receives the
+  // speaker's casing so a dictated title keeps it ("Call Dave", not "Call dave").
+  const casedCommand = direct.restCased;
   let wakeAuthorized = direct.heard && commandTranscript.length > 0;
   if (!wakeAuthorized && input.heardTranscript !== undefined) {
     const heard = splitVoiceWakeWord(input.heardTranscript);
@@ -81,11 +110,11 @@ export function voiceUtteranceForSession(input: {
   // session sees it and fails closed. Benign alternatives are unchanged.
   const alternatives = input.alternatives?.map((alternative) => {
     const split = splitVoiceWakeWord(alternative);
-    return unnormalisedDictation(alternative, split.heard) ?? split.rest;
+    return unnormalisedDictation(alternative, split.heard) ?? split.restCased;
   });
   return {
     wakeAuthorized,
-    transcript: rawCommand ?? commandTranscript,
+    transcript: rawCommand ?? casedCommand,
     ...(alternatives ? { alternatives } : {}),
   };
 }

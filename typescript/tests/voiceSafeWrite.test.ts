@@ -19,6 +19,7 @@ import type { PersistenceProvider } from "../src/persistence/persistence.js";
 import type { ControlledReminderRecord } from "../src/reminders/controlledReminder.js";
 import { captureCredentials, type CredentialsRuntime } from "../src/settings/credentialsStatus.js";
 import type { ControlledTaskRecord } from "../src/tasks/controlledTask.js";
+import { splitVoiceWakeWord, voiceUtteranceForSession } from "../src/voice/voiceSafeWrite.js";
 import { VoiceWriteTarget } from "../src/voice/voiceWriteTarget.js";
 
 function credentials(host: string): CredentialsRuntime {
@@ -977,7 +978,7 @@ describe("voice dictated safe writes", () => {
     const dispatch = confirmed.json().dispatch;
     assert.equal(dispatch.decision, "proposed");
     const staged = actions.rows.get(dispatch.toolActionId);
-    assert.deepEqual(staged?.arguments, { title: "Call dave about the fence" });
+    assert.deepEqual(staged?.arguments, { title: "Call Dave about the fence" });
     assert.equal(staged?.tool, "reminders");
   });
 
@@ -1163,7 +1164,7 @@ describe("voice dictated reminder due times", () => {
     });
     const readBack = spoken.json().dispatch;
     assert.equal(readBack.decision, "awaiting-confirmation");
-    assert.equal(readBack.capture.title, "Call dave");
+    assert.equal(readBack.capture.title, "Call Dave");
     assert.equal(readBack.capture.dueRaw, "tomorrow at 7 am");
     assert.equal(readBack.capture.dueTimezone, "Australia/Melbourne");
     assert.ok(readBack.capture.dueAt > before, "tomorrow is in the future");
@@ -1179,7 +1180,7 @@ describe("voice dictated reminder due times", () => {
     const staged = actions.rows.get(dispatch.toolActionId);
     assert.ok(staged);
     assert.deepEqual(staged.arguments, {
-      title: "Call dave",
+      title: "Call Dave",
       dueRaw: "tomorrow at 7 am",
       dueAt: readBack.capture.dueAt,
       dueTimezone: "Australia/Melbourne",
@@ -1210,5 +1211,45 @@ describe("voice dictated reminder due times", () => {
     });
     assert.equal(response.statusCode, 422);
     assert.equal(actions.rows.size, 0);
+  });
+});
+
+describe("voice dictation casing end to end", () => {
+  it("splits the wake word but keeps the command's casing", () => {
+    assert.deepEqual(splitVoiceWakeWord("Nolan, add a task: call Dave"), {
+      heard: true,
+      rest: "add a task: call dave",
+      restCased: "add a task: call Dave",
+    });
+    const prepared = voiceUtteranceForSession({
+      transcript: "add a task: call Dave",
+      heardTranscript: "Nolan add a task: call Dave",
+    });
+    assert.equal(prepared.wakeAuthorized, true);
+    assert.equal(prepared.transcript, "add a task: call Dave");
+  });
+
+  it("stages a HUD-shaped dictation with the spoken casing", async () => {
+    const actions = new MemoryActions();
+    const app = await makeApp(actions);
+    const sessionId = await openSession(app);
+    const spoken = await utter(app, sessionId, {
+      transcript: "add a work task: quote the Smith fence for the BBQ area",
+      heardTranscript: "Nolan, add a work task: quote the Smith fence for the BBQ area",
+      isFinal: true,
+      ...TARGET,
+    });
+    assert.equal(spoken.json().dispatch.decision, "awaiting-confirmation");
+    assert.equal(spoken.json().dispatch.capture.title, "Quote the Smith fence for the BBQ area");
+    const confirmed = await utter(app, sessionId, {
+      transcript: "Nolan confirm",
+      isFinal: true,
+      ...TARGET,
+    });
+    const staged = actions.rows.get(confirmed.json().dispatch.toolActionId);
+    assert.deepEqual(staged?.arguments, {
+      title: "Quote the Smith fence for the BBQ area",
+      category: "work",
+    });
   });
 });

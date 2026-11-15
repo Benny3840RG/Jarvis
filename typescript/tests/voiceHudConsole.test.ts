@@ -101,6 +101,9 @@ describe("voice HUD console logic (extracted from dashboard-v1.html)", () => {
         assert.equal(gate.status, "command", raw);
         assert.equal(gate.transcript, "add a task: order bar oil", raw);
       }
+      const cased = logic.voiceWakeGate("Nolan, add a task: call Dave about the BMW.", true);
+      assert.equal(cased.status, "command");
+      assert.equal(cased.transcript, "add a task: call Dave about the BMW");
       assert.equal(logic.voiceWakeGate("Nolan", true).status, "awake");
       assert.equal(logic.voiceWakeGate("Jarvis winch up", true).status, "command");
       assert.equal(logic.voiceWakeGate("Nolanx add a task", true).status, "idle");
@@ -127,7 +130,7 @@ describe("voice HUD console logic (extracted from dashboard-v1.html)", () => {
           transcript: "confirm",
           isFinal: true,
           alternatives: ["confirm command", "cancel"],
-          heardTranscript: "jarvis confirm",
+          heardTranscript: "Jarvis confirm",
         },
       );
     });

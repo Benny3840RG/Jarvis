@@ -405,7 +405,7 @@ describe("voice HUD clarification prompt (#567)", () => {
     recognition.emit("Jarvis the second one");
     await flush();
     assert.equal(h.utterances().at(-1)?.body.transcript, "the second one");
-    assert.equal(h.utterances().at(-1)?.body.heardTranscript, "jarvis the second one");
+    assert.equal(h.utterances().at(-1)?.body.heardTranscript, "Jarvis the second one");
     assert.equal(h.get("voice-result").textContent, "Awaiting spoken “confirm”.");
     assert.match(h.get("voice-pending").textContent, /Turn the crawler inspection lights on/);
     assert.deepEqual(h.actuations, []);
