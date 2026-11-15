@@ -194,7 +194,14 @@ class FakeNode {
 
 async function page(app: NestFastifyApplication) {
   const html = (await app.inject({ method: "GET", url: "/settings/approvals" })).body;
-  const script = /<script>([\s\S]*)<\/script>/.exec(html)?.[1];
+  // The page's own inline script, taken by plain string positions (it is our
+  // trusted shell, not untrusted HTML being filtered).
+  const scriptStart = html.indexOf("<script>");
+  const scriptEnd = html.lastIndexOf("</script>");
+  const script =
+    scriptStart >= 0 && scriptEnd > scriptStart
+      ? html.slice(scriptStart + "<script>".length, scriptEnd)
+      : "";
   assert.ok(script, "the page carries its script inline");
   const elements = new Map<string, FakeNode>();
   for (const id of [
