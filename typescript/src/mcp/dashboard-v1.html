@@ -3985,17 +3985,25 @@
             synthesis: !!w.speechSynthesis,
           };
         }
+        // NOLAN is the public wake word; legacy "Jarvis" stays accepted, matching the server splitter.
+        var VOICE_WAKE_WORDS = ["nolan", "jarvis"];
         function voiceWakeGate(raw, isFinal, wakeWord) {
-          var word = normalizeVoicePhrase(wakeWord || "jarvis");
+          var words = (Array.isArray(wakeWord) ? wakeWord : wakeWord ? [wakeWord] : VOICE_WAKE_WORDS)
+            .map(normalizeVoicePhrase);
           var text = normalizeVoicePhrase(raw);
-          if (text === word) return { status: "awake" };
-          if (text.indexOf(word) !== 0) return { status: "idle" };
-          var after = text.slice(word.length);
-          var separator = /^[\s.,!?;:]+/.exec(after);
-          if (!separator) return { status: "idle" };
-          var rest = after.slice(separator[0].length).trim();
-          if (!rest) return { status: "awake" };
-          return { status: "command", transcript: rest, isFinal: !!isFinal };
+          for (var i = 0; i < words.length; i += 1) {
+            var word = words[i];
+            if (!word) continue;
+            if (text === word) return { status: "awake" };
+            if (text.indexOf(word) !== 0) continue;
+            var after = text.slice(word.length);
+            var separator = /^[\s.,!?;:]+/.exec(after);
+            if (!separator) continue;
+            var rest = after.slice(separator[0].length).trim();
+            if (!rest) return { status: "awake" };
+            return { status: "command", transcript: rest, isFinal: !!isFinal };
+          }
+          return { status: "idle" };
         }
         function prepareVoiceDispatch(raw, isFinal, alternatives, wakeWord) {
           if (!isFinal) return null;
@@ -4091,6 +4099,19 @@
           if (dispatch && dispatch.decision === "ambiguous") {
             return describeVoiceClarification(dispatch.candidates, catalog, profile);
           }
+          var capture = dispatch && dispatch.capture && typeof dispatch.capture.title === "string" ? dispatch.capture : null;
+          if (capture) {
+            var isTask = !!(dispatch.command && dispatch.command.proposes && dispatch.command.proposes.tool === "tasks");
+            var what = isTask
+              ? "task “" + capture.title + "”" + (capture.category ? " (" + capture.category + ")" : "")
+              : "reminder “" + capture.title + "”";
+            if (dispatch.decision === "awaiting-confirmation") {
+              return { label: "Add " + what + "? Say “Nolan confirm” to stage it for your approval, or “Nolan cancel”.", tone: "pending" };
+            }
+            if (dispatch.decision === "proposed" && typeof dispatch.toolActionId === "string" && dispatch.toolActionId) {
+              return { label: "Staged " + what + " for your approval. Nothing is created until you approve it.", tone: "ok" };
+            }
+          }
           if (dispatch && dispatch.decision === "answered") {
             var answer = typeof dispatch.answer === "string" ? dispatch.answer.trim() : "";
             return answer
@@ -4141,7 +4162,7 @@
           // How long a profile switch waits for the command queued before it.
           // A request that never answers must not leave the profile paused.
           var PROFILE_SWITCH_WAIT_MS = 10000;
-          var WAKE_WORD = "jarvis";
+          var WAKE_WORD = VOICE_WAKE_WORDS;
           var caps = voiceCapabilities(typeof window !== "undefined" ? window : {});
           var state = {
             profile: "client", sessionId: null, sessionPromise: null, generation: 0,
@@ -4205,7 +4226,13 @@
             if (!el) return;
             if (pending && pending.command) {
               el.hidden = false;
-              el.textContent = "Awaiting confirm: " + pending.command.summary + " — say “Nolan confirm” or “Nolan cancel”.";
+              var pendingCapture = pending.capture && typeof pending.capture.title === "string" ? pending.capture : null;
+              var pendingWhat = pendingCapture
+                ? (pending.command.proposes && pending.command.proposes.tool === "tasks"
+                  ? "add task “" + pendingCapture.title + "”" + (pendingCapture.category ? " (" + pendingCapture.category + ")" : "")
+                  : "add reminder “" + pendingCapture.title + "”")
+                : pending.command.summary;
+              el.textContent = "Awaiting confirm: " + pendingWhat + " — say “Nolan confirm” or “Nolan cancel”.";
             } else {
               el.hidden = true;
               el.textContent = "";

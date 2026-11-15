@@ -15,6 +15,7 @@ import type { ToolActionService } from "../actions/toolActions.js";
 import { VOICE_COMMANDS, VOICE_PROFILES } from "../voice/voiceCommands.js";
 import { stageVoiceSafeWrite, voiceUtteranceForSession } from "../voice/voiceSafeWrite.js";
 import type { VoiceSessionRegistry } from "../voice/voiceSessionRegistry.js";
+import type { VoiceWriteTarget } from "../voice/voiceWriteTarget.js";
 import { LocalLoopbackRoute } from "./localLoopbackRoute.js";
 import { JarvisProblem } from "./problemDetails.js";
 import {
@@ -22,7 +23,7 @@ import {
   parseSwitchVoiceProfile,
   parseVoiceUtterance,
 } from "./voiceRequest.js";
-import { HTTP_TOOL_ACTIONS, HTTP_VOICE_REGISTRY } from "./tokens.js";
+import { HTTP_TOOL_ACTIONS, HTTP_VOICE_REGISTRY, HTTP_VOICE_WRITE_TARGET } from "./tokens.js";
 
 function invalid(detail: string): JarvisProblem {
   return new JarvisProblem(
@@ -60,6 +61,9 @@ export class VoiceController {
     @Optional()
     @Inject(HTTP_TOOL_ACTIONS)
     private readonly toolActions?: ToolActionService | null,
+    @Optional()
+    @Inject(HTTP_VOICE_WRITE_TARGET)
+    private readonly voiceTarget?: VoiceWriteTarget | null,
   ) {}
 
   @Get("catalog")
@@ -112,11 +116,18 @@ export class VoiceController {
       sessionId,
       command: dispatch.command,
       wakeAuthorized: prepared.wakeAuthorized,
+      target: this.voiceTarget ?? null,
       ...(parsed.projectId === undefined ? {} : { projectId: parsed.projectId }),
       ...(parsed.expectedRevision === undefined
         ? {}
         : { expectedRevision: parsed.expectedRevision }),
-      ...(parsed.capture === undefined ? {} : { capture: parsed.capture }),
+      // A dictated capture is exactly what the owner heard read back and
+      // confirmed; a request-body capture can never replace it.
+      ...(dispatch.capture !== undefined
+        ? { capture: dispatch.capture }
+        : parsed.capture === undefined
+          ? {}
+          : { capture: parsed.capture }),
     });
     if (!staged) return { dispatch, pending: session.pending() ?? null };
     if ("toolActionId" in staged) {
