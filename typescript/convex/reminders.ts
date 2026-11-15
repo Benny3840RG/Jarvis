@@ -126,7 +126,7 @@ async function findControlledResult(
   ctx: MutationCtx,
   ownerId: string,
   projectId: string,
-  actionFamilyId: "AM-006" | "AM-007",
+  actionFamilyId: "AM-006" | "AM-007" | "AM-017",
   idempotencyKey: string,
 ) {
   return ctx.db
@@ -455,6 +455,97 @@ export const cancelControlled = mutation({
       createdAt: now,
     });
     await ctx.db.delete("reminders", id);
+    return result;
+  },
+});
+
+/**
+ * AM-017: move one project-scoped reminder to a new due value. The due value
+ * is replaced as a whole (raw text always preserved; a normalized timestamp
+ * only with its timezone), the revision is bumped, and the result is retained
+ * under the execution idempotency key so a replay returns the original result.
+ */
+export const rescheduleControlled = mutation({
+  args: {
+    serviceToken: v.string(),
+    projectId: v.string(),
+    id: v.string(),
+    dueRaw: v.string(),
+    dueAt: v.optional(v.number()),
+    dueTimezone: v.optional(v.string()),
+    idempotencyKey: v.string(),
+    actionFingerprint: v.string(),
+    sourceRequestId: v.string(),
+    correlationId: v.string(),
+    source: v.string(),
+  },
+  returns: v.union(reminderActionResultValidator, v.null()),
+  handler: async (ctx, args) => {
+    const ownerId = requireOwner(args.serviceToken);
+    const projectId = cleanRequiredText(args.projectId, "Project ID");
+    const due = validatedDue(args);
+    if (due.dueRaw === undefined) {
+      throw new Error("Reminder reschedule requires preserved raw due text.");
+    }
+    const idempotencyKey = cleanRequiredText(
+      args.idempotencyKey,
+      "Reminder reschedule idempotency key",
+    );
+    const actionFingerprint = cleanRequiredText(args.actionFingerprint, "Action fingerprint");
+    const sourceRequestId = cleanRequiredText(args.sourceRequestId, "Source request ID");
+    const correlationId = cleanRequiredText(args.correlationId, "Correlation ID");
+    const source = cleanRequiredText(args.source, "Reminder source");
+
+    const existing = await findControlledResult(ctx, ownerId, projectId, "AM-017", idempotencyKey);
+    if (existing) {
+      if (existing.actionFingerprint !== actionFingerprint) {
+        throw new Error("Reminder reschedule idempotency key belongs to another fingerprint.");
+      }
+      if (existing.result.kind !== "reminder") {
+        throw new Error("Reminder reschedule result kind mismatch.");
+      }
+      return existing.result;
+    }
+
+    const id = ctx.db.normalizeId("reminders", args.id);
+    if (!id) return null;
+    const reminder = await ctx.db.get("reminders", id);
+    if (!reminder || reminder.ownerId !== ownerId || reminder.projectId !== projectId) return null;
+
+    const now = Date.now();
+    const revision = (reminder.revision ?? 1) + 1;
+    await ctx.db.replace("reminders", id, {
+      ownerId,
+      projectId,
+      title: reminder.title,
+      ...due,
+      ...(reminder.directCreateIdempotencyKey === undefined
+        ? {}
+        : { directCreateIdempotencyKey: reminder.directCreateIdempotencyKey }),
+      ...(reminder.directCreateFingerprint === undefined
+        ? {}
+        : { directCreateFingerprint: reminder.directCreateFingerprint }),
+      createdAt: reminder.createdAt,
+      updatedAt: now,
+      revision,
+    });
+    const updated = await ctx.db.get("reminders", id);
+    if (!updated) throw new Error("Controlled reminder reschedule failed.");
+    const result = controlledReminderResult(updated);
+    await ctx.db.insert("internalActionResults", {
+      ownerId,
+      projectId,
+      actionFamilyId: "AM-017",
+      idempotencyKey,
+      actionFingerprint,
+      entityType: "reminder",
+      entityId: id,
+      result,
+      sourceRequestId,
+      correlationId,
+      source,
+      createdAt: now,
+    });
     return result;
   },
 });

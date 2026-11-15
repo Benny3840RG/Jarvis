@@ -7,7 +7,10 @@
 import { canonicalJson } from "../actions/canonicalJson.js";
 import { sha256Hex } from "../actions/sha256.js";
 import { createErrandArgumentsSchema } from "../actions/errandTools.js";
-import { createReminderArgumentsSchema } from "../actions/taskReminderTools.js";
+import {
+  createReminderArgumentsSchema,
+  rescheduleReminderArgumentsSchema,
+} from "../actions/taskReminderTools.js";
 import type { ToolActionService } from "../actions/toolActions.js";
 import {
   classifyVoiceDictation,
@@ -31,6 +34,7 @@ const SAFE_EXECUTORS = new Set([
   "errands:complete",
   "reminders:cancel",
   "errands:remove",
+  "reminders:reschedule",
 ]);
 
 /** Completions act on a resolved record, so they only ever stage on the voice project. */
@@ -39,6 +43,7 @@ const COMPLETION_EXECUTORS = new Set([
   "errands:complete",
   "reminders:cancel",
   "errands:remove",
+  "reminders:reschedule",
 ]);
 
 export const VOICE_COMPLETION_TARGET_REASON =
@@ -176,6 +181,18 @@ function safeWriteArguments(
     // The executor's own schema decides: a due value that the executor would
     // refuse (dueAt without timezone or raw text) is never staged.
     return createReminderArgumentsSchema.safeParse(candidate).success ? candidate : undefined;
+  }
+  if (key === "reminders:reschedule") {
+    // A resolved reminder plus the new due value exactly as heard and read back.
+    const title = capture?.title?.trim() ?? "";
+    if (title.length < 1 || capture?.category !== undefined) return undefined;
+    const candidate = {
+      reminderId: capture?.targetId?.trim() ?? "",
+      ...(capture?.dueRaw === undefined ? {} : { dueRaw: capture.dueRaw }),
+      ...(capture?.dueAt === undefined ? {} : { dueAt: capture.dueAt }),
+      ...(capture?.dueTimezone === undefined ? {} : { dueTimezone: capture.dueTimezone }),
+    };
+    return rescheduleReminderArgumentsSchema.safeParse(candidate).success ? candidate : undefined;
   }
   if (COMPLETION_EXECUTORS.has(key)) {
     const title = capture?.title?.trim() ?? "";

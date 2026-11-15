@@ -52,6 +52,15 @@ tools:
     allowlist: typescript/src/actions/toolExecutionFactory.ts
     bound_by: [AM-007]
 
+  - id: TOOL-REMINDERS-RESCHEDULE
+    lifecycle_status: planned
+    implemented: true
+    description: Moves one owner/project-scoped reminder to a new due value (raw text preserved, a normalized instant only with its timezone) through the rescheduleControlled mutation, bumping the revision and retaining the result under the execution idempotency key for exact replay. Registered into the live tool-execution service only when JARVIS_REMINDER_RESCHEDULE_ENABLED is "true". Not commissioned or deployed; AM-017 stays planned until the owner deploys the Convex mutation and runs a commissioning smoke.
+    implementation: typescript/src/actions/taskReminderTools.ts
+    adapter: typescript/src/persistence/convexControlledReminders.ts
+    allowlist: typescript/src/actions/toolExecutionFactory.ts
+    bound_by: [AM-017]
+
   - id: TOOL-QUOTE-FINALIZE
     lifecycle_status: active
     implemented: true

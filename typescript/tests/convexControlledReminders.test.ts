@@ -174,4 +174,50 @@ describe("ConvexControlledReminderStore", () => {
       /require JARVIS_SERVICE_TOKEN/,
     );
   });
+
+  it("reschedules through the authenticated AM-017 mutation and maps the retained result", async () => {
+    const calls: unknown[] = [];
+    const client = {
+      async query() {
+        throw new Error("not used");
+      },
+      async mutation(_ref: unknown, args: unknown) {
+        calls.push(args);
+        return reminderRow({
+          dueRaw: "friday",
+          dueAt: undefined,
+          dueTimezone: undefined,
+          revision: 2,
+        });
+      },
+    } as unknown as ConvexClientLike;
+    const store = new ConvexControlledReminderStore(client, "owner-service-token");
+    const rescheduled = await store.reschedule({
+      projectId: "project-1",
+      reminderId: "reminder-1",
+      dueRaw: "friday",
+      idempotencyKey: "reminder-reschedule-key",
+      actionFingerprint: "jarvis-action-fingerprint:v1:ghi",
+      sourceRequestId: "request-reminder-reschedule",
+      correlationId: "correlation-reminder-reschedule",
+      source: "tool-action-http",
+    });
+    assert.equal(rescheduled?.dueRaw, "friday");
+    assert.equal(rescheduled?.dueAt, undefined);
+    assert.equal(rescheduled?.revision, 2);
+    // An undated reschedule sends no dueAt/dueTimezone at all.
+    assert.deepEqual(calls, [
+      {
+        serviceToken: "owner-service-token",
+        projectId: "project-1",
+        id: "reminder-1",
+        dueRaw: "friday",
+        idempotencyKey: "reminder-reschedule-key",
+        actionFingerprint: "jarvis-action-fingerprint:v1:ghi",
+        sourceRequestId: "request-reminder-reschedule",
+        correlationId: "correlation-reminder-reschedule",
+        source: "tool-action-http",
+      },
+    ]);
+  });
 });

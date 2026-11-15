@@ -10,6 +10,8 @@ import {
 import type { ToolAction, ToolActionService } from "../src/actions/toolActions.js";
 import {
   cancelReminderToolDefinition,
+  REMINDER_RESCHEDULE_ENABLED_ENV,
+  rescheduleReminderToolDefinition,
   completeTaskToolDefinition,
   createReminderToolDefinition,
   createTaskToolDefinition,
@@ -1621,6 +1623,28 @@ class ReminderTable {
     return { ...row, cancelledAt: 2, revision: row.revision + 1 };
   }
 
+  async reschedule(input: {
+    projectId: string;
+    reminderId: string;
+    dueRaw: string;
+    dueAt?: number;
+    dueTimezone?: string;
+  }): Promise<ControlledReminderRecord | null> {
+    const row = this.rows.find(
+      (candidate) => candidate.id === input.reminderId && candidate.projectId === input.projectId,
+    );
+    if (!row) return null;
+    delete row.dueAt;
+    delete row.dueTimezone;
+    Object.assign(row, {
+      dueRaw: input.dueRaw,
+      ...(input.dueAt === undefined ? {} : { dueAt: input.dueAt, dueTimezone: input.dueTimezone }),
+      revision: row.revision + 1,
+      updatedAt: 2,
+    });
+    return { ...row };
+  }
+
   async get(): Promise<ControlledReminderRecord | null> {
     return null;
   }
@@ -1857,6 +1881,126 @@ describe("voice spoken errand removal", () => {
     });
     assert.equal(confirmed.json().dispatch.toolActionId, undefined);
     assert.equal(confirmed.json().dispatch.reason, VOICE_COMPLETION_TARGET_REASON);
+    assert.equal(actions.rows.size, 0);
+  });
+});
+
+describe("voice spoken reminder reschedule (AM-017, planned)", () => {
+  async function rescheduleApp(table: ReminderTable, enabled: boolean) {
+    const previous = process.env[REMINDER_RESCHEDULE_ENABLED_ENV];
+    if (enabled) process.env[REMINDER_RESCHEDULE_ENABLED_ENV] = "true";
+    else delete process.env[REMINDER_RESCHEDULE_ENABLED_ENV];
+    try {
+      const actions = new MemoryActions();
+      const revisions = new VoiceProjectRevisions(new Map([["nolan-voice", 4]]));
+      const app = await makeApp(
+        actions,
+        new InMemoryErrandStore(),
+        new VoiceWriteTarget("nolan-voice", revisions),
+        table.provider(),
+      );
+      return { actions, app, sessionId: await openSession(app) };
+    } finally {
+      if (previous === undefined) delete process.env[REMINDER_RESCHEDULE_ENABLED_ENV];
+      else process.env[REMINDER_RESCHEDULE_ENABLED_ENV] = previous;
+    }
+  }
+
+  it("is refused with a reason while AM-017 is not enabled, and nothing is armed", async () => {
+    const table = new ReminderTable();
+    table.add("Order bar oil", "nolan-voice", { dueRaw: "tomorrow" });
+    const { actions, app, sessionId } = await rescheduleApp(table, false);
+    const response = await utter(app, sessionId, {
+      transcript: "Nolan, move the bar oil reminder to tomorrow at 9 am",
+      isFinal: true,
+    });
+    const dispatch = response.json().dispatch;
+    assert.equal(dispatch.decision, "completion-unresolved");
+    assert.equal(dispatch.command.id, "client.reschedule-reminder");
+    assert.match(dispatch.reason, /not enabled yet \(AM-017 is planned\)/);
+    assert.equal(response.json().pending, null);
+    assert.equal(actions.rows.size, 0);
+    assert.equal(table.rows[0]?.dueRaw, "tomorrow");
+  });
+
+  it("when enabled, reads back the new time, stages it on confirm and only changes after approval", async () => {
+    const table = new ReminderTable();
+    const barOil = table.add("Order bar oil", "nolan-voice", { dueRaw: "tomorrow" });
+    table.add("Call Dave", "nolan-voice");
+    const { actions, app, sessionId } = await rescheduleApp(table, true);
+
+    const before = Date.now();
+    const spoken = await utter(app, sessionId, {
+      transcript: "Nolan, move the bar oil reminder to tomorrow at 9 am",
+      isFinal: true,
+    });
+    const readBack = spoken.json().dispatch;
+    assert.equal(readBack.decision, "awaiting-confirmation");
+    assert.equal(readBack.command.id, "client.reschedule-reminder");
+    assert.deepEqual(readBack.command.proposes, { tool: "reminders", operation: "reschedule" });
+    assert.equal(readBack.capture.title, "Order bar oil");
+    assert.equal(readBack.capture.targetId, barOil);
+    assert.equal(readBack.capture.dueRaw, "tomorrow at 9 am");
+    assert.equal(readBack.capture.dueTimezone, "Australia/Melbourne");
+    assert.ok(readBack.capture.dueAt > before);
+    assert.equal(actions.rows.size, 0);
+
+    const confirmed = await utter(app, sessionId, { transcript: "Nolan confirm", isFinal: true });
+    const staged = actions.rows.get(confirmed.json().dispatch.toolActionId);
+    assert.ok(staged);
+    assert.equal(`${staged.tool}:${staged.operation}`, "reminders:reschedule");
+    assert.equal(staged.projectId, "nolan-voice");
+    assert.deepEqual(staged.arguments, {
+      reminderId: barOil,
+      dueRaw: "tomorrow at 9 am",
+      dueAt: readBack.capture.dueAt,
+      dueTimezone: "Australia/Melbourne",
+    });
+    assert.equal(actions.approveCalls, 0, "voice never approves");
+    assert.equal(table.rows[0]?.dueRaw, "tomorrow", "staging never executes");
+
+    const approved = await actions.approve({
+      actionId: staged.actionId,
+      projectId: "nolan-voice",
+      expectedRevision: 4,
+      approvalToken: "owner-token",
+    });
+    const execution = new ToolExecutionService([rescheduleReminderToolDefinition(table)]);
+    assert.equal((await executeLive(execution, approved)).status, "succeeded");
+    assert.equal(table.rows[0]?.dueRaw, "tomorrow at 9 am");
+    assert.equal(table.rows[0]?.dueAt, readBack.capture.dueAt);
+    assert.equal(table.rows[1]?.dueRaw, undefined, "no other reminder changes");
+  });
+
+  it("when enabled, refuses a HUD reminder, a past time and a request-supplied target", async () => {
+    const table = new ReminderTable();
+    table.add("Order bar oil", "nolan-voice");
+    table.add("Renew the rego", "hud-project");
+    const { actions, app, sessionId } = await rescheduleApp(table, true);
+
+    const hud = await utter(app, sessionId, {
+      transcript: "Nolan move the rego reminder to tomorrow at 9 am",
+      isFinal: true,
+    });
+    assert.equal(hud.json().dispatch.decision, "completion-unresolved");
+    assert.match(hud.json().dispatch.reason, /was not captured by voice/);
+
+    const vague = await utter(app, sessionId, {
+      transcript: "Nolan move the bar oil reminder to next friday",
+      isFinal: true,
+    });
+    assert.notEqual(vague.json().dispatch.decision, "awaiting-confirmation");
+
+    await utter(app, sessionId, {
+      transcript: "Nolan move the bar oil reminder to tomorrow at 9 am",
+      isFinal: true,
+    });
+    const explicit = await utter(app, sessionId, {
+      transcript: "Nolan confirm",
+      isFinal: true,
+      ...TARGET,
+    });
+    assert.equal(explicit.json().dispatch.reason, VOICE_COMPLETION_TARGET_REASON);
     assert.equal(actions.rows.size, 0);
   });
 });
