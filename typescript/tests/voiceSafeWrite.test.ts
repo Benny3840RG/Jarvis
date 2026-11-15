@@ -19,6 +19,7 @@ import type { PersistenceProvider } from "../src/persistence/persistence.js";
 import type { ControlledReminderRecord } from "../src/reminders/controlledReminder.js";
 import { captureCredentials, type CredentialsRuntime } from "../src/settings/credentialsStatus.js";
 import type { ControlledTaskRecord } from "../src/tasks/controlledTask.js";
+import { VoiceWriteTarget } from "../src/voice/voiceWriteTarget.js";
 
 function credentials(host: string): CredentialsRuntime {
   return captureCredentials({
@@ -203,11 +204,20 @@ class MemoryTasks {
 class MemoryReminders {
   readonly records: ControlledReminderRecord[] = [];
 
-  async create(input: { projectId: string; title: string }): Promise<ControlledReminderRecord> {
+  async create(input: {
+    projectId: string;
+    title: string;
+    dueRaw?: string;
+    dueAt?: number;
+    dueTimezone?: string;
+  }): Promise<ControlledReminderRecord> {
     const record: ControlledReminderRecord = {
       id: `reminder-${this.records.length + 1}`,
       projectId: input.projectId,
       title: input.title,
+      ...(input.dueRaw === undefined ? {} : { dueRaw: input.dueRaw }),
+      ...(input.dueAt === undefined ? {} : { dueAt: input.dueAt }),
+      ...(input.dueTimezone === undefined ? {} : { dueTimezone: input.dueTimezone }),
       createdAt: 1,
       updatedAt: 1,
       revision: 1,
@@ -237,6 +247,7 @@ afterEach(async () => {
 async function makeApp(
   actions?: ToolActionService,
   errandStore?: ErrandStore,
+  voiceWriteTarget?: VoiceWriteTarget,
 ): Promise<NestFastifyApplication> {
   const app = await createJarvisHttpApp({
     persistence: persistence(),
@@ -246,6 +257,7 @@ async function makeApp(
     logger: false,
     ...(actions ? { toolActionService: actions } : {}),
     ...(errandStore ? { errandStore } : {}),
+    ...(voiceWriteTarget ? { voiceWriteTarget } : {}),
   });
   openApps.push(app);
   return app;
@@ -833,10 +845,11 @@ describe("voice safe writes", () => {
     const sessionId = await openSession(app);
     const capture = { title: "Call the client" };
 
-    // A natural phrasing the exact parser declines. It is interpreted but held
-    // for confirmation — nothing is staged yet.
+    // A natural phrasing the exact parser declines and the dictation grammar
+    // does not claim ("remind me to …" is now dictated with its own title).
+    // It is interpreted but held for confirmation — nothing is staged yet.
     const first = await utter(app, sessionId, {
-      transcript: "jarvis remind me to chase this up",
+      transcript: "jarvis set a follow up reminder",
       isFinal: true,
       ...TARGET,
       capture,
@@ -879,6 +892,323 @@ describe("voice safe writes", () => {
     });
     assert.equal(out.statusCode, 200);
     assert.equal(out.json().dispatch.decision, "unrecognized");
+    assert.equal(actions.rows.size, 0);
+  });
+});
+
+describe("voice dictated safe writes", () => {
+  it("reads back a spoken task, stages it only after confirm, and the owner approval creates it", async () => {
+    const actions = new MemoryActions();
+    const tasks = new MemoryTasks();
+    const reminders = new MemoryReminders();
+    const execution = new ToolExecutionService([
+      createTaskToolDefinition(tasks),
+      createReminderToolDefinition(reminders),
+    ]);
+    const app = await makeApp(actions);
+    const sessionId = await openSession(app);
+
+    const spoken = await utter(app, sessionId, {
+      transcript: "Nolan, add a work task: order bar oil",
+      isFinal: true,
+      ...TARGET,
+    });
+    assert.equal(spoken.statusCode, 200);
+    const readBack = spoken.json();
+    assert.equal(readBack.dispatch.decision, "awaiting-confirmation");
+    assert.deepEqual(readBack.dispatch.capture, { title: "Order bar oil", category: "work" });
+    assert.deepEqual(readBack.pending.capture, { title: "Order bar oil", category: "work" });
+    assert.equal(actions.rows.size, 0, "a read-back stages nothing");
+
+    // A body capture on the confirm turn can never replace what was read back.
+    const confirmed = await utter(app, sessionId, {
+      transcript: "Nolan confirm",
+      isFinal: true,
+      ...TARGET,
+      capture: { title: "Something else entirely", category: "money" },
+    });
+    assert.equal(confirmed.statusCode, 200);
+    const dispatch = confirmed.json().dispatch;
+    assert.equal(dispatch.decision, "proposed");
+    assert.deepEqual(dispatch.capture, { title: "Order bar oil", category: "work" });
+    assert.equal(typeof dispatch.toolActionId, "string");
+    const staged = actions.rows.get(dispatch.toolActionId);
+    assert.ok(staged);
+    assert.equal(staged.state, "proposed");
+    assert.deepEqual(staged.arguments, { title: "Order bar oil", category: "work" });
+    assert.equal(actions.approveCalls, 0, "voice never approves");
+    assert.equal(tasks.records.length, 0, "staging must not execute");
+
+    const approved = await actions.approve({
+      actionId: staged.actionId,
+      projectId: "project-1",
+      expectedRevision: 1,
+      approvalToken: "owner-token",
+    });
+    const receipt = await executeLive(execution, approved);
+    assert.equal(receipt.status, "succeeded");
+    assert.equal(tasks.records.length, 1);
+    assert.equal(tasks.records[0]?.title, "Order bar oil");
+    assert.equal(tasks.records[0]?.category, "work");
+
+    const replay = await utter(app, sessionId, {
+      transcript: "Nolan confirm",
+      isFinal: true,
+      ...TARGET,
+    });
+    assert.equal(replay.json().dispatch.decision, "confirmation-not-pending");
+    assert.equal(actions.rows.size, 1);
+  });
+
+  it("stages a dictated reminder after confirm", async () => {
+    const actions = new MemoryActions();
+    const app = await makeApp(actions);
+    const sessionId = await openSession(app);
+    await utter(app, sessionId, {
+      transcript: "nolan remind me to call Dave about the fence",
+      isFinal: true,
+      ...TARGET,
+    });
+    const confirmed = await utter(app, sessionId, {
+      transcript: "nolan confirm",
+      isFinal: true,
+      ...TARGET,
+    });
+    const dispatch = confirmed.json().dispatch;
+    assert.equal(dispatch.decision, "proposed");
+    const staged = actions.rows.get(dispatch.toolActionId);
+    assert.deepEqual(staged?.arguments, { title: "Call dave about the fence" });
+    assert.equal(staged?.tool, "reminders");
+  });
+
+  it("stages nothing for a dictation without the wake word", async () => {
+    const actions = new MemoryActions();
+    const app = await makeApp(actions);
+    const sessionId = await openSession(app);
+    const spoken = await utter(app, sessionId, {
+      transcript: "add a task: order bar oil",
+      isFinal: true,
+      ...TARGET,
+    });
+    assert.equal(spoken.json().dispatch.decision, "unrecognized");
+    const confirm = await utter(app, sessionId, {
+      transcript: "nolan confirm",
+      isFinal: true,
+      ...TARGET,
+    });
+    assert.equal(confirm.json().dispatch.decision, "confirmation-not-pending");
+    assert.equal(actions.rows.size, 0);
+  });
+
+  it("reports an uncommissioned target honestly after a confirmed dictation", async () => {
+    const actions = new MemoryActions();
+    const app = await makeApp(actions);
+    const sessionId = await openSession(app);
+    await utter(app, sessionId, { transcript: "nolan add a task: order bar oil", isFinal: true });
+    const confirmed = await utter(app, sessionId, { transcript: "nolan confirm", isFinal: true });
+    const dispatch = confirmed.json().dispatch;
+    assert.equal(dispatch.decision, "proposed");
+    assert.equal(dispatch.toolActionId, undefined);
+    assert.match(dispatch.reason, /not commissioned/);
+    assert.equal(actions.rows.size, 0);
+  });
+});
+
+class VoiceProjectRevisions {
+  reads = 0;
+  constructor(private readonly revisions: Map<string, number>) {}
+  set(projectKey: string, revision: number): void {
+    this.revisions.set(projectKey, revision);
+  }
+  async revision(projectKey: string): Promise<number | null> {
+    this.reads += 1;
+    return this.revisions.get(projectKey) ?? null;
+  }
+}
+
+describe("voice writes on the dedicated voice project", () => {
+  it("stages a HUD dictation with no client target against the voice project's current revision", async () => {
+    const actions = new MemoryActions();
+    const tasks = new MemoryTasks();
+    const execution = new ToolExecutionService([createTaskToolDefinition(tasks)]);
+    const revisions = new VoiceProjectRevisions(new Map([["nolan-voice", 3]]));
+    const app = await makeApp(actions, undefined, new VoiceWriteTarget("nolan-voice", revisions));
+    const sessionId = await openSession(app);
+
+    // Exactly what the HUD microphone sends: no projectId, no expectedRevision.
+    const spoken = await utter(app, sessionId, {
+      transcript: "Nolan, add a work task: order bar oil",
+      isFinal: true,
+    });
+    assert.equal(spoken.json().dispatch.decision, "awaiting-confirmation");
+    assert.equal(revisions.reads, 0, "a read-back resolves nothing");
+    assert.equal(actions.rows.size, 0);
+
+    const confirmed = await utter(app, sessionId, { transcript: "Nolan confirm", isFinal: true });
+    const dispatch = confirmed.json().dispatch;
+    assert.equal(dispatch.decision, "proposed");
+    assert.equal(typeof dispatch.toolActionId, "string");
+    assert.equal(dispatch.reason, undefined);
+    const staged = actions.rows.get(dispatch.toolActionId);
+    assert.ok(staged);
+    assert.equal(staged.projectId, "nolan-voice");
+    assert.equal(staged.baseRevision, 3);
+    assert.equal(staged.state, "proposed");
+    assert.deepEqual(staged.arguments, { title: "Order bar oil", category: "work" });
+    assert.equal(actions.approveCalls, 0, "voice never approves");
+    assert.equal(tasks.records.length, 0, "staging never executes");
+
+    const approved = await actions.approve({
+      actionId: staged.actionId,
+      projectId: "nolan-voice",
+      expectedRevision: 3,
+      approvalToken: "owner-token",
+    });
+    const receipt = await executeLive(execution, approved);
+    assert.equal(receipt.status, "succeeded");
+    assert.equal(tasks.records.length, 1);
+    assert.equal(tasks.records[0]?.projectId, "nolan-voice");
+    assert.equal(tasks.records[0]?.title, "Order bar oil");
+  });
+
+  it("reads the revision at confirm time, so a bumped project is never staged stale", async () => {
+    const actions = new MemoryActions();
+    const revisions = new VoiceProjectRevisions(new Map([["nolan-voice", 1]]));
+    const app = await makeApp(actions, undefined, new VoiceWriteTarget("nolan-voice", revisions));
+    const sessionId = await openSession(app);
+    await utter(app, sessionId, { transcript: "nolan remind me to call Dave", isFinal: true });
+    revisions.set("nolan-voice", 2);
+    const confirmed = await utter(app, sessionId, { transcript: "nolan confirm", isFinal: true });
+    const staged = actions.rows.get(confirmed.json().dispatch.toolActionId);
+    assert.equal(staged?.projectId, "nolan-voice");
+    assert.equal(staged?.baseRevision, 2);
+    assert.equal(staged?.tool, "reminders");
+  });
+
+  it("an explicit request target still wins over the voice project", async () => {
+    const actions = new MemoryActions();
+    const revisions = new VoiceProjectRevisions(new Map([["nolan-voice", 1]]));
+    const app = await makeApp(actions, undefined, new VoiceWriteTarget("nolan-voice", revisions));
+    const sessionId = await openSession(app);
+    await utter(app, sessionId, { transcript: "nolan add a task: order bar oil", isFinal: true });
+    const confirmed = await utter(app, sessionId, {
+      transcript: "nolan confirm",
+      isFinal: true,
+      ...TARGET,
+    });
+    const staged = actions.rows.get(confirmed.json().dispatch.toolActionId);
+    assert.equal(staged?.projectId, "project-1");
+    assert.equal(revisions.reads, 0);
+  });
+
+  it("stages nothing and says how to fix it when the voice project is not commissioned", async () => {
+    const actions = new MemoryActions();
+    const revisions = new VoiceProjectRevisions(new Map());
+    const app = await makeApp(actions, undefined, new VoiceWriteTarget("nolan-voice", revisions));
+    const sessionId = await openSession(app);
+    await utter(app, sessionId, { transcript: "nolan add a task: order bar oil", isFinal: true });
+    const confirmed = await utter(app, sessionId, { transcript: "nolan confirm", isFinal: true });
+    const dispatch = confirmed.json().dispatch;
+    assert.equal(dispatch.decision, "proposed");
+    assert.equal(dispatch.toolActionId, undefined);
+    assert.match(dispatch.reason, /voice project "nolan-voice" is not commissioned/);
+    assert.match(dispatch.reason, /commission:voice-project/);
+    assert.equal(actions.rows.size, 0);
+  });
+
+  it("fails closed when the voice project cannot be read", async () => {
+    const actions = new MemoryActions();
+    const broken = {
+      async revision(): Promise<number | null> {
+        throw new Error("convex down");
+      },
+    };
+    const app = await makeApp(actions, undefined, new VoiceWriteTarget("nolan-voice", broken));
+    const sessionId = await openSession(app);
+    await utter(app, sessionId, { transcript: "nolan add a task: order bar oil", isFinal: true });
+    const confirmed = await utter(app, sessionId, { transcript: "nolan confirm", isFinal: true });
+    assert.equal(
+      confirmed.json().dispatch.reason,
+      "Safe write was not staged: the voice project could not be read.",
+    );
+    assert.equal(actions.rows.size, 0);
+  });
+
+  it("never resolves the voice project for an unwoken or non-write turn", async () => {
+    const actions = new MemoryActions();
+    const revisions = new VoiceProjectRevisions(new Map([["nolan-voice", 1]]));
+    const app = await makeApp(actions, undefined, new VoiceWriteTarget("nolan-voice", revisions));
+    const sessionId = await openSession(app);
+    const unwoken = await utter(app, sessionId, { transcript: "add a task", isFinal: true });
+    assert.equal(unwoken.json().dispatch.toolActionId, undefined);
+    await utter(app, sessionId, { transcript: "nolan open tasks", isFinal: true });
+    assert.equal(revisions.reads, 0);
+    assert.equal(actions.rows.size, 0);
+  });
+});
+
+describe("voice dictated reminder due times", () => {
+  it("stages the spoken due time with the reminder and the approved reminder is dated", async () => {
+    const actions = new MemoryActions();
+    const reminders = new MemoryReminders();
+    const execution = new ToolExecutionService([createReminderToolDefinition(reminders)]);
+    const app = await makeApp(actions);
+    const sessionId = await openSession(app);
+
+    const before = Date.now();
+    const spoken = await utter(app, sessionId, {
+      transcript: "Nolan, remind me to call Dave tomorrow at 7 am",
+      isFinal: true,
+      ...TARGET,
+    });
+    const readBack = spoken.json().dispatch;
+    assert.equal(readBack.decision, "awaiting-confirmation");
+    assert.equal(readBack.capture.title, "Call dave");
+    assert.equal(readBack.capture.dueRaw, "tomorrow at 7 am");
+    assert.equal(readBack.capture.dueTimezone, "Australia/Melbourne");
+    assert.ok(readBack.capture.dueAt > before, "tomorrow is in the future");
+    assert.ok(readBack.capture.dueAt < before + 2 * 24 * 60 * 60 * 1_000);
+    assert.equal(actions.rows.size, 0);
+
+    const confirmed = await utter(app, sessionId, {
+      transcript: "Nolan confirm",
+      isFinal: true,
+      ...TARGET,
+    });
+    const dispatch = confirmed.json().dispatch;
+    const staged = actions.rows.get(dispatch.toolActionId);
+    assert.ok(staged);
+    assert.deepEqual(staged.arguments, {
+      title: "Call dave",
+      dueRaw: "tomorrow at 7 am",
+      dueAt: readBack.capture.dueAt,
+      dueTimezone: "Australia/Melbourne",
+    });
+
+    const approved = await actions.approve({
+      actionId: staged.actionId,
+      projectId: "project-1",
+      expectedRevision: 1,
+      approvalToken: "owner-token",
+    });
+    const receipt = await executeLive(execution, approved);
+    assert.equal(receipt.status, "succeeded");
+    assert.equal(reminders.records.length, 1);
+    assert.equal(reminders.records[0]?.dueAt, readBack.capture.dueAt);
+    assert.equal(reminders.records[0]?.dueRaw, "tomorrow at 7 am");
+  });
+
+  it("a request-body capture cannot add a due time to a voice reminder", async () => {
+    const actions = new MemoryActions();
+    const app = await makeApp(actions);
+    const sessionId = await openSession(app);
+    const response = await utter(app, sessionId, {
+      transcript: "jarvis remind me to follow up",
+      isFinal: true,
+      ...TARGET,
+      capture: { title: "Follow up", dueAt: 1, dueTimezone: "UTC", dueRaw: "x" },
+    });
+    assert.equal(response.statusCode, 422);
     assert.equal(actions.rows.size, 0);
   });
 });

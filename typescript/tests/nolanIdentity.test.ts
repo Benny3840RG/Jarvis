@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { JARVIS_INSTRUCTIONS, JARVIS_PERSONA_MARKDOWN } from "../src/mcp/persona.js";
+import { classifyVoiceDictation } from "../src/voice/voiceDictation.js";
 import { splitVoiceWakeWord, voiceUtteranceForSession } from "../src/voice/voiceSafeWrite.js";
 
 describe("NOLAN identity and guarded voice compatibility", () => {
@@ -53,5 +54,63 @@ describe("NOLAN identity and guarded voice compatibility", () => {
       }).wakeAuthorized,
       false,
     );
+  });
+});
+
+describe("HTTP safe-write preparation keeps raw control whitespace for dictation", () => {
+  it("does not let newline, tab or CR be normalised away before the unsafe check", () => {
+    for (const transcript of [
+      "Nolan, add a task: buy oil\nand more",
+      "Nolan, add a task: buy\toil",
+      "Nolan, add a task: buy oil\rand more",
+      "Nolan, remind me to call\nDave",
+    ]) {
+      const prepared = voiceUtteranceForSession({ transcript });
+      assert.equal(prepared.wakeAuthorized, true);
+      assert.equal(
+        classifyVoiceDictation(prepared.transcript, "client").status,
+        "rejected",
+        JSON.stringify(transcript),
+      );
+    }
+    const safe = voiceUtteranceForSession({ transcript: "Nolan,  add a task:   order oil \n" });
+    assert.equal(classifyVoiceDictation(safe.transcript, "client").status, "captured");
+    assert.equal(
+      voiceUtteranceForSession({ transcript: "Nolan, what is\non today" }).transcript,
+      "what is on today",
+    );
+  });
+});
+
+describe("HTTP preparation keeps raw control whitespace in ASR alternatives", () => {
+  it("passes dictated alternatives unnormalised so they classify as rejected", () => {
+    for (const alternative of [
+      "Nolan, add a task: buy oil\nand more",
+      "add a task: buy\toil",
+      "Nolan, add a task: buy oil\rand more",
+      "Nolan, remind me to call\nDave",
+      "remind me to call\tDave",
+      "remind me to call Dave\rtomorrow",
+    ]) {
+      const prepared = voiceUtteranceForSession({
+        transcript: "Nolan, add a task: order oil",
+        alternatives: [alternative],
+      });
+      const [out] = prepared.alternatives ?? [];
+      assert.equal(classifyVoiceDictation(out ?? "", "client").status, "rejected", alternative);
+      assert.ok(!/^nolan/i.test(out ?? ""), "wake word stripped");
+    }
+  });
+
+  it("still strips wake words and normalises benign alternatives", () => {
+    const prepared = voiceUtteranceForSession({
+      transcript: "Nolan, what is on today",
+      alternatives: ["Nolan,  add a task:   order oil \n", "what is\non today", "jarvis status"],
+    });
+    assert.equal(
+      classifyVoiceDictation(prepared.alternatives?.[0] ?? "", "client").status,
+      "captured",
+    );
+    assert.deepEqual(prepared.alternatives?.slice(1), ["what is on today", "status"]);
   });
 });

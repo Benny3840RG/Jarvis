@@ -7,8 +7,11 @@
 
 import { canonicalJson } from "../actions/canonicalJson.js";
 import { sha256Hex } from "../actions/sha256.js";
+import { createReminderArgumentsSchema } from "../actions/taskReminderTools.js";
 import type { ToolActionService } from "../actions/toolActions.js";
+import { classifyVoiceDictation, hasUnsafeVoiceCharacters } from "./voiceDictation.js";
 import { normalizeUtterance, type VoiceCommand } from "./voiceCommands.js";
+import type { VoiceWriteTarget } from "./voiceWriteTarget.js";
 
 /** NOLAN is the approved public wake word. Keep Jarvis temporarily for legacy clients. */
 const WAKE_WORDS = ["nolan", "jarvis"] as const;
@@ -27,6 +30,11 @@ export const VOICE_WRITE_INCOMPLETE_REASON =
 export type VoiceWriteCapture = Readonly<{
   title?: string;
   category?: string;
+  /** Spoken due text, preserved exactly as heard (dictated reminders only). */
+  dueRaw?: string;
+  /** Resolved due instant (ms since epoch); always paired with dueTimezone and dueRaw. */
+  dueAt?: number;
+  dueTimezone?: string;
 }>;
 
 export function splitVoiceWakeWord(raw: string): { heard: boolean; rest: string } {
@@ -39,6 +47,17 @@ export function splitVoiceWakeWord(raw: string): { heard: boolean; rest: string 
     if (separator) return { heard: true, rest: after.slice(separator[0].length).trim() };
   }
   return { heard: false, rest: text };
+}
+
+function unnormalisedDictation(raw: string, wakeHeard: boolean): string | undefined {
+  if (!hasUnsafeVoiceCharacters(raw)) return undefined;
+  let text = raw.trim();
+  if (wakeHeard) {
+    const lower = text.toLowerCase();
+    const wake = WAKE_WORDS.find((word) => lower.startsWith(word));
+    if (wake) text = text.slice(wake.length).replace(WAKE_SEPARATOR, "");
+  }
+  return classifyVoiceDictation(text, "client").status === "rejected" ? text : undefined;
 }
 
 export function voiceUtteranceForSession(input: {
@@ -54,12 +73,19 @@ export function voiceUtteranceForSession(input: {
     wakeAuthorized =
       heard.heard && heard.rest === commandTranscript && commandTranscript.length > 0;
   }
-  const alternatives = input.alternatives?.map(
-    (alternative) => splitVoiceWakeWord(alternative).rest,
-  );
+  // Normalisation collapses newline/tab/CR into spaces. A dictation that carried
+  // them must reach the session unnormalised so it is rejected, not armed.
+  const rawCommand = unnormalisedDictation(input.transcript, direct.heard);
+  // Alternatives get the same treatment: a dictated alternative carrying raw
+  // control characters is passed through stripped-but-unnormalised so the
+  // session sees it and fails closed. Benign alternatives are unchanged.
+  const alternatives = input.alternatives?.map((alternative) => {
+    const split = splitVoiceWakeWord(alternative);
+    return unnormalisedDictation(alternative, split.heard) ?? split.rest;
+  });
   return {
     wakeAuthorized,
-    transcript: commandTranscript,
+    transcript: rawCommand ?? commandTranscript,
     ...(alternatives ? { alternatives } : {}),
   };
 }
@@ -85,7 +111,15 @@ function safeWriteArguments(
   if (key === "reminders:create") {
     const title = capture?.title?.trim() ?? "";
     if (title.length < 1 || title.length > 200) return undefined;
-    return { title };
+    const candidate = {
+      title,
+      ...(capture?.dueRaw === undefined ? {} : { dueRaw: capture.dueRaw }),
+      ...(capture?.dueAt === undefined ? {} : { dueAt: capture.dueAt }),
+      ...(capture?.dueTimezone === undefined ? {} : { dueTimezone: capture.dueTimezone }),
+    };
+    // The executor's own schema decides: a due value that the executor would
+    // refuse (dueAt without timezone or raw text) is never staged.
+    return createReminderArgumentsSchema.safeParse(candidate).success ? candidate : undefined;
   }
   return undefined;
 }
@@ -110,20 +144,40 @@ export async function stageVoiceSafeWrite(input: {
   projectId?: string;
   expectedRevision?: number;
   capture?: VoiceWriteCapture;
+  /** The owner's dedicated voice project, used when the request names no project. */
+  target?: VoiceWriteTarget | null;
 }): Promise<{ toolActionId: string } | { reason: string } | undefined> {
   if (!isSafeVoiceWrite(input.command) || !input.command.proposes) return undefined;
   if (!input.wakeAuthorized) return { reason: VOICE_WRITE_NO_WAKE_REASON };
-  if (!input.service || !input.projectId || input.expectedRevision === undefined) {
+  if (!input.service) return { reason: VOICE_WRITE_UNCOMMISSIONED_REASON };
+  const explicit = input.projectId !== undefined || input.expectedRevision !== undefined;
+  if (explicit && (!input.projectId || input.expectedRevision === undefined)) {
     return { reason: VOICE_WRITE_UNCOMMISSIONED_REASON };
   }
+  if (!explicit && !input.target) return { reason: VOICE_WRITE_UNCOMMISSIONED_REASON };
   const argumentsValue = safeWriteArguments(input.command, input.capture);
   if (!argumentsValue) return { reason: VOICE_WRITE_INCOMPLETE_REASON };
+  // An explicit request target keeps its existing meaning. Otherwise the
+  // server resolves the dedicated voice project and its current revision now,
+  // after the capture is known to be complete, so a stale or forged revision
+  // can never come from the client.
+  let projectId: string;
+  let expectedRevision: number;
+  if (explicit) {
+    projectId = input.projectId as string;
+    expectedRevision = input.expectedRevision as number;
+  } else {
+    const resolved = await (input.target as VoiceWriteTarget).resolve();
+    if ("reason" in resolved) return { reason: resolved.reason };
+    projectId = resolved.projectId;
+    expectedRevision = resolved.expectedRevision;
+  }
   const { tool, operation } = input.command.proposes;
   const actionId = voiceSafeWriteActionId({
     sessionId: input.sessionId,
     commandId: input.command.id,
-    projectId: input.projectId,
-    expectedRevision: input.expectedRevision,
+    projectId,
+    expectedRevision,
     tool,
     operation,
     arguments: argumentsValue,
@@ -131,8 +185,8 @@ export async function stageVoiceSafeWrite(input: {
   const staged = await input.service.stage({
     actionId,
     requestId: actionId,
-    projectId: input.projectId,
-    expectedRevision: input.expectedRevision,
+    projectId,
+    expectedRevision,
     tool,
     operation,
     arguments: argumentsValue,

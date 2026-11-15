@@ -78,6 +78,7 @@ import { VoiceController } from "./voiceController.js";
 import type { VoiceSessionRegistry } from "../voice/voiceSessionRegistry.js";
 import type { VoiceConversationService } from "../voice/voiceConversation.js";
 import type { VoiceConversationStatus } from "../voice/voiceConversationFactory.js";
+import type { VoiceWriteTarget } from "../voice/voiceWriteTarget.js";
 import {
   HTTP_APP_CONFIG,
   HTTP_CREDENTIALS,
@@ -114,6 +115,7 @@ import {
   HTTP_VOICE_REGISTRY,
   HTTP_VOICE_CONVERSATION,
   HTTP_VOICE_CONVERSATION_STATUS,
+  HTTP_VOICE_WRITE_TARGET,
 } from "./tokens.js";
 
 export type JarvisHttpModuleOptions = {
@@ -152,6 +154,7 @@ export type JarvisHttpModuleOptions = {
   voiceSessionRegistry: VoiceSessionRegistry;
   voiceConversation: VoiceConversationService | null;
   voiceConversationStatus: VoiceConversationStatus;
+  voiceWriteTarget?: VoiceWriteTarget | null;
 };
 
 @Module({})
@@ -270,6 +273,7 @@ export class JarvisHttpModule {
         { provide: HTTP_VOICE_REGISTRY, useValue: options.voiceSessionRegistry },
         { provide: HTTP_VOICE_CONVERSATION, useValue: options.voiceConversation },
         { provide: HTTP_VOICE_CONVERSATION_STATUS, useValue: options.voiceConversationStatus },
+        { provide: HTTP_VOICE_WRITE_TARGET, useValue: options.voiceWriteTarget ?? null },
         SystemStatusService,
         { provide: APP_GUARD, useClass: ServiceTokenGuard },
         { provide: APP_INTERCEPTOR, useClass: RequestIdInterceptor },

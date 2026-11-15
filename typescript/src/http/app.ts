@@ -87,6 +87,7 @@ import {
 import { createAuthoritativeVoiceQueries } from "../voice/authoritativeVoiceQuery.js";
 import { AbsentHardwareProvider } from "../voice/voiceHardware.js";
 import { VoiceSessionRegistry } from "../voice/voiceSessionRegistry.js";
+import { createVoiceWriteTargetFromEnv, type VoiceWriteTarget } from "../voice/voiceWriteTarget.js";
 import {
   createDangerZoneFromEnv,
   createInactiveDangerZone,
@@ -175,6 +176,8 @@ export type CreateJarvisHttpAppOptions = (
    */
   voiceSessionRegistry?: VoiceSessionRegistry;
   voiceConversation?: VoiceConversationService | null;
+  /** Dedicated project voice safe writes stage against (owner decision on #815). */
+  voiceWriteTarget?: VoiceWriteTarget | null;
   telemetry?: PostHogTelemetry;
   /**
    * Overrides the process-wide HTTP rate limit. Tests use this so a low budget
@@ -291,6 +294,12 @@ export async function createJarvisHttpApp(
       ? options.toolActionService
       : usesEnvironment
         ? createToolActionServiceFromEnv()
+        : null;
+  const voiceWriteTarget =
+    options.voiceWriteTarget !== undefined
+      ? options.voiceWriteTarget
+      : usesEnvironment
+        ? createVoiceWriteTargetFromEnv()
         : null;
   const toolExecutionService =
     options.toolExecutionService !== undefined
@@ -477,6 +486,7 @@ export async function createJarvisHttpApp(
       totalityPipeline,
       memoryChangeSetService,
       toolActionService,
+      voiceWriteTarget,
       toolExecutionService,
       businessSettingsStore,
       enquiryStore,
@@ -509,6 +519,7 @@ export async function createJarvisHttpApp(
         options.voiceSessionRegistry ??
         new VoiceSessionRegistry({
           provider: new AbsentHardwareProvider(),
+          timezone: config.timezone,
           queries: createAuthoritativeVoiceQueries({
             timezone: config.timezone,
             tasks: persistence,

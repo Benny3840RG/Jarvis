@@ -141,6 +141,34 @@ describe("voice HTTP boundary", () => {
     assert.deepEqual(calls, ["tell me a joke"]);
   });
 
+  it("never hands a refused dictation to conversation, but still converses otherwise", async () => {
+    const calls: string[] = [];
+    const reasoner: VoiceConversationReasoner = {
+      reply: async ({ transcript }) => {
+        calls.push(transcript);
+        return { status: "answered", reply: "Hello." };
+      },
+    };
+    const app = await makeApp("10.0.0.5", new VoiceConversationService({ reasoner }));
+    const sessionId = await openSession(app, "client");
+    const send = async (transcript: string) =>
+      (await utter(app, sessionId, { transcript, isFinal: true })).json();
+    for (const refused of [
+      "Nolan add a task: nolan send the quote",
+      "Nolan add a garbage task buy oil",
+      "Nolan remind me to cancel",
+      "Nolan remind me to put the bins out tonight at 8 am",
+    ]) {
+      const result = await send(refused);
+      assert.equal(result.dispatch.decision, "unrecognized", refused);
+      assert.equal(result.dispatch.reply, undefined, refused);
+      assert.equal(result.pending, null, refused);
+    }
+    assert.deepEqual(calls, [], "a refused dictation never reaches the reasoner");
+    assert.equal((await send("Nolan tell me a joke")).dispatch.decision, "conversation");
+    assert.deepEqual(calls, ["tell me a joke"]);
+  });
+
   it("does not converse while confirmation is pending or after a profile switch", async () => {
     const calls: string[] = [];
     const histories: number[] = [];

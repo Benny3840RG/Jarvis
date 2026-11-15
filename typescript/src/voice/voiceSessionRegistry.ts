@@ -29,6 +29,8 @@ export type VoiceSessionRegistryOptions = Readonly<{
   confirmationTtlMs?: number;
   /** Enable natural-language interpretation (behind confirmation) in each session. */
   interpretNaturalLanguage?: boolean;
+  /** Owner timezone for spoken reminder due times in each session. */
+  timezone?: string;
   /** Id generator (tests). */
   idFactory?: () => string;
   /**
@@ -49,6 +51,7 @@ export class VoiceSessionRegistry {
   readonly #clock: () => number;
   readonly #confirmationTtlMs: number | undefined;
   readonly #interpretNaturalLanguage: boolean;
+  readonly #timezone: string | undefined;
   readonly #idFactory: () => string;
   readonly #sessions = new Map<string, Entry>();
   readonly #sweepIntervalMs: number;
@@ -68,6 +71,7 @@ export class VoiceSessionRegistry {
     this.#clock = options.clock ?? Date.now;
     this.#confirmationTtlMs = options.confirmationTtlMs;
     this.#interpretNaturalLanguage = options.interpretNaturalLanguage ?? false;
+    this.#timezone = options.timezone;
     this.#idFactory = options.idFactory ?? randomUUID;
     this.#sweepIntervalMs = options.sweepIntervalMs ?? DEFAULT_SWEEP_INTERVAL_MS;
   }
@@ -113,6 +117,7 @@ export class VoiceSessionRegistry {
         ? {}
         : { confirmationTtlMs: this.#confirmationTtlMs }),
       interpretNaturalLanguage: this.#interpretNaturalLanguage,
+      ...(this.#timezone === undefined ? {} : { timezone: this.#timezone }),
     });
     const expiresAt = now + this.#ttlMs;
     this.#sessions.set(id, { session, expiresAt });
