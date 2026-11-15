@@ -47,6 +47,10 @@ const MAX_TITLE_LENGTH = 200;
 const TASK_COMMAND_ID = "client.capture-task";
 const REMINDER_COMMAND_ID = "client.follow-up-reminder";
 const ERRAND_COMMAND_ID = "client.capture-errand";
+export const COMPLETE_TASK_COMMAND_ID = "client.complete-task";
+export const COMPLETE_ERRAND_COMMAND_ID = "client.complete-errand";
+/** A completion whose kind was not spoken; it is never armed until resolved. */
+export const COMPLETE_ITEM_COMMAND_ID = "client.complete-item";
 
 const CATEGORY_ALIASES: ReadonlyMap<string, VoiceTaskCategory> = new Map([
   ["personal", "personal"],
@@ -71,6 +75,54 @@ const TASK_PATTERN =
 const REMINDER_PATTERN =
   /^(?:remind me to|(?:add|set|make|create) (?:a |me a )?reminder to|reminder to|new reminder to)[\s:,-]+(.+)$/d;
 
+function completionCommand(
+  id: string,
+  summary: string,
+  proposes?: Readonly<{ tool: string; operation: string }>,
+): VoiceCommand {
+  return Object.freeze({
+    id,
+    profile: "client" as const,
+    phrases: Object.freeze([]) as readonly string[],
+    kind: "propose" as const,
+    criticality: "routine" as const,
+    requiresSpokenConfirmation: false,
+    summary,
+    ...(proposes ? { proposes: Object.freeze({ ...proposes }) } : {}),
+  });
+}
+
+/**
+ * Completion commands. They are not catalog phrases (the archived catalog is
+ * pinned); like every dictation they are read back with the resolved item's
+ * full title and only staged after a spoken confirmation.
+ */
+export const COMPLETE_TASK_COMMAND = completionCommand(
+  COMPLETE_TASK_COMMAND_ID,
+  "Stage completing one voice-captured task. Voice does not approve or execute it.",
+  { tool: "tasks", operation: "complete" },
+);
+export const COMPLETE_ERRAND_COMMAND = completionCommand(
+  COMPLETE_ERRAND_COMMAND_ID,
+  "Stage marking one open errand done. Voice does not approve or execute it.",
+  { tool: "errands", operation: "complete" },
+);
+/** Has no governed operation of its own: it must resolve to a task or an errand. */
+export const COMPLETE_ITEM_COMMAND = completionCommand(
+  COMPLETE_ITEM_COMMAND_ID,
+  "Find one open task or errand to mark done.",
+);
+
+export type VoiceCompletionKind = "task" | "errand" | "any";
+
+/** The kind a completion command searches, or undefined for any other command. */
+export function voiceCompletionKind(command: VoiceCommand): VoiceCompletionKind | undefined {
+  if (command.id === COMPLETE_TASK_COMMAND_ID) return "task";
+  if (command.id === COMPLETE_ERRAND_COMMAND_ID) return "errand";
+  if (command.id === COMPLETE_ITEM_COMMAND_ID) return "any";
+  return undefined;
+}
+
 /** "add an errand: X", "new errand, X", "add an errand to pick up X". Group 1 is the title. */
 const ERRAND_PATTERN =
   /^(?:(?:add|capture|create|make|put)(?: (?:a|an|another|me an?))?|new) errand(?: (?:to|for|called|saying))?[\s:,-]+(.+)$/d;
@@ -78,6 +130,36 @@ const ERRAND_PATTERN =
 /** "add X to the errands", "put X on my shopping list". Group 1 is the title. */
 const ERRAND_LIST_PATTERN =
   /^(?:add|put) (.+?) (?:on|to) (?:the |my )?(?:errands|errand list|errands list|shopping list)$/d;
+
+/**
+ * Completing an existing item: "mark bar oil as done", "tick off the errand
+ * milk", "complete the task order bar oil". Group 1 is an optional kind word
+ * (task/errand); group 2 is the spoken reference, which the session resolves
+ * against the authoritative records before anything is read back.
+ */
+const COMPLETE_MARK_PATTERN =
+  /^(?:mark|set) (?:the |my )?(?:(task|errand) )?(.+?) (?:as )?(?:done|complete|completed|finished)$/d;
+const COMPLETE_TICK_PATTERN = /^(?:tick|cross|check) off (?:the |my )?(?:(task|errand) )?(.+)$/d;
+const COMPLETE_VERB_PATTERN = /^(?:complete|finish) (?:the |my )?(task|errand)[\s:,-]+(.+)$/d;
+
+/** A reference that names no item ("mark it done", "tick off the task"). */
+const VAGUE_REFERENCES: ReadonlySet<string> = new Set([
+  "it",
+  "that",
+  "this",
+  "them",
+  "those",
+  "these",
+  "one",
+  "task",
+  "tasks",
+  "errand",
+  "errands",
+  "everything",
+  "all",
+  "all of them",
+  "the lot",
+]);
 
 /** "remind me tomorrow at 7 am to X": a due phrase before the title. */
 const REMINDER_DUE_FIRST_PATTERN = /^remind me[\s,]+(?!to\b)(.+)$/d;
@@ -292,6 +374,26 @@ export function classifyVoiceDictation(
     };
   }
 
+  const completion =
+    COMPLETE_MARK_PATTERN.exec(text) ??
+    COMPLETE_TICK_PATTERN.exec(text) ??
+    COMPLETE_VERB_PATTERN.exec(text);
+  if (completion) {
+    if (rawUnsafe) return REJECTED;
+    const reference = cleanTitle(completion[2] ?? "", casedGroup(completion, 2, cased));
+    if (!reference || VAGUE_REFERENCES.has(reference.toLowerCase())) return REJECTED;
+    const command =
+      completion[1] === "task"
+        ? COMPLETE_TASK_COMMAND
+        : completion[1] === "errand"
+          ? COMPLETE_ERRAND_COMMAND
+          : COMPLETE_ITEM_COMMAND;
+    return {
+      status: "captured",
+      dictation: { command, capture: Object.freeze({ title: reference }) },
+    };
+  }
+
   const errand = ERRAND_PATTERN.exec(text) ?? ERRAND_LIST_PATTERN.exec(text);
   if (errand) {
     if (rawUnsafe) return REJECTED;
@@ -340,6 +442,9 @@ export function describeVoiceDictation(
     return `Add task “${capture.title}” (${capture.category ?? DEFAULT_VOICE_TASK_CATEGORY})`;
   }
   if (command.id === ERRAND_COMMAND_ID) return `Add errand “${capture.title}”`;
+  if (command.id === COMPLETE_TASK_COMMAND_ID) return `Mark task “${capture.title}” done`;
+  if (command.id === COMPLETE_ERRAND_COMMAND_ID) return `Mark errand “${capture.title}” done`;
+  if (command.id === COMPLETE_ITEM_COMMAND_ID) return `Mark “${capture.title}” done`;
   if (capture.dueRaw === undefined) return `Add reminder “${capture.title}”`;
   const due = describeSpokenReminderDue({
     dueRaw: capture.dueRaw,

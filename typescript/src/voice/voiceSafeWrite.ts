@@ -22,8 +22,20 @@ const WAKE_WORDS = ["nolan", "jarvis"] as const;
 /** Punctuation or whitespace that may sit between the wake word and the command. */
 const WAKE_SEPARATOR = /^[\s.,!?;:]+/;
 
-/** Executors that exist on ToolExecutionService for the three spoken safe writes. */
-const SAFE_EXECUTORS = new Set(["tasks:create", "reminders:create", "errands:create"]);
+/** Executors that exist on ToolExecutionService for the spoken safe writes. */
+const SAFE_EXECUTORS = new Set([
+  "tasks:create",
+  "reminders:create",
+  "errands:create",
+  "tasks:complete",
+  "errands:complete",
+]);
+
+/** Completions act on a resolved record, so they only ever stage on the voice project. */
+const COMPLETION_EXECUTORS = new Set(["tasks:complete", "errands:complete"]);
+
+export const VOICE_COMPLETION_TARGET_REASON =
+  "Safe write was not staged: a spoken completion stages only on the dedicated voice project.";
 
 export const VOICE_WRITE_NO_WAKE_REASON = "Safe write was not staged: the wake word was not heard.";
 export const VOICE_WRITE_UNCOMMISSIONED_REASON =
@@ -39,6 +51,11 @@ export type VoiceWriteCapture = Readonly<{
   /** Resolved due instant (ms since epoch); always paired with dueTimezone and dueRaw. */
   dueAt?: number;
   dueTimezone?: string;
+  /**
+   * Spoken completions only: the id of the one open task or errand the server
+   * resolved and read back by its full title. Never accepted from a request.
+   */
+  targetId?: string;
 }>;
 
 /**
@@ -129,6 +146,8 @@ function safeWriteArguments(
   capture: VoiceWriteCapture | undefined,
 ): Record<string, unknown> | undefined {
   const key = `${command.proposes?.tool}:${command.proposes?.operation}`;
+  // Only a completion acts on an existing record; a create never carries one.
+  if (!COMPLETION_EXECUTORS.has(key) && capture?.targetId !== undefined) return undefined;
   if (key === "tasks:create") {
     const title = capture?.title?.trim() ?? "";
     const category = capture?.category?.trim() ?? "";
@@ -149,6 +168,22 @@ function safeWriteArguments(
     // The executor's own schema decides: a due value that the executor would
     // refuse (dueAt without timezone or raw text) is never staged.
     return createReminderArgumentsSchema.safeParse(candidate).success ? candidate : undefined;
+  }
+  if (key === "tasks:complete" || key === "errands:complete") {
+    const title = capture?.title?.trim() ?? "";
+    const targetId = capture?.targetId?.trim() ?? "";
+    if (
+      title.length < 1 ||
+      targetId.length < 1 ||
+      targetId.length > 200 ||
+      capture?.category !== undefined ||
+      capture?.dueRaw !== undefined ||
+      capture?.dueAt !== undefined ||
+      capture?.dueTimezone !== undefined
+    ) {
+      return undefined;
+    }
+    return key === "tasks:complete" ? { taskId: targetId } : { errandId: targetId };
   }
   if (key === "errands:create") {
     // A spoken errand carries only its title; task and reminder fields never apply.
@@ -197,6 +232,10 @@ export async function stageVoiceSafeWrite(input: {
     return { reason: VOICE_WRITE_UNCOMMISSIONED_REASON };
   }
   if (!explicit && !input.target) return { reason: VOICE_WRITE_UNCOMMISSIONED_REASON };
+  const completion = COMPLETION_EXECUTORS.has(
+    `${input.command.proposes.tool}:${input.command.proposes.operation}`,
+  );
+  if (completion && explicit) return { reason: VOICE_COMPLETION_TARGET_REASON };
   const argumentsValue = safeWriteArguments(input.command, input.capture);
   if (!argumentsValue) return { reason: VOICE_WRITE_INCOMPLETE_REASON };
   // An explicit request target keeps its existing meaning. Otherwise the

@@ -12,6 +12,7 @@ import { randomUUID } from "node:crypto";
 
 import type { VoiceProfile } from "./voiceCommands.js";
 import type { VoiceActuationProvider } from "./voiceHardware.js";
+import type { VoiceCompletionResolver } from "./voiceCompletion.js";
 import type { VoiceQueryProvider } from "./voiceQuery.js";
 import { VoiceSession } from "./voiceSession.js";
 
@@ -31,6 +32,8 @@ export type VoiceSessionRegistryOptions = Readonly<{
   interpretNaturalLanguage?: boolean;
   /** Owner timezone for spoken reminder due times in each session. */
   timezone?: string;
+  /** Resolves spoken completions ("tick off bar oil") in each session. */
+  completions?: VoiceCompletionResolver;
   /** Id generator (tests). */
   idFactory?: () => string;
   /**
@@ -52,6 +55,7 @@ export class VoiceSessionRegistry {
   readonly #confirmationTtlMs: number | undefined;
   readonly #interpretNaturalLanguage: boolean;
   readonly #timezone: string | undefined;
+  readonly #completions: VoiceCompletionResolver | undefined;
   readonly #idFactory: () => string;
   readonly #sessions = new Map<string, Entry>();
   readonly #sweepIntervalMs: number;
@@ -72,6 +76,7 @@ export class VoiceSessionRegistry {
     this.#confirmationTtlMs = options.confirmationTtlMs;
     this.#interpretNaturalLanguage = options.interpretNaturalLanguage ?? false;
     this.#timezone = options.timezone;
+    this.#completions = options.completions;
     this.#idFactory = options.idFactory ?? randomUUID;
     this.#sweepIntervalMs = options.sweepIntervalMs ?? DEFAULT_SWEEP_INTERVAL_MS;
   }
@@ -118,6 +123,7 @@ export class VoiceSessionRegistry {
         : { confirmationTtlMs: this.#confirmationTtlMs }),
       interpretNaturalLanguage: this.#interpretNaturalLanguage,
       ...(this.#timezone === undefined ? {} : { timezone: this.#timezone }),
+      ...(this.#completions === undefined ? {} : { completions: this.#completions }),
     });
     const expiresAt = now + this.#ttlMs;
     this.#sessions.set(id, { session, expiresAt });
