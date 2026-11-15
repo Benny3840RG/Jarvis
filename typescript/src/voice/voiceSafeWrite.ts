@@ -10,6 +10,7 @@ import { sha256Hex } from "../actions/sha256.js";
 import type { ToolActionService } from "../actions/toolActions.js";
 import { classifyVoiceDictation, hasUnsafeVoiceCharacters } from "./voiceDictation.js";
 import { normalizeUtterance, type VoiceCommand } from "./voiceCommands.js";
+import type { VoiceWriteTarget } from "./voiceWriteTarget.js";
 
 /** NOLAN is the approved public wake word. Keep Jarvis temporarily for legacy clients. */
 const WAKE_WORDS = ["nolan", "jarvis"] as const;
@@ -129,20 +130,40 @@ export async function stageVoiceSafeWrite(input: {
   projectId?: string;
   expectedRevision?: number;
   capture?: VoiceWriteCapture;
+  /** The owner's dedicated voice project, used when the request names no project. */
+  target?: VoiceWriteTarget | null;
 }): Promise<{ toolActionId: string } | { reason: string } | undefined> {
   if (!isSafeVoiceWrite(input.command) || !input.command.proposes) return undefined;
   if (!input.wakeAuthorized) return { reason: VOICE_WRITE_NO_WAKE_REASON };
-  if (!input.service || !input.projectId || input.expectedRevision === undefined) {
+  if (!input.service) return { reason: VOICE_WRITE_UNCOMMISSIONED_REASON };
+  const explicit = input.projectId !== undefined || input.expectedRevision !== undefined;
+  if (explicit && (!input.projectId || input.expectedRevision === undefined)) {
     return { reason: VOICE_WRITE_UNCOMMISSIONED_REASON };
   }
+  if (!explicit && !input.target) return { reason: VOICE_WRITE_UNCOMMISSIONED_REASON };
   const argumentsValue = safeWriteArguments(input.command, input.capture);
   if (!argumentsValue) return { reason: VOICE_WRITE_INCOMPLETE_REASON };
+  // An explicit request target keeps its existing meaning. Otherwise the
+  // server resolves the dedicated voice project and its current revision now,
+  // after the capture is known to be complete, so a stale or forged revision
+  // can never come from the client.
+  let projectId: string;
+  let expectedRevision: number;
+  if (explicit) {
+    projectId = input.projectId as string;
+    expectedRevision = input.expectedRevision as number;
+  } else {
+    const resolved = await (input.target as VoiceWriteTarget).resolve();
+    if ("reason" in resolved) return { reason: resolved.reason };
+    projectId = resolved.projectId;
+    expectedRevision = resolved.expectedRevision;
+  }
   const { tool, operation } = input.command.proposes;
   const actionId = voiceSafeWriteActionId({
     sessionId: input.sessionId,
     commandId: input.command.id,
-    projectId: input.projectId,
-    expectedRevision: input.expectedRevision,
+    projectId,
+    expectedRevision,
     tool,
     operation,
     arguments: argumentsValue,
@@ -150,8 +171,8 @@ export async function stageVoiceSafeWrite(input: {
   const staged = await input.service.stage({
     actionId,
     requestId: actionId,
-    projectId: input.projectId,
-    expectedRevision: input.expectedRevision,
+    projectId,
+    expectedRevision,
     tool,
     operation,
     arguments: argumentsValue,

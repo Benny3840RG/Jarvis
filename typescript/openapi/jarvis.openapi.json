@@ -8196,7 +8196,7 @@
             "minLength": 1,
             "maxLength": 256,
             "pattern": "^[^\\s]+$",
-            "description": "Project a safe write would be staged against on the existing ToolAction path. Required together with expectedRevision. When both are absent the target is uncommissioned and nothing is staged."
+            "description": "Project a safe write would be staged against on the existing ToolAction path. Required together with expectedRevision. When both are absent the server stages against the owner's dedicated voice project (JARVIS_VOICE_PROJECT_KEY, default nolan-voice) at its current revision; if that project is not commissioned, nothing is staged."
           },
           "expectedRevision": {
             "type": "integer",
