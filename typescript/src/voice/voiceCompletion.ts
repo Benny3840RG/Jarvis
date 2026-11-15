@@ -45,6 +45,8 @@ export interface VoiceCompletionResolver {
 
 export const VOICE_COMPLETION_UNAVAILABLE_REASON =
   "Voice completion is unavailable: no task or errand source is connected.";
+export const VOICE_RESCHEDULE_DISABLED_REASON =
+  "Rescheduling reminders by voice is not enabled yet (AM-017 is planned). Reschedule it on the HUD.";
 export const VOICE_REMINDER_CANCEL_UNAVAILABLE_REASON =
   "Voice reminder cancellation is unavailable: no reminder source is connected.";
 

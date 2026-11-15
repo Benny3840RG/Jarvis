@@ -106,6 +106,17 @@ it("binds capture to awaiting-confirmation/proposed on the three safe-write comm
     operation: "cancel",
   });
   const removeErrand = command("client.remove-errand", { tool: "errands", operation: "remove" });
+  const rescheduleReminder = command("client.reschedule-reminder", {
+    tool: "reminders",
+    operation: "reschedule",
+  });
+  const rescheduleCapture = {
+    title: "Order bar oil",
+    targetId: "r1",
+    dueRaw: "friday at 9 am",
+    dueAt: 1_795_125_600_000,
+    dueTimezone: "Australia/Sydney",
+  };
   const completionCapture = { title: "Order bar oil", targetId: "t1" };
   const taskCapture = { title: "Order oil", category: "work" };
   const reminderCapture = { title: "Call Dave" };
@@ -127,6 +138,12 @@ it("binds capture to awaiting-confirmation/proposed on the three safe-write comm
       { decision, command: completeErrand, capture: { title: "Milk", targetId: "e1" } },
       { decision, command: cancelReminder, capture: { title: "Call Dave", targetId: "r1" } },
       { decision, command: removeErrand, capture: { title: "Milk", targetId: "e1" } },
+      { decision, command: rescheduleReminder, capture: rescheduleCapture },
+      {
+        decision,
+        command: rescheduleReminder,
+        capture: { title: "Order bar oil", targetId: "r1", dueRaw: "friday" },
+      },
     ])
       assert.equal(validateDispatch(value), true, JSON.stringify(validateDispatch.errors));
   }
@@ -253,6 +270,28 @@ it("binds capture to awaiting-confirmation/proposed on the three safe-write comm
       command: command(removeErrand.id, { tool: "errands", operation: "complete" }),
       capture: completionCapture,
     },
+    // A reschedule needs the resolved target and the new due text, never a category.
+    { decision: "proposed", command: rescheduleReminder, capture: completionCapture },
+    {
+      decision: "proposed",
+      command: rescheduleReminder,
+      capture: { title: "X", dueRaw: "friday" },
+    },
+    {
+      decision: "proposed",
+      command: rescheduleReminder,
+      capture: { ...rescheduleCapture, category: "work" },
+    },
+    {
+      decision: "proposed",
+      command: rescheduleReminder,
+      capture: { title: "X", targetId: "r1", dueRaw: "friday", dueAt: 1 },
+    },
+    {
+      decision: "proposed",
+      command: command(rescheduleReminder.id, { tool: "reminders", operation: "create" }),
+      capture: rescheduleCapture,
+    },
     { decision: "completion-unresolved", command: completeTask },
     { decision: "completion-unresolved", command: task, reason: "x" },
     {
@@ -282,6 +321,7 @@ it("binds capture to awaiting-confirmation/proposed on the three safe-write comm
     { ...pending, command: completeTask, capture: completionCapture },
     { ...pending, command: cancelReminder, capture: completionCapture },
     { ...pending, command: removeErrand, capture: completionCapture },
+    { ...pending, command: rescheduleReminder, capture: rescheduleCapture },
   ])
     assert.equal(validatePending(value), true, JSON.stringify(validatePending.errors));
   for (const value of [
@@ -309,6 +349,7 @@ it("binds capture to awaiting-confirmation/proposed on the three safe-write comm
     { ...pending, command: completeErrand, capture: { title: "Milk" } },
     { ...pending, command: cancelReminder, capture: { title: "Call Dave" } },
     { ...pending, command: removeErrand, capture: { title: "Milk" } },
+    { ...pending, command: rescheduleReminder, capture: completionCapture },
     { ...pending, command: errand, capture: { title: "Milk", targetId: "e1" } },
     {
       ...pending,

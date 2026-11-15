@@ -8,6 +8,7 @@ import {
   completionMatchRank,
   VOICE_COMPLETION_UNAVAILABLE_REASON,
   VOICE_REMINDER_CANCEL_UNAVAILABLE_REASON,
+  VOICE_RESCHEDULE_DISABLED_REASON,
   type VoiceCompletionResolver,
 } from "../src/voice/voiceCompletion.js";
 import { VOICE_COMMANDS } from "../src/voice/voiceCommands.js";
@@ -567,5 +568,139 @@ describe("voice errand removal", () => {
     assert.ok(done.decision === "completion-unresolved");
     assert.equal(done.command.id, "client.remove-errand");
     assert.equal(done.reason, "No open errand matches “Screws”.");
+  });
+});
+
+describe("voice reminder reschedule (AM-017, planned)", () => {
+  // Monday 16 November 2026, 10:00 in Sydney (AEDT, UTC+11).
+  const DUE = { now: Date.UTC(2026, 10, 15, 23, 0), timezone: "Australia/Sydney" };
+  const FRIDAY_9AM = Date.UTC(2026, 10, 19, 22, 0);
+
+  it("captures the reference and the new due value in every form", () => {
+    const cases: Array<[string, string, Record<string, unknown>]> = [
+      [
+        "move the bar oil reminder to friday at 9 am",
+        "Bar oil",
+        { dueRaw: "friday at 9 am", dueAt: FRIDAY_9AM, dueTimezone: "Australia/Sydney" },
+      ],
+      [
+        "push my reminder to call Dave to friday at 9 am",
+        "Call Dave",
+        { dueRaw: "friday at 9 am", dueAt: FRIDAY_9AM, dueTimezone: "Australia/Sydney" },
+      ],
+      [
+        "reschedule the reminder about the trip to Sydney until friday at 9 am",
+        "Trip to Sydney",
+        { dueRaw: "friday at 9 am", dueAt: FRIDAY_9AM, dueTimezone: "Australia/Sydney" },
+      ],
+      ["move the rego reminder to tomorrow", "Rego", { dueRaw: "tomorrow" }],
+      [
+        "bump the rego reminder to 3 pm",
+        "Rego",
+        {
+          dueRaw: "at 3 pm",
+          dueAt: Date.UTC(2026, 10, 16, 4, 0),
+          dueTimezone: "Australia/Sydney",
+        },
+      ],
+      ["shift the rego reminder to friday at 7", "Rego", { dueRaw: "friday at 7" }],
+    ];
+    for (const [utterance, title, due] of cases) {
+      const dictation = parseVoiceDictation(utterance, "client", DUE);
+      assert.equal(dictation?.command.id, "client.reschedule-reminder", utterance);
+      assert.deepEqual(dictation?.command.proposes, { tool: "reminders", operation: "reschedule" });
+      assert.deepEqual(dictation?.capture, { title, ...due }, utterance);
+    }
+    const readBack = describeVoiceDictation(
+      parseVoiceDictation("move the bar oil reminder to friday at 9 am", "client", DUE)!,
+    );
+    assert.equal(readBack, "Reschedule reminder “Bar oil” due Fri, 20 Nov, 9:00 am");
+  });
+
+  it("fails closed when the new time is missing, vague, past or unparseable", () => {
+    for (const utterance of [
+      "move the bar oil reminder to next friday", // never resolved
+      "move the bar oil reminder to today at 9 am", // already passed
+      "move the bar oil reminder to tonight at 8 am", // contradiction
+      "move the bar oil reminder to later",
+      "move the bar oil reminder to friday week",
+      "move the reminder to friday",
+      "move that reminder to friday",
+      "move my reminder to it to friday",
+      "move the bar oil reminder to friday and send the quote",
+    ]) {
+      const dictation = parseVoiceDictation(utterance, "client", DUE);
+      assert.notEqual(dictation?.command.id, "client.reschedule-reminder", utterance);
+    }
+    // Without the owner clock and timezone no new time can be resolved.
+    assert.equal(
+      parseVoiceDictation("move the bar oil reminder to friday at 9 am", "client"),
+      undefined,
+    );
+    assert.equal(
+      VOICE_COMMANDS.find((entry) => entry.id === "client.reschedule-reminder"),
+      undefined,
+    );
+  });
+
+  function rescheduleSession(rescheduleReminders: boolean, reads: { count: number }) {
+    return new VoiceSession({
+      profile: "client",
+      provider: new AbsentHardwareProvider(),
+      timezone: "Australia/Sydney",
+      rescheduleReminders,
+      completions: {
+        resolve: async (input) => {
+          reads.count += 1;
+          return new AuthoritativeVoiceCompletionResolver({
+            reminders: { listReminders: async () => [reminder("r1", "Order bar oil", "voice-1")] },
+            voiceProject: VOICE_PROJECT,
+          }).resolve(input);
+        },
+      },
+    });
+  }
+
+  it("is refused before any records are read while AM-017 is not enabled", async () => {
+    const reads = { count: 0 };
+    const s = rescheduleSession(false, reads);
+    const out = await s.handle({
+      transcript: "move the bar oil reminder to friday at 9 am",
+      isFinal: true,
+      wakeAuthorized: true,
+      now: DUE.now,
+    });
+    assert.ok(out.decision === "completion-unresolved");
+    assert.equal(out.reason, VOICE_RESCHEDULE_DISABLED_REASON);
+    assert.equal(reads.count, 0);
+    assert.equal(s.pending(), undefined);
+  });
+
+  it("when enabled, arms the resolved reminder with exactly the heard due value", async () => {
+    const reads = { count: 0 };
+    const s = rescheduleSession(true, reads);
+    const out = await s.handle({
+      transcript: "move the bar oil reminder to friday at 9 am",
+      isFinal: true,
+      wakeAuthorized: true,
+      now: DUE.now,
+    });
+    assert.equal(out.decision, "awaiting-confirmation");
+    assert.equal(s.pending()?.command.id, "client.reschedule-reminder");
+    assert.deepEqual(s.pending()?.capture, {
+      title: "Order bar oil",
+      targetId: "r1",
+      dueRaw: "friday at 9 am",
+      dueAt: FRIDAY_9AM,
+      dueTimezone: "Australia/Sydney",
+    });
+    const confirmed = await s.handle({
+      transcript: "confirm",
+      isFinal: true,
+      wakeAuthorized: true,
+      now: DUE.now + 1_000,
+    });
+    assert.ok(confirmed.decision === "proposed");
+    assert.deepEqual(confirmed.command.proposes, { tool: "reminders", operation: "reschedule" });
   });
 });

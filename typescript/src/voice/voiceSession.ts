@@ -31,9 +31,7 @@ import {
 import type { VoiceActuationProvider } from "./voiceHardware.js";
 import { resolveClarification } from "./voiceDialogueResolver.js";
 import {
-  CANCEL_REMINDER_COMMAND,
-  REMOVE_ERRAND_COMMAND,
-  REMOVE_ERRAND_COMMAND_ID,
+  RESCHEDULE_REMINDER_COMMAND_ID,
   COMPLETE_ERRAND_COMMAND,
   COMPLETE_TASK_COMMAND,
   classifyVoiceDictation,
@@ -44,6 +42,7 @@ import {
 import {
   VOICE_COMPLETION_UNAVAILABLE_REASON,
   VOICE_REMINDER_CANCEL_UNAVAILABLE_REASON,
+  VOICE_RESCHEDULE_DISABLED_REASON,
   type VoiceCompletionResolver,
 } from "./voiceCompletion.js";
 import { interpretIntent } from "./voiceIntentInterpreter.js";
@@ -276,6 +275,11 @@ export type VoiceSessionOptions = Readonly<{
    * means spoken completions are refused as unavailable.
    */
   completions?: VoiceCompletionResolver;
+  /**
+   * AM-017 (Reschedule reminder) is planned. Spoken reschedules are refused
+   * with a reason unless the owner has enabled it.
+   */
+  rescheduleReminders?: boolean;
 }>;
 
 export type VoiceSessionInput = Readonly<{
@@ -303,6 +307,7 @@ export class VoiceSession {
   readonly #interpret: boolean;
   readonly #timezone: string | undefined;
   readonly #completions: VoiceCompletionResolver | undefined;
+  readonly #rescheduleReminders: boolean;
   readonly #history: VoiceHistoryEntry[] = [];
   #pending: PendingConfirmation | undefined;
   #clarification: PendingClarification | undefined;
@@ -318,6 +323,7 @@ export class VoiceSession {
     this.#interpret = options.interpretNaturalLanguage ?? false;
     this.#timezone = options.timezone;
     this.#completions = options.completions;
+    this.#rescheduleReminders = options.rescheduleReminders === true;
   }
 
   #dueContext(now: number): SpokenDueContext | undefined {
@@ -701,6 +707,9 @@ export class VoiceSession {
       kind === "reminder"
         ? VOICE_REMINDER_CANCEL_UNAVAILABLE_REASON
         : VOICE_COMPLETION_UNAVAILABLE_REASON;
+    if (dictation.command.id === RESCHEDULE_REMINDER_COMMAND_ID && !this.#rescheduleReminders) {
+      return unresolved(VOICE_RESCHEDULE_DISABLED_REASON);
+    }
     if (!this.#completions) return unresolved(unavailable);
     let resolution;
     try {
@@ -712,16 +721,26 @@ export class VoiceSession {
     // Anything armed while the records were read is void: this turn replaces it.
     this.#invalidatePending();
     const { target } = resolution;
+    // A command that names its operation is armed as dictated; only a
+    // kind-less "tick off X" takes its operation from the resolved item.
+    const command =
+      dictation.command.proposes !== undefined
+        ? dictation.command
+        : target.kind === "task"
+          ? COMPLETE_TASK_COMMAND
+          : COMPLETE_ERRAND_COMMAND;
+    // A reschedule keeps the new due value exactly as it was heard and read back.
+    const { dueRaw, dueAt, dueTimezone } = dictation.capture;
+    const due =
+      command.id === RESCHEDULE_REMINDER_COMMAND_ID && dueRaw !== undefined
+        ? {
+            dueRaw,
+            ...(dueAt === undefined || dueTimezone === undefined ? {} : { dueAt, dueTimezone }),
+          }
+        : {};
     return this.#arm(now, normalizedTranscript, {
-      command:
-        dictation.command.id === REMOVE_ERRAND_COMMAND_ID
-          ? REMOVE_ERRAND_COMMAND
-          : target.kind === "task"
-            ? COMPLETE_TASK_COMMAND
-            : target.kind === "errand"
-              ? COMPLETE_ERRAND_COMMAND
-              : CANCEL_REMINDER_COMMAND,
-      capture: Object.freeze({ title: target.title, targetId: target.id }),
+      command,
+      capture: Object.freeze({ title: target.title, targetId: target.id, ...due }),
     });
   }
 

@@ -6,6 +6,7 @@ import type {
   ControlledReminderRecord,
   ControlledReminderStore,
   CreateControlledReminderInput,
+  RescheduleControlledReminderInput,
 } from "../reminders/controlledReminder.js";
 import type { ConvexClientLike } from "./convexPersistence.js";
 
@@ -80,6 +81,25 @@ export class ConvexControlledReminderStore implements ControlledReminderStore {
       serviceToken: this.serviceToken,
       projectId: input.projectId,
       id: input.reminderId,
+      idempotencyKey: input.idempotencyKey,
+      actionFingerprint: input.actionFingerprint,
+      sourceRequestId: input.sourceRequestId,
+      correlationId: input.correlationId,
+      source: input.source,
+    });
+    return row === null ? null : reminderFromConvex(row as ControlledReminderRow);
+  }
+
+  async reschedule(
+    input: RescheduleControlledReminderInput,
+  ): Promise<ControlledReminderRecord | null> {
+    const row = await this.client.mutation(controlledReminderFunctions.rescheduleControlled, {
+      serviceToken: this.serviceToken,
+      projectId: input.projectId,
+      id: input.reminderId,
+      dueRaw: input.dueRaw,
+      ...(input.dueAt === undefined ? {} : { dueAt: input.dueAt }),
+      ...(input.dueTimezone === undefined ? {} : { dueTimezone: input.dueTimezone }),
       idempotencyKey: input.idempotencyKey,
       actionFingerprint: input.actionFingerprint,
       sourceRequestId: input.sourceRequestId,

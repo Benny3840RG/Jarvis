@@ -30,6 +30,7 @@ import {
 } from "./voiceCommands.js";
 import {
   describeSpokenReminderDue,
+  parseSpokenDuePhrase,
   splitSpokenReminderDue,
   type SpokenDueContext,
 } from "./voiceReminderDue.js";
@@ -53,6 +54,7 @@ export const COMPLETE_ERRAND_COMMAND_ID = "client.complete-errand";
 export const COMPLETE_ITEM_COMMAND_ID = "client.complete-item";
 export const CANCEL_REMINDER_COMMAND_ID = "client.cancel-reminder";
 export const REMOVE_ERRAND_COMMAND_ID = "client.remove-errand";
+export const RESCHEDULE_REMINDER_COMMAND_ID = "client.reschedule-reminder";
 
 const CATEGORY_ALIASES: ReadonlyMap<string, VoiceTaskCategory> = new Map([
   ["personal", "personal"],
@@ -129,6 +131,13 @@ export const REMOVE_ERRAND_COMMAND = completionCommand(
   { tool: "errands", operation: "remove" },
 );
 
+/** Moving one existing reminder to a new due value (AM-017), resolved like a completion. */
+export const RESCHEDULE_REMINDER_COMMAND = completionCommand(
+  RESCHEDULE_REMINDER_COMMAND_ID,
+  "Stage moving one voice-captured reminder to a new due time. Voice does not approve or execute it.",
+  { tool: "reminders", operation: "reschedule" },
+);
+
 export type VoiceCompletionKind = "task" | "errand" | "any" | "reminder";
 
 /** The kind a completion command searches, or undefined for any other command. */
@@ -138,6 +147,7 @@ export function voiceCompletionKind(command: VoiceCommand): VoiceCompletionKind 
   if (command.id === COMPLETE_ITEM_COMMAND_ID) return "any";
   if (command.id === CANCEL_REMINDER_COMMAND_ID) return "reminder";
   if (command.id === REMOVE_ERRAND_COMMAND_ID) return "errand";
+  if (command.id === RESCHEDULE_REMINDER_COMMAND_ID) return "reminder";
   return undefined;
 }
 
@@ -186,6 +196,23 @@ const REMOVE_ERRAND_OFF_PATTERN = new RegExp(
 );
 const REMOVE_ERRAND_LEADING_PATTERN =
   /^(?:remove|delete|drop|scrap) (?:the |my )?errand[\s:,-]+(?:(?:the|my) )?(.+)$/d;
+
+/**
+ * Rescheduling a reminder: "move the bar oil reminder to friday at 9 am",
+ * "push my reminder to call dave to tomorrow", "reschedule the rego reminder
+ * for 3 pm". Group 1 is the spoken reference; group 2 must be nothing but a
+ * due phrase. In the leading form the last "to/until" splits the two, so a
+ * reference may itself contain "to" ("call Dave to book the trailer").
+ */
+const RESCHEDULE_VERB = "(?:move|push|reschedule|shift|change|bump)";
+const RESCHEDULE_TRAILING_PATTERN = new RegExp(
+  `^${RESCHEDULE_VERB} (?:the |my )?(.+?) reminder (?:to|until|till|for) (.+)$`,
+  "d",
+);
+const RESCHEDULE_LEADING_PATTERN = new RegExp(
+  `^${RESCHEDULE_VERB} (?:the |my )?reminder (?:to|for|about|called) (?:(?:the|my) )?(.+) (?:to|until|till) (.+)$`,
+  "d",
+);
 
 /** A reference that names no item ("mark it done", "tick off the task"). */
 const VAGUE_REFERENCES: ReadonlySet<string> = new Set([
@@ -385,6 +412,31 @@ export function classifyVoiceDictation(
     };
   }
 
+  const reschedule =
+    RESCHEDULE_LEADING_PATTERN.exec(text) ?? RESCHEDULE_TRAILING_PATTERN.exec(text);
+  if (reschedule) {
+    if (rawUnsafe) return REJECTED;
+    // Without the owner's clock and timezone a new time cannot be resolved.
+    if (!due) return REJECTED;
+    const reference = cleanTitle(reschedule[1] ?? "", casedGroup(reschedule, 1, cased));
+    if (!reference || VAGUE_REFERENCES.has(reference.toLowerCase())) return REJECTED;
+    const newDue = parseSpokenDuePhrase(reschedule[2] ?? "", due);
+    if (newDue === "none" || newDue === "rejected") return REJECTED;
+    return {
+      status: "captured",
+      dictation: {
+        command: RESCHEDULE_REMINDER_COMMAND,
+        capture: Object.freeze({
+          title: reference,
+          dueRaw: newDue.dueRaw,
+          ...(newDue.dueAt === undefined
+            ? {}
+            : { dueAt: newDue.dueAt, dueTimezone: newDue.dueTimezone }),
+        }),
+      },
+    };
+  }
+
   const cancel =
     CANCEL_REMINDER_LEADING_PATTERN.exec(text) ?? CANCEL_REMINDER_TRAILING_PATTERN.exec(text);
   if (cancel) {
@@ -523,6 +575,15 @@ export function describeVoiceDictation(
   if (command.id === COMPLETE_ERRAND_COMMAND_ID) return `Mark errand “${capture.title}” done`;
   if (command.id === COMPLETE_ITEM_COMMAND_ID) return `Mark “${capture.title}” done`;
   if (command.id === CANCEL_REMINDER_COMMAND_ID) return `Cancel reminder “${capture.title}”`;
+  if (command.id === RESCHEDULE_REMINDER_COMMAND_ID && capture.dueRaw !== undefined) {
+    const when = describeSpokenReminderDue({
+      dueRaw: capture.dueRaw,
+      ...(capture.dueAt === undefined || capture.dueTimezone === undefined
+        ? {}
+        : { dueAt: capture.dueAt, dueTimezone: capture.dueTimezone }),
+    });
+    return `Reschedule reminder “${capture.title}” due ${when}`;
+  }
   if (command.id === REMOVE_ERRAND_COMMAND_ID) {
     return `Remove errand “${capture.title}” from the list`;
   }

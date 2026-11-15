@@ -8260,23 +8260,23 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 500,
-            "description": "Dictated reminders only: the spoken due phrase exactly as heard, for example “tomorrow at 7 am”. Present without dueAt when the phrase names no time or an hour without am/pm; no time is guessed."
+            "description": "Dictated reminders and spoken reminder reschedules only: the spoken due phrase exactly as heard, for example “tomorrow at 7 am”. Present without dueAt when the phrase names no time or an hour without am/pm; no time is guessed."
           },
           "dueAt": {
             "type": "number",
-            "description": "Dictated reminders only: the resolved due instant in milliseconds since the Unix epoch, read back to the owner before confirmation. Always paired with dueTimezone and dueRaw."
+            "description": "Dictated reminders and spoken reminder reschedules only: the resolved due instant in milliseconds since the Unix epoch, read back to the owner before confirmation. Always paired with dueTimezone and dueRaw."
           },
           "dueTimezone": {
             "type": "string",
             "minLength": 1,
             "maxLength": 100,
-            "description": "Dictated reminders only: the owner timezone dueAt was resolved in (JARVIS_TIMEZONE)."
+            "description": "Dictated reminders and spoken reminder reschedules only: the owner timezone dueAt was resolved in (JARVIS_TIMEZONE)."
           },
           "targetId": {
             "type": "string",
             "minLength": 1,
             "maxLength": 200,
-            "description": "Spoken completions and reminder cancellations only (client.complete-task, client.complete-errand, client.cancel-reminder, client.remove-errand): the id of the one open task, errand or reminder the server resolved from the spoken reference. title is then that item's full stored title. Never accepted in a request body."
+            "description": "Spoken completions and reminder cancellations only (client.complete-task, client.complete-errand, client.cancel-reminder, client.remove-errand, client.reschedule-reminder): the id of the one open task, errand or reminder the server resolved from the spoken reference. title is then that item's full stored title. Never accepted in a request body."
           }
         }
       },
@@ -8432,6 +8432,48 @@
             "if": {
               "properties": {
                 "command": {
+                  "properties": { "id": { "const": "client.reschedule-reminder" } },
+                  "required": ["id"]
+                },
+                "capture": {}
+              },
+              "required": ["command", "capture"]
+            },
+            "then": {
+              "required": ["command"],
+              "properties": {
+                "command": {
+                  "properties": {
+                    "kind": { "const": "propose" },
+                    "proposes": {
+                      "properties": {
+                        "tool": { "const": "reminders" },
+                        "operation": { "const": "reschedule" }
+                      },
+                      "required": ["tool", "operation"]
+                    }
+                  },
+                  "required": ["kind", "proposes"]
+                },
+                "capture": {
+                  "properties": {
+                    "title": {},
+                    "targetId": {},
+                    "category": {},
+                    "dueRaw": {},
+                    "dueAt": {},
+                    "dueTimezone": {}
+                  },
+                  "required": ["title", "targetId", "dueRaw"],
+                  "not": { "properties": { "category": {} }, "required": ["category"] }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "command": {
                   "properties": { "id": { "const": "client.remove-errand" } },
                   "required": ["id"]
                 },
@@ -8541,7 +8583,8 @@
                         "client.complete-task",
                         "client.complete-errand",
                         "client.cancel-reminder",
-                        "client.remove-errand"
+                        "client.remove-errand",
+                        "client.reschedule-reminder"
                       ]
                     },
                     "profile": { "const": "client" }
@@ -8794,6 +8837,7 @@
                         "client.complete-errand",
                         "client.cancel-reminder",
                         "client.remove-errand",
+                        "client.reschedule-reminder",
                         "client.complete-item"
                       ]
                     },
@@ -8928,6 +8972,48 @@
                       { "properties": { "dueTimezone": {} }, "required": ["dueTimezone"] }
                     ]
                   }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "command": {
+                  "properties": { "id": { "const": "client.reschedule-reminder" } },
+                  "required": ["id"]
+                },
+                "capture": {}
+              },
+              "required": ["command", "capture"]
+            },
+            "then": {
+              "required": ["command"],
+              "properties": {
+                "command": {
+                  "properties": {
+                    "kind": { "const": "propose" },
+                    "proposes": {
+                      "properties": {
+                        "tool": { "const": "reminders" },
+                        "operation": { "const": "reschedule" }
+                      },
+                      "required": ["tool", "operation"]
+                    }
+                  },
+                  "required": ["kind", "proposes"]
+                },
+                "capture": {
+                  "properties": {
+                    "title": {},
+                    "targetId": {},
+                    "category": {},
+                    "dueRaw": {},
+                    "dueAt": {},
+                    "dueTimezone": {}
+                  },
+                  "required": ["title", "targetId", "dueRaw"],
+                  "not": { "properties": { "category": {} }, "required": ["category"] }
                 }
               }
             }
@@ -9077,7 +9163,8 @@
                         "client.complete-task",
                         "client.complete-errand",
                         "client.cancel-reminder",
-                        "client.remove-errand"
+                        "client.remove-errand",
+                        "client.reschedule-reminder"
                       ]
                     },
                     "profile": { "const": "client" }
