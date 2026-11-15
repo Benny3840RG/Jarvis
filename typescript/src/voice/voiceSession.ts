@@ -34,6 +34,7 @@ import { classifyVoiceDictation, voiceDictationKey } from "./voiceDictation.js";
 import { interpretIntent } from "./voiceIntentInterpreter.js";
 import { parseUtterance } from "./voiceParser.js";
 import type { VoiceQueryProvider } from "./voiceQuery.js";
+import type { VoiceQueryAnswer } from "./voiceQuery.js";
 import type { VoiceWriteCapture } from "./voiceSafeWrite.js";
 import type { SpokenDueContext } from "./voiceReminderDue.js";
 import { resolveReminderTimezone } from "../reminders/due.js";
@@ -279,6 +280,7 @@ export class VoiceSession {
   readonly #history: VoiceHistoryEntry[] = [];
   #pending: PendingConfirmation | undefined;
   #clarification: PendingClarification | undefined;
+  #lastTurnRejectedDictation = false;
 
   constructor(options: VoiceSessionOptions) {
     this.#profile = options.profile;
@@ -307,6 +309,23 @@ export class VoiceSession {
     return this.#pending;
   }
 
+  /** Read-only observation for the HTTP conversation gate. */
+  hasPendingClarification(now = this.#clock()): boolean {
+    return this.#clarification !== undefined && now < this.#clarification.expiresAt;
+  }
+
+  /** Uses the same authoritative query path and spoken result as catalogue dispatch. */
+  async readOnlyQuery(commandId: string): Promise<VoiceQueryAnswer> {
+    const command = COMMAND_BY_ID.get(commandId);
+    if (!command || command.profile !== this.#profile || command.kind !== "query") {
+      return { status: "unavailable", reason: "Voice query unavailable." };
+    }
+    const result = await this.#query(command, this.#clock());
+    return result.decision === "answered"
+      ? { status: "answered", answer: result.answer }
+      : { status: "unavailable", reason: result.reason };
+  }
+
   history(): readonly VoiceHistoryEntry[] {
     return [...this.#history];
   }
@@ -331,7 +350,18 @@ export class VoiceSession {
     void now;
   }
 
+  /**
+   * True when the most recent `handle` call matched a dictation prefix but
+   * refused its text as unsafe or malformed. Callers must not hand such a turn
+   * to any other responder (for example conversational replies): a refusal
+   * stays a plain "not understood".
+   */
+  lastTurnRejectedDictation(): boolean {
+    return this.#lastTurnRejectedDictation;
+  }
+
   async handle(input: VoiceSessionInput): Promise<VoiceDispatch> {
+    this.#lastTurnRejectedDictation = false;
     const now = input.now ?? this.#clock();
     const normalized = normalizeUtterance(input.transcript);
 
@@ -578,6 +608,7 @@ export class VoiceSession {
       // Unsafe or malformed dictation: fail closed here. It must not arm a
       // pending confirmation and must not fall through to inference.
       this.#invalidatePending();
+      this.#lastTurnRejectedDictation = true;
       this.#record(now, normalizedTranscript, "dictation-rejected");
       return { decision: "unrecognized", normalizedTranscript };
     }
@@ -668,7 +699,10 @@ export class VoiceSession {
     }
   }
 
-  async #query(command: VoiceCommand, now: number): Promise<VoiceDispatch> {
+  async #query(
+    command: VoiceCommand,
+    now: number,
+  ): Promise<Extract<VoiceDispatch, { decision: "answered" | "query-unavailable" }>> {
     if (!this.#queries) {
       return {
         decision: "query-unavailable",

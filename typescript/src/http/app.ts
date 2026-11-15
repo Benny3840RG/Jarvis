@@ -110,6 +110,11 @@ import {
 import { evaluateRemoteGatewayRequest } from "./remoteGateway.js";
 import { createOidcVerifier, type OidcVerifier } from "./oidcVerifier.js";
 import { JarvisHttpModule } from "./jarvisHttpModule.js";
+import type { VoiceConversationService } from "../voice/voiceConversation.js";
+import {
+  createVoiceConversationFromEnv,
+  resolveVoiceConversationStatus,
+} from "../voice/voiceConversationFactory.js";
 import { configuredSecrets, redactedRequestPath } from "./problemDetails.js";
 import { REQUEST_ID_HEADER, resolveRequestId } from "./requestId.js";
 import {
@@ -170,6 +175,7 @@ export type CreateJarvisHttpAppOptions = (
    * a custom registry (short TTL, deterministic clock, or a live provider).
    */
   voiceSessionRegistry?: VoiceSessionRegistry;
+  voiceConversation?: VoiceConversationService | null;
   /** Dedicated project voice safe writes stage against (owner decision on #815). */
   voiceWriteTarget?: VoiceWriteTarget | null;
   telemetry?: PostHogTelemetry;
@@ -260,6 +266,9 @@ export async function createJarvisHttpApp(
   const remoteGateway = config.remoteGateway;
   const telemetry = options.telemetry ?? createPostHogTelemetryFromEnv();
   const usesEnvironment = options.persistence === undefined;
+  const resolvedVoiceConversation = usesEnvironment
+    ? createVoiceConversationFromEnv()
+    : { service: null, status: resolveVoiceConversationStatus({}) };
   const reconciliationHealth =
     options.reconciliationHealth ?? (() => ({ state: "disabled", enabled: false }));
   const externalReconciliationReadStore =
@@ -527,6 +536,11 @@ export async function createJarvisHttpApp(
           // into the spoken-confirmation path — never dispatched directly (#567).
           interpretNaturalLanguage: true,
         }),
+      voiceConversation:
+        options.voiceConversation === undefined
+          ? resolvedVoiceConversation.service
+          : options.voiceConversation,
+      voiceConversationStatus: resolvedVoiceConversation.status,
     }),
     adapter,
     { logger: options.logger, abortOnError: false },
