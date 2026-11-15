@@ -76,6 +76,8 @@ import { ToolActionController } from "./toolActionController.js";
 import { TotalityController } from "./totalityController.js";
 import { VoiceController } from "./voiceController.js";
 import type { VoiceSessionRegistry } from "../voice/voiceSessionRegistry.js";
+import type { VoiceConversationService } from "../voice/voiceConversation.js";
+import type { VoiceConversationStatus } from "../voice/voiceConversationFactory.js";
 import type { VoiceWriteTarget } from "../voice/voiceWriteTarget.js";
 import {
   HTTP_APP_CONFIG,
@@ -111,6 +113,8 @@ import {
   HTTP_TOOL_EXECUTION,
   HTTP_TOTALITY_PIPELINE,
   HTTP_VOICE_REGISTRY,
+  HTTP_VOICE_CONVERSATION,
+  HTTP_VOICE_CONVERSATION_STATUS,
   HTTP_VOICE_WRITE_TARGET,
 } from "./tokens.js";
 
@@ -148,6 +152,8 @@ export type JarvisHttpModuleOptions = {
   dangerZone: DangerZoneService;
   ownerDecisions: OwnerDecisionService;
   voiceSessionRegistry: VoiceSessionRegistry;
+  voiceConversation: VoiceConversationService | null;
+  voiceConversationStatus: VoiceConversationStatus;
   voiceWriteTarget?: VoiceWriteTarget | null;
 };
 
@@ -265,6 +271,8 @@ export class JarvisHttpModule {
         { provide: HTTP_ENQUIRY_STORE, useValue: options.enquiryStore },
         { provide: HTTP_INVOICE_STORE, useValue: options.invoiceStore },
         { provide: HTTP_VOICE_REGISTRY, useValue: options.voiceSessionRegistry },
+        { provide: HTTP_VOICE_CONVERSATION, useValue: options.voiceConversation },
+        { provide: HTTP_VOICE_CONVERSATION_STATUS, useValue: options.voiceConversationStatus },
         { provide: HTTP_VOICE_WRITE_TARGET, useValue: options.voiceWriteTarget ?? null },
         SystemStatusService,
         { provide: APP_GUARD, useClass: ServiceTokenGuard },

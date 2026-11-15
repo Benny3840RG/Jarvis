@@ -47,6 +47,12 @@ const STATUS: SystemStatus = {
     model: null,
     reason: "OPENAI_API_KEY is not set.",
   },
+  voiceConversation: {
+    status: "not-configured",
+    provider: null,
+    model: null,
+    reason: "Voice conversation is disabled.",
+  },
   timezone: "Australia/Melbourne",
   layers: {
     runtime: { status: "ready" },
