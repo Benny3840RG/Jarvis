@@ -25,6 +25,9 @@ import type { QuoteRepository } from "../quotes/quoteRepository.js";
 import type { ControlledReminderStore } from "../reminders/controlledReminder.js";
 import type { ControlledTaskStore } from "../tasks/controlledTask.js";
 import { createNoteToolDefinition } from "./createNoteTool.js";
+import { createErrandToolDefinition } from "./errandTools.js";
+import type { ErrandStore } from "../errands/errand.js";
+import { JsonErrandStore } from "../errands/jsonErrandStore.js";
 import {
   createGitHubDevelopmentClientFromEnv,
   createGitHubMergeToolDefinition,
@@ -50,6 +53,7 @@ export function createToolExecutionDefinitions(
   quotePdfArtifactRepository?: QuotePdfArtifactRepository,
   githubDevelopmentClient?: GitHubDevelopmentClient,
   googleHomeAnnouncementProvider?: GoogleHomeAnnouncementProvider,
+  errandStore?: ErrandStore,
 ): ToolExecutionDefinition[] {
   if ((taskStore === undefined) !== (reminderStore === undefined)) {
     throw new Error("Task and reminder tool stores must be registered together.");
@@ -81,6 +85,7 @@ export function createToolExecutionDefinitions(
     ...(googleHomeAnnouncementProvider === undefined
       ? []
       : [createHomeAnnouncementToolDefinition(googleHomeAnnouncementProvider)]),
+    ...(errandStore === undefined ? [] : [createErrandToolDefinition(errandStore)]),
   ];
 }
 
@@ -90,7 +95,8 @@ export function createToolExecutionDefinitions(
  * when Convex persistence and all four quote-delivery dependencies are
  * available. Maintained process entrypoints inject the provider from the same
  * Outlook runtime bundle used by reconciliation so token state is not
- * duplicated.
+ * duplicated. `errands:create` writes the same local JSON errand file the HTTP
+ * errand routes use (its file lock is cross-process).
  */
 export function createToolExecutionServiceFromEnv(
   quoteEmailProvider: QuoteEmailProvider | null = createQuoteEmailProviderFromEnv(),
@@ -109,6 +115,7 @@ export function createToolExecutionServiceFromEnv(
       createQuotePdfArtifactRepositoryFromEnv() ?? undefined,
       githubDevelopmentClient ?? undefined,
       googleHomeAnnouncementProvider ?? undefined,
+      new JsonErrandStore(),
     ),
     new ConvexToolExecutionReceiptStore(),
     new ConvexExternalReconciliationStore(),

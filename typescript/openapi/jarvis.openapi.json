@@ -8237,7 +8237,7 @@
       },
       "VoiceWriteCapture": {
         "type": "object",
-        "description": "Safe-write fields captured from speech by the dictation grammar, for example “Nolan, add a work task: order bar oil”. They are read back to the owner and staged only after an explicit spoken confirmation. Staging never approves or executes.",
+        "description": "Safe-write fields captured from speech by the dictation grammar, for example “Nolan, add a work task: order bar oil”. A dictated errand (“Nolan, add an errand: silicone for the deck”) carries only its title. They are read back to the owner and staged only after an explicit spoken confirmation. Staging never approves or executes.",
         "required": ["title"],
         "additionalProperties": false,
         "dependentRequired": {
@@ -8249,7 +8249,7 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 200,
-            "description": "Dictated title for tasks/create or reminders/create."
+            "description": "Dictated title for tasks/create, reminders/create or errands/create."
           },
           "category": {
             "type": "string",
@@ -8303,7 +8303,13 @@
               "properties": {
                 "command": {
                   "properties": {
-                    "id": { "enum": ["client.capture-task", "client.follow-up-reminder"] },
+                    "id": {
+                      "enum": [
+                        "client.capture-task",
+                        "client.follow-up-reminder",
+                        "client.capture-errand"
+                      ]
+                    },
                     "profile": { "const": "client" }
                   },
                   "required": ["id", "profile"]
@@ -8382,6 +8388,53 @@
                 "capture": {
                   "properties": { "title": {}, "category": {} },
                   "not": { "properties": { "category": {} }, "required": ["category"] }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "command": {
+                  "properties": { "id": { "const": "client.capture-errand" } },
+                  "required": ["id"]
+                },
+                "capture": {}
+              },
+              "required": ["command", "capture"]
+            },
+            "then": {
+              "required": ["command"],
+              "properties": {
+                "command": {
+                  "properties": {
+                    "kind": { "const": "propose" },
+                    "proposes": {
+                      "properties": {
+                        "tool": { "const": "errands" },
+                        "operation": { "const": "create" }
+                      },
+                      "required": ["tool", "operation"]
+                    }
+                  },
+                  "required": ["kind", "proposes"]
+                },
+                "capture": {
+                  "properties": {
+                    "title": {},
+                    "category": {},
+                    "dueRaw": {},
+                    "dueAt": {},
+                    "dueTimezone": {}
+                  },
+                  "not": {
+                    "anyOf": [
+                      { "properties": { "category": {} }, "required": ["category"] },
+                      { "properties": { "dueRaw": {} }, "required": ["dueRaw"] },
+                      { "properties": { "dueAt": {} }, "required": ["dueAt"] },
+                      { "properties": { "dueTimezone": {} }, "required": ["dueTimezone"] }
+                    ]
+                  }
                 }
               }
             }
@@ -8529,7 +8582,13 @@
               "properties": {
                 "command": {
                   "properties": {
-                    "id": { "enum": ["client.capture-task", "client.follow-up-reminder"] },
+                    "id": {
+                      "enum": [
+                        "client.capture-task",
+                        "client.follow-up-reminder",
+                        "client.capture-errand"
+                      ]
+                    },
                     "profile": { "const": "client" }
                   },
                   "required": ["id", "profile"]
@@ -8615,6 +8674,53 @@
                 "capture": {
                   "properties": { "title": {}, "category": {} },
                   "not": { "properties": { "category": {} }, "required": ["category"] }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "command": {
+                  "properties": { "id": { "const": "client.capture-errand" } },
+                  "required": ["id"]
+                },
+                "capture": {}
+              },
+              "required": ["command", "capture"]
+            },
+            "then": {
+              "required": ["command"],
+              "properties": {
+                "command": {
+                  "properties": {
+                    "kind": { "const": "propose" },
+                    "proposes": {
+                      "properties": {
+                        "tool": { "const": "errands" },
+                        "operation": { "const": "create" }
+                      },
+                      "required": ["tool", "operation"]
+                    }
+                  },
+                  "required": ["kind", "proposes"]
+                },
+                "capture": {
+                  "properties": {
+                    "title": {},
+                    "category": {},
+                    "dueRaw": {},
+                    "dueAt": {},
+                    "dueTimezone": {}
+                  },
+                  "not": {
+                    "anyOf": [
+                      { "properties": { "category": {} }, "required": ["category"] },
+                      { "properties": { "dueRaw": {} }, "required": ["dueRaw"] },
+                      { "properties": { "dueAt": {} }, "required": ["dueAt"] },
+                      { "properties": { "dueTimezone": {} }, "required": ["dueTimezone"] }
+                    ]
+                  }
                 }
               }
             }

@@ -12,9 +12,11 @@ import {
   createReminderToolDefinition,
   createTaskToolDefinition,
 } from "../src/actions/taskReminderTools.js";
+import { createErrandToolDefinition } from "../src/actions/errandTools.js";
 import { createJarvisHttpApp } from "../src/http/app.js";
 import type { HttpAppConfig } from "../src/http/config.js";
 import type { ErrandStore } from "../src/errands/errand.js";
+import { InMemoryErrandStore } from "../src/errands/inMemoryErrandStore.js";
 import type { PersistenceProvider } from "../src/persistence/persistence.js";
 import type { ControlledReminderRecord } from "../src/reminders/controlledReminder.js";
 import { captureCredentials, type CredentialsRuntime } from "../src/settings/credentialsStatus.js";
@@ -482,13 +484,17 @@ describe("voice safe writes", () => {
     void execution;
   });
 
-  it("does not write an errand, because no ToolAction executor exists", async () => {
+  it("does not write an errand from the bare catalog phrase, even with a body capture", async () => {
     const actions = new MemoryActions();
     let errandWrites = 0;
     const errandStore: ErrandStore = {
       list: () => Promise.resolve([]),
       get: () => Promise.resolve(null),
       add: () => {
+        errandWrites += 1;
+        return Promise.reject(new Error("errand write"));
+      },
+      addOnce: () => {
         errandWrites += 1;
         return Promise.reject(new Error("errand write"));
       },
@@ -1251,5 +1257,125 @@ describe("voice dictation casing end to end", () => {
       title: "Quote the Smith fence for the BBQ area",
       category: "work",
     });
+  });
+});
+
+describe("voice dictated errands", () => {
+  it("reads a spoken errand back, stages it on confirm, and the approved errand is written once", async () => {
+    const actions = new MemoryActions();
+    const errands = new InMemoryErrandStore();
+    const execution = new ToolExecutionService([createErrandToolDefinition(errands)]);
+    const app = await makeApp(actions, errands);
+    const sessionId = await openSession(app);
+
+    const spoken = await utter(app, sessionId, {
+      transcript: "Nolan, add an errand: silicone for the Smith deck",
+      isFinal: true,
+      ...TARGET,
+    });
+    assert.equal(spoken.statusCode, 200);
+    const readBack = spoken.json().dispatch;
+    assert.equal(readBack.decision, "awaiting-confirmation");
+    assert.equal(readBack.command.id, "client.capture-errand");
+    assert.deepEqual(readBack.command.proposes, { tool: "errands", operation: "create" });
+    assert.deepEqual(readBack.capture, { title: "Silicone for the Smith deck" });
+    assert.equal(actions.rows.size, 0);
+    assert.equal((await errands.list()).length, 0);
+
+    const confirmed = await utter(app, sessionId, {
+      transcript: "Nolan confirm",
+      isFinal: true,
+      ...TARGET,
+    });
+    const dispatch = confirmed.json().dispatch;
+    assert.equal(dispatch.decision, "proposed");
+    const staged = actions.rows.get(dispatch.toolActionId);
+    assert.ok(staged);
+    assert.equal(staged.tool, "errands");
+    assert.equal(staged.operation, "create");
+    assert.deepEqual(staged.arguments, { title: "Silicone for the Smith deck" });
+    assert.equal(staged.state, "proposed");
+    assert.equal(actions.approveCalls, 0);
+    // Staging writes nothing: the errand exists only after owner approval.
+    assert.equal((await errands.list()).length, 0);
+
+    const again = await utter(app, sessionId, {
+      transcript: "Nolan confirm",
+      isFinal: true,
+      ...TARGET,
+    });
+    assert.equal(again.json().dispatch.decision, "confirmation-not-pending");
+    assert.equal(actions.rows.size, 1);
+
+    const approved = await actions.approve({
+      actionId: staged.actionId,
+      projectId: "project-1",
+      expectedRevision: 1,
+      approvalToken: "owner-token",
+    });
+    const receipt = await executeLive(execution, approved);
+    assert.equal(receipt.status, "succeeded");
+    const retried = await executeLive(execution, approved);
+    assert.equal(retried.status, "succeeded");
+    const written = await errands.list();
+    assert.equal(written.length, 1);
+    assert.equal(written[0]?.title, "Silicone for the Smith deck");
+    assert.equal(written[0]?.status, "open");
+    // The governing ToolAction project is not an errand's business-project link.
+    assert.equal(written[0]?.projectId, undefined);
+
+    const listed = await app.inject({ method: "GET", url: "/api/v1/errands", headers: AUTH });
+    assert.equal(listed.json().count, 1);
+  });
+
+  it("accepts the list form and refuses an errand dictation that chains an action", async () => {
+    const actions = new MemoryActions();
+    const app = await makeApp(actions, new InMemoryErrandStore());
+    const sessionId = await openSession(app);
+
+    const listForm = await utter(app, sessionId, {
+      transcript: "Nolan add milk to the errands",
+      isFinal: true,
+      ...TARGET,
+    });
+    assert.equal(listForm.json().dispatch.decision, "awaiting-confirmation");
+    assert.deepEqual(listForm.json().dispatch.capture, { title: "Milk" });
+    await utter(app, sessionId, { transcript: "Nolan cancel", isFinal: true, ...TARGET });
+
+    const chained = await utter(app, sessionId, {
+      transcript: "Nolan add an errand: milk and send the quote",
+      isFinal: true,
+      ...TARGET,
+    });
+    assert.notEqual(chained.json().dispatch.decision, "awaiting-confirmation");
+    const confirm = await utter(app, sessionId, {
+      transcript: "Nolan confirm",
+      isFinal: true,
+      ...TARGET,
+    });
+    assert.equal(confirm.json().dispatch.toolActionId, undefined);
+    assert.equal(actions.rows.size, 0);
+  });
+
+  it("a request-body capture on confirm cannot retitle a voice errand or add task fields", async () => {
+    const actions = new MemoryActions();
+    const app = await makeApp(actions, new InMemoryErrandStore());
+    const sessionId = await openSession(app);
+    await utter(app, sessionId, {
+      transcript: "Nolan add an errand: bar oil",
+      isFinal: true,
+      ...TARGET,
+    });
+    const confirmed = await utter(app, sessionId, {
+      transcript: "Nolan confirm",
+      isFinal: true,
+      ...TARGET,
+      capture: { title: "Something else", category: "work" },
+    });
+    // The confirmed capture is exactly the read-back; the body capture is ignored.
+    const dispatch = confirmed.json().dispatch;
+    assert.equal(dispatch.decision, "proposed");
+    assert.equal(actions.rows.size, 1);
+    assert.deepEqual(actions.rows.get(dispatch.toolActionId)?.arguments, { title: "Bar oil" });
   });
 });

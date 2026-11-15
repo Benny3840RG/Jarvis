@@ -1,12 +1,12 @@
 /**
  * Safe voice writes stage onto the existing ToolAction service.
  * This module never approves, executes, or writes a second store.
- * Consequential proposals (quote send/draft, announcements, errands without
- * a ToolAction executor) are not staged.
+ * Consequential proposals (quote send/draft, announcements) are not staged.
  */
 
 import { canonicalJson } from "../actions/canonicalJson.js";
 import { sha256Hex } from "../actions/sha256.js";
+import { createErrandArgumentsSchema } from "../actions/errandTools.js";
 import { createReminderArgumentsSchema } from "../actions/taskReminderTools.js";
 import type { ToolActionService } from "../actions/toolActions.js";
 import {
@@ -22,8 +22,8 @@ const WAKE_WORDS = ["nolan", "jarvis"] as const;
 /** Punctuation or whitespace that may sit between the wake word and the command. */
 const WAKE_SEPARATOR = /^[\s.,!?;:]+/;
 
-/** Executors that already exist on ToolExecutionService. Errands are absent. */
-const SAFE_EXECUTORS = new Set(["tasks:create", "reminders:create"]);
+/** Executors that exist on ToolExecutionService for the three spoken safe writes. */
+const SAFE_EXECUTORS = new Set(["tasks:create", "reminders:create", "errands:create"]);
 
 export const VOICE_WRITE_NO_WAKE_REASON = "Safe write was not staged: the wake word was not heard.";
 export const VOICE_WRITE_UNCOMMISSIONED_REASON =
@@ -149,6 +149,19 @@ function safeWriteArguments(
     // The executor's own schema decides: a due value that the executor would
     // refuse (dueAt without timezone or raw text) is never staged.
     return createReminderArgumentsSchema.safeParse(candidate).success ? candidate : undefined;
+  }
+  if (key === "errands:create") {
+    // A spoken errand carries only its title; task and reminder fields never apply.
+    if (
+      capture?.category !== undefined ||
+      capture?.dueRaw !== undefined ||
+      capture?.dueAt !== undefined ||
+      capture?.dueTimezone !== undefined
+    ) {
+      return undefined;
+    }
+    const candidate = { title: capture?.title?.trim() ?? "" };
+    return createErrandArgumentsSchema.safeParse(candidate).success ? candidate : undefined;
   }
   return undefined;
 }

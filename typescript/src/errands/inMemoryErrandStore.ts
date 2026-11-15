@@ -1,4 +1,9 @@
-import { applyErrandUpdate, cloneErrand, createErrand } from "./errandData.js";
+import {
+  applyErrandUpdate,
+  cloneErrand,
+  createErrand,
+  existingErrandForAddOnce,
+} from "./errandData.js";
 import type { Errand, ErrandInput, ErrandStore, ErrandUpdate } from "./errand.js";
 
 /** In-memory ErrandStore for tests and default HTTP wiring; nothing is persisted. */
@@ -23,6 +28,23 @@ export class InMemoryErrandStore implements ErrandStore {
     }
     this.errands.set(errand.id, errand);
     return Promise.resolve(cloneErrand(errand));
+  }
+
+  addOnce(id: string, input: ErrandInput): Promise<{ errand: Errand; created: boolean }> {
+    try {
+      const existing = this.errands.get(id);
+      if (existing) {
+        return Promise.resolve({
+          errand: cloneErrand(existingErrandForAddOnce(existing, input)),
+          created: false,
+        });
+      }
+      const errand = createErrand(input, id);
+      this.errands.set(errand.id, errand);
+      return Promise.resolve({ errand: cloneErrand(errand), created: true });
+    } catch (error: unknown) {
+      return Promise.reject(error instanceof Error ? error : new Error(String(error)));
+    }
   }
 
   update(id: string, update: ErrandUpdate): Promise<Errand | null> {

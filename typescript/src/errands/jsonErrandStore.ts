@@ -4,7 +4,13 @@ import { writePrivateJsonFile } from "../persistence/atomicJsonFile.js";
 import { jarvisDataFile } from "../persistence/jarvisDataPaths.js";
 import { JsonFileLock } from "../persistence/jsonFileLock.js";
 import type { PersistenceWarning } from "../persistence/types.js";
-import { applyErrandUpdate, cloneErrand, createErrand, normalizeLocation } from "./errandData.js";
+import {
+  applyErrandUpdate,
+  cloneErrand,
+  createErrand,
+  existingErrandForAddOnce,
+  normalizeLocation,
+} from "./errandData.js";
 import {
   isErrandStatus,
   type Errand,
@@ -142,6 +148,20 @@ export class JsonErrandStore implements ErrandStore {
       document.errands.push(errand);
       await this.writeDocument(document);
       return cloneErrand(errand);
+    }, "errand mutation");
+  }
+
+  async addOnce(id: string, input: ErrandInput): Promise<{ errand: Errand; created: boolean }> {
+    return this.writeLock.run(async () => {
+      const document = await this.readDocument(true);
+      const existing = document.errands.find((candidate) => candidate.id === id);
+      if (existing) {
+        return { errand: cloneErrand(existingErrandForAddOnce(existing, input)), created: false };
+      }
+      const errand = createErrand(input, id);
+      document.errands.push(errand);
+      await this.writeDocument(document);
+      return { errand: cloneErrand(errand), created: true };
     }, "errand mutation");
   }
 

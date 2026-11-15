@@ -55,11 +55,11 @@ export function cloneErrand(errand: Errand): Errand {
 }
 
 /** Builds a fully-formed errand from input. */
-export function createErrand(input: ErrandInput): Errand {
+export function createErrand(input: ErrandInput, id: string = randomUUID()): Errand {
   const now = Date.now();
   const status = input.status ?? "open";
   return {
-    id: randomUUID(),
+    id: requiredText(id, "Errand id"),
     title: requiredText(input.title, "Errand title"),
     ...(input.quantity === undefined ? {} : { quantity: positiveQuantity(input.quantity) }),
     status,
@@ -104,4 +104,16 @@ export function applyErrandUpdate(errand: Errand, update: ErrandUpdate): void {
     else delete errand.completedAt;
   }
   errand.updatedAt = now;
+}
+
+/**
+ * `addOnce` semantics shared by every store: an existing row with the same id
+ * is the earlier write of this same request when its title matches; any other
+ * row under that id is a conflict and nothing is written.
+ */
+export function existingErrandForAddOnce(existing: Errand, input: ErrandInput): Errand {
+  if (existing.title !== requiredText(input.title, "Errand title")) {
+    throw new Error("Errand id is already used by a different errand.");
+  }
+  return existing;
 }
