@@ -471,3 +471,101 @@ describe("voice reminder cancellation", () => {
     assert.equal(refused.reason, VOICE_REMINDER_CANCEL_UNAVAILABLE_REASON);
   });
 });
+
+describe("voice errand removal", () => {
+  it("captures the spoken errand reference in every form", () => {
+    const cases: Array<[string, string]> = [
+      ["remove milk from the errands", "Milk"],
+      ["take the milk off my shopping list", "Milk"],
+      ["delete the screws from the errand list", "Screws"],
+      ["scrap bar oil off the errands list", "Bar oil"],
+      ["strike silicone off the errands", "Silicone"],
+      ["remove the errand: pick up the trailer", "Pick up the trailer"],
+      ["delete errand milk", "Milk"],
+    ];
+    for (const [utterance, title] of cases) {
+      const dictation = parseVoiceDictation(utterance, "client");
+      assert.equal(dictation?.command.id, "client.remove-errand", utterance);
+      assert.deepEqual(dictation?.command.proposes, { tool: "errands", operation: "remove" });
+      assert.deepEqual(dictation?.capture, { title }, utterance);
+    }
+    assert.equal(
+      describeVoiceDictation({
+        command: parseVoiceDictation("remove milk from the errands", "client")!.command,
+        capture: { title: "Milk" },
+      }),
+      "Remove errand “Milk” from the list",
+    );
+  });
+
+  it("fails closed on vague, chained or unsafe removals and leaves other commands alone", () => {
+    for (const utterance of [
+      "remove it from the errands",
+      "take everything off the shopping list",
+      "remove all of them from my errands",
+      "delete the errand",
+      "remove the errand: it",
+      "take milk and send the quote off the errands",
+      "remove nolan from the errands",
+      "remove confirm from the errands",
+    ]) {
+      const dictation = parseVoiceDictation(utterance, "client");
+      assert.notEqual(dictation?.command.id, "client.remove-errand", utterance);
+    }
+    assert.equal(
+      parseVoiceDictation("add milk to the errands", "client")?.command.id,
+      "client.capture-errand",
+    );
+    assert.equal(
+      parseVoiceDictation("cancel the bar oil reminder", "client")?.command.id,
+      "client.cancel-reminder",
+    );
+    assert.equal(
+      parseVoiceDictation("cross off the milk", "client")?.command.id,
+      "client.complete-item",
+    );
+    assert.equal(parseVoiceDictation("remove milk", "client"), undefined);
+    assert.equal(
+      VOICE_COMMANDS.find((entry) => entry.id === "client.remove-errand"),
+      undefined,
+    );
+  });
+
+  it("arms the resolved open errand for removal, never a task or a done errand", async () => {
+    const s = new VoiceSession({
+      profile: "client",
+      provider: new AbsentHardwareProvider(),
+      completions: resolver(
+        [task("t1", "Milk run", { projectId: "voice-1" })],
+        [errand("e1", "Milk"), errand("e2", "Screws", { status: "done" })],
+      ),
+    });
+    const out = await s.handle({
+      transcript: "take milk off the errands",
+      isFinal: true,
+      wakeAuthorized: true,
+      now: 1_000,
+    });
+    assert.equal(out.decision, "awaiting-confirmation");
+    assert.equal(s.pending()?.command.id, "client.remove-errand");
+    assert.deepEqual(s.pending()?.capture, { title: "Milk", targetId: "e1" });
+    const confirmed = await s.handle({
+      transcript: "confirm",
+      isFinal: true,
+      wakeAuthorized: true,
+      now: 2_000,
+    });
+    assert.ok(confirmed.decision === "proposed");
+    assert.deepEqual(confirmed.command.proposes, { tool: "errands", operation: "remove" });
+
+    const done = await s.handle({
+      transcript: "remove screws from the errands",
+      isFinal: true,
+      wakeAuthorized: true,
+      now: 3_000,
+    });
+    assert.ok(done.decision === "completion-unresolved");
+    assert.equal(done.command.id, "client.remove-errand");
+    assert.equal(done.reason, "No open errand matches “Screws”.");
+  });
+});

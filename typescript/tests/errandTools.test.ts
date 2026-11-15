@@ -9,6 +9,7 @@ import {
   createErrandArgumentsSchema,
   createErrandToolDefinition,
   errandIdForToolAction,
+  removeErrandToolDefinition,
 } from "../src/actions/errandTools.js";
 import { createToolExecutionDefinitions } from "../src/actions/toolExecutionFactory.js";
 import {
@@ -184,6 +185,7 @@ describe("errands:create executor", () => {
     );
     assert.equal(keys(withErrands).includes("errands:create"), true);
     assert.equal(keys(withErrands).includes("errands:complete"), true);
+    assert.equal(keys(withErrands).includes("errands:remove"), true);
   });
 });
 
@@ -217,6 +219,37 @@ describe("errands:complete executor", () => {
       arguments: { errandId: "nope" },
     });
     assert.notEqual((await execute(service, missing)).status, "succeeded");
+    for (const value of [{}, { errandId: "" }, { errandId: "x", title: "Milk" }]) {
+      assert.equal(definition.schema.safeParse(value).success, false, JSON.stringify(value));
+    }
+  });
+});
+
+describe("errands:remove executor", () => {
+  it("removes exactly one errand, and a retry after it is gone is harmless", async () => {
+    const store = new InMemoryErrandStore();
+    const milk = await store.add({ title: "Milk" });
+    const bread = await store.add({ title: "Bread" });
+    const service = new ToolExecutionService([removeErrandToolDefinition(store)]);
+    const action = approvedAction({ operation: "remove", arguments: { errandId: milk.id } });
+    const receipt = await execute(service, action);
+    assert.equal(receipt.status, "succeeded");
+    assert.equal(await store.get(milk.id), null);
+    assert.deepEqual(
+      (await store.list()).map((errand) => errand.id),
+      [bread.id],
+    );
+
+    // Already gone (a crash before the receipt, or removed on the HUD meanwhile).
+    const definition = removeErrandToolDefinition(store);
+    const again = await definition.execute(
+      { errandId: milk.id },
+      new AbortController().signal,
+      {} as Parameters<typeof definition.execute>[2],
+    );
+    assert.deepEqual(again, { errandId: milk.id, removed: false });
+    assert.equal((await store.list()).length, 1, "a retry never removes anything else");
+
     for (const value of [{}, { errandId: "" }, { errandId: "x", title: "Milk" }]) {
       assert.equal(definition.schema.safeParse(value).success, false, JSON.stringify(value));
     }

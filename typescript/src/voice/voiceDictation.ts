@@ -52,6 +52,7 @@ export const COMPLETE_ERRAND_COMMAND_ID = "client.complete-errand";
 /** A completion whose kind was not spoken; it is never armed until resolved. */
 export const COMPLETE_ITEM_COMMAND_ID = "client.complete-item";
 export const CANCEL_REMINDER_COMMAND_ID = "client.cancel-reminder";
+export const REMOVE_ERRAND_COMMAND_ID = "client.remove-errand";
 
 const CATEGORY_ALIASES: ReadonlyMap<string, VoiceTaskCategory> = new Map([
   ["personal", "personal"],
@@ -121,6 +122,13 @@ export const CANCEL_REMINDER_COMMAND = completionCommand(
   { tool: "reminders", operation: "cancel" },
 );
 
+/** Removing one open errand from the list, resolved like a completion. */
+export const REMOVE_ERRAND_COMMAND = completionCommand(
+  REMOVE_ERRAND_COMMAND_ID,
+  "Stage removing one open errand from the list. Voice does not approve or execute it.",
+  { tool: "errands", operation: "remove" },
+);
+
 export type VoiceCompletionKind = "task" | "errand" | "any" | "reminder";
 
 /** The kind a completion command searches, or undefined for any other command. */
@@ -129,6 +137,7 @@ export function voiceCompletionKind(command: VoiceCommand): VoiceCompletionKind 
   if (command.id === COMPLETE_ERRAND_COMMAND_ID) return "errand";
   if (command.id === COMPLETE_ITEM_COMMAND_ID) return "any";
   if (command.id === CANCEL_REMINDER_COMMAND_ID) return "reminder";
+  if (command.id === REMOVE_ERRAND_COMMAND_ID) return "errand";
   return undefined;
 }
 
@@ -160,6 +169,23 @@ const CANCEL_REMINDER_LEADING_PATTERN =
   /^(?:cancel|delete|remove|scrap|drop|clear) (?:the |my )?reminder(?: (?:to|for|about|called|saying))?[\s:,-]+(?:(?:the|my) )?(.+)$/d;
 const CANCEL_REMINDER_TRAILING_PATTERN =
   /^(?:cancel|delete|remove|scrap|drop|clear) (?:the |my )?(.+?) reminder$/d;
+
+/**
+ * Removing an errand from the list: "take milk off the errands", "remove the
+ * screws from my shopping list", "delete the errand milk". Group 1 is the
+ * spoken reference, resolved against the open errands.
+ */
+const ERRAND_LIST_NAME = "(?:the |my )?(?:errands|errand list|errands list|shopping list)";
+const REMOVE_ERRAND_FROM_PATTERN = new RegExp(
+  `^(?:remove|delete|drop|scrap) (?:(?:the|my) )?(.+?) (?:from|off) ${ERRAND_LIST_NAME}$`,
+  "d",
+);
+const REMOVE_ERRAND_OFF_PATTERN = new RegExp(
+  `^(?:take|knock|strike) (?:(?:the|my) )?(.+?) off ${ERRAND_LIST_NAME}$`,
+  "d",
+);
+const REMOVE_ERRAND_LEADING_PATTERN =
+  /^(?:remove|delete|drop|scrap) (?:the |my )?errand[\s:,-]+(?:(?:the|my) )?(.+)$/d;
 
 /** A reference that names no item ("mark it done", "tick off the task"). */
 const VAGUE_REFERENCES: ReadonlySet<string> = new Set([
@@ -371,6 +397,20 @@ export function classifyVoiceDictation(
     };
   }
 
+  const removal =
+    REMOVE_ERRAND_FROM_PATTERN.exec(text) ??
+    REMOVE_ERRAND_OFF_PATTERN.exec(text) ??
+    REMOVE_ERRAND_LEADING_PATTERN.exec(text);
+  if (removal) {
+    if (rawUnsafe) return REJECTED;
+    const reference = cleanTitle(removal[1] ?? "", casedGroup(removal, 1, cased));
+    if (!reference || VAGUE_REFERENCES.has(reference.toLowerCase())) return REJECTED;
+    return {
+      status: "captured",
+      dictation: { command: REMOVE_ERRAND_COMMAND, capture: Object.freeze({ title: reference }) },
+    };
+  }
+
   const reminder = REMINDER_PATTERN.exec(text);
   const dueFirst = reminder || !due ? null : REMINDER_DUE_FIRST_PATTERN.exec(text);
   if (reminder || dueFirst) {
@@ -483,6 +523,9 @@ export function describeVoiceDictation(
   if (command.id === COMPLETE_ERRAND_COMMAND_ID) return `Mark errand “${capture.title}” done`;
   if (command.id === COMPLETE_ITEM_COMMAND_ID) return `Mark “${capture.title}” done`;
   if (command.id === CANCEL_REMINDER_COMMAND_ID) return `Cancel reminder “${capture.title}”`;
+  if (command.id === REMOVE_ERRAND_COMMAND_ID) {
+    return `Remove errand “${capture.title}” from the list`;
+  }
   if (capture.dueRaw === undefined) return `Add reminder “${capture.title}”`;
   const due = describeSpokenReminderDue({
     dueRaw: capture.dueRaw,

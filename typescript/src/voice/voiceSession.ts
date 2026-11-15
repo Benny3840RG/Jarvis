@@ -32,6 +32,8 @@ import type { VoiceActuationProvider } from "./voiceHardware.js";
 import { resolveClarification } from "./voiceDialogueResolver.js";
 import {
   CANCEL_REMINDER_COMMAND,
+  REMOVE_ERRAND_COMMAND,
+  REMOVE_ERRAND_COMMAND_ID,
   COMPLETE_ERRAND_COMMAND,
   COMPLETE_TASK_COMMAND,
   classifyVoiceDictation,
@@ -712,11 +714,13 @@ export class VoiceSession {
     const { target } = resolution;
     return this.#arm(now, normalizedTranscript, {
       command:
-        target.kind === "task"
-          ? COMPLETE_TASK_COMMAND
-          : target.kind === "errand"
-            ? COMPLETE_ERRAND_COMMAND
-            : CANCEL_REMINDER_COMMAND,
+        dictation.command.id === REMOVE_ERRAND_COMMAND_ID
+          ? REMOVE_ERRAND_COMMAND
+          : target.kind === "task"
+            ? COMPLETE_TASK_COMMAND
+            : target.kind === "errand"
+              ? COMPLETE_ERRAND_COMMAND
+              : CANCEL_REMINDER_COMMAND,
       capture: Object.freeze({ title: target.title, targetId: target.id }),
     });
   }
