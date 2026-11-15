@@ -20,7 +20,11 @@ describe("NOLAN identity and guarded voice compatibility", () => {
       "Nolan? add a task",
       "Jarvis add a task",
     ]) {
-      assert.deepEqual(splitVoiceWakeWord(input), { heard: true, rest: "add a task" });
+      assert.deepEqual(splitVoiceWakeWord(input), {
+        heard: true,
+        rest: "add a task",
+        restCased: "add a task",
+      });
     }
   });
 

@@ -20,7 +20,7 @@ describe("voice dictation grammar", () => {
 
   it("captures a spoken category and its aliases", () => {
     const cases: Array<[string, string, string]> = [
-      ["add a work task: quote the Smith fence", "Quote the smith fence", "work"],
+      ["add a work task: quote the Smith fence", "Quote the Smith fence", "work"],
       ["add a build task replace the crawler servo", "Replace the crawler servo", "builds"],
       ["new money task, pay the rego", "Pay the rego", "money"],
       ["capture a home task to fix the gate", "Fix the gate", "life"],
@@ -96,7 +96,7 @@ describe("voice dictation grammar", () => {
     const reminder = parseVoiceDictation("remind me to call Dave", "client");
     assert.ok(task && reminder);
     assert.equal(describeVoiceDictation(task), "Add task “Order bar oil” (work)");
-    assert.equal(describeVoiceDictation(reminder), "Add reminder “Call dave”");
+    assert.equal(describeVoiceDictation(reminder), "Add reminder “Call Dave”");
   });
 });
 
@@ -155,10 +155,10 @@ describe("voice dictation unsafe titles", () => {
   it("keeps ordinary natural titles working", () => {
     for (const [utterance, title] of [
       ["add a task: order bar oil", "Order bar oil"],
-      ["add a task: call Dave about the quote", "Call dave about the quote"],
-      ["add a work task: quote the Smith fence", "Quote the smith fence"],
+      ["add a task: call Dave about the quote", "Call Dave about the quote"],
+      ["add a work task: quote the Smith fence", "Quote the Smith fence"],
       ["add a task: pay the rego", "Pay the rego"],
-      ["remind me to send the invoice to Dave", "Send the invoice to dave"],
+      ["remind me to send the invoice to Dave", "Send the invoice to Dave"],
       ["remind me to renew the car insurance", "Renew the car insurance"],
       ["add a task: buy oil and grease", "Buy oil and grease"],
     ] as const) {
@@ -498,7 +498,7 @@ describe("voice dictation compound action titles", () => {
   it("keeps noun conjunctions and single-action titles", () => {
     for (const [utterance, title] of [
       ["add a task: buy oil and grease", "Buy oil and grease"],
-      ["add a task: call Dave", "Call dave"],
+      ["add a task: call Dave", "Call Dave"],
       ["add a task: order bar oil", "Order bar oil"],
       ["remind me to book the van", "Book the van"],
       ["remind me to buy salt or pepper", "Buy salt or pepper"],
@@ -558,5 +558,73 @@ describe("voice session with control characters in prepared ASR alternatives", (
       assert.notEqual(out.decision, "proposed", JSON.stringify(alternative));
       assert.equal(s.pending(), undefined, JSON.stringify(alternative));
     }
+  });
+});
+
+describe("voice dictation keeps the speaker's casing", () => {
+  const CTX = { now: Date.parse("2026-11-14T23:00:00.000Z"), timezone: "Australia/Melbourne" };
+
+  it("keeps proper nouns, acronyms and model names in titles", () => {
+    const cases: Array<[string, string]> = [
+      ["add a task: call Dave about the BMW", "Call Dave about the BMW"],
+      [
+        "Add a work task, ring the Holden dealer about the VE",
+        "Ring the Holden dealer about the VE",
+      ],
+      ["add a task: iPhone screen repair", "iPhone screen repair"],
+      ["remind me to email Sarah the PDF", "Email Sarah the PDF"],
+    ];
+    for (const [utterance, title] of cases) {
+      assert.equal(parseVoiceDictation(utterance, "client")?.capture.title, title, utterance);
+    }
+  });
+
+  it("keeps casing when a due time is split off, in either position", () => {
+    for (const utterance of [
+      "remind me to call Dave tomorrow at 7 am",
+      "Remind me tomorrow at 7 AM to call Dave",
+    ]) {
+      const dictation = parseVoiceDictation(utterance, "client", CTX);
+      assert.equal(dictation?.capture.title, "Call Dave", utterance);
+      assert.equal(typeof dictation?.capture.dueAt, "number", utterance);
+    }
+  });
+
+  it("applies every safety rule regardless of casing", () => {
+    for (const utterance of [
+      "add a task: NOLAN send the quote",
+      "add a task: Jarvis winch up",
+      "add a task: CONFIRM",
+      "remind me to Cancel the booking",
+      "add a task: call Dave And Send the quote",
+      "add a task: Don't order oil",
+    ]) {
+      assert.equal(parseVoiceDictation(utterance, "client"), undefined, utterance);
+    }
+  });
+
+  it("falls back to the lower-cased title when casing cannot be aligned", () => {
+    // "İ" lower-cases to two code units, so the cased span is not trusted.
+    const dictation = parseVoiceDictation("add a task: İzmir trip", "client");
+    assert.ok(dictation);
+    assert.equal(dictation.capture.title.toLowerCase().includes("zmir trip"), true);
+  });
+
+  it("does not treat an alternative that differs only in casing as a conflict", async () => {
+    const s = new VoiceSession({
+      profile: "client",
+      provider: new AbsentHardwareProvider(),
+      interpretNaturalLanguage: true,
+      clock: () => 1_000,
+    });
+    const out = await s.handle({
+      transcript: "add a task: call Dave",
+      alternatives: ["add a task: call dave"],
+      isFinal: true,
+      wakeAuthorized: true,
+      now: 1_000,
+    });
+    assert.ok(out.decision === "awaiting-confirmation");
+    assert.equal(out.capture?.title, "Call Dave");
   });
 });

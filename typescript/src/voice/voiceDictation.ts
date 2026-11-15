@@ -64,14 +64,14 @@ const CATEGORY_ALIASES: ReadonlyMap<string, VoiceTaskCategory> = new Map([
  * Group 1 is an optional category word; group 2 is the dictated title.
  */
 const TASK_PATTERN =
-  /^(?:(?:add|capture|create|make|put)(?: (?:a|an|another|me a))?|new) (?:([a-z]+) )?task(?: (?:to|for|called|saying|that says))?[\s:,-]+(.+)$/;
+  /^(?:(?:add|capture|create|make|put)(?: (?:a|an|another|me a))?|new) (?:([a-z]+) )?task(?: (?:to|for|called|saying|that says))?[\s:,-]+(.+)$/d;
 
 /** "remind me to X", "add a reminder to X", "set a reminder to X", "reminder to X". */
 const REMINDER_PATTERN =
-  /^(?:remind me to|(?:add|set|make|create) (?:a |me a )?reminder to|reminder to|new reminder to)[\s:,-]+(.+)$/;
+  /^(?:remind me to|(?:add|set|make|create) (?:a |me a )?reminder to|reminder to|new reminder to)[\s:,-]+(.+)$/d;
 
 /** "remind me tomorrow at 7 am to X": a due phrase before the title. */
-const REMINDER_DUE_FIRST_PATTERN = /^remind me[\s,]+(?!to\b)(.+)$/;
+const REMINDER_DUE_FIRST_PATTERN = /^remind me[\s,]+(?!to\b)(.+)$/d;
 
 /** Words that may sit before "task" without naming a category. */
 const CATEGORY_FILLERS: ReadonlySet<string> = new Set(["new", "quick"]);
@@ -112,18 +112,43 @@ const DECLARATIVE =
 const COMPOUND_ACTION =
   /(?:\band|\bthen|\balso|\bplus|\bbut|\bor|\bafterwards?|\bafter that|[;|&])\s*(?:then\s+|also\s+|please\s+)?(?:send|resend|email|e-mail|mail|forward|submit|post|publish|share|text|message|dm|pay|wire|transfer|delete|remove|erase|wipe|approve|execute|run|start|stop|open|close|lock|unlock|turn|switch|activate|deactivate|shut|fire|launch|actuate|move|drive|nolan|jarvis|confirm|cancel|call|phone|ring|order|reorder|book|reserve|schedule|create|make|add|buy|purchase|hire|arrange|organi[sz]e|set up|sign|install|download|upload|apply|register|subscribe|ship|deliver|invite|notify|tell|ask|reply|respond|update|edit|change|reset|restart|reboot|enable|disable|cut|burn|unplug|power|raise|lower|dial|ping)\b/;
 
+/**
+ * `normalizeUtterance` without lower-casing, for dictated text whose casing is
+ * data ("call Dave about the BMW"). Matching must still use `normalizeUtterance`.
+ * Returns `undefined` when lower-casing would change the string's length (a few
+ * Unicode letters do), so a caller can never slice the two forms out of step.
+ */
+export function normalizeUtterancePreservingCase(raw: string): string | undefined {
+  const cased = raw
+    .trim()
+    .replace(/\s+/g, " ")
+    .replace(/^[\s.,!?;:]+/, "")
+    .replace(/[\s.,!?;:]+$/, "");
+  return cased.toLowerCase() === normalizeUtterance(raw) ? cased : undefined;
+}
+
 /** True when the raw (pre-normalisation) text carries a forbidden control/format character. */
 export function hasUnsafeVoiceCharacters(raw: string): boolean {
   return UNSAFE_CHARACTERS.test(raw.trim());
 }
 
-function cleanTitle(raw: string): string | undefined {
-  if (UNSAFE_CHARACTERS.test(raw)) return undefined;
-  const title = raw
+function tidy(raw: string): string {
+  return raw
     .replace(/^[\s:,;.-]+/, "")
     .replace(/[\s:,;.-]+$/, "")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+/**
+ * Validate a dictated title on its lower-cased form (every safety rule is
+ * case-insensitive) and return it with the speaker's casing. `cased` is the
+ * same span of the case-preserving transcript; it is used only when it lines
+ * up exactly with the lower-cased text, otherwise the lower-cased form is used.
+ */
+function cleanTitle(raw: string, cased?: string): string | undefined {
+  if (UNSAFE_CHARACTERS.test(raw)) return undefined;
+  const title = tidy(raw);
   if (title.length < 1 || title.length > MAX_TITLE_LENGTH) return undefined;
   if (!/[\p{L}\p{N}]/u.test(title)) return undefined;
   if (WAKE_TOKEN.test(title)) return undefined;
@@ -131,7 +156,25 @@ function cleanTitle(raw: string): string | undefined {
   if (EMBEDDED_CONTROL.test(title)) return undefined;
   if (NEGATION.test(title) || DECLARATIVE.test(title)) return undefined;
   if (COMPOUND_ACTION.test(title)) return undefined;
-  return title.charAt(0).toUpperCase() + title.slice(1);
+  const casedTitle = cased === undefined ? undefined : tidy(cased);
+  const display =
+    casedTitle !== undefined && casedTitle.toLowerCase() === title ? casedTitle : title;
+  // Capitalise a lower-case first word ("call Dave" -> "Call Dave"), but never
+  // rewrite one the speaker cased deliberately ("iPhone", "eBay").
+  const firstWord = display.split(" ", 1)[0] ?? "";
+  if (firstWord !== firstWord.toLowerCase()) return display;
+  return display.charAt(0).toUpperCase() + display.slice(1);
+}
+
+/** The span of `cased` that group `group` of a `d`-flag match on the lower-cased text covers. */
+function casedGroup(
+  match: RegExpExecArray,
+  group: number,
+  cased: string | undefined,
+): string | undefined {
+  const span = match.indices?.[group];
+  if (cased === undefined || !span) return undefined;
+  return cased.slice(span[0], span[1]);
 }
 
 /**
@@ -156,6 +199,7 @@ export function classifyVoiceDictation(
   if (profile !== "client") return NONE;
   const text = normalizeUtterance(transcript);
   if (text.length === 0) return NONE;
+  const cased = normalizeUtterancePreservingCase(transcript);
   // Whitespace normalisation would turn an embedded newline, tab or CR into a
   // plain space, so the unsafe check must see the original text.
   const rawUnsafe = hasUnsafeVoiceCharacters(transcript);
@@ -173,7 +217,7 @@ export function classifyVoiceDictation(
       if (!mapped) return REJECTED;
       category = mapped;
     }
-    const title = cleanTitle(task[2] ?? "");
+    const title = cleanTitle(task[2] ?? "", casedGroup(task, 2, cased));
     if (!title) return REJECTED;
     return {
       status: "captured",
@@ -187,7 +231,9 @@ export function classifyVoiceDictation(
     if (rawUnsafe) return REJECTED;
     const command = COMMAND_BY_ID.get(REMINDER_COMMAND_ID);
     if (!command) return REJECTED;
-    let body = (reminder ? reminder[1] : dueFirst?.[1]) ?? "";
+    const bodyMatch = (reminder ?? dueFirst) as RegExpExecArray;
+    let body = bodyMatch[1] ?? "";
+    let casedBody = casedGroup(bodyMatch, 1, cased);
     let spoken: VoiceWriteCapture = {};
     if (due) {
       const split = splitSpokenReminderDue(body, due, reminder ? "suffix" : "prefix");
@@ -195,6 +241,13 @@ export function classifyVoiceDictation(
       // "remind me <something>" with no leading due phrase is not a dictation.
       if (split.status === "none" && !reminder) return NONE;
       if (split.status === "due") {
+        // The title is the leading span of the body for "… tomorrow at 7 am"
+        // and the trailing span for "tomorrow at 7 am to …".
+        if (casedBody !== undefined) {
+          casedBody = reminder
+            ? casedBody.slice(0, split.title.length)
+            : casedBody.slice(casedBody.length - split.title.length);
+        }
         body = split.title;
         spoken = {
           dueRaw: split.due.dueRaw,
@@ -204,7 +257,7 @@ export function classifyVoiceDictation(
         };
       }
     }
-    const title = cleanTitle(body);
+    const title = cleanTitle(body, casedBody);
     if (!title) return REJECTED;
     return {
       status: "captured",
