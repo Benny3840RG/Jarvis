@@ -327,6 +327,37 @@ describe("voice HUD dictation read-back", () => {
     );
   });
 
+  it("reads a spoken reminder cancellation back and says when nothing was cancelled", () => {
+    const cancelReminder = {
+      id: "client.cancel-reminder",
+      proposes: { tool: "reminders", operation: "cancel" },
+    };
+    const ask = logic.describeVoiceDispatch({
+      decision: "awaiting-confirmation",
+      command: cancelReminder,
+      capture: { title: "Order bar oil", targetId: "r1" },
+    } as never);
+    assert.equal(ask.tone, "pending");
+    assert.match(ask.label, /^Cancel reminder “Order bar oil”\? Say “Nolan confirm”/);
+    const staged = logic.describeVoiceDispatch({
+      decision: "proposed",
+      command: cancelReminder,
+      capture: { title: "Order bar oil", targetId: "r1" },
+      toolActionId: "voice-safe-write:v1:abc",
+    } as never);
+    assert.match(
+      staged.label,
+      /^Staged cancelling reminder “Order bar oil” for your approval\. Nothing changes/,
+    );
+    const unresolved = logic.describeVoiceDispatch({
+      decision: "completion-unresolved",
+      command: cancelReminder,
+      reason: "No reminder matches “Sprocket”.",
+    } as never);
+    assert.equal(unresolved.tone, "warn");
+    assert.equal(unresolved.label, "Nothing cancelled. No reminder matches “Sprocket”.");
+  });
+
   it("says a confirmed dictation is staged for approval, not done", () => {
     const info = logic.describeVoiceDispatch({
       decision: "proposed",

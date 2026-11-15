@@ -31,6 +31,7 @@ import {
 import type { VoiceActuationProvider } from "./voiceHardware.js";
 import { resolveClarification } from "./voiceDialogueResolver.js";
 import {
+  CANCEL_REMINDER_COMMAND,
   COMPLETE_ERRAND_COMMAND,
   COMPLETE_TASK_COMMAND,
   classifyVoiceDictation,
@@ -40,6 +41,7 @@ import {
 } from "./voiceDictation.js";
 import {
   VOICE_COMPLETION_UNAVAILABLE_REASON,
+  VOICE_REMINDER_CANCEL_UNAVAILABLE_REASON,
   type VoiceCompletionResolver,
 } from "./voiceCompletion.js";
 import { interpretIntent } from "./voiceIntentInterpreter.js";
@@ -693,19 +695,28 @@ export class VoiceSession {
       this.#record(now, normalizedTranscript, "completion-unresolved", dictation.command.id);
       return { decision: "completion-unresolved", command: dictation.command, reason };
     };
-    if (!this.#completions) return unresolved(VOICE_COMPLETION_UNAVAILABLE_REASON);
+    const unavailable =
+      kind === "reminder"
+        ? VOICE_REMINDER_CANCEL_UNAVAILABLE_REASON
+        : VOICE_COMPLETION_UNAVAILABLE_REASON;
+    if (!this.#completions) return unresolved(unavailable);
     let resolution;
     try {
       resolution = await this.#completions.resolve({ kind, reference: dictation.capture.title });
     } catch {
-      return unresolved(VOICE_COMPLETION_UNAVAILABLE_REASON);
+      return unresolved(unavailable);
     }
     if (resolution.status !== "found") return unresolved(resolution.reason);
     // Anything armed while the records were read is void: this turn replaces it.
     this.#invalidatePending();
     const { target } = resolution;
     return this.#arm(now, normalizedTranscript, {
-      command: target.kind === "task" ? COMPLETE_TASK_COMMAND : COMPLETE_ERRAND_COMMAND,
+      command:
+        target.kind === "task"
+          ? COMPLETE_TASK_COMMAND
+          : target.kind === "errand"
+            ? COMPLETE_ERRAND_COMMAND
+            : CANCEL_REMINDER_COMMAND,
       capture: Object.freeze({ title: target.title, targetId: target.id }),
     });
   }

@@ -2,11 +2,12 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import type { Errand } from "../src/errands/errand.js";
-import type { Task } from "../src/persistence/types.js";
+import type { Reminder, Task } from "../src/persistence/types.js";
 import {
   AuthoritativeVoiceCompletionResolver,
   completionMatchRank,
   VOICE_COMPLETION_UNAVAILABLE_REASON,
+  VOICE_REMINDER_CANCEL_UNAVAILABLE_REASON,
   type VoiceCompletionResolver,
 } from "../src/voice/voiceCompletion.js";
 import { VOICE_COMMANDS } from "../src/voice/voiceCommands.js";
@@ -60,6 +61,8 @@ describe("voice completion grammar", () => {
       "mark the task done",
       "tick off everything",
       "tick off all of them",
+      "tick off the",
+      "mark my done",
       "tick off nolan",
       "tick off confirm",
       "tick off milk and send the quote",
@@ -297,5 +300,174 @@ describe("voice completion in the session", () => {
     assert.equal(out.decision, "ambiguous");
     assert.equal(reads, 0);
     assert.equal(s.pending(), undefined);
+  });
+});
+
+function reminder(id: string, title: string, projectId?: string): Reminder {
+  return { id, title, createdAt: 1, ...(projectId ? { projectId } : {}) };
+}
+
+describe("voice reminder cancellation", () => {
+  it("captures the spoken reminder reference in every form", () => {
+    const cases: Array<[string, string]> = [
+      ["cancel the bar oil reminder", "Bar oil"],
+      ["cancel my reminder to order bar oil", "Order bar oil"],
+      ["delete the reminder: call Dave", "Call Dave"],
+      ["remove reminder about the rego", "Rego"],
+      ["scrap the reminder for the Smith quote", "Smith quote"],
+      ["drop my call Dave reminder", "Call Dave"],
+      ["clear the reminder called renew the rego", "Renew the rego"],
+    ];
+    for (const [utterance, title] of cases) {
+      const dictation = parseVoiceDictation(utterance, "client");
+      assert.equal(dictation?.command.id, "client.cancel-reminder", utterance);
+      assert.deepEqual(dictation?.command.proposes, { tool: "reminders", operation: "cancel" });
+      assert.deepEqual(dictation?.capture, { title }, utterance);
+    }
+    assert.equal(
+      describeVoiceDictation({
+        command: parseVoiceDictation("cancel the bar oil reminder", "client")!.command,
+        capture: { title: "Order bar oil" },
+      }),
+      "Cancel reminder “Order bar oil”",
+    );
+  });
+
+  it("fails closed on vague, chained or unsafe cancellations", () => {
+    for (const utterance of [
+      "cancel the reminder",
+      "cancel that reminder",
+      "cancel it reminder",
+      "delete my reminder",
+      "cancel the reminder to it",
+      "cancel the reminder reminder",
+      "cancel all reminders",
+      "cancel everything reminder",
+      "cancel the reminder to order oil and send the quote",
+      "cancel the reminder to nolan",
+      "cancel the reminder to confirm",
+      "cancel the reminder to not call Dave",
+    ]) {
+      const dictation = parseVoiceDictation(utterance, "client");
+      assert.notEqual(dictation?.command.id, "client.cancel-reminder", utterance);
+    }
+    // Bare control words are not dictations at all.
+    assert.equal(parseVoiceDictation("cancel", "client"), undefined);
+    assert.equal(parseVoiceDictation("cancel command", "client"), undefined);
+    // Creating a reminder is unaffected.
+    assert.equal(
+      parseVoiceDictation("remind me to renew the rego", "client")?.command.id,
+      "client.follow-up-reminder",
+    );
+    assert.equal(
+      VOICE_COMMANDS.find((entry) => entry.id === "client.cancel-reminder"),
+      undefined,
+    );
+  });
+
+  function reminderResolver(reminders: Reminder[], voiceProject: unknown = VOICE_PROJECT) {
+    return new AuthoritativeVoiceCompletionResolver({
+      tasks: { listTasks: async () => [task("t1", "Order bar oil", { projectId: "voice-1" })] },
+      errands: { list: async () => [errand("e1", "Bar oil")] },
+      reminders: { listReminders: async () => reminders },
+      voiceProject: voiceProject as typeof VOICE_PROJECT,
+    });
+  }
+
+  it("resolves only reminders, and only inside the voice project", async () => {
+    const r = reminderResolver([
+      reminder("r1", "Order bar oil", "voice-1"),
+      reminder("r2", "Change the oil filter", "voice-1"),
+      reminder("r3", "Renew the rego"),
+    ]);
+    // Tasks and errands with the same words are never cancellation targets.
+    assert.deepEqual(await r.resolve({ kind: "reminder", reference: "bar oil" }), {
+      status: "found",
+      target: { kind: "reminder", id: "r1", title: "Order bar oil" },
+    });
+    assert.deepEqual(await r.resolve({ kind: "reminder", reference: "oil" }), {
+      status: "unresolved",
+      reason: "2 reminders match “oil”. Say more of the title.",
+    });
+    assert.deepEqual(await r.resolve({ kind: "reminder", reference: "sprocket" }), {
+      status: "unresolved",
+      reason: "No reminder matches “sprocket”.",
+    });
+    assert.deepEqual(await r.resolve({ kind: "reminder", reference: "rego" }), {
+      status: "unresolved",
+      reason:
+        "Reminder “Renew the rego” was not captured by voice, so voice cannot cancel it. Cancel it on the HUD.",
+    });
+    // Completion lookups never see reminders.
+    assert.match(
+      JSON.stringify(await r.resolve({ kind: "any", reference: "rego" })),
+      /No open task or errand matches/,
+    );
+  });
+
+  it("fails closed when reminders or the voice project cannot be read", async () => {
+    assert.match(
+      JSON.stringify(
+        await reminderResolver([reminder("r1", "Order bar oil", "voice-1")], {
+          resolve: async () => ({ reason: "Run npm run commission:voice-project." }),
+        }).resolve({ kind: "reminder", reference: "bar oil" }),
+      ),
+      /cannot be cancelled by voice: Run npm run commission:voice-project\./,
+    );
+    const broken = new AuthoritativeVoiceCompletionResolver({
+      reminders: {
+        listReminders: async () => {
+          throw new Error("convex down");
+        },
+      },
+      voiceProject: VOICE_PROJECT,
+    });
+    assert.deepEqual(await broken.resolve({ kind: "reminder", reference: "x" }), {
+      status: "unresolved",
+      reason: "Reminder records are unavailable.",
+    });
+    const missing = new AuthoritativeVoiceCompletionResolver({
+      tasks: { listTasks: async () => [] },
+      errands: { list: async () => [] },
+    });
+    assert.deepEqual(await missing.resolve({ kind: "reminder", reference: "x" }), {
+      status: "unresolved",
+      reason: VOICE_REMINDER_CANCEL_UNAVAILABLE_REASON,
+    });
+  });
+
+  it("arms the resolved reminder in the session, and is unavailable without a resolver", async () => {
+    const s = new VoiceSession({
+      profile: "client",
+      provider: new AbsentHardwareProvider(),
+      completions: reminderResolver([reminder("r1", "Order bar oil", "voice-1")]),
+    });
+    const out = await s.handle({
+      transcript: "cancel the bar oil reminder",
+      isFinal: true,
+      wakeAuthorized: true,
+      now: 1_000,
+    });
+    assert.equal(out.decision, "awaiting-confirmation");
+    assert.equal(s.pending()?.command.id, "client.cancel-reminder");
+    assert.deepEqual(s.pending()?.capture, { title: "Order bar oil", targetId: "r1" });
+    const confirmed = await s.handle({
+      transcript: "confirm",
+      isFinal: true,
+      wakeAuthorized: true,
+      now: 2_000,
+    });
+    assert.ok(confirmed.decision === "proposed");
+    assert.deepEqual(confirmed.command.proposes, { tool: "reminders", operation: "cancel" });
+
+    const bare = new VoiceSession({ profile: "client", provider: new AbsentHardwareProvider() });
+    const refused = await bare.handle({
+      transcript: "cancel the bar oil reminder",
+      isFinal: true,
+      wakeAuthorized: true,
+      now: 1_000,
+    });
+    assert.ok(refused.decision === "completion-unresolved");
+    assert.equal(refused.reason, VOICE_REMINDER_CANCEL_UNAVAILABLE_REASON);
   });
 });

@@ -4127,6 +4127,10 @@
             var item = (tool === "tasks" ? "task" : "errand") + " “" + capture.title + "”";
             return { ask: "Mark " + item + " done", staged: "completing " + item, pending: "mark " + item + " done", effect: "changes" };
           }
+          if (tool === "reminders" && operation === "cancel") {
+            var reminder = "reminder “" + capture.title + "”";
+            return { ask: "Cancel " + reminder, staged: "cancelling " + reminder, pending: "cancel " + reminder, effect: "changes" };
+          }
           var what;
           if (tool === "tasks") what = "task “" + capture.title + "”" + (capture.category ? " (" + capture.category + ")" : "");
           else if (tool === "errands") what = "errand “" + capture.title + "”";
@@ -4149,7 +4153,8 @@
           }
           if (dispatch && dispatch.decision === "completion-unresolved") {
             var unresolved = typeof dispatch.reason === "string" ? dispatch.reason.trim() : "";
-            return { label: unresolved ? "Nothing marked done. " + unresolved : "Nothing marked done.", tone: "warn" };
+            var nothing = dispatch.command && dispatch.command.id === "client.cancel-reminder" ? "Nothing cancelled." : "Nothing marked done.";
+            return { label: unresolved ? nothing + " " + unresolved : nothing, tone: "warn" };
           }
           if (dispatch && dispatch.decision === "answered") {
             var answer = typeof dispatch.answer === "string" ? dispatch.answer.trim() : "";
