@@ -76,6 +76,30 @@ describe("spoken reminder due times", () => {
     assert.match(describeVoiceDictation(byFriday), /“by friday” \(no time set\)$/);
   });
 
+  it("never guesses noon or midnight for 'tonight at 12'", () => {
+    for (const [utterance, dueRaw] of [
+      ["remind me to lock up tonight at 12", "tonight at 12"],
+      ["remind me to lock up tonight at 12:30", "tonight at 12:30"],
+    ] as const) {
+      const dictation = capture(utterance);
+      assert.deepEqual(dictation.capture, { title: "Lock up", dueRaw }, utterance);
+      assert.match(describeVoiceDictation(dictation), /no time set — say am or pm/, utterance);
+    }
+    // Explicit noon or midnight contradicts "tonight".
+    for (const utterance of [
+      "remind me to lock up tonight at 12 pm",
+      "remind me to lock up tonight at 12 am",
+      "remind me to lock up tonight at noon",
+    ]) {
+      assert.equal(classifyVoiceDictation(utterance, "client", CTX).status, "rejected", utterance);
+    }
+    // A bare evening hour is still resolved.
+    assert.equal(
+      capture("remind me to lock up tonight at 11:30").capture.dueAt,
+      Date.parse("2026-11-15T12:30:00.000Z"),
+    );
+  });
+
   it("fails closed on a past, contradictory or impossible time", () => {
     for (const utterance of [
       "remind me to feed the dog today at 9 am", // already passed

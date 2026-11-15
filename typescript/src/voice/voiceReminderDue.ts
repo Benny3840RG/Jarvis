@@ -12,7 +12,8 @@
  *     "this friday", "by friday"). "next friday" is ambiguous and is never resolved.
  *   - Times: "7 am", "7am", "7 a.m.", "7:30 pm", "19:00", "noon", "midday".
  *     A bare 1-12 hour with no am/pm ("at 7") is ambiguous: it stays in the
- *     preserved due text but no timestamp is guessed. After "tonight" it is pm.
+ *     preserved due text but no timestamp is guessed. After "tonight" a bare
+ *     1-11 is pm; "tonight at 12" (noon or midnight?) is never guessed.
  *   - A time with no day means the next occurrence (today if still ahead).
  *   - A day with no time is preserved as due text only; no time is invented.
  *   - A resolved time in the past ("today at 7 am" at noon) or a contradiction
@@ -94,13 +95,14 @@ function resolve(
 
   if (tonight && time) {
     if (time.ambiguous) {
-      time = {
-        hour: time.hour === 12 ? 12 : time.hour + 12,
-        minute: time.minute,
-        ambiguous: false,
-      };
-    } else if (time.hour < 12) {
-      return "rejected"; // "tonight at 7 am" contradicts itself.
+      // "tonight at 12" could mean midnight (tomorrow 00:00) or be a slip for
+      // noon; neither is guessed. A bare 1-11 after "tonight" is the evening.
+      if (time.hour === 12) return { dueRaw };
+      time = { hour: time.hour + 12, minute: time.minute, ambiguous: false };
+    } else if (time.hour <= 12) {
+      // "tonight at 7 am", "tonight at 12 pm" (noon) and "tonight at 12 am"
+      // contradict "tonight"; the evening is 13:00 onwards.
+      return "rejected";
     }
   }
   // No time, or an hour that could be am or pm: keep what was said, guess nothing.
