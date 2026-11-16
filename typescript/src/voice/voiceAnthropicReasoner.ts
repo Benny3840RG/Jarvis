@@ -9,6 +9,18 @@ import type {
 
 import { JARVIS_INSTRUCTIONS } from "../mcp/persona.js";
 import type { ConversationReasonerInput, VoiceConversationReasoner } from "./voiceConversation.js";
+import {
+  PROPOSE_CHANGE_DESCRIPTION,
+  PROPOSE_CHANGE_INPUT_SCHEMA,
+  voiceProposalSchema,
+} from "./voiceProposal.js";
+
+const PROPOSE_CHANGE_TOOL = "propose_change";
+
+/** Spoken changes are dictations on the client profile only. */
+function canPropose(input: ConversationReasonerInput): boolean {
+  return input.profile === "client";
+}
 
 export type AnthropicVoiceConfig = Readonly<{
   apiKey?: string;
@@ -32,8 +44,16 @@ function systemPrompt(input: ConversationReasonerInput): string {
   return (
     `${JARVIS_INSTRUCTIONS}\n\nVoice conversation rules override tone where they differ. ` +
     "You have no ability to write, stage, approve, confirm, cancel, actuate, or change the profile. " +
-    "Never claim an action happened. If Benny asks for an action, say plainly you have not done it " +
-    "and give the catalogue phrase to say instead. Use the voice_query tool for every factual " +
+    "Never claim an action happened. " +
+    (input.profile === "client"
+      ? "When Benny asks to add, tick off, cancel, remove or reschedule one of his tasks, reminders " +
+        "or errands, call propose_change once with that single change, using his own words for " +
+        "titles and references, and nothing else in that turn. NOLAN reads it back and it only " +
+        "happens after he confirms and approves. For any other action, say plainly you have not " +
+        "done it and give the catalogue phrase to say instead. "
+      : "If Benny asks for an action, say plainly you have not done it and give the catalogue " +
+        "phrase to say instead. ") +
+    "Use the voice_query tool for every factual " +
     "business question. If its source is unavailable, say so; never guess from general knowledge. " +
     "Only the tool's spoken answer is authoritative for business facts. " +
     "Answer in one to three short spoken sentences, plain Australian English. No markdown, lists, " +
@@ -83,6 +103,18 @@ export function createAnthropicVoiceReasoner(
               system: systemPrompt(input),
               messages,
               tools: [
+                ...(canPropose(input)
+                  ? [
+                      {
+                        name: PROPOSE_CHANGE_TOOL,
+                        description: PROPOSE_CHANGE_DESCRIPTION,
+                        input_schema: PROPOSE_CHANGE_INPUT_SCHEMA as unknown as {
+                          type: "object";
+                          [key: string]: unknown;
+                        },
+                      },
+                    ]
+                  : []),
                 {
                   name: "voice_query",
                   description:
@@ -125,6 +157,19 @@ export function createAnthropicVoiceReasoner(
             return { status: "unavailable", reason: "provider-error" };
           const uses = response.content.filter((block) => block.type === "tool_use");
           if (!uses.length) return { status: "unavailable", reason: "tool-limit" };
+          if (uses.some((use) => use.name === PROPOSE_CHANGE_TOOL)) {
+            // A proposal ends the turn and must be its only tool use. NOLAN, not the
+            // model, turns it into a sentence, and the session reads it back.
+            if (!canPropose(input) || uses.length !== 1 || toolCalls > 0) {
+              return { status: "unavailable", reason: "tool-limit" };
+            }
+            const parsed = voiceProposalSchema.safeParse(uses[0]!.input);
+            if (!parsed.success) {
+              input.rejectMalformedRequest();
+              return { status: "unavailable", reason: "provider-error" };
+            }
+            return { status: "proposed", proposal: parsed.data };
+          }
           // Every request is counted by the service (via input.query) before any terminal
           // reason is chosen, so no early return may skip a request block.
           const results: BetaToolResultBlockParam[] = [];

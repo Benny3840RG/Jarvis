@@ -11,6 +11,22 @@ provider selector to disable paid conversation even if a key remains present.
 The status API reports the provider, model and configuration reason without a
 key or a live provider probe. Unknown provider values disable conversation.
 
+**Free-form changes (Client profile).** With conversation on, NOLAN also
+understands changes said in your own words: `Nolan, chuck some bar oil on the
+shopping list`, `Nolan, I've sorted the milk`, `Nolan, push the rego reminder
+to Friday at 9`. The model may propose exactly one change through its
+`propose_change` tool: add a task, reminder or errand; tick off a task or
+errand; cancel a reminder; remove an errand; or reschedule a reminder. It
+cannot stage anything itself. NOLAN turns the proposal into its own canonical
+sentence (`add an errand: Bar oil`) and runs it through the ordinary dictation
+path, so every rule above applies unchanged: record lookup, refusing ties and
+vague words, the bounded due-time grammar, the full read-back, `Nolan confirm`,
+and owner approval on the Approvals page. A proposal that the grammar refuses,
+or one made alongside a query, is reported as not understood and arms nothing.
+A due time outside the bounded grammar (`next Friday`, `in two hours`) is
+refused rather than folded into the title. Speech the deterministic grammar
+already understands never reaches the model.
+
 Only a final, wake-authorised utterance that the deterministic session returns
 as unrecognised reaches the conversation provider. **Enabling this sends the
 wake-authorised utterance text and the read-only answers the model asks for to

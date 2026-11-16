@@ -5,7 +5,7 @@ import {
   NOT_DONE_REPLY,
   VoiceConversationService,
   type ConversationReasonerInput,
-  type ConversationResult,
+  type ReasonerResult,
   type VoiceConversationReasoner,
 } from "../src/voice/voiceConversation.js";
 import { resolveVoiceConversationStatus } from "../src/voice/voiceConversationFactory.js";
@@ -428,7 +428,7 @@ it("a disallowed trailer.status query is an attempt answered unavailable by the 
 
 it("classifies a lone malformed request provider-error and any second request tool-limit", async () => {
   let reads = 0;
-  const respond = (script: (input: ConversationReasonerInput) => Promise<ConversationResult>) => {
+  const respond = (script: (input: ConversationReasonerInput) => Promise<ReasonerResult>) => {
     const s = session();
     const original = s.readOnlyQuery.bind(s);
     s.readOnlyQuery = async (id) => {
