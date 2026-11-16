@@ -5,6 +5,7 @@ import { taskActionResultValidator } from "./internalActionValidators.js";
 import { collectBounded, requireOwner } from "./authHelpers.js";
 import { cleanRequiredText, requirePageSize } from "./toolActionLogic.js";
 import { mutation, query, type MutationCtx } from "./_generated/server.js";
+import { requireDirectlyMutableTask } from "../src/persistence/directMutationPolicy.js";
 
 export const taskValidator = v.object({
   _id: v.id("tasks"),
@@ -40,12 +41,6 @@ function directCreateIdentity(
     idempotencyKey: cleanRequiredText(idempotencyKey, "Task create idempotency key"),
     requestFingerprint: cleanRequiredText(requestFingerprint, "Task create request fingerprint"),
   };
-}
-
-function requireDirectlyMutableTask(task: { projectId?: string }): void {
-  if (task.projectId !== undefined) {
-    throw new Error("Project-scoped tasks must be changed through controlled task execution.");
-  }
 }
 
 function controlledTaskResult(

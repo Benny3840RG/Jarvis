@@ -5,6 +5,7 @@ import { collectBounded, requireOwner } from "./authHelpers.js";
 import { reminderActionResultValidator } from "./internalActionValidators.js";
 import { cleanRequiredText, requirePageSize } from "./toolActionLogic.js";
 import { mutation, query, type MutationCtx } from "./_generated/server.js";
+import { requireDirectlyMutableReminder } from "../src/persistence/directMutationPolicy.js";
 
 export const reminderValidator = v.object({
   _id: v.id("reminders"),
@@ -47,14 +48,6 @@ function directCreateIdentity(
       "Reminder create request fingerprint",
     ),
   };
-}
-
-function requireDirectlyMutableReminder(reminder: { projectId?: string }): void {
-  if (reminder.projectId !== undefined) {
-    throw new Error(
-      "Project-scoped reminders must be changed through controlled reminder execution.",
-    );
-  }
 }
 
 function validatedDue(args: DueFields): DueFields {
