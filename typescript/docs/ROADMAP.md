@@ -1,5 +1,21 @@
 # Jarvis TypeScript Roadmap
 
+## Provider mutation contract suite (2026-11-16)
+
+- One case table (`tests/contracts/providerMutationContract.ts`) now runs
+  against the production `JSONPersistence`, `ConvexPersistence` and
+  `ConvexControlledTaskStore` classes; Convex runs over convex-test.
+- Capability-aware: cases needing `controlled` or `serviceAuth` are skipped
+  with a reason on JSON rather than assumed equal.
+- Result: no new defect. JSON 6 pass / 4 skipped; Convex 10 pass.
+- Mutation check: disabling the shared task guard fails the contract on both
+  backends (JSON 1 case, Convex 2), so the suite can detect the #830 defect.
+- Not covered: controlled reminder store (cancel/reschedule) and controlled
+  task create; Convex smoke against a dev deployment not run.
+- Note: `docs/architecture/provider-mutation-contract.md`.
+- Next: cross-interface audit (CLI, MCP, voice, HUD → approval, execution,
+  receipts, persistence), read-only unless it proves a concrete defect.
+
 ## Direct-mutation policy parity for project-scoped records (2026-11-16)
 
 - Defect: Convex `tasks.update/complete/remove` and `reminders.update/remove`
