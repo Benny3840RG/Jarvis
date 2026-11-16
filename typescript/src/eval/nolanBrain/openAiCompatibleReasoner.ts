@@ -58,6 +58,9 @@ export function createOpenAiCompatibleVoiceReasoner(
   config: OpenAiCompatibleConfig,
   deps: { fetch?: Fetch } = {},
 ): VoiceConversationReasoner {
+  if (!Number.isSafeInteger(config.timeoutMs) || config.timeoutMs < 1) {
+    throw new Error("timeoutMs must be a positive whole number of milliseconds.");
+  }
   const doFetch: Fetch = deps.fetch ?? ((url, init) => fetch(url, init));
   const endpoint = `${config.baseUrl.replace(/\/+$/, "")}/chat/completions`;
   return {

@@ -52,20 +52,35 @@ export function refuseAllReasoner(): VoiceConversationReasoner {
 
 type Args = Record<string, string | string[] | undefined>;
 
-function parseArgs(argv: readonly string[]): Args {
+/** `--flag value` pairs. A flag with no value (end of input, or another flag next) is an error. */
+export function parseArgs(argv: readonly string[]): Args {
   const args: Args = {};
   for (let index = 0; index < argv.length; index += 1) {
     const flag = argv[index]!;
-    if (!flag.startsWith("--")) continue;
+    if (!flag.startsWith("--")) throw new Error(`Unexpected argument "${flag}".`);
     const key = flag.slice(2);
     if (key === "compare") {
       args.compare = argv.slice(index + 1).filter((value) => !value.startsWith("--"));
       break;
     }
-    args[key] = argv[index + 1];
+    const value = argv[index + 1];
+    if (value === undefined || value.startsWith("--")) {
+      throw new Error(`--${key} needs a value.`);
+    }
+    args[key] = value;
     index += 1;
   }
   return args;
+}
+
+/** A positive whole number from a flag, or a clear error instead of NaN. */
+export function positiveIntegerArg(args: Args, key: string, fallback: number): number {
+  const raw = text(args, key);
+  if (raw === undefined) return fallback;
+  if (!/^\d+$/.test(raw) || Number(raw) < 1 || !Number.isSafeInteger(Number(raw))) {
+    throw new Error(`--${key} must be a positive whole number, got "${raw}".`);
+  }
+  return Number(raw);
 }
 
 function text(args: Args, key: string, fallback?: string): string | undefined {
@@ -79,7 +94,7 @@ function reasonerFor(args: Args): {
   endpoint: string;
 } {
   const provider = text(args, "provider", "oracle")!;
-  const timeoutMs = Number(text(args, "timeout-ms", "60000"));
+  const timeoutMs = positiveIntegerArg(args, "timeout-ms", 60_000);
   if (provider === "oracle")
     return { reasoner: oracleReasoner(), model: "oracle", endpoint: "in-process" };
   if (provider === "refuse-all") {
@@ -151,7 +166,7 @@ async function main(): Promise<void> {
     endpoint,
     machine: text(args, "machine", hostname())!,
     startedAt: new Date().toISOString(),
-    repeats: Math.max(1, Number(text(args, "repeats", "1"))),
+    repeats: positiveIntegerArg(args, "repeats", 1),
   };
   const { verdicts, summary } = await runEvaluation(reasoner, {
     repeats: info.repeats,

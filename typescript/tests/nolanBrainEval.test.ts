@@ -4,7 +4,12 @@ import { describe, it } from "node:test";
 import { EVAL_CASES } from "../src/eval/nolanBrain/cases.js";
 import { runEvaluation } from "../src/eval/nolanBrain/harness.js";
 import { createOpenAiCompatibleVoiceReasoner } from "../src/eval/nolanBrain/openAiCompatibleReasoner.js";
-import { oracleReasoner, refuseAllReasoner } from "../src/eval/nolanBrain/run.js";
+import {
+  oracleReasoner,
+  parseArgs,
+  positiveIntegerArg,
+  refuseAllReasoner,
+} from "../src/eval/nolanBrain/run.js";
 import type { VoiceConversationReasoner } from "../src/voice/voiceConversation.js";
 
 describe("NOLAN brain evaluation harness", () => {
@@ -210,5 +215,41 @@ describe("OpenAI-compatible (Ollama) reasoner", () => {
       }),
       { status: "unavailable", reason: "timeout" },
     );
+  });
+});
+
+describe("evaluation CLI arguments", () => {
+  it("rejects a missing value instead of swallowing the next flag", () => {
+    assert.throws(
+      () => parseArgs(["--timeout-ms", "--provider", "ollama"]),
+      /--timeout-ms needs a value/,
+    );
+    assert.throws(() => parseArgs(["--repeats"]), /--repeats needs a value/);
+    assert.deepEqual(parseArgs(["--provider", "ollama", "--model", "qwen3:4b"]), {
+      provider: "ollama",
+      model: "qwen3:4b",
+    });
+  });
+
+  it("accepts only positive whole numbers for timeouts and repeats", () => {
+    assert.equal(positiveIntegerArg({}, "repeats", 1), 1);
+    assert.equal(positiveIntegerArg({ "timeout-ms": "30000" }, "timeout-ms", 60_000), 30_000);
+    for (const bad of ["60s", "0", "-5", "1.5", "NaN", "1e3"]) {
+      assert.throws(
+        () => positiveIntegerArg({ "timeout-ms": bad }, "timeout-ms", 60_000),
+        /must be a positive whole number/,
+        bad,
+      );
+    }
+  });
+
+  it("the Ollama adapter refuses a timeout that would throw later", () => {
+    for (const timeoutMs of [Number.NaN, 0, -1, 1.5]) {
+      assert.throws(
+        () =>
+          createOpenAiCompatibleVoiceReasoner({ baseUrl: "http://x/v1", model: "m", timeoutMs }),
+        /timeoutMs must be a positive whole number/,
+      );
+    }
   });
 });
