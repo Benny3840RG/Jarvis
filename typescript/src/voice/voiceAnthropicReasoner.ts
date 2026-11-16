@@ -37,7 +37,11 @@ export interface AnthropicVoiceMessages {
   ): Promise<Pick<BetaMessage, "stop_reason" | "content">>;
 }
 
-function systemPrompt(input: ConversationReasonerInput): string {
+/**
+ * NOLAN's conversation instructions. Exported so a provider-independent
+ * evaluation sends every provider exactly the same prompt.
+ */
+export function voiceConversationSystemPrompt(input: ConversationReasonerInput): string {
   const catalog = input.catalog
     .map((command) => `${command.id}: ${command.phrases.join(" / ")} — ${command.summary}`)
     .join("\n");
@@ -73,6 +77,45 @@ function requestedCommandId(name: string, value: unknown): string | undefined {
   return typeof commandId === "string" ? commandId : undefined;
 }
 
+export type VoiceConversationTool = {
+  name: string;
+  description: string;
+  input_schema: { type: "object"; [key: string]: unknown };
+};
+
+/**
+ * The tools NOLAN offers the model: propose_change on the client profile and
+ * the read-only voice_query enum. Exported for the same reason as the prompt.
+ */
+export function voiceConversationTools(input: ConversationReasonerInput): VoiceConversationTool[] {
+  const ids = input.catalog.filter((command) => command.kind === "query").map((c) => c.id);
+  return [
+    ...(canPropose(input)
+      ? [
+          {
+            name: PROPOSE_CHANGE_TOOL,
+            description: PROPOSE_CHANGE_DESCRIPTION,
+            input_schema: PROPOSE_CHANGE_INPUT_SCHEMA as unknown as {
+              type: "object";
+              [key: string]: unknown;
+            },
+          },
+        ]
+      : []),
+    {
+      name: "voice_query",
+      description:
+        "Read the existing authoritative spoken answer for one query in the active voice profile.",
+      input_schema: {
+        type: "object",
+        properties: { commandId: { type: "string", enum: ids } },
+        required: ["commandId"],
+        additionalProperties: false,
+      },
+    },
+  ];
+}
+
 export function createAnthropicVoiceReasoner(
   config: AnthropicVoiceConfig,
   deps: { client?: AnthropicVoiceMessages } = {},
@@ -83,7 +126,6 @@ export function createAnthropicVoiceReasoner(
       .messages;
   return {
     async reply(input) {
-      const ids = input.catalog.filter((command) => command.kind === "query").map((c) => c.id);
       const messages: BetaMessageParam[] = [
         ...input.history.map((message) => ({ role: message.role, content: message.content })),
         { role: "user", content: input.transcript },
@@ -100,33 +142,9 @@ export function createAnthropicVoiceReasoner(
               model: config.model,
               max_tokens: 2000,
               output_config: { effort: "low" },
-              system: systemPrompt(input),
+              system: voiceConversationSystemPrompt(input),
               messages,
-              tools: [
-                ...(canPropose(input)
-                  ? [
-                      {
-                        name: PROPOSE_CHANGE_TOOL,
-                        description: PROPOSE_CHANGE_DESCRIPTION,
-                        input_schema: PROPOSE_CHANGE_INPUT_SCHEMA as unknown as {
-                          type: "object";
-                          [key: string]: unknown;
-                        },
-                      },
-                    ]
-                  : []),
-                {
-                  name: "voice_query",
-                  description:
-                    "Read the existing authoritative spoken answer for one query in the active voice profile.",
-                  input_schema: {
-                    type: "object",
-                    properties: { commandId: { type: "string", enum: ids } },
-                    required: ["commandId"],
-                    additionalProperties: false,
-                  },
-                },
-              ],
+              tools: voiceConversationTools(input),
               tool_choice: { type: "auto" },
               betas: ["server-side-fallback-2026-07-01"],
               fallbacks: "default",

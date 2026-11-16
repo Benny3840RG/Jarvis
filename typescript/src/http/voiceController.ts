@@ -19,7 +19,10 @@ import type { ToolActionService } from "../actions/toolActions.js";
 import { VOICE_COMMANDS, VOICE_PROFILES } from "../voice/voiceCommands.js";
 import { stageVoiceSafeWrite, voiceUtteranceForSession } from "../voice/voiceSafeWrite.js";
 import type { VoiceSessionRegistry } from "../voice/voiceSessionRegistry.js";
-import type { VoiceConversationService } from "../voice/voiceConversation.js";
+import {
+  dispatchConversationProposal,
+  type VoiceConversationService,
+} from "../voice/voiceConversation.js";
 import type { VoiceWriteTarget } from "../voice/voiceWriteTarget.js";
 import { LocalLoopbackRoute } from "./localLoopbackRoute.js";
 import { JarvisProblem } from "./problemDetails.js";
@@ -170,15 +173,8 @@ export class VoiceController implements OnModuleDestroy {
           // record lookup and the full read-back apply and nothing is staged
           // until "Nolan confirm". A sentence the grammar refuses is reported
           // as not understood, never guessed.
-          const proposed = await session.handle({
-            transcript: outcome.utterance,
-            isFinal: true,
-            wakeAuthorized: true,
-          });
-          if (
-            proposed.decision !== "awaiting-confirmation" &&
-            proposed.decision !== "completion-unresolved"
-          ) {
+          const proposed = await dispatchConversationProposal(session, outcome.utterance);
+          if (!proposed) {
             return {
               dispatch: {
                 decision: "conversation-unavailable" as const,
