@@ -18,6 +18,7 @@ import {
   normalizeUtterancePreservingCase,
 } from "./voiceDictation.js";
 import { normalizeUtterance, type VoiceCommand } from "./voiceCommands.js";
+import { describeVoiceDictation } from "./voiceDictation.js";
 import type { VoiceWriteTarget } from "./voiceWriteTarget.js";
 
 /** NOLAN is the approved public wake word. Keep Jarvis temporarily for legacy clients. */
@@ -228,6 +229,24 @@ function safeWriteArguments(
   return undefined;
 }
 
+/**
+ * The rationale names the command and repeats the exact read-back the owner
+ * heard, so an approver sees which item an id-only action ("tasks:complete
+ * { taskId }") acts on. It is derived from the same capture as the arguments,
+ * so a restage of the same action carries the same rationale.
+ */
+export function voiceSafeWriteRationale(
+  command: VoiceCommand,
+  capture: VoiceWriteCapture | undefined,
+): string {
+  const title = capture?.title?.trim();
+  if (!capture || !title) return `Voice safe write ${command.id}`;
+  return `Voice safe write ${command.id}: ${describeVoiceDictation({
+    command,
+    capture: { ...capture, title },
+  })}`;
+}
+
 function voiceSafeWriteActionId(input: {
   sessionId: string;
   commandId: string;
@@ -298,7 +317,7 @@ export async function stageVoiceSafeWrite(input: {
     tool,
     operation,
     arguments: argumentsValue,
-    rationale: `Voice safe write ${input.command.id}`,
+    rationale: voiceSafeWriteRationale(input.command, input.capture),
     requiredAuthority: "T1",
     destructive: false,
     idempotencyKey: actionId,

@@ -7495,6 +7495,39 @@
         }
       }
     },
+    "/settings/approvals": {
+      "get": {
+        "operationId": "getApprovalsPage",
+        "summary": "Open the loopback approvals page",
+        "description": "Serves the Approvals page on a loopback bind only. The page is public (no Bearer token) and contains no token and no action data. It lists staged ToolActions through GET /api/v1/projects/{projectId}/tool-actions and acts only through the existing approve, reject and execute routes, sending the service token and, to approve, the approval token, which the operator types into fields that are never written to browser storage. It adds no authority. Non-loopback binds do not serve the page.",
+        "tags": ["System"],
+        "security": [],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Loopback approvals HTML shell.",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/settings/owner-decisions": {
       "get": {
         "operationId": "getOwnerDecisionsPage",

@@ -1482,6 +1482,11 @@ describe("voice spoken completions", () => {
     assert.equal(staged.projectId, "nolan-voice");
     assert.equal(staged.baseRevision, 4);
     assert.deepEqual(staged.arguments, { taskId });
+    // The id-only action carries the exact read-back, so an approver sees the item.
+    assert.equal(
+      staged.rationale,
+      "Voice safe write client.complete-task: Mark task “Order bar oil” done",
+    );
     assert.equal(actions.approveCalls, 0, "voice never approves");
     assert.equal(table.rows[0]?.completed, false, "staging never executes");
 
