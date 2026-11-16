@@ -327,6 +327,11 @@ export class VoiceSession {
     this.#rescheduleReminders = options.rescheduleReminders === true;
   }
 
+  /** The owner clock and timezone spoken due times resolve in, or undefined when unset. */
+  spokenDueContext(now = this.#clock()): SpokenDueContext | undefined {
+    return this.#dueContext(now);
+  }
+
   #dueContext(now: number): SpokenDueContext | undefined {
     try {
       return { now, timezone: resolveReminderTimezone(this.#timezone) };

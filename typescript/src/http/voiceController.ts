@@ -164,6 +164,31 @@ export class VoiceController implements OnModuleDestroy {
             session.pending() === undefined &&
             !session.hasPendingClarification(),
         });
+        if (outcome.status === "proposed") {
+          // NOLAN understood a free-form request as one change. Its canonical
+          // sentence goes through the ordinary dictation path, so every guard,
+          // record lookup and the full read-back apply and nothing is staged
+          // until "Nolan confirm". A sentence the grammar refuses is reported
+          // as not understood, never guessed.
+          const proposed = await session.handle({
+            transcript: outcome.utterance,
+            isFinal: true,
+            wakeAuthorized: true,
+          });
+          if (
+            proposed.decision !== "awaiting-confirmation" &&
+            proposed.decision !== "completion-unresolved"
+          ) {
+            return {
+              dispatch: {
+                decision: "conversation-unavailable" as const,
+                conversationReason: "ungrounded" as const,
+              },
+              pending: session.pending() ?? null,
+            };
+          }
+          return { dispatch: proposed, pending: session.pending() ?? null };
+        }
         return {
           dispatch:
             outcome.status === "answered"
