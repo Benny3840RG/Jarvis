@@ -167,6 +167,27 @@ export function splitSpokenReminderDue(
   return { status: "due", title, due };
 }
 
+/**
+ * Parse a phrase that must be nothing but a due value ("friday at 9 am",
+ * "tomorrow", "3:30 pm"), as when rescheduling an existing reminder. It uses
+ * the same bounded grammar and fail-closed resolution as a dictated
+ * reminder's trailing due phrase; anything left over is `none`.
+ */
+export function parseSpokenDuePhrase(
+  phrase: string,
+  context: SpokenDueContext,
+): SpokenReminderDue | "rejected" | "none" {
+  const text = phrase.trim();
+  if (text.length === 0) return "none";
+  // A sentinel title lets the suffix grammar match; it must consume the rest.
+  for (const body of [`x ${text}`, `x at ${text}`]) {
+    const split = splitSpokenReminderDue(body, context, "suffix");
+    if (split.status === "rejected") return "rejected";
+    if (split.status === "due" && split.title === "x") return split.due;
+  }
+  return "none";
+}
+
 /** Human read-back of a resolved due value, in the owner's timezone. */
 export function describeSpokenReminderDue(due: SpokenReminderDue): string {
   if (due.dueAt === undefined || due.dueTimezone === undefined) {

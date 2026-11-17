@@ -1,5 +1,45 @@
 # Jarvis TypeScript Roadmap
 
+## Provider mutation contract suite (2026-11-16)
+
+- One case table (`tests/contracts/providerMutationContract.ts`) now runs
+  against the production `JSONPersistence`, `ConvexPersistence` and
+  `ConvexControlledTaskStore` classes; Convex runs over convex-test.
+- Capability-aware: cases needing `controlled` or `serviceAuth` are skipped
+  with a reason on JSON rather than assumed equal.
+- Result: no new defect. JSON 6 pass / 4 skipped; Convex 10 pass.
+- Mutation check: disabling the shared task guard fails the contract on both
+  backends (JSON 1 case, Convex 2), so the suite can detect the #830 defect.
+- Not covered: controlled reminder store (cancel/reschedule) and controlled
+  task create; Convex smoke against a dev deployment not run.
+- Note: `docs/architecture/provider-mutation-contract.md`.
+- Next: cross-interface audit (CLI, MCP, voice, HUD → approval, execution,
+  receipts, persistence), read-only unless it proves a concrete defect.
+
+## Direct-mutation policy parity for project-scoped records (2026-11-16)
+
+- Defect: Convex `tasks.update/complete/remove` and `reminders.update/remove`
+  refused project-scoped records (`projectId` set), but the JSON provider's
+  `updateTask/completeTask/removeTask/updateReminder/removeReminder` did not.
+  JSON can hold such records because `restoreSnapshotIntoEmpty` preserves
+  `projectId`. New tests reproduced the divergence before the fix.
+- Fix: the rule now lives in one place, `src/persistence/directMutationPolicy.ts`,
+  imported by both `convex/tasks.ts`, `convex/reminders.ts` and
+  `src/persistence/jsonPersistence.ts`. Error text is unchanged, so the
+  existing HTTP 409 `controlled-*-boundary` mapping applies to both providers.
+- Contract: OpenAPI now lists the 409 response that the task/reminder
+  PATCH, DELETE and complete routes already returned.
+- Trade-off: JSON has no controlled task/reminder store, so a project-scoped
+  record restored into JSON is now read-only through the direct API. That
+  matches Convex's direct API; it is not a new capability loss on Convex.
+- Not done: `npm run smoke:convex` (no dev deployment in this session); the
+  Convex change only relocates the guard, covered by
+  `convex/controlledMutationBoundary.test.ts`.
+- Next: (1) confirm whether a restored project-scoped record in JSON mode is a
+  reachable operator scenario and whether it needs a controlled JSON store;
+  (2) a shared provider contract suite run against JSON and convex-test for
+  the remaining direct-mutation invariants (re-complete, missing IDs).
+
 ## NOLAN voice conversation draft (#811, 2026-11-14)
 
 - Added an opt-in Anthropic conversational reply for final wake-authorised

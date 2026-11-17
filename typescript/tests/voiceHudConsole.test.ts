@@ -327,6 +327,105 @@ describe("voice HUD dictation read-back", () => {
     );
   });
 
+  it("reads a spoken reminder cancellation back and says when nothing was cancelled", () => {
+    const cancelReminder = {
+      id: "client.cancel-reminder",
+      proposes: { tool: "reminders", operation: "cancel" },
+    };
+    const ask = logic.describeVoiceDispatch({
+      decision: "awaiting-confirmation",
+      command: cancelReminder,
+      capture: { title: "Order bar oil", targetId: "r1" },
+    } as never);
+    assert.equal(ask.tone, "pending");
+    assert.match(ask.label, /^Cancel reminder “Order bar oil”\? Say “Nolan confirm”/);
+    const staged = logic.describeVoiceDispatch({
+      decision: "proposed",
+      command: cancelReminder,
+      capture: { title: "Order bar oil", targetId: "r1" },
+      toolActionId: "voice-safe-write:v1:abc",
+    } as never);
+    assert.match(
+      staged.label,
+      /^Staged cancelling reminder “Order bar oil” for your approval\. Nothing changes/,
+    );
+    const unresolved = logic.describeVoiceDispatch({
+      decision: "completion-unresolved",
+      command: cancelReminder,
+      reason: "No reminder matches “Sprocket”.",
+    } as never);
+    assert.equal(unresolved.tone, "warn");
+    assert.equal(unresolved.label, "Nothing cancelled. No reminder matches “Sprocket”.");
+  });
+
+  it("reads a spoken errand removal back and says when nothing was removed", () => {
+    const removeErrand = {
+      id: "client.remove-errand",
+      proposes: { tool: "errands", operation: "remove" },
+    };
+    const ask = logic.describeVoiceDispatch({
+      decision: "awaiting-confirmation",
+      command: removeErrand,
+      capture: { title: "Milk", targetId: "e1" },
+    } as never);
+    assert.match(ask.label, /^Remove errand “Milk” from the list\? Say “Nolan confirm”/);
+    const staged = logic.describeVoiceDispatch({
+      decision: "proposed",
+      command: removeErrand,
+      capture: { title: "Milk", targetId: "e1" },
+      toolActionId: "voice-safe-write:v1:abc",
+    } as never);
+    assert.match(
+      staged.label,
+      /^Staged removing errand “Milk” for your approval\. Nothing changes/,
+    );
+    const unresolved = logic.describeVoiceDispatch({
+      decision: "completion-unresolved",
+      command: removeErrand,
+      reason: "No open errand matches “Sprocket”.",
+    } as never);
+    assert.equal(unresolved.label, "Nothing removed. No open errand matches “Sprocket”.");
+  });
+
+  it("reads a spoken reschedule back with the new time and says when nothing was rescheduled", () => {
+    const rescheduleReminder = {
+      id: "client.reschedule-reminder",
+      proposes: { tool: "reminders", operation: "reschedule" },
+    };
+    const capture = {
+      title: "Order bar oil",
+      targetId: "r1",
+      dueRaw: "friday at 9 am",
+      dueAt: Date.UTC(2026, 10, 19, 22, 0),
+      dueTimezone: "Australia/Sydney",
+    };
+    const ask = logic.describeVoiceDispatch({
+      decision: "awaiting-confirmation",
+      command: rescheduleReminder,
+      capture,
+    } as never);
+    assert.match(
+      ask.label,
+      /^Reschedule reminder “Order bar oil” due Fri, 20 Nov, 9:00 am\? Say “Nolan confirm”/,
+    );
+    const staged = logic.describeVoiceDispatch({
+      decision: "proposed",
+      command: rescheduleReminder,
+      capture,
+      toolActionId: "voice-safe-write:v1:abc",
+    } as never);
+    assert.match(
+      staged.label,
+      /^Staged rescheduling reminder “Order bar oil” due Fri, 20 Nov, 9:00 am for your approval\. Nothing changes/,
+    );
+    const unresolved = logic.describeVoiceDispatch({
+      decision: "completion-unresolved",
+      command: rescheduleReminder,
+      reason: "Rescheduling reminders by voice is not enabled yet (AM-017 is planned).",
+    } as never);
+    assert.match(unresolved.label, /^Nothing rescheduled\. Rescheduling reminders by voice/);
+  });
+
   it("says a confirmed dictation is staged for approval, not done", () => {
     const info = logic.describeVoiceDispatch({
       decision: "proposed",

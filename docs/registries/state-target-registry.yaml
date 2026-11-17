@@ -36,7 +36,7 @@ state_targets:
       - typescript/convex/schema.ts
       - typescript/convex/reminders.ts
       - typescript/src/persistence/convexControlledReminders.ts
-    bound_by: [AM-006, AM-007]
+    bound_by: [AM-006, AM-007, AM-017]
 
   - id: STORE-QUOTES
     lifecycle_status: active

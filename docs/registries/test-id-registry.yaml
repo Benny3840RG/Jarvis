@@ -72,6 +72,19 @@ tests:
     path: typescript/tests/taskReminderActionsSmoke.test.ts
     verifies: live cancellation tombstone replay after deletion and authenticated post-run cleanup
 
+  - id: TEST-AM-017-DOMAIN-001
+    path: typescript/convex/reminderReschedule.test.ts
+    verifies: reminder reschedule replaces the due value, bumps the revision, replays the retained result and rejects fingerprint collisions and other projects
+  - id: TEST-AM-017-TOOL-001
+    path: typescript/tests/taskReminderAllowlist.test.ts
+    verifies: reminders:reschedule is absent unless explicitly enabled, then validates arguments and propagates execution context
+  - id: TEST-AM-017-PERSIST-001
+    path: typescript/tests/convexControlledReminders.test.ts
+    verifies: authenticated reschedule adapter call and retained result mapping
+  - id: TEST-AM-017-VOICE-001
+    path: typescript/tests/voiceSafeWrite.test.ts
+    verifies: spoken reschedule read-back, confirm staging on the voice project and refusal while AM-017 is not enabled
+
   - id: TEST-AM-012-DOMAIN-001
     path: typescript/tests/quoteConvexLifecycle.test.ts
     verifies: reviewed→finalized transition, draft→finalized rejection, immutability enforcement, optimistic concurrency and fingerprint computation

@@ -7,7 +7,10 @@
 import { canonicalJson } from "../actions/canonicalJson.js";
 import { sha256Hex } from "../actions/sha256.js";
 import { createErrandArgumentsSchema } from "../actions/errandTools.js";
-import { createReminderArgumentsSchema } from "../actions/taskReminderTools.js";
+import {
+  createReminderArgumentsSchema,
+  rescheduleReminderArgumentsSchema,
+} from "../actions/taskReminderTools.js";
 import type { ToolActionService } from "../actions/toolActions.js";
 import {
   classifyVoiceDictation,
@@ -15,6 +18,7 @@ import {
   normalizeUtterancePreservingCase,
 } from "./voiceDictation.js";
 import { normalizeUtterance, type VoiceCommand } from "./voiceCommands.js";
+import { describeVoiceDictation } from "./voiceDictation.js";
 import type { VoiceWriteTarget } from "./voiceWriteTarget.js";
 
 /** NOLAN is the approved public wake word. Keep Jarvis temporarily for legacy clients. */
@@ -29,10 +33,19 @@ const SAFE_EXECUTORS = new Set([
   "errands:create",
   "tasks:complete",
   "errands:complete",
+  "reminders:cancel",
+  "errands:remove",
+  "reminders:reschedule",
 ]);
 
 /** Completions act on a resolved record, so they only ever stage on the voice project. */
-const COMPLETION_EXECUTORS = new Set(["tasks:complete", "errands:complete"]);
+const COMPLETION_EXECUTORS = new Set([
+  "tasks:complete",
+  "errands:complete",
+  "reminders:cancel",
+  "errands:remove",
+  "reminders:reschedule",
+]);
 
 export const VOICE_COMPLETION_TARGET_REASON =
   "Safe write was not staged: a spoken completion stages only on the dedicated voice project.";
@@ -52,8 +65,9 @@ export type VoiceWriteCapture = Readonly<{
   dueAt?: number;
   dueTimezone?: string;
   /**
-   * Spoken completions only: the id of the one open task or errand the server
-   * resolved and read back by its full title. Never accepted from a request.
+   * Spoken completions and reminder cancellations only: the id of the one
+   * open task, errand or reminder the server resolved and read back by its
+   * full title. Never accepted from a request.
    */
   targetId?: string;
 }>;
@@ -169,7 +183,19 @@ function safeWriteArguments(
     // refuse (dueAt without timezone or raw text) is never staged.
     return createReminderArgumentsSchema.safeParse(candidate).success ? candidate : undefined;
   }
-  if (key === "tasks:complete" || key === "errands:complete") {
+  if (key === "reminders:reschedule") {
+    // A resolved reminder plus the new due value exactly as heard and read back.
+    const title = capture?.title?.trim() ?? "";
+    if (title.length < 1 || capture?.category !== undefined) return undefined;
+    const candidate = {
+      reminderId: capture?.targetId?.trim() ?? "",
+      ...(capture?.dueRaw === undefined ? {} : { dueRaw: capture.dueRaw }),
+      ...(capture?.dueAt === undefined ? {} : { dueAt: capture.dueAt }),
+      ...(capture?.dueTimezone === undefined ? {} : { dueTimezone: capture.dueTimezone }),
+    };
+    return rescheduleReminderArgumentsSchema.safeParse(candidate).success ? candidate : undefined;
+  }
+  if (COMPLETION_EXECUTORS.has(key)) {
     const title = capture?.title?.trim() ?? "";
     const targetId = capture?.targetId?.trim() ?? "";
     if (
@@ -183,7 +209,9 @@ function safeWriteArguments(
     ) {
       return undefined;
     }
-    return key === "tasks:complete" ? { taskId: targetId } : { errandId: targetId };
+    if (key === "tasks:complete") return { taskId: targetId };
+    if (key === "errands:complete" || key === "errands:remove") return { errandId: targetId };
+    return { reminderId: targetId };
   }
   if (key === "errands:create") {
     // A spoken errand carries only its title; task and reminder fields never apply.
@@ -199,6 +227,24 @@ function safeWriteArguments(
     return createErrandArgumentsSchema.safeParse(candidate).success ? candidate : undefined;
   }
   return undefined;
+}
+
+/**
+ * The rationale names the command and repeats the exact read-back the owner
+ * heard, so an approver sees which item an id-only action ("tasks:complete
+ * { taskId }") acts on. It is derived from the same capture as the arguments,
+ * so a restage of the same action carries the same rationale.
+ */
+export function voiceSafeWriteRationale(
+  command: VoiceCommand,
+  capture: VoiceWriteCapture | undefined,
+): string {
+  const title = capture?.title?.trim();
+  if (!capture || !title) return `Voice safe write ${command.id}`;
+  return `Voice safe write ${command.id}: ${describeVoiceDictation({
+    command,
+    capture: { ...capture, title },
+  })}`;
 }
 
 function voiceSafeWriteActionId(input: {
@@ -271,7 +317,7 @@ export async function stageVoiceSafeWrite(input: {
     tool,
     operation,
     arguments: argumentsValue,
-    rationale: `Voice safe write ${input.command.id}`,
+    rationale: voiceSafeWriteRationale(input.command, input.capture),
     requiredAuthority: "T1",
     destructive: false,
     idempotencyKey: actionId,

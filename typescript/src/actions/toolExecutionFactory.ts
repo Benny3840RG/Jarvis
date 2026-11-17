@@ -40,7 +40,10 @@ import {
   type GoogleHomeAnnouncementProvider,
 } from "../integrations/googleHome/googleHomeAnnouncementProvider.js";
 import { createQuoteSendToolDefinition } from "./quoteSendTool.js";
-import { createTaskReminderToolDefinitions } from "./taskReminderTools.js";
+import {
+  createTaskReminderToolDefinitions,
+  reminderRescheduleEnabledFromEnv,
+} from "./taskReminderTools.js";
 import { ToolExecutionService, type ToolExecutionDefinition } from "./toolExecution.js";
 
 export function createToolExecutionDefinitions(
@@ -54,6 +57,7 @@ export function createToolExecutionDefinitions(
   githubDevelopmentClient?: GitHubDevelopmentClient,
   googleHomeAnnouncementProvider?: GoogleHomeAnnouncementProvider,
   errandStore?: ErrandStore,
+  options: { reminderReschedule?: boolean } = {},
 ): ToolExecutionDefinition[] {
   if ((taskStore === undefined) !== (reminderStore === undefined)) {
     throw new Error("Task and reminder tool stores must be registered together.");
@@ -64,7 +68,7 @@ export function createToolExecutionDefinitions(
     ...createSecurityEducationTools(),
     ...(taskStore === undefined || reminderStore === undefined
       ? []
-      : createTaskReminderToolDefinitions(taskStore, reminderStore)),
+      : createTaskReminderToolDefinitions(taskStore, reminderStore, options)),
     ...(quoteRepository === undefined ? [] : [createQuoteFinalizeToolDefinition(quoteRepository)]),
     ...(quoteRepository === undefined ||
     quoteEmailProvider === undefined ||
@@ -95,7 +99,8 @@ export function createToolExecutionDefinitions(
  * when Convex persistence and all four quote-delivery dependencies are
  * available. Maintained process entrypoints inject the provider from the same
  * Outlook runtime bundle used by reconciliation so token state is not
- * duplicated. `errands:create` writes the same local JSON errand file the HTTP
+ * duplicated. `reminders:reschedule` (AM-017, planned) is registered only when
+ * JARVIS_REMINDER_RESCHEDULE_ENABLED is "true". `errands:create` writes the same local JSON errand file the HTTP
  * errand routes use (its file lock is cross-process).
  */
 export function createToolExecutionServiceFromEnv(
@@ -116,6 +121,7 @@ export function createToolExecutionServiceFromEnv(
       githubDevelopmentClient ?? undefined,
       googleHomeAnnouncementProvider ?? undefined,
       new JsonErrandStore(),
+      { reminderReschedule: reminderRescheduleEnabledFromEnv() },
     ),
     new ConvexToolExecutionReceiptStore(),
     new ConvexExternalReconciliationStore(),

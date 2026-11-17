@@ -19,7 +19,10 @@ import type { ToolActionService } from "../actions/toolActions.js";
 import { VOICE_COMMANDS, VOICE_PROFILES } from "../voice/voiceCommands.js";
 import { stageVoiceSafeWrite, voiceUtteranceForSession } from "../voice/voiceSafeWrite.js";
 import type { VoiceSessionRegistry } from "../voice/voiceSessionRegistry.js";
-import type { VoiceConversationService } from "../voice/voiceConversation.js";
+import {
+  dispatchConversationProposal,
+  type VoiceConversationService,
+} from "../voice/voiceConversation.js";
 import type { VoiceWriteTarget } from "../voice/voiceWriteTarget.js";
 import { LocalLoopbackRoute } from "./localLoopbackRoute.js";
 import { JarvisProblem } from "./problemDetails.js";
@@ -164,6 +167,24 @@ export class VoiceController implements OnModuleDestroy {
             session.pending() === undefined &&
             !session.hasPendingClarification(),
         });
+        if (outcome.status === "proposed") {
+          // NOLAN understood a free-form request as one change. Its canonical
+          // sentence goes through the ordinary dictation path, so every guard,
+          // record lookup and the full read-back apply and nothing is staged
+          // until "Nolan confirm". A sentence the grammar refuses is reported
+          // as not understood, never guessed.
+          const proposed = await dispatchConversationProposal(session, outcome.utterance);
+          if (!proposed) {
+            return {
+              dispatch: {
+                decision: "conversation-unavailable" as const,
+                conversationReason: "ungrounded" as const,
+              },
+              pending: session.pending() ?? null,
+            };
+          }
+          return { dispatch: proposed, pending: session.pending() ?? null };
+        }
         return {
           dispatch:
             outcome.status === "answered"
