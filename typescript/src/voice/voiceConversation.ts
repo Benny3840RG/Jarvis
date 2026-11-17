@@ -1,7 +1,7 @@
 import { VOICE_COMMANDS, type VoiceCommand, type VoiceProfile } from "./voiceCommands.js";
 import { proposalUtterance, type VoiceProposal } from "./voiceProposal.js";
 import type { VoiceQueryAnswer } from "./voiceQuery.js";
-import type { VoiceSession } from "./voiceSession.js";
+import type { VoiceDispatch, VoiceSession } from "./voiceSession.js";
 
 export type ConversationReason =
   | "provider-error"
@@ -28,6 +28,28 @@ export type ConversationResult =
 export type ReasonerResult =
   | Exclude<ConversationResult, { status: "proposed" }>
   | Readonly<{ status: "proposed"; proposal: VoiceProposal }>;
+
+/**
+ * Run a proposal's canonical sentence through the session as a woken final
+ * dictation. Only a read-back (`awaiting-confirmation`) or an honest
+ * `completion-unresolved` is accepted; anything else means the proposal was
+ * not usable, and nothing is armed. Shared by the HTTP gate and the
+ * provider-independent evaluation so both judge proposals identically.
+ */
+export async function dispatchConversationProposal(
+  session: VoiceSession,
+  utterance: string,
+): Promise<VoiceDispatch | undefined> {
+  const dispatch = await session.handle({
+    transcript: utterance,
+    isFinal: true,
+    wakeAuthorized: true,
+  });
+  return dispatch.decision === "awaiting-confirmation" ||
+    dispatch.decision === "completion-unresolved"
+    ? dispatch
+    : undefined;
+}
 
 export type ConversationMessage = Readonly<{ role: "user" | "assistant"; content: string }>;
 
