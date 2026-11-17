@@ -5,6 +5,7 @@ export const internalActionFamilyValidator = v.union(
   v.literal("AM-005"),
   v.literal("AM-006"),
   v.literal("AM-007"),
+  v.literal("AM-017"),
 );
 
 export const taskActionResultValidator = v.object({

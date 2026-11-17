@@ -4,12 +4,14 @@ import { describe, it } from "node:test";
 import type { ToolAction } from "../src/actions/toolActions.js";
 import { ToolExecutionService } from "../src/actions/toolExecution.js";
 import { createToolExecutionDefinitions } from "../src/actions/toolExecutionFactory.js";
+import { reminderRescheduleEnabledFromEnv } from "../src/actions/taskReminderTools.js";
 import type { CreateNoteInput, NoteRecord, NoteStore } from "../src/notes/note.js";
 import type {
   CancelControlledReminderInput,
   ControlledReminderRecord,
   ControlledReminderStore,
   CreateControlledReminderInput,
+  RescheduleControlledReminderInput,
 } from "../src/reminders/controlledReminder.js";
 import type {
   CompleteControlledTaskInput,
@@ -350,5 +352,157 @@ describe("task and reminder tool allowlist", () => {
     assert.equal(tasks.completions.length, 0);
     assert.equal(reminders.creates.length, 0);
     assert.equal(reminders.cancellations.length, 0);
+  });
+});
+
+class ReschedulingReminderStore extends RecordingReminderStore {
+  readonly reschedules: RescheduleControlledReminderInput[] = [];
+  rescheduleResult: ControlledReminderRecord | null = null;
+
+  async reschedule(
+    input: RescheduleControlledReminderInput,
+  ): Promise<ControlledReminderRecord | null> {
+    this.reschedules.push(input);
+    return this.rescheduleResult;
+  }
+}
+
+describe("AM-017 reminders:reschedule allowlist (planned)", () => {
+  function keys(reminders: RecordingReminderStore, reminderReschedule?: boolean) {
+    return createToolExecutionDefinitions(
+      new StubNoteStore(),
+      new RecordingTaskStore(),
+      reminders,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      reminderReschedule === undefined ? {} : { reminderReschedule },
+    ).map(({ tool, operation }) => `${tool}:${operation}`);
+  }
+
+  it("is absent unless explicitly enabled and supported by the store", () => {
+    assert.equal(keys(new ReschedulingReminderStore()).includes("reminders:reschedule"), false);
+    assert.equal(
+      keys(new ReschedulingReminderStore(), false).includes("reminders:reschedule"),
+      false,
+    );
+    assert.equal(
+      keys(new RecordingReminderStore(), true).includes("reminders:reschedule"),
+      false,
+      "a store without reschedule never registers it",
+    );
+    assert.equal(
+      keys(new ReschedulingReminderStore(), true).includes("reminders:reschedule"),
+      true,
+    );
+    assert.equal(reminderRescheduleEnabledFromEnv({}), false);
+    assert.equal(
+      reminderRescheduleEnabledFromEnv({ JARVIS_REMINDER_RESCHEDULE_ENABLED: "1" }),
+      false,
+    );
+    assert.equal(
+      reminderRescheduleEnabledFromEnv({ JARVIS_REMINDER_RESCHEDULE_ENABLED: "true" }),
+      true,
+    );
+  });
+
+  it("is blocked as not allowlisted while AM-017 is not enabled", async () => {
+    const reminders = new ReschedulingReminderStore();
+    const result = await service(new RecordingTaskStore(), reminders).execute({
+      action: approvedAction("reminders", "reschedule", {
+        reminderId: "reminder-1",
+        dueRaw: "friday",
+      }),
+      authority: "T1",
+      idempotencyKey: "blocked-reschedule",
+    });
+    assert.equal(result.status, "blocked");
+    assert.equal(result.errorCode, "not-allowlisted");
+    assert.equal(reminders.reschedules.length, 0);
+  });
+
+  it("when enabled, validates arguments and propagates the execution context", async () => {
+    const reminders = new ReschedulingReminderStore();
+    reminders.rescheduleResult = {
+      id: "reminder-1",
+      projectId: "project-1",
+      title: "Order bar oil",
+      dueRaw: "friday at 9 am",
+      dueAt: 1_800_500_000_000,
+      dueTimezone: "Australia/Sydney",
+      createdAt: 1,
+      updatedAt: 2,
+      revision: 2,
+    };
+    const enabled = new ToolExecutionService(
+      createToolExecutionDefinitions(
+        new StubNoteStore(),
+        new RecordingTaskStore(),
+        reminders,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        { reminderReschedule: true },
+      ),
+    );
+    const result = await enabled.execute({
+      action: approvedAction("reminders", "reschedule", {
+        reminderId: "reminder-1",
+        dueRaw: "friday at 9 am",
+        dueAt: 1_800_500_000_000,
+        dueTimezone: "Australia/Sydney",
+      }),
+      authority: "T1",
+      idempotencyKey: "execute-reschedule",
+      correlationId: "correlation-reschedule",
+      source: "tool-action-http",
+    });
+    assert.equal(result.status, "succeeded");
+    assert.deepEqual(reminders.reschedules, [
+      {
+        projectId: "project-1",
+        reminderId: "reminder-1",
+        dueRaw: "friday at 9 am",
+        dueAt: 1_800_500_000_000,
+        dueTimezone: "Australia/Sydney",
+        idempotencyKey: "execute-reschedule",
+        actionFingerprint: result.actionFingerprint,
+        sourceRequestId: "request-reminders-reschedule",
+        correlationId: "correlation-reschedule",
+        source: "tool-action-http",
+      },
+    ]);
+
+    const definition = createToolExecutionDefinitions(
+      new StubNoteStore(),
+      new RecordingTaskStore(),
+      reminders,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      { reminderReschedule: true },
+    ).find((entry) => entry.operation === "reschedule");
+    assert.ok(definition);
+    for (const value of [
+      { reminderId: "reminder-1" },
+      { reminderId: "reminder-1", dueRaw: "" },
+      { reminderId: "reminder-1", dueRaw: "friday", dueAt: 1 },
+      { reminderId: "reminder-1", dueRaw: "friday", dueTimezone: "UTC" },
+      { reminderId: "reminder-1", dueRaw: "friday", title: "Renamed" },
+    ]) {
+      assert.equal(definition.schema.safeParse(value).success, false, JSON.stringify(value));
+    }
   });
 });

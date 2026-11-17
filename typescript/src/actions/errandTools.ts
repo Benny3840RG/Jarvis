@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import type { ErrandStore } from "../errands/errand.js";
+import type { Errand, ErrandStore } from "../errands/errand.js";
 import { sha256Hex } from "./sha256.js";
 import type { ToolExecutionDefinition } from "./toolExecution.js";
 
@@ -96,6 +96,46 @@ export function completeErrandToolDefinition(store: ErrandStore): ToolExecutionD
   };
 }
 
+export const REMOVE_ERRAND_OPERATION = "remove";
+
+export const removeErrandArgumentsSchema = z
+  .object({
+    errandId: z.string().trim().min(1).max(200),
+  })
+  .strict();
+
+export type RemoveErrandResult = Readonly<{
+  errandId: string;
+  /** False when the errand was already gone, so a retried execution is harmless. */
+  removed: boolean;
+  errand?: Errand;
+}>;
+
+/**
+ * Removes one errand from the list. The id always comes from an approved
+ * action. An errand that is already gone (a retry after a crash between the
+ * write and the receipt, or a removal on the HUD meanwhile) succeeds with
+ * `removed: false`: the list already holds what the owner approved.
+ */
+export function removeErrandToolDefinition(store: ErrandStore): ToolExecutionDefinition {
+  return {
+    tool: ERRAND_TOOL,
+    operation: REMOVE_ERRAND_OPERATION,
+    schema: removeErrandArgumentsSchema,
+    async execute(argumentsValue): Promise<RemoveErrandResult> {
+      const parsed = removeErrandArgumentsSchema.parse(argumentsValue);
+      const removed = await store.remove(parsed.errandId);
+      return removed === null
+        ? { errandId: parsed.errandId, removed: false }
+        : { errandId: parsed.errandId, removed: true, errand: removed };
+    },
+  };
+}
+
 export function createErrandToolDefinitions(store: ErrandStore): ToolExecutionDefinition[] {
-  return [createErrandToolDefinition(store), completeErrandToolDefinition(store)];
+  return [
+    createErrandToolDefinition(store),
+    completeErrandToolDefinition(store),
+    removeErrandToolDefinition(store),
+  ];
 }

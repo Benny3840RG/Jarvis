@@ -1,6 +1,7 @@
 import { VOICE_COMMANDS, type VoiceCommand, type VoiceProfile } from "./voiceCommands.js";
+import { proposalUtterance, type VoiceProposal } from "./voiceProposal.js";
 import type { VoiceQueryAnswer } from "./voiceQuery.js";
-import type { VoiceSession } from "./voiceSession.js";
+import type { VoiceDispatch, VoiceSession } from "./voiceSession.js";
 
 export type ConversationReason =
   | "provider-error"
@@ -15,7 +16,40 @@ export type ConversationReason =
 
 export type ConversationResult =
   | Readonly<{ status: "answered"; reply: string }>
-  | Readonly<{ status: "unavailable"; reason: ConversationReason }>;
+  | Readonly<{ status: "unavailable"; reason: ConversationReason }>
+  /**
+   * The model proposed one change. `utterance` is the canonical dictation
+   * sentence built from it by NOLAN (never model prose); the caller runs it
+   * through the session so it is read back and needs "Nolan confirm".
+   */
+  | Readonly<{ status: "proposed"; utterance: string }>;
+
+/** What a reasoner returns: a proposal is still structured; the service builds the sentence. */
+export type ReasonerResult =
+  | Exclude<ConversationResult, { status: "proposed" }>
+  | Readonly<{ status: "proposed"; proposal: VoiceProposal }>;
+
+/**
+ * Run a proposal's canonical sentence through the session as a woken final
+ * dictation. Only a read-back (`awaiting-confirmation`) or an honest
+ * `completion-unresolved` is accepted; anything else means the proposal was
+ * not usable, and nothing is armed. Shared by the HTTP gate and the
+ * provider-independent evaluation so both judge proposals identically.
+ */
+export async function dispatchConversationProposal(
+  session: VoiceSession,
+  utterance: string,
+): Promise<VoiceDispatch | undefined> {
+  const dispatch = await session.handle({
+    transcript: utterance,
+    isFinal: true,
+    wakeAuthorized: true,
+  });
+  return dispatch.decision === "awaiting-confirmation" ||
+    dispatch.decision === "completion-unresolved"
+    ? dispatch
+    : undefined;
+}
 
 export type ConversationMessage = Readonly<{ role: "user" | "assistant"; content: string }>;
 
@@ -32,7 +66,7 @@ export type ConversationReasonerInput = Readonly<{
 }>;
 
 export interface VoiceConversationReasoner {
-  reply(input: ConversationReasonerInput): Promise<ConversationResult>;
+  reply(input: ConversationReasonerInput): Promise<ReasonerResult>;
 }
 
 type SessionContext = {
@@ -126,7 +160,7 @@ export class VoiceConversationService {
       input.live?.() !== false;
     // Every query attempt this turn and its outcome. Only a lone successful one can supply speech.
     const attempts: VoiceQueryAnswer[] = [];
-    let result: ConversationResult;
+    let result: ReasonerResult;
     try {
       result = await this.#reasoner.reply({
         transcript,
@@ -159,6 +193,22 @@ export class VoiceConversationService {
     if (!stillLive()) return { status: "unavailable", reason: "unavailable" };
     // Attempt count outranks every reasoner outcome (provider-error, unavailable, order).
     if (attempts.length > 1) return { status: "unavailable", reason: "tool-limit" };
+    if (result.status === "proposed") {
+      // A proposal must be the turn's only tool use: no query may ride along.
+      if (attempts.length > 0) return { status: "unavailable", reason: "tool-limit" };
+      const due = session.spokenDueContext();
+      const utterance = due ? proposalUtterance(result.proposal, due) : undefined;
+      if (!utterance) return { status: "unavailable", reason: "ungrounded" };
+      activeContext.messages.push(
+        { role: "user", content: transcript },
+        { role: "assistant", content: `Proposed for confirmation: ${utterance}` },
+      );
+      activeContext.messages.splice(
+        0,
+        Math.max(0, activeContext.messages.length - this.#historyLimit),
+      );
+      return { status: "proposed", utterance };
+    }
     if (result.status !== "answered") return result;
     const decision = speechDecision(attempts, this.#maxReplyLength);
     if (decision.status !== "answered") return decision;

@@ -84,7 +84,10 @@ edited to hide the divergence.
     implementation paths). AM-012 (finalize quote) is also `active`, bound to the commissioned
     reviewed-to-finalized Quote store and `TOOL-QUOTE-FINALIZE` allowlist entry. AM-013 (send quote)
     remains `planned`: no live Outlook delivery is commissioned or authorised, and its external
-    side effect remains gated by reconciliation and separate provider commissioning. The Status
+    side effect remains gated by reconciliation and separate provider commissioning. AM-017
+    (reschedule reminder) is `planned`: its executor is implemented but only registered when
+    `JARVIS_REMINDER_RESCHEDULE_ENABLED` is `"true"`, pending a Convex deploy and commissioning
+    smoke (`docs/evidence/reminder-reschedule-am-017.md`). The Status
     column is a live record for active families and an intent record for planned ones; check it per
     family, don't assume the whole map is one or the other.
 

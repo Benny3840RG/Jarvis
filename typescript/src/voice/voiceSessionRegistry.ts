@@ -34,6 +34,8 @@ export type VoiceSessionRegistryOptions = Readonly<{
   timezone?: string;
   /** Resolves spoken completions ("tick off bar oil") in each session. */
   completions?: VoiceCompletionResolver;
+  /** AM-017 (planned): spoken reschedules are refused unless this is true. */
+  rescheduleReminders?: boolean;
   /** Id generator (tests). */
   idFactory?: () => string;
   /**
@@ -56,6 +58,7 @@ export class VoiceSessionRegistry {
   readonly #interpretNaturalLanguage: boolean;
   readonly #timezone: string | undefined;
   readonly #completions: VoiceCompletionResolver | undefined;
+  readonly #rescheduleReminders: boolean;
   readonly #idFactory: () => string;
   readonly #sessions = new Map<string, Entry>();
   readonly #sweepIntervalMs: number;
@@ -77,6 +80,7 @@ export class VoiceSessionRegistry {
     this.#interpretNaturalLanguage = options.interpretNaturalLanguage ?? false;
     this.#timezone = options.timezone;
     this.#completions = options.completions;
+    this.#rescheduleReminders = options.rescheduleReminders === true;
     this.#idFactory = options.idFactory ?? randomUUID;
     this.#sweepIntervalMs = options.sweepIntervalMs ?? DEFAULT_SWEEP_INTERVAL_MS;
   }
@@ -124,6 +128,7 @@ export class VoiceSessionRegistry {
       interpretNaturalLanguage: this.#interpretNaturalLanguage,
       ...(this.#timezone === undefined ? {} : { timezone: this.#timezone }),
       ...(this.#completions === undefined ? {} : { completions: this.#completions }),
+      rescheduleReminders: this.#rescheduleReminders,
     });
     const expiresAt = now + this.#ttlMs;
     this.#sessions.set(id, { session, expiresAt });

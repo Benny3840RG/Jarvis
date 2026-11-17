@@ -2940,6 +2940,7 @@
                     </div>
                     <div class="panel-header"><h3>Approvals</h3><span id="approvals-stage">UNKNOWN</span></div>
                     <p class="operations-headline" id="approvals-source">Tool-action proposals are not on this snapshot. This console does not approve, reject, or execute.</p>
+                    <p class="operations-headline"><a href="/settings/approvals">Review, approve and run staged changes on the Approvals page</a></p>
                     <p class="operations-headline"><a href="/settings/owner-decisions">Open the owner decision queue</a></p>
                   </article>
                   <div class="systems-side">
@@ -4127,6 +4128,18 @@
             var item = (tool === "tasks" ? "task" : "errand") + " “" + capture.title + "”";
             return { ask: "Mark " + item + " done", staged: "completing " + item, pending: "mark " + item + " done", effect: "changes" };
           }
+          if (tool === "reminders" && operation === "reschedule") {
+            var moved = "reminder “" + capture.title + "”";
+            return { ask: "Reschedule " + moved + voiceCaptureDue(capture), staged: "rescheduling " + moved + voiceCaptureDue(capture), pending: "reschedule " + moved, effect: "changes" };
+          }
+          if (tool === "errands" && operation === "remove") {
+            var removal = "errand “" + capture.title + "”";
+            return { ask: "Remove " + removal + " from the list", staged: "removing " + removal, pending: "remove " + removal, effect: "changes" };
+          }
+          if (tool === "reminders" && operation === "cancel") {
+            var reminder = "reminder “" + capture.title + "”";
+            return { ask: "Cancel " + reminder, staged: "cancelling " + reminder, pending: "cancel " + reminder, effect: "changes" };
+          }
           var what;
           if (tool === "tasks") what = "task “" + capture.title + "”" + (capture.category ? " (" + capture.category + ")" : "");
           else if (tool === "errands") what = "errand “" + capture.title + "”";
@@ -4149,7 +4162,9 @@
           }
           if (dispatch && dispatch.decision === "completion-unresolved") {
             var unresolved = typeof dispatch.reason === "string" ? dispatch.reason.trim() : "";
-            return { label: unresolved ? "Nothing marked done. " + unresolved : "Nothing marked done.", tone: "warn" };
+            var unresolvedId = dispatch.command ? dispatch.command.id : "";
+            var nothing = unresolvedId === "client.cancel-reminder" ? "Nothing cancelled." : unresolvedId === "client.remove-errand" ? "Nothing removed." : unresolvedId === "client.reschedule-reminder" ? "Nothing rescheduled." : "Nothing marked done.";
+            return { label: unresolved ? nothing + " " + unresolved : nothing, tone: "warn" };
           }
           if (dispatch && dispatch.decision === "answered") {
             var answer = typeof dispatch.answer === "string" ? dispatch.answer.trim() : "";

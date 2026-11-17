@@ -35,7 +35,7 @@ function client(
   };
 }
 
-it("sends a bounded low-effort request with only the read-only enum tool", async () => {
+it("sends a bounded low-effort request with the read-only enum tool and, on client, propose_change", async () => {
   const calls: { params: unknown; options: unknown }[] = [];
   const signal = new AbortController().signal;
   const reasoner = createAnthropicVoiceReasoner(
@@ -64,11 +64,123 @@ it("sends a bounded low-effort request with only the read-only enum tool", async
     name: string;
     input_schema: { properties: { commandId: { enum: string[] } } };
   }[];
-  assert.equal(tools.length, 1);
-  assert.equal(tools[0]!.name, "voice_query");
-  assert.ok(tools[0]!.input_schema.properties.commandId.enum.includes("client.unpaid-invoices"));
-  assert.ok(!tools[0]!.input_schema.properties.commandId.enum.includes("trailer.status"));
+  assert.deepEqual(
+    tools.map((tool) => tool.name),
+    ["propose_change", "voice_query"],
+  );
+  const query = tools[1]!;
+  assert.ok(query.input_schema.properties.commandId.enum.includes("client.unpaid-invoices"));
+  assert.ok(!query.input_schema.properties.commandId.enum.includes("trailer.status"));
   assert.deepEqual(calls[0]!.options, { timeout: 20_000, signal, maxRetries: 0 });
+});
+
+it("offers only the read-only query tool off the client profile", async () => {
+  const calls: { params: unknown; options: unknown }[] = [];
+  const reasoner = createAnthropicVoiceReasoner(
+    { apiKey: "test-only", model: "claude-opus-5-5", timeoutMs: 20_000 },
+    {
+      client: client(
+        [{ stop_reason: "end_turn", content: [{ type: "text", text: "G'day." }] }],
+        calls,
+      ),
+    },
+  );
+  await reasoner.reply(
+    input({
+      profile: "workshop",
+      catalog: VOICE_COMMANDS.filter((command) => command.profile === "workshop"),
+    }),
+  );
+  const tools = (calls[0]!.params as { tools: { name: string }[] }).tools;
+  assert.deepEqual(
+    tools.map((tool) => tool.name),
+    ["voice_query"],
+  );
+});
+
+it("returns one validated proposal and never executes or queries for it", async () => {
+  const calls: { params: unknown; options: unknown }[] = [];
+  let queries = 0;
+  const propose = (inputValue: unknown, extra: unknown[] = []) => ({
+    stop_reason: "tool_use",
+    content: [{ type: "tool_use", id: "p1", name: "propose_change", input: inputValue }, ...extra],
+  });
+  const run = async (response: unknown, overrides: Partial<ConversationReasonerInput> = {}) => {
+    let malformed = 0;
+    const result = await createAnthropicVoiceReasoner(
+      { apiKey: "test-only", model: "claude-opus-5-5", timeoutMs: 100 },
+      { client: client([response as never], calls) },
+    ).reply(
+      input({
+        query: async () => {
+          queries += 1;
+          return { status: "answered", answer: "x" };
+        },
+        rejectMalformedRequest: () => {
+          malformed += 1;
+        },
+        ...overrides,
+      }),
+    );
+    return { result, malformed };
+  };
+  assert.deepEqual((await run(propose({ action: "add_errand", title: "Bar oil" }))).result, {
+    status: "proposed",
+    proposal: { action: "add_errand", title: "Bar oil" },
+  });
+  assert.deepEqual(
+    (
+      await run(
+        propose({ action: "reschedule_reminder", reference: "bar oil", due: "friday at 9 am" }),
+      )
+    ).result,
+    {
+      status: "proposed",
+      proposal: { action: "reschedule_reminder", reference: "bar oil", due: "friday at 9 am" },
+    },
+  );
+  // Malformed: unknown action, missing fields, or extra fields.
+  for (const bad of [
+    { action: "send_quote", title: "Smith" },
+    { action: "add_errand" },
+    { action: "add_errand", title: "Milk", reference: "milk" },
+    { action: "reschedule_reminder", reference: "oil" },
+  ]) {
+    const { result, malformed } = await run(propose(bad));
+    assert.deepEqual(
+      result,
+      { status: "unavailable", reason: "provider-error" },
+      JSON.stringify(bad),
+    );
+    assert.equal(malformed, 1);
+  }
+  // Never alongside a query in the same turn.
+  assert.deepEqual(
+    (
+      await run(
+        propose({ action: "add_errand", title: "Milk" }, [
+          {
+            type: "tool_use",
+            id: "q1",
+            name: "voice_query",
+            input: { commandId: "client.open-errands" },
+          },
+        ]),
+      )
+    ).result,
+    { status: "unavailable", reason: "tool-limit" },
+  );
+  // Never off the client profile, even if the model calls it anyway.
+  assert.deepEqual(
+    (
+      await run(propose({ action: "add_errand", title: "Milk" }), {
+        profile: "workshop",
+        catalog: VOICE_COMMANDS.filter((command) => command.profile === "workshop"),
+      })
+    ).result,
+    { status: "unavailable", reason: "tool-limit" },
+  );
+  assert.equal(queries, 0);
 });
 
 it("sends the unavailable source as a tool result and never relays a guessed count", async () => {
