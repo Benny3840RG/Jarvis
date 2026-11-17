@@ -40,6 +40,7 @@ import type { DangerZoneService } from "../settings/dangerZone/service.js";
 import { ActivityTimelineController } from "./activityTimelineController.js";
 import { DangerZoneController } from "./dangerZoneController.js";
 import { OwnerDecisionController } from "./ownerDecisionController.js";
+import { SituationController } from "./situationController.js";
 import { ApprovalsPageController } from "./approvalsPageController.js";
 import type { OwnerDecisionService } from "../ownerGate/ownerDecisionService.js";
 import { DevelopmentLiveWorkController } from "./developmentLiveWorkController.js";
@@ -197,6 +198,7 @@ export class JarvisHttpModule {
         DevelopmentLiveWorkController,
         DangerZoneController,
         OwnerDecisionController,
+        SituationController,
         ApprovalsPageController,
         VoiceController,
       ],
