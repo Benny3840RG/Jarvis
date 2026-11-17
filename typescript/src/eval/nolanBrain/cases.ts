@@ -259,7 +259,9 @@ export const EVAL_CASES: readonly EvalCase[] = [
   {
     id: "query-tasks",
     group: "query",
-    utterance: "what's on my plate job wise",
+    // Revised after the first Haiku run: "job wise" also fairly means the jobs
+    // schedule, so the case is now unambiguous about the task list.
+    utterance: "what's on my to-do list",
     expect: { kind: "query", commandIds: ["client.open-tasks"] },
     ideal: { query: "client.open-tasks" },
   },
@@ -321,3 +323,163 @@ export const EVAL_CASES: readonly EvalCase[] = [
     ideal: { decline: true },
   },
 ];
+
+/**
+ * Held-out cases, written on 2026-11-17 after the instructions were tuned on
+ * EVAL_CASES and before any model saw these. Score them once; do not tune the
+ * instructions against them, or they stop being held out.
+ */
+export const EVAL_HELDOUT_CASES: readonly EvalCase[] = [
+  {
+    id: "h-add-errand-staples",
+    group: "add",
+    utterance: "we're nearly out of fence staples",
+    expect: {
+      kind: "change",
+      commandId: "client.capture-errand",
+      titleWords: ["fence", "staples"],
+    },
+    ideal: { propose: { action: "add_errand", title: "Fence staples" } },
+  },
+  {
+    id: "h-add-task-bank",
+    group: "add",
+    utterance: "I need to ring the bank about the loan",
+    expect: { kind: "change", commandId: "client.capture-task", titleWords: ["ring", "bank"] },
+    ideal: { propose: { action: "add_task", title: "Ring the bank about the loan" } },
+  },
+  {
+    id: "h-add-reminder-mower",
+    group: "add",
+    utterance: "can you nudge me Friday at 2 pm about picking up the mower",
+    expect: {
+      kind: "change",
+      commandId: "client.follow-up-reminder",
+      titleWords: ["mower"],
+      dueRaw: ["friday at 2 pm"],
+    },
+    ideal: {
+      propose: { action: "add_reminder", title: "Pick up the mower", due: "friday at 2 pm" },
+    },
+  },
+  {
+    id: "h-add-task-patels",
+    group: "add",
+    utterance: "add a job for the Patels, need to measure up their deck, it's work",
+    expect: {
+      kind: "change",
+      commandId: "client.capture-task",
+      titleWords: ["measure", "deck"],
+      category: "work",
+    },
+    ideal: {
+      propose: { action: "add_task", title: "Measure up the Patels deck", category: "work" },
+    },
+  },
+  {
+    id: "h-add-errand-sausages",
+    group: "add",
+    utterance: "stick sausages on the list for the barbie",
+    expect: { kind: "change", commandId: "client.capture-errand", titleWords: ["sausages"] },
+    ideal: { propose: { action: "add_errand", title: "Sausages" } },
+  },
+  {
+    id: "h-complete-milk",
+    group: "complete",
+    utterance: "milk's done",
+    expect: { kind: "change", commandId: "client.complete-errand", targetId: "e-milk" },
+    ideal: { propose: { action: "complete", reference: "milk", kind: "errand" } },
+  },
+  {
+    id: "h-complete-filter",
+    group: "complete",
+    utterance: "the oil filter's been changed",
+    expect: { kind: "change", commandId: "client.complete-task", targetId: "t-filter" },
+    ideal: { propose: { action: "complete", reference: "oil filter", kind: "task" } },
+  },
+  {
+    id: "h-complete-chain-oil",
+    group: "complete",
+    utterance: "bought the chain oil",
+    expect: { kind: "change", commandId: "client.complete-errand", targetId: "e-chain" },
+    ideal: { propose: { action: "complete", reference: "chain oil", kind: "errand" } },
+  },
+  {
+    id: "h-complete-ambiguous",
+    group: "complete",
+    utterance: "sorted the oil",
+    expect: { kind: "unresolved" },
+    ideal: { propose: { action: "complete", reference: "oil" } },
+  },
+  {
+    id: "h-cancel-rego",
+    group: "cancel",
+    utterance: "forget about the rego reminder, I already paid it",
+    expect: { kind: "change", commandId: "client.cancel-reminder", targetId: "r-rego" },
+    ideal: { propose: { action: "cancel_reminder", reference: "rego" } },
+  },
+  {
+    id: "h-remove-silicone",
+    group: "remove",
+    utterance: "don't need silicone anymore",
+    expect: { kind: "change", commandId: "client.remove-errand", targetId: "e-silicone" },
+    ideal: { propose: { action: "remove_errand", reference: "silicone" } },
+  },
+  {
+    id: "h-reschedule-dave",
+    group: "reschedule",
+    utterance: "can the Dave reminder wait till Thursday at 10 am",
+    expect: {
+      kind: "change",
+      commandId: "client.reschedule-reminder",
+      targetId: "r-dave",
+      dueRaw: ["thursday at 10 am"],
+    },
+    ideal: {
+      propose: { action: "reschedule_reminder", reference: "Dave", due: "thursday at 10 am" },
+    },
+  },
+  {
+    id: "h-query-shopping",
+    group: "query",
+    utterance: "anything on the shopping list",
+    expect: { kind: "query", commandIds: ["client.open-errands"] },
+    ideal: { query: "client.open-errands" },
+  },
+  {
+    id: "h-query-reminders",
+    group: "query",
+    utterance: "what reminders have I got coming up",
+    expect: { kind: "query", commandIds: ["client.reminders"] },
+    ideal: { query: "client.reminders" },
+  },
+  {
+    id: "h-refuse-transfer",
+    group: "refuse",
+    utterance: "transfer two hundred bucks to Dave",
+    expect: { kind: "refuse" },
+    ideal: { decline: true },
+  },
+  {
+    id: "h-refuse-delete-list",
+    group: "refuse",
+    utterance: "delete the whole errand list",
+    expect: { kind: "refuse" },
+    ideal: { decline: true },
+  },
+  {
+    id: "h-refuse-lights",
+    group: "refuse",
+    utterance: "turn the workshop lights off",
+    expect: { kind: "refuse" },
+    ideal: { decline: true },
+  },
+];
+
+export type EvalCaseSet = "main" | "heldout" | "all";
+
+export function evalCases(set: EvalCaseSet = "main"): readonly EvalCase[] {
+  if (set === "heldout") return EVAL_HELDOUT_CASES;
+  if (set === "all") return [...EVAL_CASES, ...EVAL_HELDOUT_CASES];
+  return EVAL_CASES;
+}

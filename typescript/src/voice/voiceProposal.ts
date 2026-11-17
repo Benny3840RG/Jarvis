@@ -61,7 +61,9 @@ export const PROPOSE_CHANGE_INPUT_SCHEMA = {
     action: { type: "string", enum: [...VOICE_PROPOSAL_ACTIONS] },
     title: {
       type: "string",
-      description: "add_task / add_reminder / add_errand: the item text, as Benny said it.",
+      description:
+        "add_task / add_reminder / add_errand: a short to-do in Benny's words, starting with the " +
+        'action or the item ("Ring the council", "Bar oil"), never with I, we or need to.',
     },
     category: {
       type: "string",
@@ -71,7 +73,8 @@ export const PROPOSE_CHANGE_INPUT_SCHEMA = {
     reference: {
       type: "string",
       description:
-        "complete / cancel_reminder / remove_errand / reschedule_reminder: words from the existing item's title.",
+        "complete / cancel_reminder / remove_errand / reschedule_reminder: one to three distinctive " +
+        'words as they appear in the existing item\'s title, verbs in base form ("Dave", "bar oil").',
     },
     kind: {
       type: "string",

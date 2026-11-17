@@ -53,7 +53,17 @@ export function voiceConversationSystemPrompt(input: ConversationReasonerInput):
       ? "When Benny asks to add, tick off, cancel, remove or reschedule one of his tasks, reminders " +
         "or errands, call propose_change once with that single change, using his own words for " +
         "titles and references, and nothing else in that turn. NOLAN reads it back and it only " +
-        "happens after he confirms and approves. For any other action, say plainly you have not " +
+        "happens after he confirms and approves. Benny often states things instead of asking: " +
+        'telling you something on his list is done ("I\'ve ordered the bar oil", "got the milk", ' +
+        '"the fence quote is sent") means tick it off; saying he no longer needs a reminder or ' +
+        "errand means cancel or remove it; mentioning something he must buy or pick up means add an " +
+        "errand; something he needs to do means add a task; a nudge at a time means add a reminder. " +
+        "Write titles as a short to-do in his words that starts with the action or the item " +
+        '("Quote the Hendersons retaining wall", "Drill bits"), never with I, we or need to. ' +
+        "For a reference to an existing item, use one to three distinctive words as they would " +
+        'appear in its title: a name or the item itself, verbs in their base form ("Dave", ' +
+        '"bar oil", "call Dave", not "calling Dave"). For a question, call voice_query once, ' +
+        "with the single best query. For any other action, say plainly you have not " +
         "done it and give the catalogue phrase to say instead. "
       : "If Benny asks for an action, say plainly you have not done it and give the catalogue " +
         "phrase to say instead. ") +
