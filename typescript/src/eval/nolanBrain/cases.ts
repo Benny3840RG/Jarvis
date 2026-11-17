@@ -259,7 +259,9 @@ export const EVAL_CASES: readonly EvalCase[] = [
   {
     id: "query-tasks",
     group: "query",
-    utterance: "what's on my plate job wise",
+    // Revised after the first Haiku run: "job wise" also fairly means the jobs
+    // schedule, so the case is now unambiguous about the task list.
+    utterance: "what's on my to-do list",
     expect: { kind: "query", commandIds: ["client.open-tasks"] },
     ideal: { query: "client.open-tasks" },
   },
