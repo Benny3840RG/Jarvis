@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { EVAL_CASES } from "../src/eval/nolanBrain/cases.js";
+import { EVAL_CASES, EVAL_HELDOUT_CASES, evalCases } from "../src/eval/nolanBrain/cases.js";
 import { runEvaluation } from "../src/eval/nolanBrain/harness.js";
 import { createOpenAiCompatibleVoiceReasoner } from "../src/eval/nolanBrain/openAiCompatibleReasoner.js";
 import {
@@ -22,6 +22,18 @@ describe("NOLAN brain evaluation harness", () => {
       [],
     );
     assert.equal(summary.pass, true);
+  });
+
+  it("the oracle also passes the held-out set: every held-out case is sound", async () => {
+    const { summary, verdicts } = await runEvaluation(oracleReasoner(), { set: "heldout" });
+    assert.equal(summary.invalidCases, 0, "every held-out utterance bypasses the fixed grammar");
+    assert.equal(summary.cases, EVAL_HELDOUT_CASES.length);
+    assert.deepEqual(
+      verdicts.filter((v) => !v.correct).map((v) => `${v.outcome.caseId}: ${v.note}`),
+      [],
+    );
+    const ids = evalCases("all").map((testCase) => testCase.id);
+    assert.equal(new Set(ids).size, ids.length, "case ids are unique across sets");
   });
 
   it("refusing everything is safe but fails: refusals are not successful commands", async () => {

@@ -20,7 +20,7 @@ import {
 import { AbsentHardwareProvider } from "../../voice/voiceHardware.js";
 import { VoiceSession, type VoiceDispatch } from "../../voice/voiceSession.js";
 import {
-  EVAL_CASES,
+  evalCases,
   EVAL_NOW,
   EVAL_TIMEZONE,
   EVAL_VOICE_PROJECT,
@@ -28,6 +28,7 @@ import {
   fixtureReminders,
   fixtureTasks,
   type EvalCase,
+  type EvalCaseSet,
 } from "./cases.js";
 
 /** The owner's provisional acceptance targets. */
@@ -312,7 +313,7 @@ function percentile(values: number[], fraction: number): number {
 const pct = (value: number) => `${(value * 100).toFixed(1)}%`;
 
 export function summarise(verdicts: readonly CaseVerdict[], coldMs: number | null): EvalSummary {
-  const caseById = new Map(EVAL_CASES.map((testCase) => [testCase.id, testCase]));
+  const caseById = new Map(evalCases("all").map((testCase) => [testCase.id, testCase]));
   const actionable = verdicts.filter(
     (v) => caseById.get(v.outcome.caseId)?.expect.kind !== "refuse",
   );
@@ -405,6 +406,8 @@ export function summarise(verdicts: readonly CaseVerdict[], coldMs: number | nul
 
 export type EvalRunInfo = Readonly<{
   provider: string;
+  /** Which case set was scored: main (tuned on), heldout, or all. */
+  set?: EvalCaseSet;
   model: string;
   endpoint: string;
   machine: string;
@@ -415,18 +418,19 @@ export type EvalRunInfo = Readonly<{
 /** Cold start is one warm-up turn before the scored cases (model load, first prompt). */
 export async function runEvaluation(
   reasoner: VoiceConversationReasoner,
-  options: { repeats?: number; onProgress?: (line: string) => void } = {},
+  options: { repeats?: number; set?: EvalCaseSet; onProgress?: (line: string) => void } = {},
 ): Promise<{ verdicts: CaseVerdict[]; summary: EvalSummary }> {
   const repeats = Math.max(1, options.repeats ?? 1);
+  const cases = evalCases(options.set ?? "main");
   const warm = await runCase(
     reasoner,
-    EVAL_CASES.find((c) => c.group === "query")!,
+    cases.find((c) => c.group === "query")!,
     -1,
   );
   options.onProgress?.(`cold start: ${warm.ms} ms (${warm.decision})`);
   const verdicts: CaseVerdict[] = [];
   for (let repeat = 0; repeat < repeats; repeat += 1) {
-    for (const testCase of EVAL_CASES) {
+    for (const testCase of cases) {
       const outcome = await runCase(reasoner, testCase, repeat);
       const verdict = scoreCase(testCase, outcome);
       verdicts.push(verdict);
@@ -443,10 +447,11 @@ export function markdownReport(
   summary: EvalSummary,
   verdicts: readonly CaseVerdict[],
 ): string {
-  const caseById = new Map(EVAL_CASES.map((testCase) => [testCase.id, testCase]));
+  const caseById = new Map(evalCases("all").map((testCase) => [testCase.id, testCase]));
   const lines = [
     `# NOLAN brain evaluation: ${info.provider} / ${info.model}`,
     "",
+    `- Case set: ${info.set ?? "main"}${info.set === "heldout" ? " (never used for tuning)" : ""}`,
     `- Machine: ${info.machine}`,
     `- Endpoint: ${info.endpoint}`,
     `- Started: ${info.startedAt}`,
@@ -498,7 +503,7 @@ export function markdownReport(
 export function compareReport(
   runs: readonly { info: EvalRunInfo; summary: EvalSummary }[],
 ): string {
-  const header = `| Check | Target | ${runs.map((r) => `${r.info.provider} / ${r.info.model} (${r.info.machine})`).join(" | ")} |`;
+  const header = `| Check | Target | ${runs.map((r) => `${r.info.provider} / ${r.info.model} (${r.info.machine}, ${r.info.set ?? "main"})`).join(" | ")} |`;
   const lines = [
     "# NOLAN brain evaluation: comparison",
     "",

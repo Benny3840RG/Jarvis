@@ -19,7 +19,7 @@ import { pathToFileURL } from "node:url";
 
 import { createAnthropicVoiceReasoner } from "../../voice/voiceAnthropicReasoner.js";
 import type { VoiceConversationReasoner } from "../../voice/voiceConversation.js";
-import { EVAL_CASES } from "./cases.js";
+import { evalCases, type EvalCaseSet } from "./cases.js";
 import {
   compareReport,
   markdownReport,
@@ -31,7 +31,9 @@ import { createOpenAiCompatibleVoiceReasoner } from "./openAiCompatibleReasoner.
 
 /** The perfect answers from the case set: proves the harness and the cases agree. */
 export function oracleReasoner(): VoiceConversationReasoner {
-  const byUtterance = new Map(EVAL_CASES.map((testCase) => [testCase.utterance, testCase.ideal]));
+  const byUtterance = new Map(
+    evalCases("all").map((testCase) => [testCase.utterance, testCase.ideal]),
+  );
   return {
     async reply(input) {
       const ideal = byUtterance.get(input.transcript);
@@ -71,6 +73,12 @@ export function parseArgs(argv: readonly string[]): Args {
     index += 1;
   }
   return args;
+}
+
+export function caseSetArg(args: Args): EvalCaseSet {
+  const value = text(args, "set", "main")!;
+  if (value === "main" || value === "heldout" || value === "all") return value;
+  throw new Error(`--set must be main, heldout or all, got "${value}".`);
 }
 
 /** A positive whole number from a flag, or a clear error instead of NaN. */
@@ -167,9 +175,11 @@ async function main(): Promise<void> {
     machine: text(args, "machine", hostname())!,
     startedAt: new Date().toISOString(),
     repeats: positiveIntegerArg(args, "repeats", 1),
+    set: caseSetArg(args),
   };
   const { verdicts, summary } = await runEvaluation(reasoner, {
     repeats: info.repeats,
+    set: info.set ?? "main",
     onProgress: (line) => process.stdout.write(`${line}\n`),
   });
   const report = markdownReport(info, summary, verdicts);
