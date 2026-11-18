@@ -65,7 +65,8 @@ Docs:
 For any Claude/Codex implementation or review mission, first read and obey
 `docs/operations/dual-agent-coordination.md` plus the handover for the assigned
 agent. Those files define the current writer, independent reviewer, collision
-stops, exact-head Jarvis PASS and Benny-only merge/deployment boundary.
+stops, exact-head Jarvis PASS and Benny-only merge/deployment boundary (with
+the narrow standing merge delegation to Claude recorded there).
 
 At the start of each session:
 
