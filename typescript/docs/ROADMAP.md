@@ -32,7 +32,9 @@
   the console's allowlist as a stopgap until the console is removed.
 - Reason: with no published fix, the advisory made both required checks red
   on main and on every PR (e.g. #809).
-- Next: drop the entry when picomatch publishes a fix; remove
+- 2026-11-18 (later): `npm audit` stopped reporting the advisory (picomatch
+  still 4.0.7), so both allowlist entries were removed; the gate stays.
+- Next: remove
   `jarvis-console-01` (owner decision 2026-11-18), which needs its required
   check removed from branch protection by the owner.
 

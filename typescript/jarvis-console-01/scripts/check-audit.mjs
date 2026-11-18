@@ -41,16 +41,6 @@ const ALLOWLIST = new Map([
       "unrelated toolchain churn. Remove this entry once mcp-use ships a qs >= " +
       "6.16.0 dependency.",
   ],
-  [
-    "GHSA-FC5Q-39XC-VJPF",
-    "picomatch ReDoS via repeated extglobs (high). Affects every published picomatch " +
-      "(<=4.0.7, latest at 2026-11-18), so no override or upgrade clears it. Here it comes " +
-      "through mcp-use -> vite -> picomatch/tinyglobby, which match glob patterns from the " +
-      "console's own build config, not request input. Unlike typescript/, this path is not " +
-      "dev-only. Owner-approved 2026-11-18 as a stopgap: the owner does not use this console " +
-      "and has decided to remove it. Remove this entry by 2026-12-02, with the console or " +
-      "once a fixed picomatch is published.",
-  ],
 ]);
 
 const BLOCKING_SEVERITIES = new Set(["moderate", "high", "critical"]);
