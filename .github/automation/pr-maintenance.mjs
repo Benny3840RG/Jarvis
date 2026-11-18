@@ -10,7 +10,9 @@ import {
 const SHA = /^[0-9a-f]{40}$/;
 const MAX_REVIEW_BYTES = 32_768;
 const MAX_CONTEXT_BYTES = 160 * 1024;
-const MAX_FILE_BYTES = 512 * 1024;
+// GitHub's contents API returns inline content for files up to 1 MB. Oversized
+// files are split by review-segments.mjs, which shares this cap.
+const MAX_FILE_BYTES = 1024 * 1024;
 const PR_EVIDENCE_PATH = ".github/workflows/copilot-check.yml";
 const REQUIRED_NAMES = new Set([
   ...Object.keys(REQUIRED_WORKFLOW_CHECKS),

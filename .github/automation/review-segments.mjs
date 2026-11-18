@@ -83,7 +83,7 @@ export function buildReviewPlan(input) {
       if (typeof value !== "string" || value.includes("\0"))
         fail("Invalid text content.");
       const bytes = Buffer.from(value, "utf8");
-      if (bytes.length > 512 * 1024 || bytes.toString("utf8") !== value)
+      if (bytes.length > 1024 * 1024 || bytes.toString("utf8") !== value)
         fail("Review file exceeds bound or is invalid UTF8.");
       item[side] = {
         bytes: bytes.length,
@@ -457,21 +457,44 @@ export function segmentReceipt(plan, index, raw) {
   };
 }
 export function aggregateSegments(plan, receipts) {
-  const blocked = (findings = []) =>
-    parseReview(
+  // Reasons are shown in the published summary so a blocked result says why.
+  // Segment summaries and context requests are model text: collapsed to one
+  // line, length-bounded and labelled untrusted.
+  const reasons = [];
+  const clean = (text, max = 300) =>
+    String(text).replace(/\s+/g, " ").trim().slice(0, max);
+  const blocked = (findings = []) => {
+    const lead =
+      findings.length > 0
+        ? `Segmented review is incomplete, but ${findings.length} validated finding(s) were preserved. Missing context still blocks any pass or approval inference.`
+        : "Segmented review lacks complete valid evidence. No approval inferred.";
+    let detail = "";
+    for (const [index, reason] of reasons.entries()) {
+      const next = `${detail ? " " : ""}${index + 1}) ${reason}`;
+      if (lead.length + 60 + detail.length + next.length > 3900) {
+        detail += ` (+${reasons.length - index} more)`;
+        break;
+      }
+      detail += next;
+    }
+    return parseReview(
       JSON.stringify({
         verdict: "blocked",
-        summary:
-          findings.length > 0
-            ? `Segmented review is incomplete, but ${findings.length} validated finding(s) were preserved. Missing context still blocks any pass or approval inference.`
-            : "Segmented review lacks complete valid evidence; inspect segment results. No approval inferred.",
+        summary: detail
+          ? `${lead} Reasons (untrusted model text where quoted): ${detail}`
+          : `${lead} Reasons (untrusted model text where quoted): none recorded; inspect segment results.`,
         findings,
       }),
     );
+  };
   try {
     validateReviewPlan(plan);
-    if (!Array.isArray(receipts) || receipts.length !== plan.prompts.length)
+    if (!Array.isArray(receipts) || receipts.length !== plan.prompts.length) {
+      reasons.push(
+        `received ${Array.isArray(receipts) ? receipts.length : 0} of ${plan.prompts.length} segment results`,
+      );
       return blocked();
+    }
     const seen = new Set();
     const findings = [];
     let requested = false;
@@ -486,8 +509,12 @@ export function aggregateSegments(plan, receipts) {
           receipt,
           segmentReceipt(plan, receipt.index, receipt.raw),
         )
-      )
+      ) {
+        reasons.push(
+          "a segment result was duplicated or does not match its prompt",
+        );
         return blocked(findings);
+      }
       seen.add(receipt.index);
       const value = JSON.parse(receipt.raw);
       if (
@@ -496,10 +523,22 @@ export function aggregateSegments(plan, receipts) {
         value.contextRequests.some(
           (x) => typeof x !== "string" || !x.trim() || x.length > 2000,
         )
-      )
+      ) {
+        reasons.push(
+          `segment ${receipt.index + 1} returned malformed context requests`,
+        );
         return blocked(findings);
+      }
       const { contextRequests, ...reviewValue } = value;
       const review = parseReview(JSON.stringify(reviewValue));
+      for (const request of contextRequests)
+        reasons.push(
+          `segment ${receipt.index + 1} asked for context: ${clean(request)}`,
+        );
+      if (review.verdict === "blocked")
+        reasons.push(
+          `segment ${receipt.index + 1} returned blocked: ${clean(review.summary)}`,
+        );
       incomplete ||= contextRequests.length > 0 || review.verdict === "blocked";
       requested ||= review.verdict === "changes_requested";
       for (const finding of review.findings) {
@@ -530,8 +569,12 @@ export function aggregateSegments(plan, receipts) {
               ),
             ),
           )
-        )
+        ) {
+          reasons.push(
+            `segment ${receipt.index + 1} cited ${clean(finding.file, 200)}:${finding.line} outside its supplied lines`,
+          );
           return blocked(findings);
+        }
         findings.push(finding);
       }
     }
@@ -543,7 +586,10 @@ export function aggregateSegments(plan, receipts) {
         findings,
       }),
     );
-  } catch {
+  } catch (error) {
+    reasons.push(
+      `review output could not be validated (${clean(error?.message ?? error, 200)})`,
+    );
     return blocked();
   }
 }

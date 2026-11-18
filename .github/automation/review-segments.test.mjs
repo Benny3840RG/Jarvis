@@ -106,6 +106,70 @@ test("missing duplicate mismatched truncated and context-requested results block
   ])
     assert.equal(aggregateSegments(plan, receipts).verdict, "blocked");
 });
+test("a blocked result names why, so the owner need not open the run artifacts", () => {
+  const plan = make([file("hello")]);
+  const segment = (value) => segmentReceipt(plan, 0, JSON.stringify(value));
+  const cases = [
+    [[], /received 0 of 1 segment results/],
+    [[{ ...segmentReceipt(plan, 0, raw), raw: "{" }], /could not be validated/],
+    [
+      [
+        segment({
+          verdict: "pass",
+          summary: "ok",
+          findings: [],
+          contextRequests: ["the\nimported   helper"],
+        }),
+      ],
+      /segment 1 asked for context: the imported helper/,
+    ],
+    [
+      [
+        segment({
+          verdict: "blocked",
+          summary: "Cannot see the caller.",
+          findings: [],
+          contextRequests: [],
+        }),
+      ],
+      /segment 1 returned blocked: Cannot see the caller\./,
+    ],
+    [
+      [
+        segment({
+          verdict: "changes_requested",
+          summary: "bug",
+          findings: [
+            {
+              file: "typescript/openapi/jarvis.openapi.json",
+              line: 99,
+              severity: "low",
+              message: "x",
+            },
+          ],
+          contextRequests: [],
+        }),
+      ],
+      /segment 1 cited typescript\/openapi\/jarvis\.openapi\.json:99 outside its supplied lines/,
+    ],
+  ];
+  for (const [receipts, reason] of cases) {
+    const result = aggregateSegments(plan, receipts);
+    assert.equal(result.verdict, "blocked");
+    assert.match(result.summary, reason);
+    assert.match(result.summary, /untrusted model text/);
+  }
+  const long = aggregateSegments(plan, [
+    segment({
+      verdict: "blocked",
+      summary: "y".repeat(3000),
+      findings: [],
+      contextRequests: Array(14).fill("z".repeat(1900)),
+    }),
+  ]);
+  assert.ok(long.summary.length <= 4000);
+});
+
 test("blocked segments preserve validated findings while still refusing a pass", () => {
   const plan = make([file("hello")]);
   const finding = {
@@ -132,8 +196,17 @@ test("blocked segments preserve validated findings while still refusing a pass",
   assert.match(result.summary, /validated finding/);
 });
 
+test("a file between 512 KB and 1 MB is split into bounded segments", () => {
+  const plan = make([file("<div>hud</div>\n".repeat(36_000))]);
+  assert.ok(plan.prompts.length > 1);
+  assert.ok(plan.prompts.length <= 24);
+  for (const prompt of plan.prompts)
+    assert.ok(Buffer.byteLength(prompt) <= 160 * 1024);
+  validateReviewPlan(plan);
+});
+
 test("caps cannot be expanded by oversized files or excessive escaped content", () => {
-  assert.throws(() => make([file("x".repeat(512 * 1024 + 1))]));
+  assert.throws(() => make([file("x".repeat(1024 * 1024 + 1))]));
   assert.throws(() =>
     make(
       Array.from({ length: 25 }, (_, i) => ({

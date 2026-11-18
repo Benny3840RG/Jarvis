@@ -13,6 +13,42 @@
 - Next: user-visible inventory/preview surface, plus wiring governed metadata
   onto persisted records. Each needs owner authorisation.
 
+## Review process: automated Codex review covers the HUD (2026-11-18)
+
+- Cause found: the automated Codex reviewer refused any PR touching a file over
+  512 KB, and `src/mcp/dashboard-v1.html` is 533 KB, so every voice/HUD PR was
+  `blocked` and the owner relayed manual Codex reviews instead.
+- Fix: the fetch and segment caps in `.github/automation/` are now 1 MB (GitHub's
+  inline-content limit). The existing segmented review splits the file; #809's
+  real before/after HUD plans into 6 of 24 segments.
+- Protocol (`docs/operations/dual-agent-coordination.md`): a completed automated
+  Codex review counts as the peer review when Claude built the change (Codex
+  builds still need a Claude review); merge-only pushes that leave the PR diff
+  byte-identical, and where main changed nothing nearby or shared, keep the
+  review; merge `main` only when needed; owner runs the
+  spoken voice checks before merging voice/HUD changes. Revisit at Local V1
+  sign-off.
+- Next: split `dashboard-v1.html` into HTML/CSS/JS with no behaviour change;
+  tally which review layer caught what over the last ~20 PRs before pruning
+  workflows.
+
+## Dated dev-only audit allowlist (2026-11-18)
+
+- CI's `typescript/` audit step now runs `npm run audit:ci`
+  (`scripts/check-audit.mjs`) instead of `npm audit --audit-level=moderate`.
+  Every moderate-or-worse advisory still blocks, except an allowlisted one
+  that has no fixed version, appears only in development dependencies (the
+  gate also audits `--omit=dev` and blocks if it reaches production) and has
+  not passed its `expires` date (at most 30 days after it was added).
+- First entry: GHSA-fc5q-39xc-vjpf (picomatch, all versions <=4.0.7) via
+  eslint/vite/vitest, owner-approved, expires 2026-12-02. The same id is in
+  the console's allowlist as a stopgap until the console is removed.
+- Reason: with no published fix, the advisory made both required checks red
+  on main and on every PR (e.g. #809).
+- Next: drop the entry when picomatch publishes a fix; remove
+  `jarvis-console-01` (owner decision 2026-11-18), which needs its required
+  check removed from branch protection by the owner.
+
 ## Provider mutation contract suite (2026-11-16)
 
 - One case table (`tests/contracts/providerMutationContract.ts`) now runs
