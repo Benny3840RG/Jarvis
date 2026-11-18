@@ -9,8 +9,10 @@
   inline-content limit). The existing segmented review splits the file; #809's
   real before/after HUD plans into 6 of 24 segments.
 - Protocol (`docs/operations/dual-agent-coordination.md`): a completed automated
-  review counts as the peer review; merge-only pushes that leave the PR diff
-  byte-identical keep the review; merge `main` only when needed; owner runs the
+  Codex review counts as the peer review when Claude built the change (Codex
+  builds still need a Claude review); merge-only pushes that leave the PR diff
+  byte-identical, and where main changed nothing nearby or shared, keep the
+  review; merge `main` only when needed; owner runs the
   spoken voice checks before merging voice/HUD changes. Revisit at Local V1
   sign-off.
 - Next: split `dashboard-v1.html` into HTML/CSS/JS with no behaviour change;

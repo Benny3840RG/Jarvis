@@ -207,20 +207,29 @@ head `Y` only when all of these hold:
 1. every commit after `X` is a merge of `main` (no other commit on the branch);
 2. the PR's own diff is unchanged: `git diff <main at X>...X` and
    `git diff <main at Y>...Y` produce the same `git patch-id --stable`;
-3. no file the PR changes was changed on `main` between the two bases;
+3. between the two bases, `main` changed no file in a directory the PR
+   changes, and no shared configuration: any `package.json`, lockfile,
+   `tsconfig*.json`, ESLint or Prettier config, `convex/schema.ts`,
+   `openapi/jarvis.openapi.json`, or anything under `.github/`;
 4. every required check passes on `Y`.
 
-Any other change needs a fresh review. The builder states which of the four
-conditions it checked in its handoff; the owner decides.
+Condition 3 is deliberately broad, because a change elsewhere can still alter
+the PR's behaviour (an import it calls, shared configuration). When unsure,
+treat the carry-over as not applying. Any other change needs a fresh review.
+The builder lists `main`'s changed files between the two bases and states which
+of the four conditions it checked in its handoff; the owner decides.
 
 **Merge `main` only when needed.** Merge `main` into a PR only to resolve a
 conflict, to pick up a fix a required check needs, or just before the owner's
 merge decision.
 
-**Automated peer review.** A completed `jarvis-pr-maintenance/review` result on
-the exact head counts as the independent peer review, because it runs a
-different model (Codex) from the builder. The owner no longer has to relay a
-manual Codex review between chat sessions; a manual review remains optional.
+**Automated peer review.** The automated `jarvis-pr-maintenance/review` runs
+Codex. A completed result on the exact head counts as the independent peer
+review only when the builder is **not** Codex. When Codex is the builder, the
+peer review must come from Claude (a manual review, or the `claude-review`
+workflow's result on the exact head). Then no model reviews its own work. When
+Claude builds, the owner no longer has to relay a manual Codex review between
+chat sessions; a manual review remains optional.
 A `blocked` result from missing context or infrastructure is not a review, so
 the owner then chooses between a manual review and the owner check below.
 
