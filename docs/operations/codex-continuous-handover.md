@@ -54,7 +54,8 @@ repository write.
     unless that policy or the mission explicitly requires it. A blocked advisory
     review caused only by infrastructure or missing context does not add a gate;
     concrete findings still require repair or independent disproof. Any new
-    commit or base change requires fresh peer review and candidate-bound evidence.
+    commit or base change requires fresh peer review and candidate-bound evidence,
+    except the merge-only carry-over in `dual-agent-coordination.md`.
 
 Codex must not review its own work, mark the PR ready, submit an approval, merge,
 deploy, close an issue or weaken a gate.

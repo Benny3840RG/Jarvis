@@ -55,7 +55,9 @@ that the **current branch-protection source of truth actually requires**, plus t
 mission-specific proof required by its acceptance criteria and a clean independent
 peer review. Missing, pending, failed, stale or differently bound required evidence
 blocks. A new commit or base change invalidates the prior peer review and
-candidate-bound evidence.
+candidate-bound evidence, except for the merge-only carry-over in
+[Review carry-over and automated peer review](#review-carry-over-and-automated-peer-review).
+Required CI is always re-run and must pass on the new head.
 
 `jarvis-pr-maintenance/review` is additional advisory machine-review evidence
 unless the current effective branch-protection policy explicitly names it as a
@@ -192,6 +194,49 @@ If branch protection is later changed to require this status, that change needs
 its own owner-approved configuration and live refusal/success proof. Until then,
 required CI, mission-specific proof, independent peer review, unresolved concrete
 findings and Benny's exact-candidate decision remain separate gates.
+
+## Review carry-over and automated peer review
+
+Owner decision, 2026-11-18, after a council review of the process. Revisit when
+Local V1 is signed off, or before NOLAN gains users other than Benny or actions
+that cannot be undone, whichever comes first.
+
+**Merge-only carry-over.** A clean peer review of head `X` stays valid for a new
+head `Y` only when all of these hold:
+
+1. every commit after `X` is a merge of `main` (no other commit on the branch);
+2. the PR's own diff is unchanged: `git diff <main at X>...X` and
+   `git diff <main at Y>...Y` produce the same `git patch-id --stable`;
+3. between the two bases, `main` changed no file in a directory the PR
+   changes, and no shared configuration: any `package.json`, lockfile,
+   `tsconfig*.json`, ESLint or Prettier config, `convex/schema.ts`,
+   `openapi/jarvis.openapi.json`, or anything under `.github/`;
+4. every required check passes on `Y`.
+
+Condition 3 is deliberately broad, because a change elsewhere can still alter
+the PR's behaviour (an import it calls, shared configuration). When unsure,
+treat the carry-over as not applying. Any other change needs a fresh review.
+The builder lists `main`'s changed files between the two bases and states which
+of the four conditions it checked in its handoff; the owner decides.
+
+**Merge `main` only when needed.** Merge `main` into a PR only to resolve a
+conflict, to pick up a fix a required check needs, or just before the owner's
+merge decision.
+
+**Automated peer review.** The automated `jarvis-pr-maintenance/review` runs
+Codex. A completed result on the exact head counts as the independent peer
+review only when the builder is **not** Codex. When Codex is the builder, the
+peer review must come from Claude (a manual review, or the `claude-review`
+workflow's result on the exact head). Then no model reviews its own work. When
+Claude builds, the owner no longer has to relay a manual Codex review between
+chat sessions; a manual review remains optional.
+A `blocked` result from missing context or infrastructure is not a review, so
+the owner then chooses between a manual review and the owner check below.
+
+**Owner check for voice and HUD changes.** Before merging a change to
+`typescript/src/voice/` or `typescript/src/mcp/dashboard-v1.html`, Benny runs the
+relevant spoken checks in `typescript/docs/operators/voice.md` on the Lenovo.
+A defect found by hand gets a regression test in the repair.
 
 ## Handoff format
 
