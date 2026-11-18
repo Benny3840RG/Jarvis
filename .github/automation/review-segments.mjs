@@ -83,7 +83,7 @@ export function buildReviewPlan(input) {
       if (typeof value !== "string" || value.includes("\0"))
         fail("Invalid text content.");
       const bytes = Buffer.from(value, "utf8");
-      if (bytes.length > 512 * 1024 || bytes.toString("utf8") !== value)
+      if (bytes.length > 1024 * 1024 || bytes.toString("utf8") !== value)
         fail("Review file exceeds bound or is invalid UTF8.");
       item[side] = {
         bytes: bytes.length,

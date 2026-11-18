@@ -1,5 +1,22 @@
 # Jarvis TypeScript Roadmap
 
+## Review process: automated Codex review covers the HUD (2026-11-18)
+
+- Cause found: the automated Codex reviewer refused any PR touching a file over
+  512 KB, and `src/mcp/dashboard-v1.html` is 533 KB, so every voice/HUD PR was
+  `blocked` and the owner relayed manual Codex reviews instead.
+- Fix: the fetch and segment caps in `.github/automation/` are now 1 MB (GitHub's
+  inline-content limit). The existing segmented review splits the file; #809's
+  real before/after HUD plans into 6 of 24 segments.
+- Protocol (`docs/operations/dual-agent-coordination.md`): a completed automated
+  review counts as the peer review; merge-only pushes that leave the PR diff
+  byte-identical keep the review; merge `main` only when needed; owner runs the
+  spoken voice checks before merging voice/HUD changes. Revisit at Local V1
+  sign-off.
+- Next: split `dashboard-v1.html` into HTML/CSS/JS with no behaviour change;
+  tally which review layer caught what over the last ~20 PRs before pruning
+  workflows.
+
 ## Dated dev-only audit allowlist (2026-11-18)
 
 - CI's `typescript/` audit step now runs `npm run audit:ci`
