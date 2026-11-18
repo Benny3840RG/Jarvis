@@ -132,8 +132,17 @@ test("blocked segments preserve validated findings while still refusing a pass",
   assert.match(result.summary, /validated finding/);
 });
 
+test("a file between 512 KB and 1 MB is split into bounded segments", () => {
+  const plan = make([file("<div>hud</div>\n".repeat(36_000))]);
+  assert.ok(plan.prompts.length > 1);
+  assert.ok(plan.prompts.length <= 24);
+  for (const prompt of plan.prompts)
+    assert.ok(Buffer.byteLength(prompt) <= 160 * 1024);
+  validateReviewPlan(plan);
+});
+
 test("caps cannot be expanded by oversized files or excessive escaped content", () => {
-  assert.throws(() => make([file("x".repeat(512 * 1024 + 1))]));
+  assert.throws(() => make([file("x".repeat(1024 * 1024 + 1))]));
   assert.throws(() =>
     make(
       Array.from({ length: 25 }, (_, i) => ({
