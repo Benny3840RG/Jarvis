@@ -1,5 +1,22 @@
 # Jarvis TypeScript Roadmap
 
+## Dated dev-only audit allowlist (2026-11-18)
+
+- CI's `typescript/` audit step now runs `npm run audit:ci`
+  (`scripts/check-audit.mjs`) instead of `npm audit --audit-level=moderate`.
+  Every moderate-or-worse advisory still blocks, except an allowlisted one
+  that has no fixed version, appears only in development dependencies (the
+  gate also audits `--omit=dev` and blocks if it reaches production) and has
+  not passed its `expires` date (at most 30 days after it was added).
+- First entry: GHSA-fc5q-39xc-vjpf (picomatch, all versions <=4.0.7) via
+  eslint/vite/vitest, owner-approved, expires 2026-12-02. The same id is in
+  the console's allowlist as a stopgap until the console is removed.
+- Reason: with no published fix, the advisory made both required checks red
+  on main and on every PR (e.g. #809).
+- Next: drop the entry when picomatch publishes a fix; remove
+  `jarvis-console-01` (owner decision 2026-11-18), which needs its required
+  check removed from branch protection by the owner.
+
 ## Provider mutation contract suite (2026-11-16)
 
 - One case table (`tests/contracts/providerMutationContract.ts`) now runs
