@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
+import { bundleHud } from "../src/mcp/hud/bundle.mjs";
 
-const html = readFileSync(new URL("../src/mcp/dashboard-v1.html", import.meta.url), "utf8");
+const html = bundleHud();
 
 /** Extract the voice-console inline block and expose its pure functions. */
 function loadVoiceLogic(): {

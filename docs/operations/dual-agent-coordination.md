@@ -234,7 +234,7 @@ A `blocked` result from missing context or infrastructure is not a review, so
 the owner then chooses between a manual review and the owner check below.
 
 **Owner check for voice and HUD changes.** Before merging a change to
-`typescript/src/voice/` or `typescript/src/mcp/dashboard-v1.html`, Benny runs the
+`typescript/src/voice/` or the HUD (`typescript/src/mcp/hud/`), Benny runs the
 relevant spoken checks in `typescript/docs/operators/voice.md` on the Lenovo.
 A defect found by hand gets a regression test in the repair.
 

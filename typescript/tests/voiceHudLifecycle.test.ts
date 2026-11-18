@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 
 import { VOICE_COMMANDS, type VoiceProfile } from "../src/voice/voiceCommands.js";
 import { voiceUtteranceForSession } from "../src/voice/voiceSafeWrite.js";
 import { VoiceSessionRegistry } from "../src/voice/voiceSessionRegistry.js";
 import type { VoiceSession } from "../src/voice/voiceSession.js";
+import { bundleHud } from "../src/mcp/hud/bundle.mjs";
 
-const html = readFileSync(new URL("../src/mcp/dashboard-v1.html", import.meta.url), "utf8");
+const html = bundleHud();
 const block = html.match(/\/\/ BEGIN voice-console[\s\S]*?\/\/ END voice-console/)?.[0];
 assert.ok(block, "voice-console block must exist");
 

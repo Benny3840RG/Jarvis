@@ -1,5 +1,3 @@
-import { readFileSync } from "node:fs";
-
 import {
   registerAppResource,
   registerAppTool,
@@ -31,10 +29,11 @@ import {
 import { enquirySchema, invoiceSchema, registerBusinessTools } from "./businessTools.js";
 import { registerPersistenceSettingsTools } from "./persistenceSettingsTools.js";
 import { JARVIS_INSTRUCTIONS, JARVIS_PERSONA_MARKDOWN, JARVIS_PERSONA_URI } from "./persona.js";
+import { bundleHud } from "./hud/bundle.mjs";
 
 export const JARVIS_DASHBOARD_URI = "ui://jarvis/dashboard-v1.html";
 
-const dashboardHtml = readFileSync(new URL("./dashboard-v1.html", import.meta.url), "utf8");
+const dashboardHtml = bundleHud();
 
 const taskSchema = z.object({
   id: z.string(),
