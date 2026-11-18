@@ -199,6 +199,12 @@ export function resolveRetentionPolicy(overrides?: {
   if (staleAfterDays !== undefined && (!Number.isFinite(staleAfterDays) || staleAfterDays <= 0)) {
     throw new Error("Stale-after days must be positive.");
   }
+  if (
+    staleAfterDays !== undefined &&
+    staleAfterDays * DAY_MS > DEFAULT_RETENTION_POLICY.staleAfterMs
+  ) {
+    throw new Error("Stale-after days can only be shortened from the default.");
+  }
   return {
     rules,
     staleAfterMs:
@@ -467,7 +473,13 @@ export type MemoryInventoryEntry = {
   held: boolean;
 };
 
-/** Read-only, user-visible listing of what is remembered and why. */
+/**
+ * Read-only, user-visible listing of what is remembered and why.
+ *
+ * This is a projection of caller-supplied records: `status` is shown as given.
+ * Callers that need the authoritative proposed-vs-approved state must derive
+ * it from the linked change set with `governanceStatusFromChangeSet`.
+ */
 export function buildMemoryInventory(
   records: readonly GovernedMemoryRecord[],
   policy: RetentionPolicy = DEFAULT_RETENTION_POLICY,

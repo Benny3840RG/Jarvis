@@ -28,9 +28,13 @@ set. Schemas are strict: unknown fields fail validation.
 - Expiry is counted from `createdAt`. `lastUsedAt` is ignored, so reuse never
   renews a memory.
 - An explicit `expiresAt` can shorten the window but never lengthen it. Policy
-  overrides can only shorten the ttl defaults.
+  overrides can only shorten the ttl defaults and the 180-day stale window.
 - Sensitive inferences are not retained: the preview marks them
-  `would_discard_sensitive` unless a hold applies.
+  `would_discard_sensitive` unless a hold applies. A pin does not keep them:
+  pinning is a convenience, while a hold is an explicit retention obligation.
+- The inventory is a projection of caller-supplied records and shows `status`
+  as given. The authoritative proposed-vs-approved state comes from the linked
+  change set via `governanceStatusFromChangeSet`.
 
 ## Dry-run preview
 

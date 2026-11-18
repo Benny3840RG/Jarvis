@@ -104,6 +104,12 @@ describe("retention policy", () => {
     assert.deepEqual(policy.rules.raw_episode, { kind: "ttl", ms: 7 * DAY });
   });
 
+  it("only allows shortening the stale window", () => {
+    assert.throws(() => resolveRetentionPolicy({ staleAfterDays: 181 }), /shortened/);
+    assert.equal(resolveRetentionPolicy({ staleAfterDays: 180 }).staleAfterMs, 180 * DAY);
+    assert.equal(resolveRetentionPolicy({ staleAfterDays: 30 }).staleAfterMs, 30 * DAY);
+  });
+
   it("lets an explicit expiry shorten but never extend the window", () => {
     const later = record({ expiresAt: new Date(Date.parse(NOW) + 900 * DAY).toISOString() });
     assert.equal(
@@ -188,6 +194,21 @@ describe("dry-run retention preview", () => {
       now: NOW,
     });
     assert.equal(itemFor(preview, "sensitive").action, "would_discard_sensitive");
+  });
+
+  it("does not let a pin keep a sensitive inference", () => {
+    const preview = previewRetention({
+      records: [
+        record({
+          recordId: "pinned-sensitive",
+          sensitivity: "sensitive",
+          pinned: true,
+          createdAt: daysBefore(1),
+        }),
+      ],
+      now: NOW,
+    });
+    assert.equal(itemFor(preview, "pinned-sensitive").action, "would_discard_sensitive");
   });
 
   it("flags stale approved records", () => {
