@@ -44,17 +44,19 @@ const pieces = new Map();
 const assets = new Map();
 let styleIndex = 0;
 let template = source.replace(
-  /(<style([^>]*)>)([\s\S]*?)(<\/style>)/g,
+  /(<style\b([^>]*)>)([\s\S]*?)(<\/style\s*>)/gi,
   (_, open, attrs, body, close) => {
     const path = `styles/${slug(attrs, styleIndex++)}.css`;
     pieces.set(path, body);
     return `${open}<!--hud:include ${path}-->${close}`;
   },
 );
-const scripts = [...template.matchAll(/<script>([\s\S]*?)<\/script>/g)];
-if (scripts.length !== 1 || /<script\b[^>]*\bsrc=/.test(template))
-  throw new Error("Expected exactly one inline <script>.");
-template = template.replace(/(<script>)([\s\S]*?)(<\/script>)/, (_, open, body, close) => {
+// Match tags case-insensitively and with any attributes, so an unexpected tag
+// is counted and refused rather than silently left out of the split.
+const scriptTags = template.match(/<script\b[^>]*>/gi) ?? [];
+if (scriptTags.length !== 1 || scriptTags[0] !== "<script>")
+  throw new Error("Expected exactly one inline <script> with no attributes.");
+template = template.replace(/(<script>)([\s\S]*?)(<\/script\s*>)/i, (_, open, body, close) => {
   pieces.set("script.js", body);
   return `${open}<!--hud:include script.js-->${close}`;
 });

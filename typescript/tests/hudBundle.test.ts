@@ -24,8 +24,8 @@ describe("HUD assembly", () => {
     assert.match(html, /^<!doctype html>/i);
     assert.equal(html.includes("<!--hud:include"), false);
     assert.equal(html.includes("{{hud-asset:"), false);
-    assert.equal(html.match(/<style\b/g)?.length, 8);
-    assert.equal(html.match(/<script>/g)?.length, 1);
+    assert.equal(html.match(/<style\b/gi)?.length, 8);
+    assert.equal(html.match(/<script\b[^>]*>/gi)?.length, 1);
     assert.match(html, /data:font\/woff2;base64,d09GMg/, "Rajdhani fonts are inlined");
     assert.match(html, /data:image\/jpeg;base64,\/9j\//, "the backdrop photo is inlined");
     assert.doesNotMatch(
