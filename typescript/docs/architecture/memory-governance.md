@@ -42,15 +42,19 @@ set. Schemas are strict: unknown fields fail validation.
 `deletionsExecuted: 0`, with one item per input record (invalid records are
 reported as `needs_review`). Expired records with a pin, hold or active
 dependents come back as `expiry_blocked`. Missing provenance, contradictions
-and stale approved records come back as `needs_review`. The output is sorted
-and carries a SHA-256 digest, so the same inputs always give the same result.
+and stale approved records come back as `needs_review`. Records that share a
+`recordId` are all held as `needs_review` (`duplicate_record_id`) rather than
+letting input order pick one. The output is sorted with a full tie-break and
+carries a SHA-256 digest, so the same inputs always give the same result.
+`DEFAULT_RETENTION_POLICY` is deeply frozen.
 
 ## Contradictions
 
 A newer claim with the same `subjectKey` and scope but different content is
 marked for review against the existing record IDs. The existing record is never
 overwritten. A claim restated with only case or whitespace changes counts as a
-duplicate.
+duplicate, unless another peer on the same subject contradicts it: any
+contradiction takes precedence, so a restatement never bypasses review.
 
 ## Consent-gated promotion
 

@@ -1,18 +1,5 @@
 # Jarvis TypeScript Roadmap
 
-## Memory Governance V1 first slice (#838, 2026-11-18)
-
-- Added the pure module `src/memory/memoryGovernance.ts`: strict governance
-  metadata, privacy-first retention (audit left unconfigured), read-only
-  inventory and a deterministic dry-run retention preview.
-- Contradictions are flagged for review, never overwritten. Promotion only
-  stages a proposed change set through the existing service. Deletion
-  receipts report a deletion only after read-back.
-- No new store, HTTP route, Convex schema, live pruning or deletion.
-- Note: `docs/architecture/memory-governance.md`.
-- Next: user-visible inventory/preview surface, plus wiring governed metadata
-  onto persisted records. Each needs owner authorisation.
-
 ## Review process: automated Codex review covers the HUD (2026-11-18)
 
 - Cause found: the automated Codex reviewer refused any PR touching a file over

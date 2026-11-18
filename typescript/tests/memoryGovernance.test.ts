@@ -88,6 +88,18 @@ describe("retention policy", () => {
     assert.equal(rules.audit.kind, "unconfigured");
   });
 
+  it("freezes the defaults deeply so callers cannot lengthen them", () => {
+    assert.ok(Object.isFrozen(DEFAULT_RETENTION_POLICY));
+    assert.ok(Object.isFrozen(DEFAULT_RETENTION_POLICY.rules));
+    for (const rule of Object.values(DEFAULT_RETENTION_POLICY.rules)) {
+      assert.ok(Object.isFrozen(rule));
+    }
+    assert.throws(() => {
+      (DEFAULT_RETENTION_POLICY.rules.raw_episode as { ms: number }).ms = 900 * DAY;
+    }, TypeError);
+    assert.deepEqual(DEFAULT_RETENTION_POLICY.rules.raw_episode, { kind: "ttl", ms: 30 * DAY });
+  });
+
   it("requires a verification reference to configure audit retention", () => {
     assert.throws(() => resolveRetentionPolicy({ auditRetentionDays: 365 }), /verification/);
     const policy = resolveRetentionPolicy({
@@ -266,6 +278,24 @@ describe("dry-run retention preview", () => {
     assert.match(first.digest, /^[0-9a-f]{64}$/);
   });
 
+  it("holds every record sharing an ID for review, independent of input order", () => {
+    const records = [
+      record({ recordId: "twin", createdAt: daysBefore(200) }),
+      record({ recordId: "twin", category: "fact", createdAt: daysBefore(1) }),
+      record({ recordId: "solo" }),
+    ];
+    const first = previewRetention({ records, now: NOW });
+    const second = previewRetention({ records: [...records].reverse(), now: NOW });
+    assert.deepEqual(first, second);
+    const twins = first.items.filter((item) => item.recordId === "twin");
+    assert.equal(twins.length, 2);
+    for (const twin of twins) {
+      assert.equal(twin.action, "needs_review");
+      assert.deepEqual(twin.reasons, ["duplicate_record_id"]);
+    }
+    assert.equal(first.summary.would_expire, 0);
+  });
+
   it("does not mutate its input", () => {
     const input = [record({ createdAt: daysBefore(400) })];
     const snapshot = structuredClone(input);
@@ -312,6 +342,23 @@ describe("contradiction review", () => {
     assert.deepEqual(reviewIncomingClaim([existing], incoming), {
       action: "duplicate",
       matches: "units-old",
+    });
+  });
+
+  it("marks a restatement for review when another peer contradicts it", () => {
+    const contradicting = record({
+      recordId: "units-imperial",
+      subjectKey: "units.preferred",
+      content: "Use imperial units",
+    });
+    const incoming = record({
+      recordId: "units-restated",
+      subjectKey: "units.preferred",
+      content: "Use metric units",
+    });
+    assert.deepEqual(reviewIncomingClaim([existing, contradicting], incoming), {
+      action: "mark_for_review",
+      conflictsWith: ["units-imperial"],
     });
   });
 

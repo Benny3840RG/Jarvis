@@ -137,30 +137,33 @@ export function validateGovernedMemoryRecord(input: unknown): GovernanceValidati
 // ---------------------------------------------------------------------------
 
 export type RetentionRule =
-  { kind: "ttl"; ms: number } | { kind: "until_changed" } | { kind: "unconfigured"; note: string };
+  | Readonly<{ kind: "ttl"; ms: number }>
+  | Readonly<{ kind: "until_changed" }>
+  | Readonly<{ kind: "unconfigured"; note: string }>;
 
-export type RetentionPolicy = {
-  rules: Record<MemoryCategory, RetentionRule>;
+export type RetentionPolicy = Readonly<{
+  rules: Readonly<Record<MemoryCategory, RetentionRule>>;
   staleAfterMs: number;
-};
+}>;
 
 /** Privacy-first defaults from #838. Audit retention is deliberately unset. */
 export const DEFAULT_RETENTION_POLICY: RetentionPolicy = Object.freeze({
+  // Every rule object is frozen too, so callers cannot lengthen the defaults.
   rules: Object.freeze({
-    working: { kind: "ttl", ms: 24 * HOUR_MS },
-    raw_episode: { kind: "ttl", ms: 30 * DAY_MS },
-    episodic_summary: { kind: "ttl", ms: 90 * DAY_MS },
-    inferred_preference: { kind: "ttl", ms: 180 * DAY_MS },
-    reflection: { kind: "ttl", ms: 180 * DAY_MS },
-    fact: { kind: "until_changed" },
-    decision: { kind: "until_changed" },
-    audit: {
+    working: Object.freeze({ kind: "ttl", ms: 24 * HOUR_MS }),
+    raw_episode: Object.freeze({ kind: "ttl", ms: 30 * DAY_MS }),
+    episodic_summary: Object.freeze({ kind: "ttl", ms: 90 * DAY_MS }),
+    inferred_preference: Object.freeze({ kind: "ttl", ms: 180 * DAY_MS }),
+    reflection: Object.freeze({ kind: "ttl", ms: 180 * DAY_MS }),
+    fact: Object.freeze({ kind: "until_changed" }),
+    decision: Object.freeze({ kind: "until_changed" }),
+    audit: Object.freeze({
       kind: "unconfigured",
       note: "Audit retention awaits legal/operational verification; it is not defaulted.",
-    },
-  }) as Record<MemoryCategory, RetentionRule>,
+    }),
+  }) satisfies Record<MemoryCategory, RetentionRule>,
   staleAfterMs: 180 * DAY_MS,
-}) as RetentionPolicy;
+});
 
 /**
  * Audit retention may only be set with an explicit verification reference;
@@ -280,15 +283,19 @@ export function reviewIncomingClaim(
       scopeKey(record.scope) === scopeKey(incoming.scope) &&
       (record.status === "approved" || record.status === "proposed"),
   );
-  const same = peers.find(
-    (record) => normaliseClaim(record.content) === normaliseClaim(incoming.content),
-  );
-  if (same) return { action: "duplicate", matches: same.recordId };
-  if (peers.length === 0) return { action: "no_conflict" };
-  return {
-    action: "mark_for_review",
-    conflictsWith: peers.map((record) => record.recordId).sort(),
-  };
+  const claim = normaliseClaim(incoming.content);
+  const conflicting = peers.filter((record) => normaliseClaim(record.content) !== claim);
+  // Any contradiction wins over a matching peer: a restatement must not let a
+  // claim bypass review while another record on the same subject disagrees.
+  if (conflicting.length > 0) {
+    return {
+      action: "mark_for_review",
+      conflictsWith: conflicting.map((record) => record.recordId).sort(),
+    };
+  }
+  const same = peers.map((record) => record.recordId).sort()[0];
+  if (same !== undefined) return { action: "duplicate", matches: same };
+  return { action: "no_conflict" };
 }
 
 function contradictionsByRecord(records: readonly GovernedMemoryRecord[]): Map<string, string[]> {
@@ -327,7 +334,8 @@ export type RetentionReason =
   | "contradiction"
   | "stale"
   | "audit_policy_unconfigured"
-  | "invalid_record";
+  | "invalid_record"
+  | "duplicate_record_id";
 
 export type RetentionPreviewItem = {
   recordId: string;
@@ -439,9 +447,32 @@ export function previewRetention(input: {
       });
     }
   }
-  const conflicts = contradictionsByRecord(valid);
-  for (const record of valid) items.push(previewItem(record, now, policy, conflicts));
-  items.sort((a, b) => a.recordId.localeCompare(b.recordId));
+  // Records sharing an ID are ambiguous: fail closed and keep them all for
+  // review instead of letting input order decide which one is previewed.
+  const idCounts = new Map<string, number>();
+  for (const record of valid)
+    idCounts.set(record.recordId, (idCounts.get(record.recordId) ?? 0) + 1);
+  const unique = valid.filter((record) => idCounts.get(record.recordId) === 1);
+  for (const record of valid) {
+    if (idCounts.get(record.recordId) === 1) continue;
+    items.push({
+      recordId: record.recordId,
+      category: record.category,
+      status: record.status,
+      action: "needs_review",
+      reasons: ["duplicate_record_id"],
+      effectiveExpiry: null,
+    });
+  }
+  const conflicts = contradictionsByRecord(unique);
+  for (const record of unique) items.push(previewItem(record, now, policy, conflicts));
+  // Tie-break on the serialised item so equal IDs never depend on input order.
+  const sortKey = (item: RetentionPreviewItem) => JSON.stringify(item);
+  items.sort(
+    (a, b) =>
+      a.recordId.localeCompare(b.recordId) ||
+      (sortKey(a) < sortKey(b) ? -1 : sortKey(a) > sortKey(b) ? 1 : 0),
+  );
 
   const summary: Record<RetentionAction, number> = {
     retain: 0,
