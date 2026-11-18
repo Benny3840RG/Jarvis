@@ -86,7 +86,10 @@ import {
 } from "../settings/credentialsStatus.js";
 import { createAuthoritativeVoiceQueries } from "../voice/authoritativeVoiceQuery.js";
 import { AbsentHardwareProvider } from "../voice/voiceHardware.js";
+import { AuthoritativeVoiceCompletionResolver } from "../voice/voiceCompletion.js";
+import { reminderRescheduleEnabledFromEnv } from "../actions/taskReminderTools.js";
 import { VoiceSessionRegistry } from "../voice/voiceSessionRegistry.js";
+import { createVoiceWriteTargetFromEnv, type VoiceWriteTarget } from "../voice/voiceWriteTarget.js";
 import {
   createDangerZoneFromEnv,
   createInactiveDangerZone,
@@ -109,6 +112,11 @@ import {
 import { evaluateRemoteGatewayRequest } from "./remoteGateway.js";
 import { createOidcVerifier, type OidcVerifier } from "./oidcVerifier.js";
 import { JarvisHttpModule } from "./jarvisHttpModule.js";
+import type { VoiceConversationService } from "../voice/voiceConversation.js";
+import {
+  createVoiceConversationFromEnv,
+  resolveVoiceConversationStatus,
+} from "../voice/voiceConversationFactory.js";
 import { configuredSecrets, redactedRequestPath } from "./problemDetails.js";
 import { REQUEST_ID_HEADER, resolveRequestId } from "./requestId.js";
 import {
@@ -169,6 +177,9 @@ export type CreateJarvisHttpAppOptions = (
    * a custom registry (short TTL, deterministic clock, or a live provider).
    */
   voiceSessionRegistry?: VoiceSessionRegistry;
+  voiceConversation?: VoiceConversationService | null;
+  /** Dedicated project voice safe writes stage against (owner decision on #815). */
+  voiceWriteTarget?: VoiceWriteTarget | null;
   telemetry?: PostHogTelemetry;
   /**
    * Overrides the process-wide HTTP rate limit. Tests use this so a low budget
@@ -257,6 +268,9 @@ export async function createJarvisHttpApp(
   const remoteGateway = config.remoteGateway;
   const telemetry = options.telemetry ?? createPostHogTelemetryFromEnv();
   const usesEnvironment = options.persistence === undefined;
+  const resolvedVoiceConversation = usesEnvironment
+    ? createVoiceConversationFromEnv()
+    : { service: null, status: resolveVoiceConversationStatus({}) };
   const reconciliationHealth =
     options.reconciliationHealth ?? (() => ({ state: "disabled", enabled: false }));
   const externalReconciliationReadStore =
@@ -282,6 +296,12 @@ export async function createJarvisHttpApp(
       ? options.toolActionService
       : usesEnvironment
         ? createToolActionServiceFromEnv()
+        : null;
+  const voiceWriteTarget =
+    options.voiceWriteTarget !== undefined
+      ? options.voiceWriteTarget
+      : usesEnvironment
+        ? createVoiceWriteTargetFromEnv()
         : null;
   const toolExecutionService =
     options.toolExecutionService !== undefined
@@ -468,6 +488,7 @@ export async function createJarvisHttpApp(
       totalityPipeline,
       memoryChangeSetService,
       toolActionService,
+      voiceWriteTarget,
       toolExecutionService,
       businessSettingsStore,
       enquiryStore,
@@ -500,6 +521,18 @@ export async function createJarvisHttpApp(
         options.voiceSessionRegistry ??
         new VoiceSessionRegistry({
           provider: new AbsentHardwareProvider(),
+          timezone: config.timezone,
+          // Spoken completions resolve against the same records the queries
+          // read; tasks are only offered inside the dedicated voice project.
+          // AM-017 is planned: spoken reschedules follow the same explicit
+          // flag that registers the reminders:reschedule executor.
+          rescheduleReminders: reminderRescheduleEnabledFromEnv(),
+          completions: new AuthoritativeVoiceCompletionResolver({
+            tasks: persistence,
+            errands: errandStore,
+            reminders: persistence,
+            voiceProject: voiceWriteTarget,
+          }),
           queries: createAuthoritativeVoiceQueries({
             timezone: config.timezone,
             tasks: persistence,
@@ -516,6 +549,11 @@ export async function createJarvisHttpApp(
           // into the spoken-confirmation path — never dispatched directly (#567).
           interpretNaturalLanguage: true,
         }),
+      voiceConversation:
+        options.voiceConversation === undefined
+          ? resolvedVoiceConversation.service
+          : options.voiceConversation,
+      voiceConversationStatus: resolvedVoiceConversation.status,
     }),
     adapter,
     { logger: options.logger, abortOnError: false },

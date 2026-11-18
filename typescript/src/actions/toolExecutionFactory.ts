@@ -25,6 +25,9 @@ import type { QuoteRepository } from "../quotes/quoteRepository.js";
 import type { ControlledReminderStore } from "../reminders/controlledReminder.js";
 import type { ControlledTaskStore } from "../tasks/controlledTask.js";
 import { createNoteToolDefinition } from "./createNoteTool.js";
+import { createErrandToolDefinitions } from "./errandTools.js";
+import type { ErrandStore } from "../errands/errand.js";
+import { JsonErrandStore } from "../errands/jsonErrandStore.js";
 import {
   createGitHubDevelopmentClientFromEnv,
   createGitHubMergeToolDefinition,
@@ -37,7 +40,10 @@ import {
   type GoogleHomeAnnouncementProvider,
 } from "../integrations/googleHome/googleHomeAnnouncementProvider.js";
 import { createQuoteSendToolDefinition } from "./quoteSendTool.js";
-import { createTaskReminderToolDefinitions } from "./taskReminderTools.js";
+import {
+  createTaskReminderToolDefinitions,
+  reminderRescheduleEnabledFromEnv,
+} from "./taskReminderTools.js";
 import { ToolExecutionService, type ToolExecutionDefinition } from "./toolExecution.js";
 
 export function createToolExecutionDefinitions(
@@ -50,6 +56,8 @@ export function createToolExecutionDefinitions(
   quotePdfArtifactRepository?: QuotePdfArtifactRepository,
   githubDevelopmentClient?: GitHubDevelopmentClient,
   googleHomeAnnouncementProvider?: GoogleHomeAnnouncementProvider,
+  errandStore?: ErrandStore,
+  options: { reminderReschedule?: boolean } = {},
 ): ToolExecutionDefinition[] {
   if ((taskStore === undefined) !== (reminderStore === undefined)) {
     throw new Error("Task and reminder tool stores must be registered together.");
@@ -60,7 +68,7 @@ export function createToolExecutionDefinitions(
     ...createSecurityEducationTools(),
     ...(taskStore === undefined || reminderStore === undefined
       ? []
-      : createTaskReminderToolDefinitions(taskStore, reminderStore)),
+      : createTaskReminderToolDefinitions(taskStore, reminderStore, options)),
     ...(quoteRepository === undefined ? [] : [createQuoteFinalizeToolDefinition(quoteRepository)]),
     ...(quoteRepository === undefined ||
     quoteEmailProvider === undefined ||
@@ -81,6 +89,7 @@ export function createToolExecutionDefinitions(
     ...(googleHomeAnnouncementProvider === undefined
       ? []
       : [createHomeAnnouncementToolDefinition(googleHomeAnnouncementProvider)]),
+    ...(errandStore === undefined ? [] : createErrandToolDefinitions(errandStore)),
   ];
 }
 
@@ -90,7 +99,9 @@ export function createToolExecutionDefinitions(
  * when Convex persistence and all four quote-delivery dependencies are
  * available. Maintained process entrypoints inject the provider from the same
  * Outlook runtime bundle used by reconciliation so token state is not
- * duplicated.
+ * duplicated. `reminders:reschedule` (AM-017, planned) is registered only when
+ * JARVIS_REMINDER_RESCHEDULE_ENABLED is "true". `errands:create` writes the same local JSON errand file the HTTP
+ * errand routes use (its file lock is cross-process).
  */
 export function createToolExecutionServiceFromEnv(
   quoteEmailProvider: QuoteEmailProvider | null = createQuoteEmailProviderFromEnv(),
@@ -109,6 +120,8 @@ export function createToolExecutionServiceFromEnv(
       createQuotePdfArtifactRepositoryFromEnv() ?? undefined,
       githubDevelopmentClient ?? undefined,
       googleHomeAnnouncementProvider ?? undefined,
+      new JsonErrandStore(),
+      { reminderReschedule: reminderRescheduleEnabledFromEnv() },
     ),
     new ConvexToolExecutionReceiptStore(),
     new ConvexExternalReconciliationStore(),

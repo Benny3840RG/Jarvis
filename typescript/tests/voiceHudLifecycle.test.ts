@@ -5,6 +5,7 @@ import { describe, it } from "node:test";
 import { VOICE_COMMANDS, type VoiceProfile } from "../src/voice/voiceCommands.js";
 import { voiceUtteranceForSession } from "../src/voice/voiceSafeWrite.js";
 import { VoiceSessionRegistry } from "../src/voice/voiceSessionRegistry.js";
+import type { VoiceSession } from "../src/voice/voiceSession.js";
 
 const html = readFileSync(new URL("../src/mcp/dashboard-v1.html", import.meta.url), "utf8");
 const block = html.match(/\/\/ BEGIN voice-console[\s\S]*?\/\/ END voice-console/)?.[0];
@@ -70,6 +71,9 @@ function harness(
     speechThrows?: boolean;
     /** Treat every recognition session as long-lived (no rapid-end guard). */
     longSessions?: boolean;
+    conversationDispatch?:
+      | { decision: "conversation"; reply: string }
+      | { decision: "conversation-unavailable"; conversationReason: string };
   } = {},
 ) {
   const elements = new Map<string, Element>();
@@ -198,13 +202,21 @@ function harness(
               : { heardTranscript: body.heardTranscript }),
             ...(body.alternatives ? { alternatives: body.alternatives } : {}),
           });
-          const dispatch = await session.handle({
+          let dispatch:
+            | Awaited<ReturnType<VoiceSession["handle"]>>
+            | NonNullable<typeof options.conversationDispatch> = await session.handle({
             transcript: prepared.transcript,
             isFinal: body.isFinal === true,
             wakeAuthorized: prepared.wakeAuthorized,
             ...(prepared.alternatives ? { alternatives: prepared.alternatives } : {}),
             now,
           });
+          if (
+            dispatch.decision === "unrecognized" &&
+            prepared.wakeAuthorized &&
+            options.conversationDispatch
+          )
+            dispatch = options.conversationDispatch;
           reply = response({ dispatch, pending: session.pending() ?? null });
         }
       }
@@ -349,6 +361,69 @@ const describeVoiceDispatch = new Function(
 )() as Describe;
 
 describe("voice HUD clarification prompt (#567)", () => {
+  it("shows and speaks a conversation reply", async () => {
+    const h = harness({
+      conversationDispatch: { decision: "conversation", reply: "Hello, Benny." },
+    });
+    h.type("Nolan tell me a joke");
+    await flush();
+    assert.equal(h.get("voice-result").textContent, "Hello, Benny.");
+    assert.equal(h.spoken.at(-1), "Hello, Benny.");
+  });
+
+  it("shows an unavailable conversation notice without speaking it", async () => {
+    const h = harness({
+      conversationDispatch: {
+        decision: "conversation-unavailable",
+        conversationReason: "rate-limited",
+      },
+    });
+    h.type("Nolan tell me a joke");
+    await flush();
+    assert.match(h.get("voice-result").textContent, /limit/i);
+    assert.equal(h.spoken.length, 0);
+  });
+
+  it("shows a reply-too-long notice without speaking any part of the answer", async () => {
+    const h = harness({
+      conversationDispatch: {
+        decision: "conversation-unavailable",
+        conversationReason: "reply-too-long",
+      },
+    });
+    h.type("Nolan tell me a joke");
+    await flush();
+    assert.match(h.get("voice-result").textContent, /too long to speak in full/i);
+    assert.equal(h.spoken.length, 0);
+  });
+
+  it("ignores a conversational reply arriving after Stop", async () => {
+    const h = harness({ conversationDispatch: { decision: "conversation", reply: "Too late." } });
+    const release = h.pause("/sessions/s1/utterances", "response");
+    h.type("Nolan tell me a joke");
+    await flush();
+    h.stop();
+    const before = h.get("voice-result").textContent;
+    release();
+    await flush();
+    assert.equal(h.get("voice-result").textContent, before);
+    assert.ok(!h.spoken.includes("Too late."));
+  });
+
+  it("ignores a conversational reply arriving after a profile switch", async () => {
+    const h = harness({
+      conversationDispatch: { decision: "conversation", reply: "Wrong profile." },
+    });
+    const release = h.pause("/sessions/s1/utterances", "response");
+    h.type("Nolan tell me a joke");
+    await flush();
+    h.profile("workshop");
+    release();
+    await flush();
+    await flush();
+    assert.ok(!h.spoken.includes("Wrong profile."));
+    assert.notEqual(h.get("voice-result").textContent, "Wrong profile.");
+  });
   it("displays and speaks only the returned candidates and keeps the session for one reply", async () => {
     const h = harness();
     await offerClarification(h);
@@ -410,7 +485,7 @@ describe("voice HUD clarification prompt (#567)", () => {
     recognition.emit("Jarvis the second one");
     await flush();
     assert.equal(h.utterances().at(-1)?.body.transcript, "the second one");
-    assert.equal(h.utterances().at(-1)?.body.heardTranscript, "jarvis the second one");
+    assert.equal(h.utterances().at(-1)?.body.heardTranscript, "Jarvis the second one");
     assert.equal(h.get("voice-result").textContent, "Awaiting spoken “confirm”.");
     assert.match(h.get("voice-pending").textContent, /Turn the crawler inspection lights on/);
     assert.deepEqual(h.actuations, []);
@@ -1193,7 +1268,7 @@ describe("voice HUD lifecycle (actual setupVoiceConsole and real session registr
     resumed.emit("Jarvis confirmed");
     await flush();
     assert.equal(h.utterances().at(-1)?.body.transcript, "confirmed");
-    assert.equal(h.utterances().at(-1)?.body.heardTranscript, "jarvis confirmed");
+    assert.equal(h.utterances().at(-1)?.body.heardTranscript, "Jarvis confirmed");
     assert.equal(h.get("voice-pending").hidden, true, "the confirmation was consumed");
     assert.deepEqual(h.actuations, ["crawler.stop"], "the test provider saw one confirmed halt");
     resumed.emit("Jarvis confirmed");
@@ -1208,7 +1283,7 @@ describe("voice HUD lifecycle (actual setupVoiceConsole and real session registr
     await flush();
     assert.equal(h.utterances().length, 1, "NOLAN reaches the server on the first session");
     assert.equal(h.utterances().at(-1)?.body.transcript, "any unpaid invoices");
-    assert.equal(h.utterances().at(-1)?.body.heardTranscript, "nolan, any unpaid invoices");
+    assert.equal(h.utterances().at(-1)?.body.heardTranscript, "Nolan, any unpaid invoices");
     first.emit("Nolan any unpaid invoices", false);
     first.emit("Nolanx any unpaid invoices");
     first.emit("any unpaid invoices");

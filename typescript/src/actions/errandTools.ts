@@ -1,0 +1,141 @@
+import { z } from "zod";
+
+import type { Errand, ErrandStore } from "../errands/errand.js";
+import { sha256Hex } from "./sha256.js";
+import type { ToolExecutionDefinition } from "./toolExecution.js";
+
+export const ERRAND_TOOL = "errands";
+export const CREATE_ERRAND_OPERATION = "create";
+
+/**
+ * A governed errand write: an open pick-up item with a title and, optionally,
+ * a quantity and a note. Location and business-project links stay on the
+ * owner's HTTP/HUD path; a ToolAction's projectId is the governing (Convex)
+ * project, not an errand's business-project link, so it is never copied over.
+ */
+export const createErrandArgumentsSchema = z
+  .object({
+    title: z.string().trim().min(1).max(200),
+    quantity: z.number().int().min(1).max(999).optional(),
+    notes: z.string().trim().min(1).max(2000).optional(),
+  })
+  .strict();
+
+/**
+ * The errand id is derived from the approved action and its execution
+ * idempotency key, so a retried execution (for example after a crash between
+ * the write and the receipt) finds the same row instead of adding a second.
+ * UUID-shaped, like the ids the store generates itself.
+ */
+export function errandIdForToolAction(input: {
+  projectId: string;
+  actionId: string;
+  idempotencyKey: string;
+}): string {
+  const hex = sha256Hex(
+    `errands:create:v1\u0000${input.projectId}\u0000${input.actionId}\u0000${input.idempotencyKey}`,
+  );
+  const variant = ((parseInt(hex[16] ?? "0", 16) & 0x3) | 0x8).toString(16);
+  return [
+    hex.slice(0, 8),
+    hex.slice(8, 12),
+    `5${hex.slice(13, 16)}`,
+    `${variant}${hex.slice(17, 20)}`,
+    hex.slice(20, 32),
+  ].join("-");
+}
+
+export function createErrandToolDefinition(store: ErrandStore): ToolExecutionDefinition {
+  return {
+    tool: ERRAND_TOOL,
+    operation: CREATE_ERRAND_OPERATION,
+    schema: createErrandArgumentsSchema,
+    async execute(argumentsValue, _signal, context) {
+      const parsed = createErrandArgumentsSchema.parse(argumentsValue);
+      const id = errandIdForToolAction({
+        projectId: context.action.projectId,
+        actionId: context.action.actionId,
+        idempotencyKey: context.idempotencyKey,
+      });
+      const { errand } = await store.addOnce(id, {
+        title: parsed.title,
+        ...(parsed.quantity === undefined ? {} : { quantity: parsed.quantity }),
+        ...(parsed.notes === undefined ? {} : { notes: parsed.notes }),
+      });
+      return errand;
+    },
+  };
+}
+
+export const COMPLETE_ERRAND_OPERATION = "complete";
+
+export const completeErrandArgumentsSchema = z
+  .object({
+    errandId: z.string().trim().min(1).max(200),
+  })
+  .strict();
+
+/**
+ * Marks one errand done. Completing an errand that is already done returns it
+ * unchanged, so a retried execution is harmless; a missing errand fails.
+ */
+export function completeErrandToolDefinition(store: ErrandStore): ToolExecutionDefinition {
+  return {
+    tool: ERRAND_TOOL,
+    operation: COMPLETE_ERRAND_OPERATION,
+    schema: completeErrandArgumentsSchema,
+    async execute(argumentsValue) {
+      const parsed = completeErrandArgumentsSchema.parse(argumentsValue);
+      const errand = await store.get(parsed.errandId);
+      if (errand === null) throw new Error("Errand was not found.");
+      if (errand.status === "done") return errand;
+      const completed = await store.update(parsed.errandId, { status: "done" });
+      if (completed === null) throw new Error("Errand was not found.");
+      return completed;
+    },
+  };
+}
+
+export const REMOVE_ERRAND_OPERATION = "remove";
+
+export const removeErrandArgumentsSchema = z
+  .object({
+    errandId: z.string().trim().min(1).max(200),
+  })
+  .strict();
+
+export type RemoveErrandResult = Readonly<{
+  errandId: string;
+  /** False when the errand was already gone, so a retried execution is harmless. */
+  removed: boolean;
+  errand?: Errand;
+}>;
+
+/**
+ * Removes one errand from the list. The id always comes from an approved
+ * action. An errand that is already gone (a retry after a crash between the
+ * write and the receipt, or a removal on the HUD meanwhile) succeeds with
+ * `removed: false`: the list already holds what the owner approved.
+ */
+export function removeErrandToolDefinition(store: ErrandStore): ToolExecutionDefinition {
+  return {
+    tool: ERRAND_TOOL,
+    operation: REMOVE_ERRAND_OPERATION,
+    schema: removeErrandArgumentsSchema,
+    async execute(argumentsValue): Promise<RemoveErrandResult> {
+      const parsed = removeErrandArgumentsSchema.parse(argumentsValue);
+      const removed = await store.remove(parsed.errandId);
+      return removed === null
+        ? { errandId: parsed.errandId, removed: false }
+        : { errandId: parsed.errandId, removed: true, errand: removed };
+    },
+  };
+}
+
+export function createErrandToolDefinitions(store: ErrandStore): ToolExecutionDefinition[] {
+  return [
+    createErrandToolDefinition(store),
+    completeErrandToolDefinition(store),
+    removeErrandToolDefinition(store),
+  ];
+}

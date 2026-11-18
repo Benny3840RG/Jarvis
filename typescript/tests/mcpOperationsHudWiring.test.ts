@@ -382,7 +382,7 @@ describe("Integration commissioning HUD wiring", () => {
     assert.equal(h.registry.get("telemetry-deployment")?.textContent, "dev-one");
     assert.equal(h.registry.get("telemetry-z-state")?.textContent, "DISABLED");
     assert.equal(h.registry.get("source-pill")?.textContent, "SOURCE · source-one");
-    assert.equal(h.registry.get("footer-status")?.textContent, "Jarvis ok · convex persistence");
+    assert.equal(h.registry.get("footer-status")?.textContent, "NOLAN ok · convex persistence");
 
     runRenderSystems({ status: null }, h);
     assert.equal(h.registry.get("status-label")?.textContent, "CONNECTING");
@@ -456,7 +456,7 @@ describe("Integration commissioning HUD wiring", () => {
     assert.equal(h.registry.get("source-pill")?.textContent, "SOURCE · source-two");
     assert.equal(
       h.registry.get("footer-status")?.textContent,
-      "Jarvis degraded · convex persistence",
+      "NOLAN degraded · convex persistence",
     );
   });
 

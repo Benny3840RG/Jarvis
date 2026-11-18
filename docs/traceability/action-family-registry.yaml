@@ -764,6 +764,64 @@ action_families:
         type: integer
         required: true
 
+  - id: AM-017
+    name: Reschedule reminder
+    lifecycle_status: planned
+    owner: reminders_domain
+    version: 1
+    classification:
+      verb: reschedule
+      object: reminder
+      domains: [business, home, workshop, shared]
+      capability: reminders
+    policy_overlay: internal_mutation
+    sensitivity:
+      mode: fixed
+      value: private
+    execution:
+      external_side_effects:
+        mode: false
+      offline_support: true
+    idempotency:
+      enabled: true
+      key_strategy: normalized_payload_hash
+      scope: owner_project_action_family
+      replay_policy: return_original_result
+      collision_policy: reject_and_log
+    bindings:
+      executor_id: TOOL-REMINDERS-RESCHEDULE
+      state_target_id: STORE-REMINDERS
+      tool_contract_version: "1"
+    state_impact:
+      entity: reminder
+      transition: reschedule
+    reconciliation:
+      required: false
+    traceability:
+      requirements:
+        primary: [R-067, R-073, R-084, R-085]
+        supporting: [R-039, R-040, R-041, R-042, R-055, R-056, R-057, R-058, R-060, R-061, R-062, R-068, R-069, R-070, R-074, R-076, R-090, R-097, R-099, R-105, R-106, R-107, R-108, R-110, R-111, R-125, R-128, R-129, R-130]
+      test_ids:
+        - TEST-AM-017-DOMAIN-001
+        - TEST-AM-017-TOOL-001
+        - TEST-AM-017-PERSIST-001
+        - TEST-AM-017-VOICE-001
+      evidence_ids:
+        - EVD-AM-017-001
+    parameters:
+      - name: reminder_id
+        type: string
+        required: true
+      - name: due_raw
+        type: string
+        required: true
+      - name: due_at
+        type: number
+        required: false
+      - name: due_timezone
+        type: string
+        required: false
+
 workflows:
   - id: WF-QUOTE-001
     name: Finalize and send quote

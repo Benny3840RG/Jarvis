@@ -107,6 +107,17 @@ const CATEGORY_COUNT_WORDS: Record<number, string> = {
 };
 
 describe("system status integration commissioning evidence", () => {
+  it("reports voice conversation configuration without a credential or live probe", async () => {
+    const app = await makeApp(null);
+    const response = await app.inject({ method: "GET", url: "/api/v1/status", headers: AUTH });
+    assert.equal(response.statusCode, 200);
+    assert.deepEqual(response.json().voiceConversation, {
+      status: "not-configured",
+      provider: null,
+      model: null,
+      reason: "Voice conversation is disabled.",
+    });
+  });
   it("reports quote-delivery as implemented-only with a reason when tool execution is unconfigured", async () => {
     const app = await makeApp(null);
     const integrations = await fetchIntegrations(app);

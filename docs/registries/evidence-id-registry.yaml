@@ -22,6 +22,10 @@ evidence:
     path: docs/evidence/task-reminder-actions-commissioning.md
     description: Runtime CI and authorised development cancellation tombstone, replay, live-record deletion and cleanup evidence
 
+  - id: EVD-AM-017-001
+    path: docs/evidence/reminder-reschedule-am-017.md
+    description: Planning-only implementation evidence for AM-017 (Reschedule reminder) — Convex rescheduleControlled mutation, gated reminders:reschedule executor and the NOLAN spoken reschedule, with local test references. Records no commissioning or deployment; AM-017 stays lifecycle_status planned until the owner deploys Convex and runs a commissioning smoke.
+
   - id: EVD-RECONCILIATION-001
     path: docs/evidence/external-reconciliation-commissioning.md
     description: Runtime CI, development commissioning, and self-cleaning regression evidence for the external-action reconciliation subsystem (issue #154). Infrastructure evidence only; does not activate any action family.

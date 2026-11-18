@@ -23,6 +23,12 @@ const BASE: SystemStatus = {
     model: null,
     reason: "Reasoning provider is not configured.",
   },
+  voiceConversation: {
+    status: "not-configured",
+    provider: null,
+    model: null,
+    reason: "Voice conversation is disabled.",
+  },
   timezone: "Australia/Melbourne",
   layers: {
     runtime: { status: "ready" },

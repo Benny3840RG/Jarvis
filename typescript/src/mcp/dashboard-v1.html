@@ -2375,6 +2375,25 @@
         body[data-console-view="focus"] #totality-bar-label { font-size: 10px; line-height: 1.2; }
       }
     </style>
+    <style>
+      /* NOLAN HUD polish: final overrides, kept last so they win the cascade. */
+      /* Totality meter label was boxed into the 14px meter column and clipped ("UNKN"). */
+      body[data-console-view="focus"] #totality-bar-label {
+        grid-column: 1 / -1;
+        justify-self: end;
+        width: auto;
+        white-space: nowrap;
+      }
+      /* Bezel rivets are fixed to the viewport; below the full console they float over live content. */
+      @media (max-width: 1399px) {
+        .rivets { display: none; }
+      }
+      @media (max-width: 780px) {
+        .title-plate { width: auto; max-width: calc(100% - 32px); box-sizing: border-box; padding-inline: 16px; }
+        .title-plate h1 { flex-wrap: wrap; row-gap: 2px; }
+        .top-actions { justify-content: flex-start; min-width: 0; max-width: 100%; }
+      }
+    </style>
 </head>
   <body data-backdrop-severity="UNKNOWN" data-console-view="focus"><!-- JARVIS // OPERATOR CONSOLE · LANDSCAPE COMMAND CENTRE -->
     <canvas id="hud-backdrop" class="hud-backdrop" aria-hidden="true"></canvas>
@@ -2442,9 +2461,9 @@
     <div class="bezel-lip" aria-hidden="true"></div>
     <div class="crt-glass" aria-hidden="true"></div>
     <div class="hud-photo" aria-hidden="true"></div>
-    <div class="rivets" aria-hidden="true"><i class="rivet"></i><i class="rivet"></i><i class="rivet"></i><i class="rivet"></i><i class="rivet"></i><i class="rivet"></i><i class="rivet"></i><i class="rivet"></i><i class="rivet"></i><i class="rivet"></i><i class="rivet"></i><i class="rivet"></i><i class="rivet"></i><i class="rivet"></i><i class="rivet"></i><i class="rivet"></i><i class="rivet"></i><i class="rivet"></i><i class="rivet"></i><i class="rivet"></i></div><!-- JARVIS // OPERATOR CONSOLE · LANDSCAPE COMMAND CENTRE --><!-- JARVIS // OPERATOR CONSOLE · LANDSCAPE COMMAND CENTRE -->
+    <div class="rivets" aria-hidden="true"><i class="rivet"></i><i class="rivet"></i><i class="rivet"></i><i class="rivet"></i><i class="rivet"></i><i class="rivet"></i><i class="rivet"></i><i class="rivet"></i><i class="rivet"></i><i class="rivet"></i><i class="rivet"></i><i class="rivet"></i><i class="rivet"></i><i class="rivet"></i><i class="rivet"></i><i class="rivet"></i><i class="rivet"></i><i class="rivet"></i><i class="rivet"></i><i class="rivet"></i></div>
     <div class="totality-title title-plate">
-      <h1><span class="wordmark">JARVIS TOTALITY</span><span class="console-no">CONSOLE 02 <span aria-hidden="true">⚡</span></span></h1>
+      <h1><span class="wordmark">NOLAN TOTALITY</span><span class="console-no">CONSOLE 02 <span aria-hidden="true">⚡</span></span></h1>
       <p class="sub-plate">OPTIMIZED TOTALITY STATE</p>
       <p class="live-state" id="totality-state-value">UNKNOWN</p>
     </div>
@@ -2682,7 +2701,7 @@
                       <p id="dev-status">DEVELOPMENT · NOT AUTHORISED</p>
                     </section>
                     <section class="plate">
-                      <h2>HEXTRICK NAMS</h2>
+                      <h2>AUX TELEMETRY</h2>
                       <div class="status-rows" aria-hidden="true">
                         <span class="tick-row"><i class="slot" aria-hidden="true"></i><i class="track" aria-hidden="true"></i><i class="check" aria-hidden="true"></i></span>
                         <span class="tick-row"><i class="slot" aria-hidden="true"></i><i class="track" aria-hidden="true"></i><i class="check" aria-hidden="true"></i></span>
@@ -2690,7 +2709,7 @@
                         <span class="tick-row"><i class="slot" aria-hidden="true"></i><i class="track" aria-hidden="true"></i><i class="check" aria-hidden="true"></i></span>
                         <span class="tick-row"><i class="slot" aria-hidden="true"></i><i class="track" aria-hidden="true"></i><i class="check" aria-hidden="true"></i></span>
                       </div>
-                      <p class="signal-tag">UNKNOWN</p>
+                      <p class="signal-tag" title="No auxiliary feed is wired. Nothing is invented.">UNKNOWN</p>
                     </section>
                   </div>
 
@@ -2885,7 +2904,7 @@
                       <section class="panel" id="panel-crew" data-hud-panel="crew">
                         <div class="panel-content">
                           <div class="panel-header"><h2>Crew</h2><span id="crew-status">UNKNOWN</span></div>
-                          <p class="crew-detail" id="crew-detail">No crew roster is on this Jarvis. Names are not invented.</p>
+                          <p class="crew-detail" id="crew-detail">No crew roster is on this NOLAN. Names are not invented.</p>
                         </div>
                       </section>
                   <article class="panel list-panel green">
@@ -2921,10 +2940,11 @@
                     </div>
                     <div class="panel-header"><h3>Approvals</h3><span id="approvals-stage">UNKNOWN</span></div>
                     <p class="operations-headline" id="approvals-source">Tool-action proposals are not on this snapshot. This console does not approve, reject, or execute.</p>
+                    <p class="operations-headline"><a href="/settings/approvals">Review, approve and run staged changes on the Approvals page</a></p>
                     <p class="operations-headline"><a href="/settings/owner-decisions">Open the owner decision queue</a></p>
                   </article>
                   <div class="systems-side">
-                    <article class="panel violet systems-radar"><div class="panel-header"><h2>Layer readiness radar</h2><span>LIVE STATUS</span></div><div class="chart-wrap"><svg viewBox="0 0 400 400" role="img" aria-label="Jarvis runtime layer readiness"><g class="radar-grid" id="radar-grid"></g><g class="radar-axes" id="radar-axes"></g><polygon id="layer-radar-polygon" points="200,200" fill="rgba(196,123,74,.18)" stroke="var(--violet)" stroke-width="3" /><g class="radar-labels" id="radar-labels"></g></svg></div></article>
+                    <article class="panel violet systems-radar"><div class="panel-header"><h2>Layer readiness radar</h2><span>LIVE STATUS</span></div><div class="chart-wrap"><svg viewBox="0 0 400 400" role="img" aria-label="NOLAN runtime layer readiness"><g class="radar-grid" id="radar-grid"></g><g class="radar-axes" id="radar-axes"></g><polygon id="layer-radar-polygon" points="200,200" fill="rgba(196,123,74,.18)" stroke="var(--violet)" stroke-width="3" /><g class="radar-labels" id="radar-labels"></g></svg></div></article>
                       <section class="panel green systems-provider">
                         <div class="panel-content">
                           <div class="panel-header"><h2>Provider</h2><span id="provider-link-state">CONNECTING</span></div>
@@ -2974,7 +2994,7 @@
                   <div class="settings-panel" data-settings-panel="persistence" id="view-persistence">
                     <div class="settings-layout">
                       <h2>Persistence</h2>
-                      <p id="persistence-honesty">Provider selection is explicit. Jarvis will not silently fall back from Convex to JSON.</p>
+                      <p id="persistence-honesty">Provider selection is explicit. NOLAN will not silently fall back from Convex to JSON.</p>
                       <p class="settings-status" id="persistence-glance" role="status">Health checking</p>
                       <div class="settings-actions" id="persistence-health-glance">
                         <span class="fp-chip" id="persistence-provider-chip">Provider</span>
@@ -2991,7 +3011,7 @@
                       </article>
                       <article class="settings-card" id="persistence-backup-card">
                         <h3>Backup</h3>
-                        <p id="persistence-export-warning">Archives must not contain service, approval, or delivery tokens. Jarvis does not write those secrets into the backup file.</p>
+                        <p id="persistence-export-warning">Archives must not contain service, approval, or delivery tokens. NOLAN does not write those secrets into the backup file.</p>
                         <p>Archive v4 is <span id="persistence-v4-label">Partial / JSON-only</span>. This is not a complete backup.</p>
                         <div class="settings-actions">
                           <button type="button" class="settings-save" id="persistence-backup">Backup</button>
@@ -3021,7 +3041,7 @@
                       <section data-persistence-dialog id="persistence-dialog-export-classic" hidden>
                         <article class="settings-card">
                           <h3>Export classic backup</h3>
-                          <p>Archives must not contain service, approval, or delivery tokens. Jarvis does not write those secrets into the backup file.</p>
+                          <p>Archives must not contain service, approval, or delivery tokens. NOLAN does not write those secrets into the backup file.</p>
                           <label>Destination <input id="persistence-export-classic-file" type="text" /></label>
                           <p id="persistence-export-classic-result" role="status"></p>
                           <div class="settings-actions">
@@ -3035,7 +3055,7 @@
                           <h3>Export archive v4</h3>
                           <p id="persistence-export-v4-blocked" class="settings-banner" hidden></p>
                           <p>Completeness today: partial. Partial / JSON-only.</p>
-                          <p>Archives must not contain service, approval, or delivery tokens. Jarvis does not write those secrets into the backup file.</p>
+                          <p>Archives must not contain service, approval, or delivery tokens. NOLAN does not write those secrets into the backup file.</p>
                           <label>Destination <input id="persistence-export-v4-file" type="text" /></label>
                           <p id="persistence-export-v4-result" role="status"></p>
                           <div class="settings-actions">
@@ -3047,7 +3067,7 @@
                       <section data-persistence-dialog id="persistence-dialog-restore-classic" hidden>
                         <article class="settings-card">
                           <h3>Restore classic backup</h3>
-                          <p>Empty-target only. Refuses if the provider already contains data. Jarvis will not merge.</p>
+                          <p>Empty-target only. Refuses if the provider already contains data. NOLAN will not merge.</p>
                           <label>File <input id="persistence-restore-classic-file" type="text" /></label>
                           <label class="settings-check"><input id="persistence-restore-classic-ack" type="checkbox" /> I understand IDs and timestamps are recreated</label>
                           <label>Type restore <input id="persistence-restore-classic-phrase" type="text" autocomplete="off" /></label>
@@ -3149,7 +3169,7 @@
                   <div class="settings-panel active" data-settings-panel="general" id="view-general" aria-labelledby="general-heading">
                 <div class="settings-layout">
                   <h2 id="general-heading">General</h2>
-                  <p>Preferences for how Jarvis interprets time and how this console looks.</p>
+                  <p>Preferences for how NOLAN interprets time and how this console looks.</p>
                   <p>This console projects operator preferences. It does not authorise ToolActions or record ΩΣ completion.</p>
                   <article class="settings-card" aria-labelledby="timezone-heading">
                     <h3 id="timezone-heading">Timezone</h3>
@@ -3162,7 +3182,7 @@
                     </dl>
                     <p id="tz-machine-note" class="settings-note" hidden></p>
                     <p>Used when normalizing “tomorrow 9am”, weekdays, and local calendar dates into dueAt + dueTimezone. Ambiguous text stays as dueRaw only.</p>
-                    <p>Read-only. Edit in .env.local, then restart Jarvis. In-app timezone editing is not available.</p>
+                    <p>Read-only. Edit in .env.local, then restart NOLAN. In-app timezone editing is not available.</p>
                     <p class="settings-actions"><a href="https://github.com/Benny3840RG/Jarvis/blob/main/typescript/docs/architecture/reminder-due-model.md">Reminder due model docs</a></p>
                   </article>
                   <article class="settings-card" aria-labelledby="display-heading">
@@ -3489,7 +3509,7 @@
           text(byId("source-pill"), `SOURCE · ${status.sourceVersion || "UNKNOWN"}`);
           text(
             byId("footer-status"),
-            `Jarvis ${status.status} · ${provider.name || "unknown"} persistence`
+            `NOLAN ${status.status} · ${provider.name || "unknown"} persistence`
           );
           renderReadiness();
           renderRadar();
@@ -3809,7 +3829,7 @@
         function renderTeamBoard() {
           text(byId("crew-status"), "UNKNOWN");
           text(byId("chip-crew"), "Crew · UNKNOWN");
-          text(byId("crew-detail"), "No crew roster is on this Jarvis. Names are not invented.");
+          text(byId("crew-detail"), "No crew roster is on this NOLAN. Names are not invented.");
           if (!state.tasksLoaded) text(byId("chip-load"), "Load · UNKNOWN");
           else text(byId("chip-load"), "Load · " + state.counts.activeTasks);
           if (!state.remindersLoaded) text(byId("chip-next"), "Next · UNKNOWN");
@@ -3959,6 +3979,17 @@
             .replace(/^[\s.,!?;:]+/, "")
             .replace(/[\s.,!?;:]+$/, "");
         }
+        // Like normalizeVoicePhrase but keeps the speaker's casing, so a dictated
+        // title reaches the server as "call Dave", not "call dave". Matching on the
+        // server is still case-insensitive. Null when the two forms cannot align.
+        function voicePhrasePreservingCase(raw) {
+          var cased = String(raw == null ? "" : raw)
+            .trim()
+            .replace(/\s+/g, " ")
+            .replace(/^[\s.,!?;:]+/, "")
+            .replace(/[\s.,!?;:]+$/, "");
+          return cased.toLowerCase() === normalizeVoicePhrase(raw) ? cased : null;
+        }
         function voiceCapabilities(view) {
           var w = view || (typeof window !== "undefined" ? window : {});
           return {
@@ -3966,27 +3997,28 @@
             synthesis: !!w.speechSynthesis,
           };
         }
-        // The exact leading wake words: NOLAN, and the legacy Jarvis for compatibility.
+        // NOLAN is the public wake word; legacy "Jarvis" stays accepted, matching the server splitter.
         var VOICE_WAKE_WORDS = ["nolan", "jarvis"];
         function voiceWakeGate(raw, isFinal, wakeWord) {
-          var words = wakeWord ? [].concat(wakeWord) : VOICE_WAKE_WORDS;
-          for (var w = 0; w < words.length; w += 1) {
-            var gate = voiceWakeGateFor(raw, isFinal, words[w]);
-            if (gate.status !== "idle") return gate;
+          var words = (Array.isArray(wakeWord) ? wakeWord : wakeWord ? [wakeWord] : VOICE_WAKE_WORDS)
+            .map(normalizeVoicePhrase);
+          var text = normalizeVoicePhrase(raw);
+          var cased = voicePhrasePreservingCase(raw);
+          for (var i = 0; i < words.length; i += 1) {
+            var word = words[i];
+            if (!word) continue;
+            if (text === word) return { status: "awake" };
+            if (text.indexOf(word) !== 0) continue;
+            var after = text.slice(word.length);
+            var separator = /^[\s.,!?;:]+/.exec(after);
+            if (!separator) continue;
+            var rest = after.slice(separator[0].length).trim();
+            if (!rest) return { status: "awake" };
+            var casedRest = cased === null ? null : cased.slice(word.length + separator[0].length).trim();
+            if (casedRest === null || casedRest.toLowerCase() !== rest) casedRest = rest;
+            return { status: "command", transcript: casedRest, isFinal: !!isFinal };
           }
           return { status: "idle" };
-        }
-        function voiceWakeGateFor(raw, isFinal, wakeWord) {
-          var word = normalizeVoicePhrase(wakeWord);
-          var text = normalizeVoicePhrase(raw);
-          if (text === word) return { status: "awake" };
-          if (text.indexOf(word) !== 0) return { status: "idle" };
-          var after = text.slice(word.length);
-          var separator = /^[\s.,!?;:]+/.exec(after);
-          if (!separator) return { status: "idle" };
-          var rest = after.slice(separator[0].length).trim();
-          if (!rest) return { status: "awake" };
-          return { status: "command", transcript: rest, isFinal: !!isFinal };
         }
         function prepareVoiceDispatch(raw, isFinal, alternatives, wakeWord) {
           if (!isFinal) return null;
@@ -3997,14 +4029,14 @@
             var alternativeGate = voiceWakeGate(alternative, true, wakeWord);
             var prepared = alternativeGate.status === "command"
               ? alternativeGate.transcript
-              : normalizeVoicePhrase(alternative);
+              : (voicePhrasePreservingCase(alternative) || normalizeVoicePhrase(alternative));
             if (prepared && preparedAlternatives.indexOf(prepared) < 0) preparedAlternatives.push(prepared);
           });
           return {
             transcript: gate.transcript,
             isFinal: true,
             alternatives: preparedAlternatives,
-            heardTranscript: normalizeVoicePhrase(raw),
+            heardTranscript: voicePhrasePreservingCase(raw) || normalizeVoicePhrase(raw),
           };
         }
         function finalVoiceRecognition(event) {
@@ -4078,15 +4110,87 @@
             tone: "warn",
           };
         }
+        function voiceCaptureDue(capture) {
+          if (!capture || typeof capture.dueRaw !== "string" || !capture.dueRaw) return "";
+          if (typeof capture.dueAt === "number" && typeof capture.dueTimezone === "string") {
+            try {
+              return " due " + new Intl.DateTimeFormat("en-AU", { timeZone: capture.dueTimezone, weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit", hour12: true }).format(new Date(capture.dueAt));
+            } catch (error) {
+              return " due “" + capture.dueRaw + "”";
+            }
+          }
+          return " due “" + capture.dueRaw + "” (no time set" + (/\d/.test(capture.dueRaw) ? " — say am or pm" : "") + ")";
+        }
+        function voiceCaptureWhat(command, capture) {
+          var tool = command && command.proposes ? command.proposes.tool : "";
+          var operation = command && command.proposes ? command.proposes.operation : "";
+          if (operation === "complete") {
+            var item = (tool === "tasks" ? "task" : "errand") + " “" + capture.title + "”";
+            return { ask: "Mark " + item + " done", staged: "completing " + item, pending: "mark " + item + " done", effect: "changes" };
+          }
+          if (tool === "reminders" && operation === "reschedule") {
+            var moved = "reminder “" + capture.title + "”";
+            return { ask: "Reschedule " + moved + voiceCaptureDue(capture), staged: "rescheduling " + moved + voiceCaptureDue(capture), pending: "reschedule " + moved, effect: "changes" };
+          }
+          if (tool === "errands" && operation === "remove") {
+            var removal = "errand “" + capture.title + "”";
+            return { ask: "Remove " + removal + " from the list", staged: "removing " + removal, pending: "remove " + removal, effect: "changes" };
+          }
+          if (tool === "reminders" && operation === "cancel") {
+            var reminder = "reminder “" + capture.title + "”";
+            return { ask: "Cancel " + reminder, staged: "cancelling " + reminder, pending: "cancel " + reminder, effect: "changes" };
+          }
+          var what;
+          if (tool === "tasks") what = "task “" + capture.title + "”" + (capture.category ? " (" + capture.category + ")" : "");
+          else if (tool === "errands") what = "errand “" + capture.title + "”";
+          else what = "reminder “" + capture.title + "”" + voiceCaptureDue(capture);
+          return { ask: "Add " + what, staged: what, pending: "add " + what, effect: "is created" };
+        }
         function describeVoiceDispatch(dispatch, catalog, profile) {
           if (dispatch && dispatch.decision === "ambiguous") {
             return describeVoiceClarification(dispatch.candidates, catalog, profile);
+          }
+          var capture = dispatch && dispatch.capture && typeof dispatch.capture.title === "string" ? dispatch.capture : null;
+          if (capture) {
+            var what = voiceCaptureWhat(dispatch.command, capture);
+            if (dispatch.decision === "awaiting-confirmation") {
+              return { label: what.ask + "? Say “Nolan confirm” to stage it for your approval, or “Nolan cancel”.", tone: "pending" };
+            }
+            if (dispatch.decision === "proposed" && typeof dispatch.toolActionId === "string" && dispatch.toolActionId) {
+              return { label: "Staged " + what.staged + " for your approval. Nothing " + what.effect + " until you approve it.", tone: "ok" };
+            }
+          }
+          if (dispatch && dispatch.decision === "completion-unresolved") {
+            var unresolved = typeof dispatch.reason === "string" ? dispatch.reason.trim() : "";
+            var unresolvedId = dispatch.command ? dispatch.command.id : "";
+            var nothing = unresolvedId === "client.cancel-reminder" ? "Nothing cancelled." : unresolvedId === "client.remove-errand" ? "Nothing removed." : unresolvedId === "client.reschedule-reminder" ? "Nothing rescheduled." : "Nothing marked done.";
+            return { label: unresolved ? nothing + " " + unresolved : nothing, tone: "warn" };
           }
           if (dispatch && dispatch.decision === "answered") {
             var answer = typeof dispatch.answer === "string" ? dispatch.answer.trim() : "";
             return answer
               ? { label: answer, tone: "ok" }
               : { label: "Query unavailable — no authoritative answer was returned.", tone: "warn" };
+          }
+          if (dispatch && dispatch.decision === "conversation") {
+            var reply = typeof dispatch.reply === "string" ? dispatch.reply : "";
+            return reply.trim()
+              ? { label: reply, tone: "ok" }
+              : { label: "Conversation unavailable.", tone: "warn", notice: true };
+          }
+          if (dispatch && dispatch.decision === "conversation-unavailable") {
+            var notices = {
+              "provider-error": "Conversation unavailable. The provider did not return a usable reply.",
+              refused: "Conversation unavailable. The provider declined to answer.",
+              "rate-limited": "Conversation limit reached. Try again later.",
+              "too-long": "Conversation request is too long. Please shorten it.",
+              "reply-too-long": "Conversation unavailable. The answer is too long to speak in full.",
+              unavailable: "Conversation unavailable. Please try again.",
+              timeout: "Conversation timed out. Please try again.",
+              "tool-limit": "Conversation reached its query limit. Please ask a shorter question.",
+              ungrounded: "Conversation unavailable. The reply quoted figures no record supplied.",
+            };
+            return { label: notices[dispatch.conversationReason] || "Conversation unavailable.", tone: "warn", notice: true };
           }
           var map = {
             "ignored-interim": { label: "Listening…", tone: "muted" },
@@ -4211,7 +4315,11 @@
             if (!el) return;
             if (pending && pending.command) {
               el.hidden = false;
-              el.textContent = "Awaiting confirm: " + pending.command.summary + " — say “Nolan confirm” or “Nolan cancel”.";
+              var pendingCapture = pending.capture && typeof pending.capture.title === "string" ? pending.capture : null;
+              var pendingWhat = pendingCapture
+                ? voiceCaptureWhat(pending.command, pendingCapture).pending
+                : pending.command.summary;
+              el.textContent = "Awaiting confirm: " + pendingWhat + " — say “Nolan confirm” or “Nolan cancel”.";
             } else {
               el.hidden = true;
               el.textContent = "";
@@ -4224,7 +4332,7 @@
               el.textContent = info.label;
               el.setAttribute("data-tone", info.tone);
             }
-            speak(info.label);
+            if (!info.notice) speak(info.label);
           }
           function renderLatency(startedAt, endedAt, failed) {
             var elapsed = voiceLatencyMs(startedAt, endedAt);
