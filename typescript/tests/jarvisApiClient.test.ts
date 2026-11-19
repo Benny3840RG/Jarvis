@@ -194,7 +194,7 @@ describe("Jarvis MCP REST client", () => {
         error instanceof JarvisApiError &&
         error.status === 504 &&
         error.problemType === "urn:jarvis:problem:mcp-backend-deadline" &&
-        error.message === "Jarvis API request exceeded the MCP backend deadline." &&
+        error.message === "NOLAN API request exceeded the MCP backend deadline." &&
         !error.message.includes("secret-token"),
     );
 
@@ -231,7 +231,7 @@ describe("Jarvis MCP REST client", () => {
         error instanceof JarvisApiError &&
         error.status === 499 &&
         error.problemType === "urn:jarvis:problem:mcp-backend-cancelled" &&
-        error.message === "Jarvis API request was cancelled." &&
+        error.message === "NOLAN API request was cancelled." &&
         !error.message.includes("secret-token"),
     );
 
@@ -280,7 +280,7 @@ describe("Jarvis MCP REST client", () => {
       (error: unknown) =>
         error instanceof JarvisApiError &&
         error.status === 499 &&
-        error.message === "Jarvis API request was cancelled.",
+        error.message === "NOLAN API request was cancelled.",
     );
     assert.equal(captured?.aborted, true);
   });
