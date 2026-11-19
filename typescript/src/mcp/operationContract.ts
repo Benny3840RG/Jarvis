@@ -33,6 +33,7 @@ export const MCP_TOOL_OPERATIONS: Readonly<Record<string, readonly OpenApiOperat
     { method: "GET", path: "/api/v1/development/live-work" },
   ],
   get_jarvis_status: [{ method: "GET", path: "/api/v1/status" }],
+  get_situation_snapshot: [{ method: "GET", path: "/api/v1/situation" }],
   get_general_settings: [{ method: "GET", path: "/api/v1/settings/general" }],
   show_persistence_settings: [{ method: "GET", path: "/api/v1/settings/persistence" }],
   run_persistence_settings_action: [
