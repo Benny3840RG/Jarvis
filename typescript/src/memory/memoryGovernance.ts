@@ -165,6 +165,9 @@ export const DEFAULT_RETENTION_POLICY: RetentionPolicy = Object.freeze({
   staleAfterMs: 180 * DAY_MS,
 });
 
+/** Upper bound for an explicit audit retention (about 100 years). */
+export const MAX_AUDIT_RETENTION_DAYS = 36_500;
+
 /**
  * Audit retention may only be set with an explicit verification reference;
  * other categories may be shortened but never lengthened past the defaults.
@@ -178,8 +181,10 @@ export function resolveRetentionPolicy(overrides?: {
   const rules = { ...DEFAULT_RETENTION_POLICY.rules };
   if (overrides?.auditRetentionDays !== undefined) {
     const days = overrides.auditRetentionDays;
-    if (!Number.isInteger(days) || days <= 0) {
-      throw new Error("Audit retention days must be a positive integer.");
+    if (!Number.isInteger(days) || days <= 0 || days > MAX_AUDIT_RETENTION_DAYS) {
+      throw new Error(
+        `Audit retention days must be a positive integer of at most ${MAX_AUDIT_RETENTION_DAYS}.`,
+      );
     }
     if (!overrides.auditVerificationRef?.trim()) {
       throw new Error("Audit retention needs an explicit verification reference.");
@@ -404,6 +409,17 @@ function previewItem(
     };
   }
 
+  // An unconfigured policy (audit) is never deletable, even with an explicit
+  // record-level expiry: retention there awaits a verified decision.
+  const rule = policy.rules[record.category];
+  if (rule.kind === "unconfigured") {
+    return {
+      ...base,
+      action: "retain_pending_policy",
+      reasons: expired ? ["expired", "audit_policy_unconfigured"] : ["audit_policy_unconfigured"],
+    };
+  }
+
   if (expired) {
     const blockers: RetentionReason[] = [];
     if (record.pinned) blockers.push("pinned");
@@ -415,10 +431,6 @@ function previewItem(
     return { ...base, action: "would_expire", reasons: ["expired"] };
   }
 
-  const rule = policy.rules[record.category];
-  if (rule.kind === "unconfigured") {
-    return { ...base, action: "retain_pending_policy", reasons: ["audit_policy_unconfigured"] };
-  }
   return {
     ...base,
     action: "retain",
@@ -426,8 +438,12 @@ function previewItem(
   };
 }
 
-function previewDigest(generatedAt: string, items: readonly RetentionPreviewItem[]): string {
-  return createHash("sha256").update(JSON.stringify({ generatedAt, items })).digest("hex");
+/** Binds every field of a preview except the digest itself. */
+function previewDigest(preview: Omit<RetentionPreview, "digest">): string {
+  const { mode, generatedAt, deletionsExecuted, items, summary } = preview;
+  return createHash("sha256")
+    .update(JSON.stringify({ mode, generatedAt, deletionsExecuted, items, summary }))
+    .digest("hex");
 }
 
 /**
@@ -500,7 +516,13 @@ export function previewRetention(input: {
   for (const item of items) summary[item.action] += 1;
 
   const generatedAt = new Date(now).toISOString();
-  const digest = previewDigest(generatedAt, items);
+  const digest = previewDigest({
+    mode: "dry_run",
+    generatedAt,
+    deletionsExecuted: 0,
+    items,
+    summary,
+  });
   return { mode: "dry_run", generatedAt, deletionsExecuted: 0, items, summary, digest };
 }
 
@@ -700,9 +722,9 @@ export function buildDeletionReceipt(input: {
 }): DeletionReceipt {
   // A receipt is only as honest as its preview: refuse one that was altered
   // after it was generated, and read-back evidence without a valid timestamp.
-  if (previewDigest(input.preview.generatedAt, input.preview.items) !== input.preview.digest) {
+  if (input.preview.mode !== "dry_run" || previewDigest(input.preview) !== input.preview.digest) {
     throw new Error(
-      "Retention preview digest does not match its items; refusing to build a receipt.",
+      "Retention preview digest does not match its contents; refusing to build a receipt.",
     );
   }
   for (const evidence of Object.values(input.readBack ?? {}))

@@ -27,6 +27,9 @@ set. Schemas are strict: unknown fields fail validation.
 
 - Expiry is counted from `createdAt`. `lastUsedAt` is ignored, so reuse never
   renews a memory.
+- Audit records are never deletion candidates while audit retention is
+  unconfigured, even with an explicit `expiresAt`. A configured audit retention
+  is capped at 36,500 days.
 - An explicit `expiresAt` can shorten the window but never lengthen it. Policy
   overrides can only shorten the ttl defaults and the 180-day stale window.
 - Sensitive inferences are not retained: the preview marks them
@@ -48,7 +51,9 @@ and stale approved records come back as `needs_review`, even when expired:
 review takes precedence over expiry, so they are never deletion candidates. Records that share a
 `recordId`, including with an invalid record, are all held as `needs_review` (`duplicate_record_id`) rather than
 letting input order pick one. The output is sorted with a full tie-break and
-carries a SHA-256 digest, so the same inputs always give the same result.
+carries a SHA-256 digest over every other field, so the same inputs always
+give the same result. `buildDeletionReceipt` refuses a preview whose digest no
+longer matches.
 `DEFAULT_RETENTION_POLICY` is deeply frozen.
 
 ## Contradictions

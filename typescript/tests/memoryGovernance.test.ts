@@ -109,6 +109,17 @@ describe("retention policy", () => {
     assert.deepEqual(policy.rules.audit, { kind: "ttl", ms: 400 * DAY });
   });
 
+  it("rejects an audit retention beyond the safe bound", () => {
+    assert.throws(
+      () =>
+        resolveRetentionPolicy({
+          auditRetentionDays: Number.MAX_SAFE_INTEGER,
+          auditVerificationRef: "owner-decision-fixture",
+        }),
+      /at most/,
+    );
+  });
+
   it("only allows shortening ttl defaults", () => {
     assert.throws(() => resolveRetentionPolicy({ shortenDays: { raw_episode: 60 } }), /shortened/);
     assert.throws(() => resolveRetentionPolicy({ shortenDays: { fact: 10 } }), /shortened/);
@@ -294,6 +305,26 @@ describe("dry-run retention preview", () => {
       now: NOW,
     });
     assert.equal(itemFor(preview, "audit").action, "retain_pending_policy");
+  });
+
+  it("never expires an audit record through an explicit expiry while policy is unconfigured", () => {
+    const preview = previewRetention({
+      records: [
+        record({
+          recordId: "audit-dated",
+          category: "audit",
+          createdAt: daysBefore(10),
+          expiresAt: daysBefore(1),
+        }),
+      ],
+      now: NOW,
+    });
+    assert.equal(itemFor(preview, "audit-dated").action, "retain_pending_policy");
+    assert.deepEqual(itemFor(preview, "audit-dated").reasons, [
+      "expired",
+      "audit_policy_unconfigured",
+    ]);
+    assert.deepEqual(buildDeletionReceipt({ preview, executed: false }).entries, []);
   });
 
   it("reports invalid records instead of dropping them", () => {
@@ -559,6 +590,8 @@ describe("inventory and deletion receipts", () => {
       items: [...preview.items, { ...preview.items[0]!, recordId: "injected" }],
     };
     assert.throws(() => buildDeletionReceipt({ preview: tampered, executed: false }), /digest/);
+    const resummarised = { ...preview, summary: { ...preview.summary, would_expire: 0 } };
+    assert.throws(() => buildDeletionReceipt({ preview: resummarised, executed: false }), /digest/);
     assert.throws(() =>
       buildDeletionReceipt({
         preview,
