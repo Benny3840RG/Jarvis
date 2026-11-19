@@ -310,10 +310,10 @@ export function reviewIncomingClaim(
   if (conflicting.length > 0) {
     return {
       action: "mark_for_review",
-      conflictsWith: conflicting.map((record) => record.recordId).sort(),
+      conflictsWith: conflicting.map((record) => record.recordId).sort(compareCodePoints),
     };
   }
-  const same = peers.map((record) => record.recordId).sort()[0];
+  const same = peers.map((record) => record.recordId).sort(compareCodePoints)[0];
   if (same !== undefined) return { action: "duplicate", matches: same };
   return { action: "no_conflict" };
 }
@@ -532,8 +532,7 @@ export function previewRetention(input: {
   const sortKey = (item: RetentionPreviewItem) => JSON.stringify(item);
   items.sort(
     (a, b) =>
-      compareCodePoints(a.recordId, b.recordId) ||
-      (sortKey(a) < sortKey(b) ? -1 : sortKey(a) > sortKey(b) ? 1 : 0),
+      compareCodePoints(a.recordId, b.recordId) || compareCodePoints(sortKey(a), sortKey(b)),
   );
 
   const summary: Record<RetentionAction, number> = {
@@ -601,8 +600,7 @@ export function buildMemoryInventory(
     .map((entry) => ({ entry, key: JSON.stringify(entry) }))
     .sort(
       (a, b) =>
-        compareCodePoints(a.entry.recordId, b.entry.recordId) ||
-        (a.key < b.key ? -1 : a.key > b.key ? 1 : 0),
+        compareCodePoints(a.entry.recordId, b.entry.recordId) || compareCodePoints(a.key, b.key),
     )
     .map(({ entry }) => entry);
 }

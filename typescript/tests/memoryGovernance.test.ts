@@ -449,6 +449,33 @@ describe("dry-run retention preview", () => {
     );
   });
 
+  it("lists conflicting record IDs in code-point order", () => {
+    const peer = (recordId: string, content: string) =>
+      record({
+        recordId,
+        subjectKey: "units.preferred",
+        content,
+        status: "approved",
+        createdAt: daysBefore(5),
+      });
+    const incoming = record({
+      recordId: "incoming",
+      subjectKey: "units.preferred",
+      content: "Use kelvin",
+      createdAt: daysBefore(1),
+    });
+    const review = reviewIncomingClaim(
+      [peer("\u{1F600}", "Use metric units"), peer("～", "Use imperial units")],
+      incoming,
+    );
+    assert.deepEqual(review, { action: "mark_for_review", conflictsWith: ["～", "\u{1F600}"] });
+    const duplicate = reviewIncomingClaim(
+      [peer("\u{1F600}", "Use kelvin"), peer("～", "use  kelvin")],
+      incoming,
+    );
+    assert.deepEqual(duplicate, { action: "duplicate", matches: "～" });
+  });
+
   it("orders contradictions by code point, so locale-equal IDs do not depend on input order", () => {
     const composed = record({
       recordId: "é",
