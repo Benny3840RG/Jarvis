@@ -44,6 +44,7 @@ function mockAdapter(calls: Call[]): DeviceTransportAdapter {
   return {
     kind: "google_cast_local",
     providerName: "mock-cast",
+    supports: ["read_state", "announce"],
     async read(device, capability) {
       calls.push({ method: "read", deviceId: device.deviceId, capability });
       return { state: "idle" };

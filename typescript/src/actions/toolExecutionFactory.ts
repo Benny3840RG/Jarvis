@@ -39,6 +39,7 @@ import {
   createGoogleHomeAnnouncementProviderFromEnv,
   type GoogleHomeAnnouncementProvider,
 } from "../integrations/googleHome/googleHomeAnnouncementProvider.js";
+import { createDeviceToolDefinitionsFromEnv } from "../devices/googleCastDeviceAdapter.js";
 import { createQuoteSendToolDefinition } from "./quoteSendTool.js";
 import {
   createTaskReminderToolDefinitions,
@@ -57,7 +58,11 @@ export function createToolExecutionDefinitions(
   githubDevelopmentClient?: GitHubDevelopmentClient,
   googleHomeAnnouncementProvider?: GoogleHomeAnnouncementProvider,
   errandStore?: ErrandStore,
-  options: { reminderReschedule?: boolean } = {},
+  options: {
+    reminderReschedule?: boolean;
+    /** Governed device-registry tools (#836); empty unless bindings are configured. */
+    deviceTools?: readonly ToolExecutionDefinition[];
+  } = {},
 ): ToolExecutionDefinition[] {
   if ((taskStore === undefined) !== (reminderStore === undefined)) {
     throw new Error("Task and reminder tool stores must be registered together.");
@@ -90,6 +95,7 @@ export function createToolExecutionDefinitions(
       ? []
       : [createHomeAnnouncementToolDefinition(googleHomeAnnouncementProvider)]),
     ...(errandStore === undefined ? [] : createErrandToolDefinitions(errandStore)),
+    ...(options.deviceTools ?? []),
   ];
 }
 
@@ -101,7 +107,8 @@ export function createToolExecutionDefinitions(
  * Outlook runtime bundle used by reconciliation so token state is not
  * duplicated. `reminders:reschedule` (AM-017, planned) is registered only when
  * JARVIS_REMINDER_RESCHEDULE_ENABLED is "true". `errands:create` writes the same local JSON errand file the HTTP
- * errand routes use (its file lock is cross-process).
+ * errand routes use (its file lock is cross-process). `device:announce` (#836) is
+ * registered only when JARVIS_DEVICE_BINDINGS_JSON is set; invalid bindings refuse startup.
  */
 export function createToolExecutionServiceFromEnv(
   quoteEmailProvider: QuoteEmailProvider | null = createQuoteEmailProviderFromEnv(),
@@ -121,7 +128,12 @@ export function createToolExecutionServiceFromEnv(
       githubDevelopmentClient ?? undefined,
       googleHomeAnnouncementProvider ?? undefined,
       new JsonErrandStore(),
-      { reminderReschedule: reminderRescheduleEnabledFromEnv() },
+      {
+        reminderReschedule: reminderRescheduleEnabledFromEnv(),
+        deviceTools: createDeviceToolDefinitionsFromEnv(
+          googleHomeAnnouncementProvider ?? undefined,
+        ),
+      },
     ),
     new ConvexToolExecutionReceiptStore(),
     new ConvexExternalReconciliationStore(),
