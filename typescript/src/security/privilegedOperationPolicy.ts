@@ -260,6 +260,7 @@ function checkRestartPreconditions(
 
 function checkApproval(
   action: ToolAction | undefined,
+  requestId: string,
   operation: PrivilegedOperation,
   args: Record<string, unknown>,
   now: number,
@@ -279,6 +280,8 @@ function checkApproval(
     return "approval_expired";
   }
   if (action.tool !== PRIVILEGED_TOOL || action.operation !== operation) return "approval_mismatch";
+  // The approval authorises one request, not every request with equal arguments.
+  if (action.requestId !== requestId) return "approval_mismatch";
   let bound: string;
   try {
     bound = canonicalJson(action.arguments);
@@ -342,7 +345,7 @@ export function evaluatePrivilegedOperation(
     authorityRef = grant.grantId;
   } else if (spec.tier === "owner_approval") {
     // Standing grants never apply here, so they cannot escalate.
-    const approved = checkApproval(context.approval, operation, args, now);
+    const approved = checkApproval(context.approval, requestId, operation, args, now);
     if (typeof approved === "string") return deny(approved);
     authorityRef = approved.actionId;
   }

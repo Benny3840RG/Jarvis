@@ -49,7 +49,7 @@ const restart = {
 function approval(overrides: Partial<ToolAction> = {}): ToolAction {
   return {
     actionId: "action-1",
-    requestId: "request-1",
+    requestId: "req-2",
     projectId: "project-1",
     baseRevision: 1,
     state: "approved",
@@ -256,6 +256,14 @@ describe("owner-approval operations", () => {
     ]) {
       denied(install, { ...base, approval: action }, "owner_approval_required");
     }
+  });
+
+  it("refuses an approval issued for a different request ID", () => {
+    denied(
+      { ...install, requestId: "req-3" },
+      { ...base, approval: approval() },
+      "approval_mismatch",
+    );
   });
 
   it("refuses expired approvals by flag or by time", () => {

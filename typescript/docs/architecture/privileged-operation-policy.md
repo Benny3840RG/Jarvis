@@ -21,7 +21,7 @@ or security-scan call, and nothing calls it in production yet.
   - `owner_approval`: every other operation needs a ToolAction that is
     `approved` by the user, single-use and unexpired (by flag or by
     `approvalExpiresAt`), for `privileged/<operation>`, with canonically
-    identical arguments. Standing grants never apply here, so they cannot
+    identical arguments, issued for this exact request ID. Standing grants never apply here, so they cannot
     escalate.
 
 ## Verified recovery, not blind retry
