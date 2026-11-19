@@ -254,6 +254,8 @@ export type DeviceAdapterAttempt = { providerRequestId: string; providerCorrelat
 export interface DeviceTransportAdapter {
   readonly kind: DeviceAdapterKind;
   readonly providerName: string;
+  /** Capabilities this adapter can serve. A binding cannot widen it. */
+  readonly supports: readonly DeviceCapability[];
   read(
     binding: DeviceBinding,
     capability: DeviceCapability,
@@ -311,6 +313,12 @@ export async function readDevice(input: {
   const adapter = adapterFor(input.adapters, checked.binding.adapter);
   if (!adapter)
     return refuse("adapter_unavailable", "No transport adapter is registered for this device.");
+  if (!adapter.supports.includes(checked.capability)) {
+    return refuse(
+      "unsupported_capability",
+      "This device's adapter does not support that capability.",
+    );
+  }
   return {
     ok: true,
     result: await adapter.read(checked.binding, checked.capability, checked.params, input.signal),
@@ -380,7 +388,7 @@ function checkedEffect(
 
 /**
  * The only way to reach a device effect: a definition for the existing
- * `ToolExecutionService`. Not registered in production by this slice.
+ * `ToolExecutionService`. Registered only by `createDeviceToolDefinitionsFromEnv`.
  */
 export function createDeviceEffectToolDefinition(input: {
   registry: DeviceRegistry;
@@ -395,9 +403,15 @@ export function createDeviceEffectToolDefinition(input: {
   if (!isCapability(capability) || !isEffect(capability)) {
     throw new DeviceRegistryError("Only effect capabilities have a governed tool definition.");
   }
-  const requireAdapter = (binding: DeviceBinding): DeviceTransportAdapter =>
-    adapterFor(adapters, binding.adapter) ??
-    precondition("No transport adapter is registered for this device.");
+  const requireAdapter = (binding: DeviceBinding): DeviceTransportAdapter => {
+    const adapter =
+      adapterFor(adapters, binding.adapter) ??
+      precondition("No transport adapter is registered for this device.");
+    if (!adapter.supports.includes(capability)) {
+      precondition("This device's adapter does not support that capability.");
+    }
+    return adapter;
+  };
 
   return {
     tool: DEVICE_TOOL,

@@ -1,9 +1,28 @@
 # NOLAN device registry (#836)
 
 `src/devices/deviceRegistry.ts` is the deny-by-default contract between NOLAN
-and physical devices. This first slice is a library only. Nothing in
-production loads bindings or registers device tools yet, and the existing
-Google Cast announcement tool (`home.announce`) is unchanged.
+and physical devices. The existing Google Cast announcement tool
+(`home.announce`) is unchanged and keeps working alongside it.
+
+## Turning it on (dormant by default)
+
+Nothing is registered unless `JARVIS_DEVICE_BINDINGS_JSON` is set. When it is
+set to a JSON array of bindings (see below), the `device:announce` tool is
+added to the governed execution service. Startup is refused, rather than
+loading a partial registry, when any of these is true:
+
+- the JSON is invalid, or a binding is invalid or duplicated;
+- no Google Cast targets are configured (`JARVIS_GOOGLE_HOME_TARGETS_JSON`);
+- a `google_cast_local` binding's `transportRef` is not one of those pinned
+  target names.
+
+The Cast adapter (`src/devices/googleCastDeviceAdapter.ts`) is announce-only.
+It reaches only the binding's pinned target and never a target named in the
+request. Each prepared attempt can be used once, and only for the same
+device, binding version, target and message. Abandoned attempts are bounded.
+Setting the variable is an enrolment decision. It does not commission a
+device, and the first live announcement is still the owner's commissioning
+step.
 
 ## Identity
 
@@ -50,6 +69,8 @@ Every request is checked in this order before any transport call:
 6. parameters match that capability's strict schema (`invalid_parameters`)
 7. exactly one adapter is registered for the binding's adapter kind
    (`adapter_unavailable`; an ambiguous adapter set is an error)
+8. that adapter supports the capability (`unsupported_capability`; for
+   example, the Cast adapter has no `read_state`)
 
 `readDevice` serves read-only capabilities only. Asking it for an effect
 returns `approval_required`. Tests assert zero transport calls for every
@@ -90,6 +111,6 @@ invalidates every outstanding approval for that device.
   indeterminate outcomes, all existing.
 - **Adapter:** must act only on the binding's `transportRef` and the parsed
   parameters. It must not widen the target or accept free-form commands.
-- Not covered yet: persisting bindings, production wiring, an HTTP/HUD
-  surface, and adapters beyond local Cast. Each is a separate owner-scoped
-  follow-up.
+- Not covered yet: persisting bindings outside the environment, an HTTP/HUD
+  surface for enrolment, and adapters beyond local Cast. Each is a separate
+  owner-scoped follow-up.
