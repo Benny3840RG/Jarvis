@@ -372,18 +372,11 @@ function previewItem(
     effectiveExpiry: expiry,
   };
 
-  if (isSensitiveInference(record) && !record.hold) {
-    return {
-      ...base,
-      action: "would_discard_sensitive",
-      reasons: ["sensitive_inference_not_retained"],
-    };
-  }
-
   const expired = expiry !== null && Date.parse(expiry) <= now;
+  const discardSensitive = isSensitiveInference(record) && !record.hold;
 
-  // Review conditions take precedence over expiry (fail closed): a record that
-  // needs a human look is never offered as a deletion candidate.
+  // Review conditions take precedence over sensitive discard and expiry (fail
+  // closed): a record that needs a human look is never a deletion candidate.
   const review: RetentionReason[] = [];
   if (record.provenance === null) review.push("missing_provenance");
   const conflictsWith = conflicts.get(record.recordId);
@@ -394,8 +387,20 @@ function previewItem(
     return {
       ...base,
       action: "needs_review",
-      reasons: expired ? ["expired", ...review] : review,
+      reasons: [
+        ...(expired ? (["expired"] as const) : []),
+        ...(discardSensitive ? (["sensitive_inference_not_retained"] as const) : []),
+        ...review,
+      ],
       ...(conflictsWith ? { conflictsWith } : {}),
+    };
+  }
+
+  if (discardSensitive) {
+    return {
+      ...base,
+      action: "would_discard_sensitive",
+      reasons: ["sensitive_inference_not_retained"],
     };
   }
 
@@ -419,6 +424,10 @@ function previewItem(
     action: "retain",
     reasons: [rule.kind === "until_changed" ? "retained_until_changed" : "within_retention"],
   };
+}
+
+function previewDigest(generatedAt: string, items: readonly RetentionPreviewItem[]): string {
+  return createHash("sha256").update(JSON.stringify({ generatedAt, items })).digest("hex");
 }
 
 /**
@@ -491,7 +500,7 @@ export function previewRetention(input: {
   for (const item of items) summary[item.action] += 1;
 
   const generatedAt = new Date(now).toISOString();
-  const digest = createHash("sha256").update(JSON.stringify({ generatedAt, items })).digest("hex");
+  const digest = previewDigest(generatedAt, items);
   return { mode: "dry_run", generatedAt, deletionsExecuted: 0, items, summary, digest };
 }
 
@@ -689,6 +698,15 @@ export function buildDeletionReceipt(input: {
   executed: boolean;
   readBack?: Readonly<Record<string, { absent: boolean; checkedAt: string }>>;
 }): DeletionReceipt {
+  // A receipt is only as honest as its preview: refuse one that was altered
+  // after it was generated, and read-back evidence without a valid timestamp.
+  if (previewDigest(input.preview.generatedAt, input.preview.items) !== input.preview.digest) {
+    throw new Error(
+      "Retention preview digest does not match its items; refusing to build a receipt.",
+    );
+  }
+  for (const evidence of Object.values(input.readBack ?? {}))
+    isoTimestamp.parse(evidence.checkedAt);
   const targets = input.preview.items.filter(
     (item) => item.action === "would_expire" || item.action === "would_discard_sensitive",
   );

@@ -228,6 +228,26 @@ describe("dry-run retention preview", () => {
     assert.equal(itemFor(preview, "sensitive").action, "would_discard_sensitive");
   });
 
+  it("holds a sensitive record that needs review instead of discarding it", () => {
+    const preview = previewRetention({
+      records: [
+        record({
+          recordId: "sensitive-orphan",
+          sensitivity: "sensitive",
+          provenance: null,
+          createdAt: daysBefore(1),
+        }),
+      ],
+      now: NOW,
+    });
+    assert.equal(itemFor(preview, "sensitive-orphan").action, "needs_review");
+    assert.deepEqual(itemFor(preview, "sensitive-orphan").reasons, [
+      "sensitive_inference_not_retained",
+      "missing_provenance",
+    ]);
+    assert.deepEqual(buildDeletionReceipt({ preview, executed: false }).entries, []);
+  });
+
   it("does not let a pin keep a sensitive inference", () => {
     const preview = previewRetention({
       records: [
@@ -527,6 +547,25 @@ describe("inventory and deletion receipts", () => {
       record({ recordId: "twin", content: "second" }),
     ];
     assert.deepEqual(buildMemoryInventory(records), buildMemoryInventory([...records].reverse()));
+  });
+
+  it("refuses a receipt for an altered preview or untimestamped read-back", () => {
+    const preview = previewRetention({
+      records: [record({ recordId: "old", createdAt: daysBefore(400) })],
+      now: NOW,
+    });
+    const tampered = {
+      ...preview,
+      items: [...preview.items, { ...preview.items[0]!, recordId: "injected" }],
+    };
+    assert.throws(() => buildDeletionReceipt({ preview: tampered, executed: false }), /digest/);
+    assert.throws(() =>
+      buildDeletionReceipt({
+        preview,
+        executed: true,
+        readBack: { old: { absent: true, checkedAt: "yesterday" } },
+      }),
+    );
   });
 
   it("states a dry run plainly and never claims backup erasure", () => {
