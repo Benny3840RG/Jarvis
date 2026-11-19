@@ -31,7 +31,10 @@ set. Schemas are strict: unknown fields fail validation.
   unconfigured, even with an explicit `expiresAt` or as a sensitive inference. A configured audit retention
   is capped at 36,500 days.
 - An explicit `expiresAt` can shorten the window but never lengthen it. Policy
-  overrides can only shorten the ttl defaults and the 180-day stale window.
+  overrides can only shorten the ttl defaults and the 180-day stale window, and an
+  unknown category is rejected. `previewRetention` accepts only the default or a
+  frozen policy returned by `resolveRetentionPolicy`, so a hand-built policy
+  cannot bypass these limits.
 - Sensitive inferences are not retained: the preview marks them
   `would_discard_sensitive` unless a hold applies. A pin does not keep them:
   pinning is a convenience, while a hold is an explicit retention obligation.

@@ -180,6 +180,12 @@ export const DEFAULT_RETENTION_POLICY: RetentionPolicy = Object.freeze({
   staleAfterMs: 180 * DAY_MS,
 });
 
+/**
+ * Policies that passed the shorten-only checks. `previewRetention` accepts only
+ * these, so a hand-built policy cannot lengthen retention or the stale window.
+ */
+const resolvedPolicies = new WeakSet<RetentionPolicy>([DEFAULT_RETENTION_POLICY]);
+
 /** Upper bound for an explicit audit retention (about 100 years). */
 export const MAX_AUDIT_RETENTION_DAYS = 36_500;
 
@@ -207,6 +213,9 @@ export function resolveRetentionPolicy(overrides?: {
     rules.audit = { kind: "ttl", ms: days * DAY_MS };
   }
   for (const [category, days] of Object.entries(overrides?.shortenDays ?? {})) {
+    if (!(MEMORY_CATEGORIES as readonly string[]).includes(category)) {
+      throw new Error(`Unknown memory category for retention: ${category}.`);
+    }
     const key = category as MemoryCategory;
     const current = rules[key];
     if (days === undefined) continue;
@@ -228,13 +237,16 @@ export function resolveRetentionPolicy(overrides?: {
   ) {
     throw new Error("Stale-after days can only be shortened from the default.");
   }
-  return {
-    rules,
+  for (const key of MEMORY_CATEGORIES) Object.freeze(rules[key]);
+  const policy: RetentionPolicy = Object.freeze({
+    rules: Object.freeze(rules),
     staleAfterMs:
       staleAfterDays === undefined
         ? DEFAULT_RETENTION_POLICY.staleAfterMs
         : staleAfterDays * DAY_MS,
-  };
+  });
+  resolvedPolicies.add(policy);
+  return policy;
 }
 
 /**
@@ -480,6 +492,9 @@ export function previewRetention(input: {
 }): RetentionPreview {
   const now = Date.parse(isoTimestamp.parse(input.now));
   const policy = input.policy ?? DEFAULT_RETENTION_POLICY;
+  if (!resolvedPolicies.has(policy)) {
+    throw new Error("Retention policy must come from resolveRetentionPolicy.");
+  }
   const valid: GovernedMemoryRecord[] = [];
   const items: RetentionPreviewItem[] = [];
   // Counts every identifiable record, valid or not, so a valid record that

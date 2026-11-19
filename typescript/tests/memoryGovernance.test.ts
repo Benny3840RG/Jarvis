@@ -16,6 +16,7 @@ import {
   reviewIncomingClaim,
   validateGovernedMemoryRecord,
   type GovernedMemoryRecord,
+  type RetentionPolicy,
 } from "../src/memory/memoryGovernance.js";
 
 const NOW = "2026-06-01T00:00:00.000Z";
@@ -125,6 +126,35 @@ describe("retention policy", () => {
     assert.throws(() => resolveRetentionPolicy({ shortenDays: { fact: 10 } }), /shortened/);
     const policy = resolveRetentionPolicy({ shortenDays: { raw_episode: 7 } });
     assert.deepEqual(policy.rules.raw_episode, { kind: "ttl", ms: 7 * DAY });
+  });
+
+  it("rejects an unknown category with a clear error", () => {
+    assert.throws(
+      () =>
+        resolveRetentionPolicy({
+          shortenDays: { raw_episod: 7 } as unknown as Record<"raw_episode", number>,
+        }),
+      /Unknown memory category for retention: raw_episod/,
+    );
+  });
+
+  it("previews only with a resolved policy, so hand-built policies cannot lengthen retention", () => {
+    const records = [
+      record({ recordId: "old", category: "raw_episode", createdAt: daysBefore(10) }),
+    ];
+    const forged: RetentionPolicy = {
+      rules: { ...DEFAULT_RETENTION_POLICY.rules, raw_episode: { kind: "ttl", ms: 900 * DAY } },
+      staleAfterMs: 900 * DAY,
+    };
+    assert.throws(
+      () => previewRetention({ records, now: NOW, policy: forged }),
+      /must come from resolveRetentionPolicy/,
+    );
+    const resolved = resolveRetentionPolicy({ shortenDays: { raw_episode: 7 } });
+    assert.ok(Object.isFrozen(resolved) && Object.isFrozen(resolved.rules));
+    assert.ok(Object.isFrozen(resolved.rules.raw_episode));
+    const preview = previewRetention({ records, now: NOW, policy: resolved });
+    assert.equal(itemFor(preview, "old").action, "would_expire");
   });
 
   it("only allows shortening the stale window", () => {
