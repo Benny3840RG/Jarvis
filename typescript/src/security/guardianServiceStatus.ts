@@ -24,6 +24,20 @@ export const STATUS_MAX_BYTES = 4_096;
 
 const PROPERTIES = ["LoadState", "ActiveState", "SubState", "NRestarts"] as const;
 
+/** systemd's ActiveState values; anything else is malformed evidence. */
+const ACTIVE_STATES = new Set([
+  "active",
+  "reloading",
+  "inactive",
+  "failed",
+  "activating",
+  "deactivating",
+  "maintenance",
+  "refreshing",
+]);
+/** A systemd state token: lowercase words joined by single hyphens, never empty. */
+const STATE_TOKEN = /^[a-z]+(?:-[a-z]+)*$/;
+
 export type CommandRunner = (
   file: string,
   args: readonly string[],
@@ -95,6 +109,11 @@ function parseShow(output: string): Required<ServiceStatusEvidence> | null {
   if (PROPERTIES.some((key) => !values.has(key))) return null;
   const restarts = values.get("NRestarts")!;
   if (!/^\d{1,9}$/.test(restarts)) return null;
+  const loadState = values.get("LoadState")!;
+  const activeState = values.get("ActiveState")!;
+  const subState = values.get("SubState")!;
+  if (![loadState, activeState, subState].every((value) => STATE_TOKEN.test(value))) return null;
+  if (!ACTIVE_STATES.has(activeState)) return null;
   return {
     loadState: values.get("LoadState")!,
     activeState: values.get("ActiveState")!,
@@ -106,7 +125,7 @@ function parseShow(output: string): Required<ServiceStatusEvidence> | null {
 function classify(evidence: Required<ServiceStatusEvidence>): ServiceHealthObservation["state"] {
   if (evidence.loadState !== "loaded") return "unknown";
   if (evidence.activeState === "active" && evidence.subState === "running") return "healthy";
-  if (evidence.activeState === "failed") return "unhealthy";
+  if (evidence.activeState === "failed" && evidence.subState === "failed") return "unhealthy";
   if (evidence.activeState === "activating" && evidence.subState === "auto-restart") {
     return "unhealthy";
   }

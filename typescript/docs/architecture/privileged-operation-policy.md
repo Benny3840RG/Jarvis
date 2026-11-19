@@ -62,8 +62,9 @@ restart needs. It runs one fixed command, `/usr/bin/systemctl --user show
 environment. The unit must be on the code allowlist; anything else is refused
 before a process starts. `jarvis.service` is a user unit, so this needs no root.
 
-It only reports `unhealthy` for a `failed` unit or one stuck in
-`activating/auto-restart`. A stopped (`inactive`) or changing unit is
+It only reports `unhealthy` for exactly `failed/failed` or
+`activating/auto-restart`. Every state value must be a well-formed systemd
+token, and `ActiveState` must be one systemd defines. A stopped (`inactive`) or changing unit is
 `unknown`, so a deliberate stop is never "repaired". Errors, timeouts, a unit
 that isn't loaded, and duplicate, missing or malformed properties are all
 `unknown`. `observedAt` is taken after the read completes. Nothing calls the

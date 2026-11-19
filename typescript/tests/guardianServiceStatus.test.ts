@@ -132,6 +132,12 @@ describe("guardian service status reader", () => {
       "LoadState=loaded\nLoadState=loaded\nActiveState=active\nSubState=running\nNRestarts=0\n",
       "garbage",
       "",
+      show({ LoadState: "loaded", ActiveState: "failed", SubState: "", NRestarts: "1" }),
+      show({ LoadState: "", ActiveState: "failed", SubState: "failed", NRestarts: "1" }),
+      show({ LoadState: "loaded", ActiveState: "FAILED", SubState: "failed", NRestarts: "1" }),
+      show({ LoadState: "loaded", ActiveState: "exploded", SubState: "failed", NRestarts: "1" }),
+      show({ LoadState: "loaded", ActiveState: "failed", SubState: "failed ", NRestarts: "1" }),
+      show({ LoadState: "loaded", ActiveState: "failed", SubState: "dead", NRestarts: "1" }),
     ];
     for (const output of outputs) assert.equal(await stateFor(output), "unknown");
   });
