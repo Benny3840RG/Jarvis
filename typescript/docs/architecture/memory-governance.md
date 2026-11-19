@@ -50,7 +50,9 @@ dependents come back as `expiry_blocked`. Missing provenance, contradictions
 and stale approved records come back as `needs_review`, even when expired:
 review takes precedence over expiry, so they are never deletion candidates. Records that share a
 `recordId`, including with an invalid record, are all held as `needs_review` (`duplicate_record_id`) rather than
-letting input order pick one. The output is sorted with a full tie-break and
+letting input order pick one. An invalid record's ID is trimmed the same way as a
+valid one before the comparison. All ordering uses code-point comparison, never
+locale collation, so distinct IDs never tie. The output is sorted with a full tie-break and
 carries a SHA-256 digest over every other field, so the same inputs always
 give the same result. `buildDeletionReceipt` refuses a preview whose digest no
 longer matches.

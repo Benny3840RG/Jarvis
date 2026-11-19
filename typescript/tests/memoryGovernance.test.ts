@@ -378,6 +378,43 @@ describe("dry-run retention preview", () => {
       "invalid_record",
     ]);
     assert.equal(preview.summary.would_expire, 0);
+    const invalidItem = preview.items.find((item) => item.reasons[0] === "invalid_record");
+    assert.deepEqual(invalidItem?.reasons, ["invalid_record", "duplicate_record_id"]);
+  });
+
+  it("matches an invalid record's padded ID against a valid record's trimmed ID", () => {
+    const valid = record({ recordId: "rec-1", createdAt: daysBefore(200) });
+    const invalid = { ...valid, recordId: " rec-1 ", purpose: "" };
+    const preview = previewRetention({ records: [valid, invalid], now: NOW });
+    const clashes = preview.items.filter((item) => item.recordId === "rec-1");
+    assert.equal(clashes.length, 2);
+    for (const item of clashes) {
+      assert.equal(item.action, "needs_review");
+      assert.ok(item.reasons.includes("duplicate_record_id"));
+    }
+    assert.equal(preview.summary.would_expire, 0);
+  });
+
+  it("orders contradictions by code point, so locale-equal IDs do not depend on input order", () => {
+    const composed = record({
+      recordId: "é",
+      subjectKey: "units.preferred",
+      content: "Use metric units",
+      status: "approved",
+      createdAt: daysBefore(5),
+    });
+    const decomposed = record({
+      recordId: "é",
+      subjectKey: "units.preferred",
+      content: "Use imperial units",
+      status: "approved",
+      createdAt: daysBefore(5),
+    });
+    const first = previewRetention({ records: [composed, decomposed], now: NOW });
+    const second = previewRetention({ records: [decomposed, composed], now: NOW });
+    assert.deepEqual(first, second);
+    assert.equal(itemFor(first, "é").action, "needs_review");
+    assert.equal(itemFor(first, "é").action, "retain");
   });
 
   it("accepts a record that omits expiresAt", () => {

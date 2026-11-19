@@ -52,6 +52,11 @@ const isoTimestamp = z.string().refine(
 
 const nonEmpty = z.string().trim().min(1);
 
+/** Code-point order: total and locale-independent, so distinct IDs never tie. */
+function compareCodePoints(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
 export const memoryScopeSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("project"), projectId: nonEmpty }).strict(),
   z.object({ kind: z.literal("session"), sessionId: nonEmpty }).strict(),
@@ -121,7 +126,7 @@ export function validateGovernedMemoryRecord(input: unknown): GovernanceValidati
     typeof input === "object" &&
     input !== null &&
     typeof (input as { recordId?: unknown }).recordId === "string"
-      ? (input as { recordId: string }).recordId
+      ? (input as { recordId: string }).recordId.trim() || null
       : null;
   return {
     ok: false,
@@ -306,7 +311,8 @@ export function reviewIncomingClaim(
 function contradictionsByRecord(records: readonly GovernedMemoryRecord[]): Map<string, string[]> {
   const result = new Map<string, string[]>();
   const ordered = [...records].sort(
-    (a, b) => a.createdAt.localeCompare(b.createdAt) || a.recordId.localeCompare(b.recordId),
+    (a, b) =>
+      compareCodePoints(a.createdAt, b.createdAt) || compareCodePoints(a.recordId, b.recordId),
   );
   ordered.forEach((record, index) => {
     const review = reviewIncomingClaim(ordered.slice(0, index), record);
@@ -483,6 +489,9 @@ export function previewRetention(input: {
   }
   // Records sharing an ID are ambiguous: fail closed and keep them all for
   // review instead of letting input order decide which one is previewed.
+  for (const item of items) {
+    if ((idCounts.get(item.recordId) ?? 0) > 1) item.reasons.push("duplicate_record_id");
+  }
   const unique = valid.filter((record) => idCounts.get(record.recordId) === 1);
   for (const record of valid) {
     if (idCounts.get(record.recordId) === 1) continue;
@@ -501,7 +510,7 @@ export function previewRetention(input: {
   const sortKey = (item: RetentionPreviewItem) => JSON.stringify(item);
   items.sort(
     (a, b) =>
-      a.recordId.localeCompare(b.recordId) ||
+      compareCodePoints(a.recordId, b.recordId) ||
       (sortKey(a) < sortKey(b) ? -1 : sortKey(a) > sortKey(b) ? 1 : 0),
   );
 
@@ -570,7 +579,7 @@ export function buildMemoryInventory(
     .map((entry) => ({ entry, key: JSON.stringify(entry) }))
     .sort(
       (a, b) =>
-        a.entry.recordId.localeCompare(b.entry.recordId) ||
+        compareCodePoints(a.entry.recordId, b.entry.recordId) ||
         (a.key < b.key ? -1 : a.key > b.key ? 1 : 0),
     )
     .map(({ entry }) => entry);
