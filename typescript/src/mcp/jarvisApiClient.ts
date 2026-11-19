@@ -214,7 +214,7 @@ export class JarvisApiClient {
         if (deadline.abortedByCaller()) {
           statusCode = 499;
           throw new JarvisApiError(
-            "Jarvis API request was cancelled.",
+            "NOLAN API request was cancelled.",
             499,
             "urn:jarvis:problem:mcp-backend-cancelled",
             null,
@@ -223,14 +223,14 @@ export class JarvisApiClient {
         if (deadline.signal.aborted) {
           statusCode = 504;
           throw new JarvisApiError(
-            "Jarvis API request exceeded the MCP backend deadline.",
+            "NOLAN API request exceeded the MCP backend deadline.",
             504,
             "urn:jarvis:problem:mcp-backend-deadline",
             null,
           );
         }
         const message = error instanceof Error ? error.message : String(error);
-        throw new JarvisApiError(`Jarvis API network request failed: ${message}`, 503, null, null);
+        throw new JarvisApiError(`NOLAN API network request failed: ${message}`, 503, null, null);
       } finally {
         deadline.dispose();
       }
@@ -242,7 +242,7 @@ export class JarvisApiClient {
         const detail = textField(problem?.detail);
         const message =
           [title, detail].filter(Boolean).join(": ") ||
-          `Jarvis API returned HTTP ${response.status}.`;
+          `NOLAN API returned HTTP ${response.status}.`;
         throw new JarvisApiError(
           message,
           response.status,
@@ -252,7 +252,7 @@ export class JarvisApiClient {
       }
       if (payload === null) {
         throw new JarvisApiError(
-          "Jarvis API returned an empty or non-JSON success response.",
+          "NOLAN API returned an empty or non-JSON success response.",
           502,
           null,
           null,
