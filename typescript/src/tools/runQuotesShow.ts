@@ -14,7 +14,7 @@ async function main(): Promise<void> {
   const store = new JsonQuoteStore();
   const quote = await findQuoteRecordByNumber(store, quoteNumber);
   if (!quote) {
-    console.error(`Jarvis: No quote #${quoteNumber} found.`);
+    console.error(`NOLAN: No quote #${quoteNumber} found.`);
     process.exitCode = 1;
     return;
   }

@@ -175,7 +175,7 @@ export function buildDangerZoneModel(input: {
 
   return {
     title: "Danger zone",
-    lede: "These actions can interrupt Jarvis or destroy local state. Export a backup from Persistence first when you can.",
+    lede: "These actions can interrupt NOLAN or destroy local state. Export a backup from Persistence first when you can.",
     provider,
     verifiedBackup: input.verifiedBackup,
     credentialsEndOverlapHref: input.credentialsEndOverlapHref,
@@ -227,7 +227,7 @@ export function buildDangerZoneModel(input: {
         disabledReason: null,
         warning: null,
         blastRadius: [
-          "Quarantines the current local JSON core document with a .corrupt-* rename and lets Jarvis start with an empty local core.",
+          "Quarantines the current local JSON core document with a .corrupt-* rename and lets NOLAN start with an empty local core.",
           "Convex data is NOT modified.",
           convexLocalNote,
         ],
@@ -264,7 +264,7 @@ export function buildDangerZoneModel(input: {
         willNotTouch: [
           "Convex deployment data",
           "Backup files already on disk",
-          "Files outside the Jarvis data directory",
+          "Files outside the NOLAN data directory",
         ],
         overlap: null,
         fingerprint: null,

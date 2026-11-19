@@ -78,7 +78,7 @@ export function resolveId(alias: string, records: readonly { id: string }[], kin
 
 function printTaskList(write: ConsoleWriter, tasks: ReturnType<TaskService["list"]>): void {
   if (tasks.length === 0) {
-    write("Jarvis: No tasks saved.");
+    write("NOLAN: No tasks saved.");
     return;
   }
   for (const task of tasks) {
@@ -93,7 +93,7 @@ function printReminderList(
   reminders: ReturnType<ReminderService["list"]>,
 ): void {
   if (reminders.length === 0) {
-    write("Jarvis: No reminders saved.");
+    write("NOLAN: No reminders saved.");
     return;
   }
   for (const reminder of reminders) {
@@ -193,13 +193,13 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
   integration.domains.register("domains", async (action, payload) => {
     if (action === "plan") {
       const workshopTask = workshop.createTask(
-        "Prototype Jarvis",
+        "Prototype NOLAN",
         "Create the first workshop task",
         "high",
       );
       const businessTask = business.createTask(
         "Submit build update",
-        "Share the current Jarvis progress",
+        "Share the current NOLAN progress",
       );
       const homeTask = home.createTask(
         "Reset living room",
@@ -257,7 +257,7 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
   }
 
   write(
-    `Jarvis CLI ready (provider: ${providerLabel}). Type 'help' for commands or 'exit' to quit.`,
+    `NOLAN CLI ready (provider: ${providerLabel}). Type 'help' for commands or 'exit' to quit.`,
   );
 
   try {
@@ -271,7 +271,7 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
         if (lower === "help") {
           write(
             [
-              "Jarvis: Available commands:",
+              "NOLAN: Available commands:",
               "  task add <title>",
               "  task list",
               "  task update <id> [--title <title>] [--category <category>]",
@@ -298,7 +298,7 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
             refreshReminders(),
           ]);
           state.replace(currentState);
-          write("Jarvis status: ok");
+          write("NOLAN status: ok");
           write(`Provider: ${providerLabel} (reachable)`);
           write(`Tasks: ${tasks.length}`);
           write(`Reminders: ${reminders.length}`);
@@ -322,7 +322,7 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
             lastIntent: "task-add",
             lastTask: task,
           });
-          write("Jarvis:", `Task added: ${task.title}`);
+          write("NOLAN:", `Task added: ${task.title}`);
           continue;
         }
 
@@ -335,7 +335,7 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
           const id = resolveId(taskUpdate[1].trim(), taskService.list(), "task");
           const task = await persistence.updateTask(id, taskUpdateFromOptions(taskUpdate[2]));
           if (!task) {
-            write("Jarvis: Task not found. Use `task list` to see current IDs.");
+            write("NOLAN: Task not found. Use `task list` to see current IDs.");
             continue;
           }
           taskService.replace(upsertById(taskService.list(), task));
@@ -344,7 +344,7 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
             lastIntent: "task-update",
             lastTask: task,
           });
-          write("Jarvis:", `Task updated: ${task.title} [${task.category}]`);
+          write("NOLAN:", `Task updated: ${task.title} [${task.category}]`);
           continue;
         }
 
@@ -352,7 +352,7 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
           const id = resolveId(taskComplete[1].trim(), taskService.list(), "task");
           const task = await persistence.completeTask(id);
           if (!task) {
-            write("Jarvis: Task not found. Use `task list` to see current IDs.");
+            write("NOLAN: Task not found. Use `task list` to see current IDs.");
             continue;
           }
           taskService.replace(upsertById(taskService.list(), task));
@@ -361,7 +361,7 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
             lastIntent: "task-complete",
             lastTask: task,
           });
-          write("Jarvis:", `Task completed: ${task.title}`);
+          write("NOLAN:", `Task completed: ${task.title}`);
           continue;
         }
 
@@ -369,7 +369,7 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
           const id = resolveId(taskRemove[1].trim(), taskService.list(), "task");
           const task = await persistence.removeTask(id);
           if (!task) {
-            write("Jarvis: Task not found. Use `task list` to see current IDs.");
+            write("NOLAN: Task not found. Use `task list` to see current IDs.");
             continue;
           }
           taskService.replace(taskService.list().filter((entry) => entry.id !== task.id));
@@ -378,7 +378,7 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
             lastIntent: "task-remove",
             lastTask: task,
           });
-          write("Jarvis:", `Task removed: ${task.title}`);
+          write("NOLAN:", `Task removed: ${task.title}`);
           continue;
         }
 
@@ -391,7 +391,7 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
             lastIntent: "reminder-add",
             lastReminder: reminder,
           });
-          write("Jarvis:", `Reminder set: ${reminder.title} for ${reminder.dueRaw}`);
+          write("NOLAN:", `Reminder set: ${reminder.title} for ${reminder.dueRaw}`);
           continue;
         }
 
@@ -407,7 +407,7 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
             reminderUpdateFromOptions(reminderUpdate[2]),
           );
           if (!reminder) {
-            write("Jarvis: Reminder not found. Use `reminder list` to see current IDs.");
+            write("NOLAN: Reminder not found. Use `reminder list` to see current IDs.");
             continue;
           }
           reminderService.replace(upsertById(reminderService.list(), reminder));
@@ -417,7 +417,7 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
             lastReminder: reminder,
           });
           write(
-            "Jarvis:",
+            "NOLAN:",
             `Reminder updated: ${reminder.title}${reminder.dueRaw ? ` for ${reminder.dueRaw}` : ""}`,
           );
           continue;
@@ -427,7 +427,7 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
           const id = resolveId(reminderRemove[1].trim(), reminderService.list(), "reminder");
           const reminder = await persistence.removeReminder(id);
           if (!reminder) {
-            write("Jarvis: Reminder not found. Use `reminder list` to see current IDs.");
+            write("NOLAN: Reminder not found. Use `reminder list` to see current IDs.");
             continue;
           }
           reminderService.replace(
@@ -438,20 +438,20 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
             lastIntent: "reminder-remove",
             lastReminder: reminder,
           });
-          write("Jarvis:", `Reminder removed: ${reminder.title}`);
+          write("NOLAN:", `Reminder removed: ${reminder.title}`);
           continue;
         }
 
         if (lower.includes("task") && !lower.includes("plan")) {
           write(
-            "Jarvis: Use `task add <title>`, `task list`, `task update <id> [--title <title>] [--category <category>]`, `task complete <id>`, or `task remove <id>`. IDs are shown in `task list`; use the abbreviated form or any unambiguous prefix.",
+            "NOLAN: Use `task add <title>`, `task list`, `task update <id> [--title <title>] [--category <category>]`, `task complete <id>`, or `task remove <id>`. IDs are shown in `task list`; use the abbreviated form or any unambiguous prefix.",
           );
           continue;
         }
 
         if (lower.includes("remind")) {
           write(
-            "Jarvis: Use `reminder add <title> --due <when>`, `reminder list`, `reminder update <id> [--title <title>] [--due <when> | --clear-due]`, or `reminder remove <id>`. IDs are shown in `reminder list`; use the abbreviated form or any unambiguous prefix.",
+            "NOLAN: Use `reminder add <title> --due <when>`, `reminder list`, `reminder update <id> [--title <title>] [--due <when> | --clear-due]`, or `reminder remove <id>`. IDs are shown in `reminder list`; use the abbreviated form or any unambiguous prefix.",
           );
           continue;
         }
@@ -466,20 +466,20 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
 
         if (lower.includes("summary")) {
           const summary = proactiveAssistant.summarize(await refreshTasks());
-          write("Jarvis:", summary);
+          write("NOLAN:", summary);
           write(JSON.stringify({ intent, summary }, null, 2));
         } else if (lower.includes("remember")) {
           const keyword = lower.replace(/^.*?remember\s+/, "").trim() || "milk";
           const recall = contextMemory.recall(keyword);
-          write("Jarvis:", `I remember: ${recall.join(", ") || "nothing yet"}`);
+          write("NOLAN:", `I remember: ${recall.join(", ") || "nothing yet"}`);
           write(JSON.stringify({ intent, recall }, null, 2));
         } else if (lower.includes("brief")) {
           const brief = personalTraits.dailyBrief();
-          write("Jarvis:", brief);
+          write("NOLAN:", brief);
           write(JSON.stringify({ intent, brief }, null, 2));
         } else if (lower.includes("motivate")) {
           const motivation = personalTraits.motivation();
-          write("Jarvis:", motivation);
+          write("NOLAN:", motivation);
           write(JSON.stringify({ intent, motivation }, null, 2));
         } else if (intent === "planning") {
           const workflow = workflowGenerator.createPlan(inputText, {
@@ -492,7 +492,7 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
             lastIntent: intent,
             lastResult: result,
           });
-          write("Jarvis:", `${reply}\nWorkflow: ${JSON.stringify(workflow)}`);
+          write("NOLAN:", `${reply}\nWorkflow: ${JSON.stringify(workflow)}`);
           write(
             JSON.stringify(
               {
@@ -511,7 +511,7 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
             lastIntent: intent,
             lastResult: result,
           });
-          write("Jarvis:", reply);
+          write("NOLAN:", reply);
           write(JSON.stringify({ intent, result }, null, 2));
         }
       } catch (error: unknown) {

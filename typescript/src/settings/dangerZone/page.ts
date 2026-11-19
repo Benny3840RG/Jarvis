@@ -175,7 +175,7 @@ export function renderDangerZonePage(model: DangerZoneModel): string {
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="referrer" content="no-referrer" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src 'none'; connect-src 'self'; base-uri 'none'; form-action 'none'" />
-  <title>Jarvis Settings · Danger zone</title>
+  <title>NOLAN Settings · Danger zone</title>
   <style>${PAGE_STYLE}</style>
 </head>
 <body>
