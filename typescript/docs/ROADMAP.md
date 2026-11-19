@@ -1,5 +1,34 @@
 # Jarvis TypeScript Roadmap
 
+## Memory Governance V1, first slice (#838, PR #841, 2026-11-19)
+
+- Added `src/memory/memoryGovernance.ts`, a pure library over caller-supplied
+  records. It adds no memory store, HTTP route or Convex schema, and its only
+  side effect is staging a proposed change set.
+- Governed records are strict zod schemas covering purpose, scope, category,
+  provenance, consent, sensitivity, status, lineage, pin/hold/dependents and
+  an optional expiry.
+- Retention defaults are privacy-first and deeply frozen. Overrides can only
+  shorten them. Audit retention stays unconfigured until it has a verification
+  reference, and is capped at 36,500 days.
+- `previewRetention` is a deterministic dry run that executes zero deletions
+  and fails closed:
+  - review conditions, duplicate IDs and unconfigured audit retention take
+    precedence over expiry and sensitive discard;
+  - all ordering is by Unicode code point;
+  - a SHA-256 digest binds the whole preview, and `buildDeletionReceipt`
+    refuses a tampered preview;
+  - only resolved policies are accepted.
+- Promotion is consent-gated and only proposes. Approval stays with the user
+  through the existing change-set flow.
+- Review: Grok, then ten automated Codex rounds. Rounds 1–9 found real edge
+  cases, each fixed with a test; round 10 passed. The focused suite has 60
+  tests.
+- Note: `docs/architecture/memory-governance.md`.
+- Next: an HTTP/HUD inventory surface; migrating existing memories into
+  governed records; live pruning behind an owner-authorised receipt. Each is a
+  separate owner-scoped follow-up.
+
 ## Review process: automated Codex review covers the HUD (2026-11-18)
 
 - Cause found: the automated Codex reviewer refused any PR touching a file over
