@@ -95,8 +95,8 @@ export const governedMemoryRecordSchema = z
       })
       .strict(),
     createdAt: isoTimestamp,
-    /** Optional explicit expiry; it can only shorten the policy window. */
-    expiresAt: isoTimestamp.nullable(),
+    /** Optional explicit expiry (omitted or null = none); it can only shorten the policy window. */
+    expiresAt: isoTimestamp.nullish(),
     /** Informational only; use never renews retention. */
     lastUsedAt: isoTimestamp.optional(),
     lastVerifiedAt: isoTimestamp.optional(),
@@ -226,7 +226,7 @@ export function effectiveExpiry(
   policy: RetentionPolicy = DEFAULT_RETENTION_POLICY,
 ): string | null {
   const rule = policy.rules[record.category];
-  const explicit = record.expiresAt === null ? null : Date.parse(record.expiresAt);
+  const explicit = record.expiresAt == null ? null : Date.parse(record.expiresAt);
   const fromPolicy = rule.kind === "ttl" ? Date.parse(record.createdAt) + rule.ms : null;
   const candidates = [explicit, fromPolicy].filter((value): value is number => value !== null);
   if (candidates.length === 0) return null;
@@ -431,11 +431,17 @@ export function previewRetention(input: {
   const policy = input.policy ?? DEFAULT_RETENTION_POLICY;
   const valid: GovernedMemoryRecord[] = [];
   const items: RetentionPreviewItem[] = [];
+  // Counts every identifiable record, valid or not, so a valid record that
+  // shares its ID with an invalid one is still held as a duplicate.
+  const idCounts = new Map<string, number>();
+  const countId = (recordId: string) => idCounts.set(recordId, (idCounts.get(recordId) ?? 0) + 1);
   for (const raw of input.records) {
     const validation = validateGovernedMemoryRecord(raw);
     if (validation.ok) {
       valid.push(validation.record);
+      countId(validation.record.recordId);
     } else {
+      if (validation.recordId != null) countId(validation.recordId);
       items.push({
         recordId: validation.recordId ?? "(unidentified)",
         category: null,
@@ -449,9 +455,6 @@ export function previewRetention(input: {
   }
   // Records sharing an ID are ambiguous: fail closed and keep them all for
   // review instead of letting input order decide which one is previewed.
-  const idCounts = new Map<string, number>();
-  for (const record of valid)
-    idCounts.set(record.recordId, (idCounts.get(record.recordId) ?? 0) + 1);
   const unique = valid.filter((record) => idCounts.get(record.recordId) === 1);
   for (const record of valid) {
     if (idCounts.get(record.recordId) === 1) continue;

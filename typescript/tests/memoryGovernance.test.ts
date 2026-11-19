@@ -296,6 +296,27 @@ describe("dry-run retention preview", () => {
     assert.equal(first.summary.would_expire, 0);
   });
 
+  it("holds a valid record that shares its ID with an invalid one", () => {
+    const valid = record({ recordId: "clash", createdAt: daysBefore(200) });
+    const invalid = { ...valid, purpose: "" };
+    const preview = previewRetention({ records: [valid, invalid], now: NOW });
+    const clashes = preview.items.filter((item) => item.recordId === "clash");
+    assert.equal(clashes.length, 2);
+    assert.deepEqual(clashes.map((item) => item.reasons[0]).sort(), [
+      "duplicate_record_id",
+      "invalid_record",
+    ]);
+    assert.equal(preview.summary.would_expire, 0);
+  });
+
+  it("accepts a record that omits expiresAt", () => {
+    const { expiresAt: _omitted, ...withoutExpiry } = record({ recordId: "no-expiry" });
+    const validation = validateGovernedMemoryRecord(withoutExpiry);
+    assert.equal(validation.ok, true);
+    const preview = previewRetention({ records: [withoutExpiry], now: NOW });
+    assert.equal(itemFor(preview, "no-expiry").action, "retain");
+  });
+
   it("does not mutate its input", () => {
     const input = [record({ createdAt: daysBefore(400) })];
     const snapshot = structuredClone(input);
