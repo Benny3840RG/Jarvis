@@ -52,9 +52,19 @@ const isoTimestamp = z.string().refine(
 
 const nonEmpty = z.string().trim().min(1);
 
-/** Code-point order: total and locale-independent, so distinct IDs never tie. */
+/**
+ * Unicode code-point order (not UTF-16 code units, not locale collation): total
+ * and locale-independent, so distinct IDs never tie.
+ */
 function compareCodePoints(a: string, b: string): number {
-  return a < b ? -1 : a > b ? 1 : 0;
+  const left = Array.from(a);
+  const right = Array.from(b);
+  const length = Math.min(left.length, right.length);
+  for (let index = 0; index < length; index += 1) {
+    const delta = left[index]!.codePointAt(0)! - right[index]!.codePointAt(0)!;
+    if (delta !== 0) return delta < 0 ? -1 : 1;
+  }
+  return left.length === right.length ? 0 : left.length < right.length ? -1 : 1;
 }
 
 export const memoryScopeSchema = z.discriminatedUnion("kind", [
@@ -407,22 +417,27 @@ function previewItem(
     };
   }
 
-  if (discardSensitive) {
-    return {
-      ...base,
-      action: "would_discard_sensitive",
-      reasons: ["sensitive_inference_not_retained"],
-    };
-  }
-
   // An unconfigured policy (audit) is never deletable, even with an explicit
-  // record-level expiry: retention there awaits a verified decision.
+  // record-level expiry or a sensitive inference: retention there awaits a
+  // verified decision, so this check runs before any deletion candidate.
   const rule = policy.rules[record.category];
   if (rule.kind === "unconfigured") {
     return {
       ...base,
       action: "retain_pending_policy",
-      reasons: expired ? ["expired", "audit_policy_unconfigured"] : ["audit_policy_unconfigured"],
+      reasons: [
+        ...(expired ? (["expired"] as const) : []),
+        ...(discardSensitive ? (["sensitive_inference_not_retained"] as const) : []),
+        "audit_policy_unconfigured",
+      ],
+    };
+  }
+
+  if (discardSensitive) {
+    return {
+      ...base,
+      action: "would_discard_sensitive",
+      reasons: ["sensitive_inference_not_retained"],
     };
   }
 
@@ -443,6 +458,8 @@ function previewItem(
     reasons: [rule.kind === "until_changed" ? "retained_until_changed" : "within_retention"],
   };
 }
+
+const UNIDENTIFIED_RECORD_ID = "(unidentified)";
 
 /** Binds every field of a preview except the digest itself. */
 function previewDigest(preview: Omit<RetentionPreview, "digest">): string {
@@ -469,6 +486,7 @@ export function previewRetention(input: {
   // shares its ID with an invalid one is still held as a duplicate.
   const idCounts = new Map<string, number>();
   const countId = (recordId: string) => idCounts.set(recordId, (idCounts.get(recordId) ?? 0) + 1);
+  let unidentified = false;
   for (const raw of input.records) {
     const validation = validateGovernedMemoryRecord(raw);
     if (validation.ok) {
@@ -476,8 +494,9 @@ export function previewRetention(input: {
       countId(validation.record.recordId);
     } else {
       if (validation.recordId != null) countId(validation.recordId);
+      else unidentified = true;
       items.push({
-        recordId: validation.recordId ?? "(unidentified)",
+        recordId: validation.recordId ?? UNIDENTIFIED_RECORD_ID,
         category: null,
         status: null,
         action: "needs_review",
@@ -487,6 +506,9 @@ export function previewRetention(input: {
       });
     }
   }
+  // The placeholder counts once, so a valid record that happens to use it is
+  // still held as a duplicate, while several unidentified records are not.
+  if (unidentified) countId(UNIDENTIFIED_RECORD_ID);
   // Records sharing an ID are ambiguous: fail closed and keep them all for
   // review instead of letting input order decide which one is previewed.
   for (const item of items) {

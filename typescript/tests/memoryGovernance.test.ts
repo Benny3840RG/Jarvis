@@ -327,6 +327,26 @@ describe("dry-run retention preview", () => {
     assert.deepEqual(buildDeletionReceipt({ preview, executed: false }).entries, []);
   });
 
+  it("never discards a sensitive audit record while audit policy is unconfigured", () => {
+    const preview = previewRetention({
+      records: [
+        record({
+          recordId: "audit-sensitive",
+          category: "audit",
+          sensitivity: "sensitive",
+          createdAt: daysBefore(1),
+        }),
+      ],
+      now: NOW,
+    });
+    assert.equal(itemFor(preview, "audit-sensitive").action, "retain_pending_policy");
+    assert.deepEqual(itemFor(preview, "audit-sensitive").reasons, [
+      "sensitive_inference_not_retained",
+      "audit_policy_unconfigured",
+    ]);
+    assert.deepEqual(buildDeletionReceipt({ preview, executed: false }).entries, []);
+  });
+
   it("reports invalid records instead of dropping them", () => {
     const preview = previewRetention({
       records: [{ recordId: "broken", category: "unknown" }],
@@ -393,6 +413,40 @@ describe("dry-run retention preview", () => {
       assert.ok(item.reasons.includes("duplicate_record_id"));
     }
     assert.equal(preview.summary.would_expire, 0);
+  });
+
+  it("holds a valid record whose ID collides with the unidentified placeholder", () => {
+    const valid = record({ recordId: "(unidentified)", createdAt: daysBefore(200) });
+    const preview = previewRetention({
+      records: [valid, { category: "unknown" }, { category: "unknown" }],
+      now: NOW,
+    });
+    const items = preview.items.filter((item) => item.recordId === "(unidentified)");
+    assert.equal(items.length, 3);
+    for (const item of items) {
+      assert.equal(item.action, "needs_review");
+      assert.ok(item.reasons.includes("duplicate_record_id"));
+    }
+    assert.equal(preview.summary.would_expire, 0);
+  });
+
+  it("does not flag several unidentified invalid records as duplicates", () => {
+    const preview = previewRetention({
+      records: [{ category: "unknown" }, { category: "unknown" }],
+      now: NOW,
+    });
+    for (const item of preview.items) assert.deepEqual(item.reasons, ["invalid_record"]);
+  });
+
+  it("orders IDs by Unicode code point, not UTF-16 code unit", () => {
+    // U+FF5E (one code unit 0xFF5E) sorts before U+1F600 (surrogates 0xD83D…)
+    // by code point, but after it by UTF-16 code unit.
+    const records = [record({ recordId: "\u{1F600}" }), record({ recordId: "～" })];
+    const preview = previewRetention({ records, now: NOW });
+    assert.deepEqual(
+      preview.items.map((item) => item.recordId),
+      ["～", "\u{1F600}"],
+    );
   });
 
   it("orders contradictions by code point, so locale-equal IDs do not depend on input order", () => {
