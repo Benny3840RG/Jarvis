@@ -381,17 +381,9 @@ function previewItem(
   }
 
   const expired = expiry !== null && Date.parse(expiry) <= now;
-  if (expired) {
-    const blockers: RetentionReason[] = [];
-    if (record.pinned) blockers.push("pinned");
-    if (record.hold) blockers.push("hold");
-    if (record.activeDependents.length > 0) blockers.push("active_dependents");
-    if (blockers.length > 0) {
-      return { ...base, action: "expiry_blocked", reasons: ["expired", ...blockers] };
-    }
-    return { ...base, action: "would_expire", reasons: ["expired"] };
-  }
 
+  // Review conditions take precedence over expiry (fail closed): a record that
+  // needs a human look is never offered as a deletion candidate.
   const review: RetentionReason[] = [];
   if (record.provenance === null) review.push("missing_provenance");
   const conflictsWith = conflicts.get(record.recordId);
@@ -402,9 +394,20 @@ function previewItem(
     return {
       ...base,
       action: "needs_review",
-      reasons: review,
+      reasons: expired ? ["expired", ...review] : review,
       ...(conflictsWith ? { conflictsWith } : {}),
     };
+  }
+
+  if (expired) {
+    const blockers: RetentionReason[] = [];
+    if (record.pinned) blockers.push("pinned");
+    if (record.hold) blockers.push("hold");
+    if (record.activeDependents.length > 0) blockers.push("active_dependents");
+    if (blockers.length > 0) {
+      return { ...base, action: "expiry_blocked", reasons: ["expired", ...blockers] };
+    }
+    return { ...base, action: "would_expire", reasons: ["expired"] };
   }
 
   const rule = policy.rules[record.category];
@@ -533,7 +536,13 @@ export function buildMemoryInventory(
       pinned: record.pinned,
       held: record.hold !== undefined,
     }))
-    .sort((a, b) => a.recordId.localeCompare(b.recordId));
+    .map((entry) => ({ entry, key: JSON.stringify(entry) }))
+    .sort(
+      (a, b) =>
+        a.entry.recordId.localeCompare(b.entry.recordId) ||
+        (a.key < b.key ? -1 : a.key > b.key ? 1 : 0),
+    )
+    .map(({ entry }) => entry);
 }
 
 // ---------------------------------------------------------------------------

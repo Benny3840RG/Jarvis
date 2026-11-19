@@ -42,7 +42,8 @@ set. Schemas are strict: unknown fields fail validation.
 `deletionsExecuted: 0`, with one item per input record (invalid records are
 reported as `needs_review`). Expired records with a pin, hold or active
 dependents come back as `expiry_blocked`. Missing provenance, contradictions
-and stale approved records come back as `needs_review`. Records that share a
+and stale approved records come back as `needs_review`, even when expired:
+review takes precedence over expiry, so they are never deletion candidates. Records that share a
 `recordId`, including with an invalid record, are all held as `needs_review` (`duplicate_record_id`) rather than
 letting input order pick one. The output is sorted with a full tie-break and
 carries a SHA-256 digest, so the same inputs always give the same result.

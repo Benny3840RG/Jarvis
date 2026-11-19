@@ -198,6 +198,26 @@ describe("dry-run retention preview", () => {
     assert.deepEqual(itemFor(preview, "orphan").reasons, ["missing_provenance"]);
   });
 
+  it("holds expired records that need review instead of offering them for deletion", () => {
+    const preview = previewRetention({
+      records: [
+        record({ recordId: "old-orphan", provenance: null, createdAt: daysBefore(400) }),
+        record({
+          recordId: "old-stale",
+          category: "raw_episode",
+          status: "approved",
+          createdAt: daysBefore(400),
+        }),
+      ],
+      now: NOW,
+    });
+    assert.equal(itemFor(preview, "old-orphan").action, "needs_review");
+    assert.deepEqual(itemFor(preview, "old-orphan").reasons, ["expired", "missing_provenance"]);
+    assert.equal(itemFor(preview, "old-stale").action, "needs_review");
+    assert.deepEqual(itemFor(preview, "old-stale").reasons, ["expired", "stale"]);
+    assert.deepEqual(buildDeletionReceipt({ preview, executed: false }).entries, []);
+  });
+
   it("does not retain sensitive inferences by default", () => {
     const preview = previewRetention({
       records: [
@@ -499,6 +519,14 @@ describe("inventory and deletion receipts", () => {
       ],
     );
     assert.ok(inventory.every((entry) => entry.purpose.length > 0 && entry.effectiveExpiry));
+  });
+
+  it("orders inventory entries that share an ID independently of input order", () => {
+    const records = [
+      record({ recordId: "twin", content: "first" }),
+      record({ recordId: "twin", content: "second" }),
+    ];
+    assert.deepEqual(buildMemoryInventory(records), buildMemoryInventory([...records].reverse()));
   });
 
   it("states a dry run plainly and never claims backup erasure", () => {
