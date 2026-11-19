@@ -200,7 +200,7 @@ describe("failure behaviour matrix", () => {
     assert.equal(persistence.addTaskCalls, 0);
     assert(logs.errors.some((line) => line.includes("Failed to load persistent data")));
     assert.equal(
-      logs.output.some((line) => line.includes("Jarvis CLI ready")),
+      logs.output.some((line) => line.includes("NOLAN CLI ready")),
       false,
     );
   });

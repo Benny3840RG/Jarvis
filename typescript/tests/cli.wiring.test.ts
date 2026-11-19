@@ -237,7 +237,7 @@ describe("interactive CLI persistence wiring", () => {
     assert.equal(persistence.saveCalled, 0);
     assert.deepEqual(readline.prompts, ["You: "]);
     assert.equal(readline.closed, true);
-    assert(logs.output.some((line) => line.includes("Jarvis CLI ready")));
+    assert(logs.output.some((line) => line.includes("NOLAN CLI ready")));
   });
 
   it("writes a task durably before saving runtime state", async () => {
@@ -815,7 +815,7 @@ describe("compact ID display and prefix alias resolution in CLI", () => {
     });
 
     const statusOutput = logs.output.join("\n");
-    assert.ok(statusOutput.includes("Jarvis status: ok"));
+    assert.ok(statusOutput.includes("NOLAN status: ok"));
     assert.ok(statusOutput.includes("Provider: json (reachable)"));
     assert.ok(statusOutput.includes("Tasks: 1"));
     assert.ok(statusOutput.includes("Reminders: 1"));

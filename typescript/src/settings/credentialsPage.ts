@@ -76,7 +76,7 @@ export function renderCredentialsPage(model: CredentialsPageModel): string {
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="referrer" content="no-referrer" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src 'none'; connect-src 'none'; base-uri 'none'; form-action 'none'" />
-  <title>Jarvis Settings · Credentials</title>
+  <title>NOLAN Settings · Credentials</title>
   <style>${PAGE_STYLE}</style>
 </head>
 <body>
@@ -229,7 +229,7 @@ export function renderCredentialsPage(model: CredentialsPageModel): string {
     });
     const exposureNote = document.createElement("p");
     exposureNote.className = "note";
-    text(exposureNote, "There is no control here to expose Jarvis to a LAN or the public internet. Remote HTTP stays fail-closed until TLS, OIDC, allowed origins, and limits are configured together.");
+    text(exposureNote, "There is no control here to expose NOLAN to a LAN or the public internet. Remote HTTP stays fail-closed until TLS, OIDC, allowed origins, and limits are configured together.");
     exposure.append(exposureTitle, exposureList, exposureNote, link(status.docs.exposure, "Open exposure / remote gateway docs"));
     const parity = document.getElementById("parity");
     status.parity.forEach((row) => {
