@@ -173,7 +173,9 @@ describe("standing grants and verified recovery", () => {
     denied(restart, restartContext({ grant: undefined }), "standing_grant_required");
     denied(
       restart,
-      restartContext({ grant: grant({ service: "other.service" as "jarvis.service" }) }),
+      restartContext({
+        grant: { ...grant(), service: "other.service" } as unknown as StandingGrant,
+      }),
       "grant_invalid",
     );
   });
