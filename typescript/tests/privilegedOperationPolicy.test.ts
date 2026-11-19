@@ -310,6 +310,8 @@ describe("halt and replay", () => {
   it("refuses a restart when the use count or restart history is not supplied", () => {
     const { grantUses: _uses, ...noUses } = restartContext();
     denied(restart, noUses, "invalid_context");
+    const { grantUses: _noGrantUses, ...noGrantNoUses } = restartContext({ grant: undefined });
+    denied(restart, noGrantNoUses, "invalid_context");
     const { recentRestarts: _history, ...noHistory } = restartContext();
     denied(restart, noHistory, "invalid_context");
   });

@@ -321,26 +321,11 @@ export function evaluatePrivilegedOperation(
   let authorityRef = "read-only";
   if (spec.tier === "standing_grant") {
     // The use count and restart history must be supplied, never assumed empty.
-    if (
-      (context.grant !== undefined && parsedContext.data.grantUses === undefined) ||
-      parsedContext.data.recentRestarts === undefined
-    ) {
-      return deny("invalid_context");
-    }
-    const grant = checkGrant(
-      context.grant,
-      parsedContext.data.grantUses ?? 0,
-      operation,
-      args,
-      now,
-    );
+    const { grantUses, recentRestarts } = parsedContext.data;
+    if (grantUses === undefined || recentRestarts === undefined) return deny("invalid_context");
+    const grant = checkGrant(context.grant, grantUses, operation, args, now);
     if (typeof grant === "string") return deny(grant);
-    const blocked = checkRestartPreconditions(
-      context.health,
-      parsedContext.data.recentRestarts,
-      args.service,
-      now,
-    );
+    const blocked = checkRestartPreconditions(context.health, recentRestarts, args.service, now);
     if (blocked) return deny(blocked);
     authorityRef = grant.grantId;
   } else if (spec.tier === "owner_approval") {
