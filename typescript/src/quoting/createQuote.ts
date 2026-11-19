@@ -143,7 +143,7 @@ export async function runCreateQuote(
           await saveQuoteRecord(store, quote);
         } catch (error: unknown) {
           write(
-            `Jarvis: Could not save quote #${quote.quoteNumber} (${
+            `NOLAN: Could not save quote #${quote.quoteNumber} (${
               error instanceof Error ? error.message : String(error)
             }). The quote below was not saved — copy it now if you need it.`,
           );

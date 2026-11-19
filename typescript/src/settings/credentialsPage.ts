@@ -90,7 +90,7 @@ export function renderCredentialsPage(model: CredentialsPageModel): string {
       <a class="link" href="/settings/danger#approval">Open Danger zone for the approval token</a>
       <a class="link" href="/settings/danger#delivery">Open Danger zone for the delivery token</a>
     </nav>
-    <p class="lede">Machine credentials authenticate Jarvis clients and gated operations. They are not a sign-in. Secrets are never shown in full after first reveal. Report security issues without including token values.</p>
+    <p class="lede">Machine credentials authenticate NOLAN clients and gated operations. They are not a sign-in. Secrets are never shown in full after first reveal. Report security issues without including token values.</p>
     <div id="banner" class="banner" hidden></div>
     <div id="approvals" class="warn" hidden></div>
     <div id="cards" class="grid"></div>
