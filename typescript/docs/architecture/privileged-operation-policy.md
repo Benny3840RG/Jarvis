@@ -53,9 +53,25 @@ segments, doubled or trailing slashes, or NUL). Symlinks can't be resolved by a
 pure function, so the broker must resolve the real path itself and refuse if it
 differs from the approved path.
 
+## Guardian status reader
+
+`src/security/guardianServiceStatus.ts` produces the health observation that a
+restart needs. It runs one fixed command, `/usr/bin/systemctl --user show
+<unit> --property=LoadState,ActiveState,SubState,NRestarts --no-pager`, through
+`execFile` with no shell, a 3-second timeout, 4 KB of output and a minimal
+environment. The unit must be on the code allowlist; anything else is refused
+before a process starts. `jarvis.service` is a user unit, so this needs no root.
+
+It only reports `unhealthy` for a `failed` unit or one stuck in
+`activating/auto-restart`. A stopped (`inactive`) or changing unit is
+`unknown`, so a deliberate stop is never "repaired". Errors, timeouts, a unit
+that isn't loaded, and duplicate, missing or malformed properties are all
+`unknown`. `observedAt` is taken after the read completes. Nothing calls the
+reader in production yet, and it never restarts anything.
+
 ## Not in this slice
 
-The root broker (Unix socket, peer credentials), the guardian status reader,
+The root broker (Unix socket, peer credentials), allowlisted log excerpts,
 investigate and redteam modes, `nolan sec halt` propagation, and grant and
 replay persistence. Each needs separate review, owner approval and
 commissioning before it gets any production privilege.
