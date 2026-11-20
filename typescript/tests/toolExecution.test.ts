@@ -675,6 +675,133 @@ describe("consent-lifecycle execution enforcement (R-048/R-049/R-050)", () => {
     assert.equal(renewals, settled, "renewal stops once the provider settles");
   });
 
+  for (const [label, renew, expectAbort] of [
+    ["an ended lease (renewed: false)", async () => ({ renewed: false }), true],
+    ["a renewal that never settles", () => new Promise<{ renewed: boolean }>(() => {}), true],
+    [
+      "two consecutive failed renewals",
+      async () => {
+        throw new Error("renew unavailable");
+      },
+      true,
+    ],
+  ] as const) {
+    it(`never reports success after ${label}`, async () => {
+      let aborted = false;
+      const running = {
+        ...definition({ count: 0 }),
+        async execute(_args: Record<string, unknown>, signal: AbortSignal) {
+          // A provider still running across several renewal intervals.
+          await new Promise<void>((resolve) => {
+            signal.addEventListener("abort", () => {
+              aborted = true;
+            });
+            setTimeout(resolve, 60);
+          });
+          return { now: "late" };
+        },
+      };
+      const executor = new ToolExecutionService(
+        [running],
+        new InMemoryToolExecutionReceiptStore(),
+        undefined,
+        undefined,
+        {
+          async verify() {
+            return { eligible: true };
+          },
+          renew,
+          async release() {},
+        },
+        5,
+      );
+      const result = await executor.execute({
+        action,
+        authority: "T1",
+        idempotencyKey: `lease-lost-${label}`,
+        timeoutMs: 1_000,
+      });
+      assert.equal(result.status, "indeterminate");
+      assert.equal(result.errorCode, "indeterminate");
+      assert.equal(aborted, expectAbort);
+    });
+
+    it(`records an abort-aware provider's own rejection after ${label} as indeterminate`, async () => {
+      const abortAware = {
+        ...definition({ count: 0 }),
+        async execute(_args: Record<string, unknown>, signal: AbortSignal) {
+          // Rejects first with its own AbortError, before the service's race.
+          await new Promise<void>((_, reject) => {
+            signal.addEventListener("abort", () =>
+              reject(new DOMException("provider aborted", "AbortError")),
+            );
+            setTimeout(() => reject(new Error("should have been aborted")), 500);
+          });
+          return { now: "never" };
+        },
+      };
+      const executor = new ToolExecutionService(
+        [abortAware],
+        new InMemoryToolExecutionReceiptStore(),
+        undefined,
+        undefined,
+        {
+          async verify() {
+            return { eligible: true };
+          },
+          renew,
+          async release() {},
+        },
+        5,
+      );
+      const result = await executor.execute({
+        action,
+        authority: "T1",
+        idempotencyKey: `lease-lost-abort-aware-${label}`,
+        timeoutMs: 1_000,
+      });
+      assert.equal(result.status, "indeterminate");
+      assert.equal(result.errorCode, "indeterminate");
+    });
+  }
+
+  it("tolerates a single failed renewal while the lease is still live", async () => {
+    let calls = 0;
+    const executor = new ToolExecutionService(
+      [
+        {
+          ...definition({ count: 0 }),
+          async execute() {
+            await new Promise((resolve) => setTimeout(resolve, 25));
+            return { now: "ok" };
+          },
+        },
+      ],
+      new InMemoryToolExecutionReceiptStore(),
+      undefined,
+      undefined,
+      {
+        async verify() {
+          return { eligible: true };
+        },
+        async renew() {
+          calls += 1;
+          if (calls === 1) throw new Error("one blip");
+          return { renewed: true };
+        },
+        async release() {},
+      },
+      5,
+    );
+    const result = await executor.execute({
+      action,
+      authority: "T1",
+      idempotencyKey: "lease-one-blip",
+      timeoutMs: 1_000,
+    });
+    assert.equal(result.status, "succeeded");
+  });
+
   it("keeps the receipt when releasing the lease fails, and never releases a refused check", async () => {
     const executions = { count: 0 };
     let released = 0;

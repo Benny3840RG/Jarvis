@@ -42,6 +42,7 @@
     "commission:isolated-ingress": "node --import tsx src/tools/runIsolatedIngressCommissioning.ts",
     "commission:sentry": "node --import tsx src/tools/runSentryCommissioning.ts",
     "backup": "tsx src/tools/runBackup.ts",
+    "sec": "tsx src/tools/runSecurityHalt.ts",
     "restore-drill": "tsx src/tools/runRestoreDrill.ts",
     "commission:local-v1-recovery": "node --import tsx src/tools/runLocalV1Recovery.ts",
     "import:convex": "tsx src/tools/runConvexImport.ts",

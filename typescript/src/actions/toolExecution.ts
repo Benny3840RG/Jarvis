@@ -486,6 +486,11 @@ export class ToolExecutionService {
     private readonly claims: SingleUseConsumptionClaimStore = new InMemorySingleUseConsumptionClaimStore(),
     private readonly eligibility: ExecutionEligibilityStore = new InMemoryExecutionEligibilityStore(),
     private readonly leaseRenewMs: number = EXECUTION_LEASE_RENEW_MS,
+    /**
+     * `nolan sec halt` (#839): resolves true while the owner has halted new
+     * dispatch. A throw or rejection is treated as halted (fail closed).
+     */
+    private readonly haltGate?: () => Promise<boolean>,
   ) {
     for (const definition of definitions) {
       const key = `${definition.tool}:${definition.operation}`;
@@ -737,6 +742,14 @@ export class ToolExecutionService {
     return bound.receipt;
   }
 
+  private async isHalted(gate: () => Promise<boolean>): Promise<boolean> {
+    try {
+      return (await gate()) !== false;
+    } catch {
+      return true;
+    }
+  }
+
   private async persistDecision(
     key: string,
     decision: ToolExecutionReceipt,
@@ -862,6 +875,18 @@ export class ToolExecutionService {
       );
     }
 
+    // `nolan sec halt` blocks every new dispatch. It runs before preflight and
+    // before the single-use claim, so a halted attempt consumes nothing and
+    // the same approved action can run after the owner resumes. The existing
+    // `safety-blocked` code is reused so persisted receipts need no new
+    // validator literal.
+    if (this.haltGate !== undefined && (await this.isHalted(this.haltGate))) {
+      return this.persistDecision(
+        key,
+        receipt(input.action, input.idempotencyKey, "blocked", "safety-blocked", startedAt, input),
+      );
+    }
+
     // Deterministic and must run before the claim below: an invalid
     // `timeoutMs` throws, and a throw here happens *before* any claim has
     // been taken, so nothing is spent. Validating this *after* the claim
@@ -944,6 +969,7 @@ export class ToolExecutionService {
     // release it while the other's effect still runs.
     let leaseExecutionId: string | undefined;
     let leaseRenewal: NodeJS.Timeout | undefined;
+    const controller = new AbortController();
     if (input.action.consumptionPolicy === "single-use") {
       const claim = await this.claims.claim(input.action, input.idempotencyKey);
       if (!claim.claimed) {
@@ -979,13 +1005,44 @@ export class ToolExecutionService {
         );
       }
       leaseExecutionId = executionId;
+      // A lease that cannot be kept live must not end in "succeeded": a revoke
+      // could commit while the provider still runs. `renewed: false` means the
+      // lease already ended; two consecutive failed renewals stay inside the
+      // 35s lease but leave no margin. Either aborts the execution, which ends
+      // through the timeout path as indeterminate rather than succeeded.
+      // A renewal still pending at the next tick counts as failed, so a hung
+      // renew() aborts within two ticks too, instead of stacking more calls.
+      // Renewal keeps running after a loss: a provider that ignores the abort
+      // is still acting, and a later successful renewal still blocks revoke.
+      let failedRenewals = 0;
+      let renewalPending = false;
+      const renewalFailed = () => {
+        failedRenewals += 1;
+        if (failedRenewals >= 2) controller.abort();
+      };
       leaseRenewal = setInterval(() => {
-        void this.eligibility.renew?.(input.action, executionId).catch(() => undefined);
+        const renew = this.eligibility.renew;
+        if (renew === undefined) return;
+        if (renewalPending) {
+          renewalFailed();
+          return;
+        }
+        renewalPending = true;
+        void renew.call(this.eligibility, input.action, executionId).then(
+          (result) => {
+            renewalPending = false;
+            if (result.renewed === false) controller.abort();
+            else failedRenewals = 0;
+          },
+          () => {
+            renewalPending = false;
+            renewalFailed();
+          },
+        );
       }, this.leaseRenewMs);
       leaseRenewal.unref();
     }
 
-    const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
     const actionFingerprint = fingerprintToolAction(input.action);
     const externalReconciliationId = scope ? reconciliationId(scope) : undefined;
@@ -1112,7 +1169,11 @@ export class ToolExecutionService {
       await this.receipts.save(key, result);
       return result;
     } catch (error: unknown) {
-      const timedOut = error instanceof Error && error.message === "timeout";
+      // Any abort this service issued (timeout or a lost lease) leaves the
+      // effect's outcome unknown, even when an abort-aware provider rejects
+      // first with its own error, so it must never be recorded as "failed".
+      const timedOut =
+        controller.signal.aborted || (error instanceof Error && error.message === "timeout");
       if (isAttemptAlreadyInProgress(error)) {
         return this.persistDecision(
           key,
