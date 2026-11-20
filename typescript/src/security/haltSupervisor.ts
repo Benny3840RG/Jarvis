@@ -51,13 +51,17 @@ export type HaltAckReading =
 
 /**
  * The acknowledgement reference that a halt reading must match: the record's
- * `changedAt`, or the identity of one particular unreadable file. Undefined
+ * unique `id` (`changedAt` for a record written before ids existed), or the
+ * identity of one particular unreadable file. Undefined
  * when not halted, or when a fail-closed halt cannot be identified (that halt
  * is still enforced and cancelled, but never reported as acknowledged).
  */
 export function haltRefFor(reading: HaltReading): string | undefined {
   if (!reading.halted) return undefined;
-  return reading.record?.changedAt ?? reading.failClosedRef;
+  if (reading.record === null) return reading.failClosedRef;
+  return reading.record.id === undefined
+    ? `record:${reading.record.changedAt}`
+    : `record:${reading.record.id}`;
 }
 
 export class FileHaltAckStore {

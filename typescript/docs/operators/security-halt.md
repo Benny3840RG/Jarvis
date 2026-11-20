@@ -14,7 +14,7 @@ While halted, the running service refuses new governed tool executions and cance
 - **acknowledged**: the service saw this halt and cancelled its running executions, but at least one provider call hasn't finished yet.
 - **verified stopped**: nothing the service started is still running.
 
-A cancelled execution ends with an unknown outcome (`indeterminate`), so check what it did before retrying it. A single-use approval cancelled after it was claimed stays used up and needs approving again. The states only cover governed tool executions inside the HTTP service process.
+Cancelling sends the provider an abort. A provider that ignores aborts can't be forced to stop, so it keeps the state at acknowledged until it finishes. A cancelled execution ends with an unknown outcome (`indeterminate`), so check what it did before retrying it. A single-use approval cancelled after it was claimed stays used up and needs approving again. The states only cover governed tool executions inside the HTTP service process.
 
 The behaviour, including what counts as halted when the record can't be read, is defined and tested in:
 

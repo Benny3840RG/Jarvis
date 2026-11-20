@@ -180,6 +180,35 @@ describe("halt cancels in-flight governed executions", () => {
     await waitFor(() => registry.unsettled() === 0);
   });
 
+  it("still links a later halt to a provider left running after a timeout", async () => {
+    const registry = new RunningExecutionRegistry();
+    const provider = deferred<{ ok: boolean }>();
+    let providerSignal: AbortSignal | undefined;
+    // A provider that only stops on the signal's abort event, not the timeout.
+    const { executor } = build(
+      {
+        execute: (_args, signal) => {
+          providerSignal = signal;
+          return provider.promise;
+        },
+      },
+      registry,
+    );
+    const result = await executor.execute({
+      action: action(),
+      authority: "T1",
+      idempotencyKey: "k-timeout",
+      timeoutMs: 5,
+    });
+    assert.equal(result.status, "indeterminate");
+    await flush();
+    assert.equal(registry.unsettled(), 1, "the timed-out provider may still be acting");
+    assert.equal(providerSignal?.aborted, true, "the timeout already aborted the provider");
+    assert.equal(registry.cancelAll(), 1, "the halt still reaches the unsettled execution");
+    provider.resolve({ ok: true });
+    await waitFor(() => registry.unsettled() === 0);
+  });
+
   it("refuses without claiming when the halt lands during preflight", async () => {
     const registry = new RunningExecutionRegistry();
     let executed = 0;
@@ -287,7 +316,7 @@ describe("halt supervisor", () => {
     assert.equal(run.signal.aborted, true);
     const first = await acks.read();
     assert.equal(first.kind, "ack");
-    assert.equal(first.kind === "ack" && first.ack.haltRef, record.changedAt);
+    assert.equal(first.kind === "ack" && first.ack.haltRef, `record:${record.id}`);
     assert.equal(first.kind === "ack" && first.ack.cancelledExecutions, 1);
     assert.equal(first.kind === "ack" && first.ack.unsettledExecutions, 1);
     assert.equal(first.kind === "ack" && first.ack.verifiedStoppedAt, null);
@@ -312,7 +341,7 @@ describe("halt supervisor", () => {
     const second = await halts.halt("second", new Date(NOW.getTime() + 60_000));
     await supervisor.tick();
     const reading = await acks.read();
-    assert.equal(reading.kind === "ack" && reading.ack.haltRef, second.changedAt);
+    assert.equal(reading.kind === "ack" && reading.ack.haltRef, `record:${second.id}`);
 
     const haltFile = path.join(directory, HALT_FILE_BASENAME);
     await writeFile(haltFile, "{not json");
@@ -321,6 +350,38 @@ describe("halt supervisor", () => {
     const firstRef = failClosed.kind === "ack" ? failClosed.ack.haltRef : "";
     assert.match(firstRef, /^fail-closed:/);
     assert.equal(firstRef, haltRefFor(await halts.read()), "stable while the file is unchanged");
+  });
+
+  it("never matches an old acknowledgement to a new halt written in the same millisecond", async () => {
+    await halts.halt("first", NOW);
+    await new HaltSupervisor(halts, acks, new RunningExecutionRegistry()).tick();
+    // Same timestamp and reason; the service is gone and never sees this one.
+    await halts.halt("first", NOW);
+    const out: string[] = [];
+    await runSecurityHalt(
+      ["status"],
+      halts,
+      { out: (l) => out.push(l), err: () => undefined },
+      acks,
+    );
+    assert.match(out.join("\n"), /not acknowledged yet/);
+    assert.doesNotMatch(out.join("\n"), /VERIFIED STOPPED/);
+  });
+
+  it("still binds a record written before ids existed by its changedAt", async () => {
+    await writeFile(
+      path.join(directory, HALT_FILE_BASENAME),
+      JSON.stringify({
+        version: 1,
+        state: "requested",
+        changedAt: NOW.toISOString(),
+        changedBy: "owner-cli",
+        reason: "legacy",
+      }),
+    );
+    const reading = await halts.read();
+    assert.equal(reading.halted, true);
+    assert.equal(haltRefFor(reading), `record:${NOW.toISOString()}`);
   });
 
   it("never matches an old fail-closed acknowledgement to a later fail-closed halt", async () => {

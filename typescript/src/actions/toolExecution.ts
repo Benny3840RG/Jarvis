@@ -1297,7 +1297,15 @@ export class ToolExecutionService {
       return result;
     } finally {
       clearTimeout(timeout);
-      run.signal.removeEventListener("abort", haltEffect);
+      // Keep the halt linked to the provider's signal until its effect has
+      // settled: an attempt that returned on timeout may still have a running
+      // provider. (An AbortSignal fires once, so a provider that ignored the
+      // timeout abort cannot be stopped harder; it stays counted as unsettled.)
+      if (!effect || effectSettled) run.signal.removeEventListener("abort", haltEffect);
+      else {
+        const unlink = () => run.signal.removeEventListener("abort", haltEffect);
+        void effect.then(unlink, unlink);
+      }
       if (leaseExecutionId !== undefined) {
         // Release only once the provider has actually settled. A timed-out
         // provider may ignore the abort signal and still act, so its lease
