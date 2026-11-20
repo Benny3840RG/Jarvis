@@ -478,6 +478,10 @@ test("findings cannot borrow supplemental source or another segment's primary ra
       protocol,
       /If essential primary source or context is missing, return blocked with contextRequests/,
     );
+    assert.match(
+      protocol,
+      /Manifest files or ranges with no primary unit in this segment are reviewed in another segment; do not request them as context/,
+    );
   }
   const payloads = plan.prompts.map((p) =>
     JSON.parse(p.slice(p.indexOf("\n\n") + 2)),
