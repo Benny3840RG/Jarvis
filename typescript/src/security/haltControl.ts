@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { constants as fsConstants } from "node:fs";
 import { lstat, mkdir, open, rename, unlink } from "node:fs/promises";
 import path from "node:path";
@@ -30,6 +31,12 @@ const haltRecordSchema = z
     changedAt: z.string().datetime(),
     changedBy: z.literal("owner-cli"),
     reason: z.string().max(MAX_REASON_LENGTH),
+    /**
+     * Unique per write, so an acknowledgement binds to exactly one halt even
+     * when two writes share a millisecond. Optional so records written before
+     * it existed still parse (they fall back to `changedAt`).
+     */
+    id: z.string().uuid().optional(),
   })
   .strict();
 
@@ -105,6 +112,7 @@ export class FileHaltStore {
       changedAt: now.toISOString(),
       changedBy: "owner-cli",
       reason: normalizeHaltReason(reason),
+      id: randomUUID(),
     });
   }
 
@@ -115,6 +123,7 @@ export class FileHaltStore {
       changedAt: now.toISOString(),
       changedBy: "owner-cli",
       reason: normalizeHaltReason(reason),
+      id: randomUUID(),
     });
   }
 
