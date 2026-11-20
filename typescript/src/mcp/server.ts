@@ -22,6 +22,7 @@ import { parseProjectScheduledDate, type Project } from "../projects/project.js"
 import type { QuoteSnapshot } from "../quotes/quoteLifecycle.js";
 import type { ToolAction } from "../actions/toolActions.js";
 import type { Reminder, Task } from "../persistence/persistence.js";
+import { situationSnapshotSchema } from "../situation/situationSnapshot.js";
 import {
   JarvisApiClient,
   JarvisApiError,
@@ -916,6 +917,31 @@ export function createJarvisMcpServer(
         return {
           content: [{ type: "text" as const, text: `NOLAN status is ${status.status}.` }],
           structuredContent: { status },
+        };
+      } catch (error: unknown) {
+        return safeError(error);
+      }
+    },
+  );
+
+  registerAppTool(
+    server,
+    "get_situation_snapshot",
+    {
+      title: "Read NOLAN situation snapshot",
+      description:
+        "Read the current sourced, freshness-labelled situation snapshot. Missing sources remain unavailable or unknown; this tool takes no action.",
+      inputSchema: {},
+      outputSchema: situationSnapshotSchema.shape,
+      annotations: readAnnotations,
+      _meta: { ui: { visibility: ["model"] } },
+    },
+    async () => {
+      try {
+        const snapshot = situationSnapshotSchema.parse(await client.getSituationSnapshot());
+        return {
+          content: [{ type: "text" as const, text: "NOLAN situation snapshot ready." }],
+          structuredContent: snapshot,
         };
       } catch (error: unknown) {
         return safeError(error);
