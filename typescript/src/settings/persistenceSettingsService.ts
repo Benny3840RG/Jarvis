@@ -114,7 +114,7 @@ export async function inspectJsonLock(
     return {
       state: "degraded",
       detail:
-        "Jarvis JSON state lock could not be read. Close the other local writer or select Convex for multi-process use.",
+        "NOLAN JSON state lock could not be read. Close the other local writer or select Convex for multi-process use.",
     };
   }
   let pid: number | null = null;
@@ -130,7 +130,7 @@ export async function inspectJsonLock(
   const owner = pid === null ? "a malformed lock file" : `process ${pid}`;
   return {
     state: "degraded",
-    detail: `Jarvis JSON state is locked by ${owner}. Close the other local writer or select Convex for multi-process use.`,
+    detail: `NOLAN JSON state is locked by ${owner}. Close the other local writer or select Convex for multi-process use.`,
   };
 }
 

@@ -32,7 +32,7 @@ function viewFor(
       ? {
           kind: "misconfigured" as const,
           detail:
-            "Provider misconfigured. Jarvis will not start durable commands until this is fixed.",
+            "Provider misconfigured. NOLAN will not start durable commands until this is fixed.",
         }
       : { kind: "active" as const, provider };
   return buildPersistenceSettingsView({
