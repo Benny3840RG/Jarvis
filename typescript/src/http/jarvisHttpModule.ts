@@ -70,6 +70,7 @@ import { ServiceTokenGuard } from "./serviceTokenGuard.js";
 import { CredentialsController } from "./credentialsController.js";
 import { HudController } from "./hudController.js";
 import { LimitsController } from "./limitsController.js";
+import { PersistencePageController } from "./persistencePageController.js";
 import { GeneralSettingsController } from "./generalSettingsController.js";
 import { HealthController, OperatorSystemController } from "./systemControllers.js";
 import { SystemStatusService } from "./systemStatusService.js";
@@ -170,6 +171,7 @@ export class JarvisHttpModule {
         GeneralSettingsController,
         CredentialsController,
         LimitsController,
+        PersistencePageController,
         HudController,
         TotalityController,
         MemoryChangeSetController,
