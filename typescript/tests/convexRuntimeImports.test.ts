@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { builtinModules } from "node:module";
 import path from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
@@ -12,25 +13,9 @@ import { fileURLToPath } from "node:url";
 
 const TYPESCRIPT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const CONVEX_DIR = path.join(TYPESCRIPT_ROOT, "convex");
-const NODE_BUILTINS = new Set([
-  "assert",
-  "buffer",
-  "child_process",
-  "crypto",
-  "events",
-  "fs",
-  "fs/promises",
-  "http",
-  "https",
-  "net",
-  "os",
-  "path",
-  "process",
-  "stream",
-  "url",
-  "util",
-  "zlib",
-]);
+// Node's own authoritative list, so a bare specifier (`timers`, `vm`, ...) is
+// caught as reliably as a `node:`-prefixed one.
+const NODE_BUILTINS = new Set(builtinModules);
 const IMPORT_PATTERN = /^\s*(import|export)\s+(?!type\b)[^;]*?from\s+["']([^"']+)["']/gm;
 const SIDE_EFFECT_IMPORT = /^\s*import\s+["']([^"']+)["']/gm;
 
@@ -87,6 +72,20 @@ describe("Convex default-runtime bundle", () => {
   it("detects a Node built-in reached through a relative import", () => {
     const found = nodeBuiltinsReachedFrom(path.join(TYPESCRIPT_ROOT, "src/backup/backup.ts"));
     assert.ok(found.length > 0, "the walker must see node: imports when they exist");
+  });
+
+  it("treats every bare Node built-in name as a built-in", () => {
+    for (const name of [
+      "timers",
+      "tty",
+      "worker_threads",
+      "readline",
+      "vm",
+      "module",
+      "fs/promises",
+    ]) {
+      assert.ok(NODE_BUILTINS.has(name), name);
+    }
   });
 
   it('never reaches a Node built-in from a module without "use node"', () => {
