@@ -582,6 +582,19 @@ const statusSchema = z.object({
     model: z.string().nullable(),
     reason: z.string(),
   }),
+  // `nolan sec halt` (#839). Optional so an MCP server still reads an HTTP
+  // service that predates the field during a staggered restart.
+  securityHalt: z
+    .object({
+      state: z.enum(["running", "requested", "acknowledged", "verified-stopped", "unverifiable"]),
+      dispatch: z.enum(["allowed", "refused"]),
+      failClosed: z.boolean(),
+      requestedAt: z.string().nullable(),
+      acknowledgedAt: z.string().nullable(),
+      verifiedStoppedAt: z.string().nullable(),
+      unsettledExecutions: z.number().int().nonnegative().nullable(),
+    })
+    .optional(),
   timezone: z.string(),
   layers: z.object({
     runtime: layerSchema,

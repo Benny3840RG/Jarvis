@@ -64,6 +64,98 @@ export function haltRefFor(reading: HaltReading): string | undefined {
     : `record:${reading.record.id}`;
 }
 
+/**
+ * The halt as a read model for `GET /api/v1/status`. It carries no reason
+ * text: the owner's words stay in the owner-private files and the CLI.
+ */
+export type SecurityHaltStatus = {
+  state: "running" | "requested" | "acknowledged" | "verified-stopped" | "unverifiable";
+  dispatch: "allowed" | "refused";
+  failClosed: boolean;
+  requestedAt: string | null;
+  acknowledgedAt: string | null;
+  verifiedStoppedAt: string | null;
+  unsettledExecutions: number | null;
+};
+
+/**
+ * One derivation for every reader. An acknowledgement counts only when it is
+ * bound to this exact halt (`haltRefFor`); an unreadable acknowledgement
+ * counts as none, so it can never produce a verified stop.
+ */
+export function summarizeSecurityHalt(
+  reading: HaltReading,
+  ackReading: HaltAckReading,
+): SecurityHaltStatus {
+  if (!reading.halted) {
+    return {
+      state: "running",
+      dispatch: "allowed",
+      failClosed: false,
+      requestedAt: null,
+      acknowledgedAt: null,
+      verifiedStoppedAt: null,
+      unsettledExecutions: null,
+    };
+  }
+  const base = {
+    dispatch: "refused" as const,
+    failClosed: reading.record === null,
+    requestedAt: reading.record?.changedAt ?? null,
+  };
+  const haltRef = haltRefFor(reading);
+  if (haltRef === undefined) {
+    return {
+      ...base,
+      state: "unverifiable",
+      acknowledgedAt: null,
+      verifiedStoppedAt: null,
+      unsettledExecutions: null,
+    };
+  }
+  const ack = ackReading.kind === "ack" ? ackReading.ack : undefined;
+  if (ack === undefined || ack.haltRef !== haltRef) {
+    return {
+      ...base,
+      state: "requested",
+      acknowledgedAt: null,
+      verifiedStoppedAt: null,
+      unsettledExecutions: null,
+    };
+  }
+  return {
+    ...base,
+    state: ack.verifiedStoppedAt === null ? "acknowledged" : "verified-stopped",
+    acknowledgedAt: ack.acknowledgedAt,
+    verifiedStoppedAt: ack.verifiedStoppedAt,
+    unsettledExecutions: ack.unsettledExecutions,
+  };
+}
+
+/** The status the service reports when the halt files cannot be read at all. */
+export const UNREADABLE_SECURITY_HALT_STATUS: SecurityHaltStatus = Object.freeze({
+  state: "unverifiable",
+  dispatch: "refused",
+  failClosed: true,
+  requestedAt: null,
+  acknowledgedAt: null,
+  verifiedStoppedAt: null,
+  unsettledExecutions: null,
+});
+
+export function securityHaltStatusReader(
+  halts: FileHaltStore,
+  acks: FileHaltAckStore,
+): () => Promise<SecurityHaltStatus> {
+  return async () => {
+    try {
+      return summarizeSecurityHalt(await halts.read(), await acks.read());
+    } catch {
+      return { ...UNREADABLE_SECURITY_HALT_STATUS };
+    }
+  };
+}
+
 export class FileHaltAckStore {
   constructor(private readonly filePath: string) {
     if (!path.isAbsolute(filePath)) throw new Error("Halt acknowledgement path must be absolute.");

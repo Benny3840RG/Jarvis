@@ -16,6 +16,8 @@ While halted, the running service refuses new governed tool executions and cance
 
 Cancelling sends the provider an abort. A provider that ignores aborts can't be forced to stop, so it keeps the state at acknowledged until it finishes. A cancelled execution ends with an unknown outcome (`indeterminate`), so check what it did before retrying it. A single-use approval cancelled after it was claimed stays used up and needs approving again. The states only cover governed tool executions inside the HTTP service process.
 
+`GET /api/v1/status` reports the same state as `securityHalt`, without your reason text. The overall status is `degraded` while dispatch is refused.
+
 The behaviour, including what counts as halted when the record can't be read, is defined and tested in:
 
 - `src/security/haltControl.ts` (the halt record)
