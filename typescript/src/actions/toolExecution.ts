@@ -13,6 +13,11 @@ import { bindSafety, type SafetyBinding } from "../safety/safetyBinder.js";
 import type { ToolAuthority } from "../runtime/totalityPolicy.js";
 import { securityEducation, type SecurityEducation } from "./securityEducation.js";
 import { canonicalJson } from "./canonicalJson.js";
+import {
+  processRunningExecutions,
+  type RunningExecution,
+  type RunningExecutionRegistry,
+} from "./runningExecutions.js";
 import { sha256Hex } from "./sha256.js";
 import type { ToolAction } from "./toolActions.js";
 
@@ -491,6 +496,11 @@ export class ToolExecutionService {
      * dispatch. A throw or rejection is treated as halted (fail closed).
      */
     private readonly haltGate?: () => Promise<boolean>,
+    /**
+     * Where running attempts register so a halt can cancel them and count
+     * what is still unsettled (#839). Process-wide by default.
+     */
+    private readonly running: RunningExecutionRegistry = processRunningExecutions,
   ) {
     for (const definition of definitions) {
       const key = `${definition.tool}:${definition.operation}`;
@@ -766,6 +776,24 @@ export class ToolExecutionService {
     effectFingerprint: string,
     scope: ExternalExecutionScope | undefined,
   ): Promise<ToolExecutionReceipt> {
+    // Registered before the halt gate is read, so a halt that lands between
+    // that read and the effect still reaches this attempt through `run`.
+    const run = this.running.begin();
+    try {
+      return await this.executeAttempt(input, definition, key, effectFingerprint, scope, run);
+    } finally {
+      this.running.end(run);
+    }
+  }
+
+  private async executeAttempt(
+    input: ExecuteInput,
+    definition: ToolExecutionDefinition | undefined,
+    key: string,
+    effectFingerprint: string,
+    scope: ExternalExecutionScope | undefined,
+    run: RunningExecution,
+  ): Promise<ToolExecutionReceipt> {
     const startedAt = new Date().toISOString();
 
     const minimumAuthority = definition?.minimumAuthority;
@@ -880,11 +908,16 @@ export class ToolExecutionService {
     // the same approved action can run after the owner resumes. The existing
     // `safety-blocked` code is reused so persisted receipts need no new
     // validator literal.
-    if (this.haltGate !== undefined && (await this.isHalted(this.haltGate))) {
-      return this.persistDecision(
+    const haltRefusal = () =>
+      this.persistDecision(
         key,
         receipt(input.action, input.idempotencyKey, "blocked", "safety-blocked", startedAt, input),
       );
+    if (
+      run.signal.aborted ||
+      (this.haltGate !== undefined && (await this.isHalted(this.haltGate)))
+    ) {
+      return haltRefusal();
     }
 
     // Deterministic and must run before the claim below: an invalid
@@ -904,6 +937,8 @@ export class ToolExecutionService {
     if (definition.preflight) {
       const preflightController = new AbortController();
       const preflightTimeout = setTimeout(() => preflightController.abort(), timeoutMs);
+      const haltPreflight = () => preflightController.abort();
+      run.signal.addEventListener("abort", haltPreflight, { once: true });
       try {
         await Promise.race([
           definition.preflight(parsed.data, preflightController.signal),
@@ -916,6 +951,7 @@ export class ToolExecutionService {
           ),
         ]);
       } catch {
+        if (run.signal.aborted) return haltRefusal();
         return this.persistDecision(
           key,
           receipt(
@@ -929,8 +965,13 @@ export class ToolExecutionService {
         );
       } finally {
         clearTimeout(preflightTimeout);
+        run.signal.removeEventListener("abort", haltPreflight);
       }
     }
+
+    // A halt that landed during preflight refuses here, before anything is
+    // claimed or leased, so the approval is not consumed.
+    if (run.signal.aborted) return haltRefusal();
 
     // Authoritative, execute-time re-check — placed as close as possible to
     // the actual external-effect call below, after every deterministic
@@ -1084,10 +1125,20 @@ export class ToolExecutionService {
       },
     };
 
+    // A halt cancels this attempt through the same abort a timeout or a lost
+    // lease uses, so an effect it interrupts ends as indeterminate.
+    const haltEffect = () => controller.abort();
+    run.signal.addEventListener("abort", haltEffect, { once: true });
+
     let effect: Promise<unknown> | undefined;
     let effectSettled = false;
     try {
+      // A halt during the claim or lease check: nothing has run, so refuse.
+      // A single-use claim taken just now stays consumed (claims are never
+      // released), so the owner re-approves that action after resume.
+      if (run.signal.aborted) return await haltRefusal();
       effect = definition.execute(parsed.data, controller.signal, context);
+      run.trackEffect(effect);
       effect.then(
         () => (effectSettled = true),
         () => (effectSettled = true),
@@ -1246,6 +1297,7 @@ export class ToolExecutionService {
       return result;
     } finally {
       clearTimeout(timeout);
+      run.signal.removeEventListener("abort", haltEffect);
       if (leaseExecutionId !== undefined) {
         // Release only once the provider has actually settled. A timed-out
         // provider may ignore the abort signal and still act, so its lease

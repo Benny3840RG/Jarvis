@@ -12,8 +12,9 @@ import { z } from "zod";
  *
  * Fail closed: a missing file means "not halted"; any other read problem
  * (permissions, a symlink, invalid JSON, an unknown shape, an oversized file)
- * means "halted". This module only records and reads intent. It does not
- * cancel in-flight work, so it never reports `verified_stopped`.
+ * means "halted". This module only records and reads intent; the service's
+ * HaltSupervisor (haltSupervisor.ts) cancels in-flight work and writes the
+ * acknowledged and verified-stopped states.
  */
 
 export const HALT_FILE_BASENAME = "jarvis-security-halt.json";
@@ -59,35 +60,10 @@ export class FileHaltStore {
   }
 
   async read(): Promise<HaltReading> {
-    let raw: string;
-    try {
-      // O_NOFOLLOW: a symlinked halt file is refused (and so reads as halted).
-      // O_NONBLOCK: opening a FIFO with no writer returns at once instead of
-      // hanging the dispatch gate; the regular-file check below then refuses it.
-      const handle = await open(
-        this.filePath,
-        fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW | fsConstants.O_NONBLOCK,
-      );
-      try {
-        const stat = await handle.stat();
-        if (!stat.isFile()) return failClosed("halt record is not a regular file");
-        if (stat.size > MAX_HALT_FILE_BYTES) return failClosed("halt record is too large");
-        raw = await handle.readFile({ encoding: "utf8" });
-      } finally {
-        await handle.close();
-      }
-    } catch (error: unknown) {
-      if (isErrno(error) && error.code === "ENOENT") return { halted: false, record: null };
-      return failClosed("halt record could not be read");
-    }
-    if (Buffer.byteLength(raw) > MAX_HALT_FILE_BYTES) return failClosed("halt record is too large");
-    let value: unknown;
-    try {
-      value = JSON.parse(raw);
-    } catch {
-      return failClosed("halt record is not valid JSON");
-    }
-    const parsed = haltRecordSchema.safeParse(value);
+    const file = await readBoundedJsonFile(this.filePath);
+    if (file.kind === "missing") return { halted: false, record: null };
+    if (file.kind === "unreadable") return failClosed(`halt record ${file.problem}`);
+    const parsed = haltRecordSchema.safeParse(file.value);
     if (!parsed.success) return failClosed("halt record has an unknown shape");
     return parsed.data.state === "none"
       ? { halted: false, record: parsed.data }
@@ -116,33 +92,78 @@ export class FileHaltStore {
 
   private async write(record: HaltRecord): Promise<HaltRecord> {
     const validated = haltRecordSchema.parse(record);
-    const directory = path.dirname(this.filePath);
-    await mkdir(directory, { recursive: true, mode: 0o700 });
-    const temporary = path.join(
-      directory,
-      `.${path.basename(this.filePath)}.${process.pid}.${Date.now()}.tmp`,
-    );
-    const handle = await open(
-      temporary,
-      fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_NOFOLLOW,
-      0o600,
-    );
-    try {
-      await handle.writeFile(`${JSON.stringify(validated, null, 2)}\n`, { encoding: "utf8" });
-      await handle.sync();
-    } catch (error: unknown) {
-      await handle.close();
-      await unlink(temporary).catch(() => undefined);
-      throw error;
-    }
-    await handle.close();
-    try {
-      await rename(temporary, this.filePath);
-    } catch (error: unknown) {
-      await unlink(temporary).catch(() => undefined);
-      throw error;
-    }
+    await writePrivateJsonAtomic(this.filePath, validated);
     return validated;
+  }
+}
+
+export type BoundedJsonFile =
+  { kind: "missing" } | { kind: "unreadable"; problem: string } | { kind: "ok"; value: unknown };
+
+/**
+ * Reads a small owner-private JSON file without following symlinks or
+ * blocking on a FIFO. Only ENOENT reads as missing; every other problem is
+ * reported so the caller can fail closed.
+ */
+export async function readBoundedJsonFile(filePath: string): Promise<BoundedJsonFile> {
+  let raw: string;
+  try {
+    // O_NOFOLLOW: a symlinked file is refused. O_NONBLOCK: opening a FIFO
+    // with no writer returns at once instead of hanging the caller; the
+    // regular-file check below then refuses it.
+    const handle = await open(
+      filePath,
+      fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW | fsConstants.O_NONBLOCK,
+    );
+    try {
+      const stat = await handle.stat();
+      if (!stat.isFile()) return { kind: "unreadable", problem: "is not a regular file" };
+      if (stat.size > MAX_HALT_FILE_BYTES) return { kind: "unreadable", problem: "is too large" };
+      raw = await handle.readFile({ encoding: "utf8" });
+    } finally {
+      await handle.close();
+    }
+  } catch (error: unknown) {
+    if (isErrno(error) && error.code === "ENOENT") return { kind: "missing" };
+    return { kind: "unreadable", problem: "could not be read" };
+  }
+  if (Buffer.byteLength(raw) > MAX_HALT_FILE_BYTES) {
+    return { kind: "unreadable", problem: "is too large" };
+  }
+  try {
+    return { kind: "ok", value: JSON.parse(raw) as unknown };
+  } catch {
+    return { kind: "unreadable", problem: "is not valid JSON" };
+  }
+}
+
+/** Atomically replaces `filePath` with owner-only (0600) JSON. */
+export async function writePrivateJsonAtomic(filePath: string, value: unknown): Promise<void> {
+  const directory = path.dirname(filePath);
+  await mkdir(directory, { recursive: true, mode: 0o700 });
+  const temporary = path.join(
+    directory,
+    `.${path.basename(filePath)}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2)}.tmp`,
+  );
+  const handle = await open(
+    temporary,
+    fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_NOFOLLOW,
+    0o600,
+  );
+  try {
+    await handle.writeFile(`${JSON.stringify(value, null, 2)}\n`, { encoding: "utf8" });
+    await handle.sync();
+  } catch (error: unknown) {
+    await handle.close();
+    await unlink(temporary).catch(() => undefined);
+    throw error;
+  }
+  await handle.close();
+  try {
+    await rename(temporary, filePath);
+  } catch (error: unknown) {
+    await unlink(temporary).catch(() => undefined);
+    throw error;
   }
 }
 
