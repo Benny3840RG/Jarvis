@@ -45,7 +45,13 @@ import {
   createTaskReminderToolDefinitions,
   reminderRescheduleEnabledFromEnv,
 } from "./taskReminderTools.js";
-import { ToolExecutionService, type ToolExecutionDefinition } from "./toolExecution.js";
+import {
+  EXECUTION_LEASE_RENEW_MS,
+  ToolExecutionService,
+  type ToolExecutionDefinition,
+} from "./toolExecution.js";
+import { jarvisDataFile } from "../persistence/jarvisDataPaths.js";
+import { FileHaltStore, HALT_FILE_BASENAME, haltGateFromStore } from "../security/haltControl.js";
 
 export function createToolExecutionDefinitions(
   noteStore: NoteStore,
@@ -109,6 +115,8 @@ export function createToolExecutionDefinitions(
  * JARVIS_REMINDER_RESCHEDULE_ENABLED is "true". `errands:create` writes the same local JSON errand file the HTTP
  * errand routes use (its file lock is cross-process). `device:announce` (#836) is
  * registered only when JARVIS_DEVICE_BINDINGS_JSON is set; invalid bindings refuse startup.
+ * Every execution first checks the `npm run sec -- halt` record (#839); an unreadable
+ * record counts as halted.
  */
 export function createToolExecutionServiceFromEnv(
   quoteEmailProvider: QuoteEmailProvider | null = createQuoteEmailProviderFromEnv(),
@@ -139,5 +147,7 @@ export function createToolExecutionServiceFromEnv(
     new ConvexExternalReconciliationStore(),
     new ConvexSingleUseConsumptionClaimStore(),
     new ConvexExecutionEligibilityStore(),
+    EXECUTION_LEASE_RENEW_MS,
+    haltGateFromStore(new FileHaltStore(jarvisDataFile(HALT_FILE_BASENAME))),
   );
 }

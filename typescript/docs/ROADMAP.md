@@ -1,5 +1,17 @@
 # Jarvis TypeScript Roadmap
 
+## Security halt dispatch gate (#839, 2026-11-20)
+
+`npm run sec -- halt|status|resume` writes and reads an owner halt record in the data directory. `ToolExecutionService` checks it before preflight and the single-use claim on every non-dry-run execution, and refuses with `safety-blocked`. A missing record means running. An unreadable, symlinked, oversized or unknown record means halted. A refused attempt consumes nothing. The existing error code is reused, so Convex validators are unchanged.
+
+See [security halt](operators/security-halt.md).
+
+Next:
+
+1. Cancel in-flight workers and record `acknowledged` and `verified_stopped` separately from `requested`.
+2. Feed the halt record into the privileged-operation policy context once a broker exists.
+3. Show the halt state on the HUD and the system status (a voice/HUD change, so it needs a spoken check).
+
 ## Situation Snapshot MCP read surface (#837 slice 2, 2026-11-20)
 
 - Added one model-visible `get_situation_snapshot` tool over the existing
