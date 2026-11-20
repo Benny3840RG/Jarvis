@@ -58,8 +58,12 @@ function describeAck(reading: HaltReading, ackReading: HaltAckReading): string {
   if (ackReading.kind === "unreadable") {
     return `Service: NOT ACKNOWLEDGED (acknowledgement file ${ackReading.problem}). Not a verified stop.`;
   }
+  const haltRef = haltRefFor(reading);
+  if (haltRef === undefined) {
+    return "Service: cannot be verified (the halt record cannot be identified, so no acknowledgement can be matched to it). Not a verified stop.";
+  }
   const ack = ackReading.kind === "ack" ? ackReading.ack : undefined;
-  if (ack === undefined || ack.haltRef !== haltRefFor(reading)) {
+  if (ack === undefined || ack.haltRef !== haltRef) {
     return "Service: not acknowledged yet. A running NOLAN service acknowledges within a few seconds; if this persists, the service is not running or cannot write its data directory. Not a verified stop.";
   }
   const cancelled = `${ack.cancelledExecutions} governed execution${ack.cancelledExecutions === 1 ? "" : "s"} cancelled`;

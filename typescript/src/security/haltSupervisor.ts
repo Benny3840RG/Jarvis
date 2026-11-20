@@ -30,14 +30,11 @@ import {
 
 export const HALT_ACK_FILE_BASENAME = "jarvis-security-halt-ack.json";
 export const HALT_SUPERVISOR_INTERVAL_MS = 1_000;
-/** Matches the halt record of a fail-closed (unreadable) halt. */
-export const FAIL_CLOSED_HALT_REF = "fail-closed";
-
 const haltAckSchema = z
   .object({
     version: z.literal(1),
     scope: z.literal("governed-tool-executions"),
-    haltRef: z.string().min(1).max(64),
+    haltRef: z.string().min(1).max(200),
     pid: z.number().int().positive(),
     acknowledgedAt: z.string().datetime(),
     cancelledExecutions: z.number().int().nonnegative(),
@@ -52,10 +49,15 @@ export type HaltAck = z.infer<typeof haltAckSchema>;
 export type HaltAckReading =
   { kind: "none" } | { kind: "unreadable"; problem: string } | { kind: "ack"; ack: HaltAck };
 
-/** The acknowledgement reference that a halt reading must match. */
+/**
+ * The acknowledgement reference that a halt reading must match: the record's
+ * `changedAt`, or the identity of one particular unreadable file. Undefined
+ * when not halted, or when a fail-closed halt cannot be identified (that halt
+ * is still enforced and cancelled, but never reported as acknowledged).
+ */
 export function haltRefFor(reading: HaltReading): string | undefined {
   if (!reading.halted) return undefined;
-  return reading.record?.changedAt ?? FAIL_CLOSED_HALT_REF;
+  return reading.record?.changedAt ?? reading.failClosedRef;
 }
 
 export class FileHaltAckStore {
@@ -100,8 +102,7 @@ export class HaltSupervisor {
   /** One poll: cancel while halted, then write the acknowledgement if it changed. */
   async tick(): Promise<void> {
     const reading = await this.halts.read();
-    const haltRef = haltRefFor(reading);
-    if (haltRef === undefined) {
+    if (!reading.halted) {
       this.current = undefined;
       return;
     }
@@ -110,6 +111,11 @@ export class HaltSupervisor {
     // is still cancelled.
     const cancelled = this.running.cancelAll();
     const unsettled = this.running.unsettled();
+    const haltRef = haltRefFor(reading);
+    if (haltRef === undefined) {
+      this.current = undefined;
+      return;
+    }
     const now = (this.options.now ?? (() => new Date()))().toISOString();
     const previous = this.current?.haltRef === haltRef ? this.current : undefined;
     const next: HaltAck = {

@@ -19,7 +19,7 @@ import {
 } from "../src/actions/toolExecution.js";
 import { FileHaltStore, HALT_FILE_BASENAME } from "../src/security/haltControl.js";
 import {
-  FAIL_CLOSED_HALT_REF,
+  haltRefFor,
   FileHaltAckStore,
   HALT_ACK_FILE_BASENAME,
   HaltSupervisor,
@@ -314,10 +314,53 @@ describe("halt supervisor", () => {
     const reading = await acks.read();
     assert.equal(reading.kind === "ack" && reading.ack.haltRef, second.changedAt);
 
-    await writeFile(path.join(directory, HALT_FILE_BASENAME), "{not json");
+    const haltFile = path.join(directory, HALT_FILE_BASENAME);
+    await writeFile(haltFile, "{not json");
     await supervisor.tick();
     const failClosed = await acks.read();
-    assert.equal(failClosed.kind === "ack" && failClosed.ack.haltRef, FAIL_CLOSED_HALT_REF);
+    const firstRef = failClosed.kind === "ack" ? failClosed.ack.haltRef : "";
+    assert.match(firstRef, /^fail-closed:/);
+    assert.equal(firstRef, haltRefFor(await halts.read()), "stable while the file is unchanged");
+  });
+
+  it("never matches an old fail-closed acknowledgement to a later fail-closed halt", async () => {
+    const haltFile = path.join(directory, HALT_FILE_BASENAME);
+    await writeFile(haltFile, "{not json");
+    await new HaltSupervisor(halts, acks, new RunningExecutionRegistry()).tick();
+    assert.equal((await acks.read()).kind, "ack");
+
+    // The service is gone; the record is replaced by a different unreadable one.
+    await rm(haltFile);
+    await writeFile(haltFile, "{still not json");
+    const later = await halts.read();
+    assert.equal(later.halted, true);
+    const out: string[] = [];
+    await runSecurityHalt(
+      ["status"],
+      halts,
+      { out: (l) => out.push(l), err: () => undefined },
+      acks,
+    );
+    assert.match(out.join("\n"), /not acknowledged yet/);
+    assert.doesNotMatch(out.join("\n"), /VERIFIED STOPPED/);
+  });
+
+  it("cancels but never acknowledges a fail-closed halt it cannot identify", async () => {
+    const registry = new RunningExecutionRegistry();
+    const run = registry.begin();
+    const unidentified = new FileHaltStore(path.join(directory, HALT_FILE_BASENAME));
+    unidentified.read = async () => ({ halted: true, record: null, failClosed: "unstatable" });
+    await new HaltSupervisor(unidentified, acks, registry).tick();
+    assert.equal(run.signal.aborted, true);
+    assert.deepEqual(await acks.read(), { kind: "none" });
+    const out: string[] = [];
+    await runSecurityHalt(
+      ["status"],
+      unidentified,
+      { out: (l) => out.push(l), err: () => undefined },
+      acks,
+    );
+    assert.match(out.join("\n"), /cannot be verified/);
   });
 
   it("reads an invalid acknowledgement as unreadable", async () => {

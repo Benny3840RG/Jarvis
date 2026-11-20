@@ -1,5 +1,5 @@
 import { constants as fsConstants } from "node:fs";
-import { mkdir, open, rename, unlink } from "node:fs/promises";
+import { lstat, mkdir, open, rename, unlink } from "node:fs/promises";
 import path from "node:path";
 
 import { z } from "zod";
@@ -37,7 +37,17 @@ export type HaltRecord = z.infer<typeof haltRecordSchema>;
 
 export type HaltReading =
   | { halted: false; record: HaltRecord | null }
-  | { halted: true; record: HaltRecord | null; failClosed?: string };
+  | {
+      halted: true;
+      record: HaltRecord | null;
+      failClosed?: string;
+      /**
+       * Identifies this particular fail-closed condition (the file's inode,
+       * times and size), so an acknowledgement of an earlier unreadable
+       * record never counts for a later one.
+       */
+      failClosedRef?: string;
+    };
 
 export function normalizeHaltReason(reason: string): string {
   // Collapse control characters so the record stays one line in a terminal.
@@ -62,12 +72,30 @@ export class FileHaltStore {
   async read(): Promise<HaltReading> {
     const file = await readBoundedJsonFile(this.filePath);
     if (file.kind === "missing") return { halted: false, record: null };
-    if (file.kind === "unreadable") return failClosed(`halt record ${file.problem}`);
+    if (file.kind === "unreadable") {
+      return failClosed(`halt record ${file.problem}`, await this.failClosedRef());
+    }
     const parsed = haltRecordSchema.safeParse(file.value);
-    if (!parsed.success) return failClosed("halt record has an unknown shape");
+    if (!parsed.success) {
+      return failClosed("halt record has an unknown shape", await this.failClosedRef());
+    }
     return parsed.data.state === "none"
       ? { halted: false, record: parsed.data }
       : { halted: true, record: parsed.data };
+  }
+
+  /**
+   * Any rewrite, replacement or chmod of the file changes its inode or ctime,
+   * so this identifies one fail-closed condition. Undefined when the path
+   * cannot even be stat'ed: that halt can then never be acknowledged.
+   */
+  private async failClosedRef(): Promise<string | undefined> {
+    try {
+      const info = await lstat(this.filePath, { bigint: true });
+      return `fail-closed:${info.dev}:${info.ino}:${info.mtimeNs}:${info.ctimeNs}:${info.size}`;
+    } catch {
+      return undefined;
+    }
   }
 
   async halt(reason: string, now: Date = new Date()): Promise<HaltRecord> {
@@ -180,8 +208,13 @@ export function haltGateFromStore(store: FileHaltStore): ExecutionHaltGate {
   };
 }
 
-function failClosed(reason: string): HaltReading {
-  return { halted: true, record: null, failClosed: reason };
+function failClosed(reason: string, failClosedRef: string | undefined): HaltReading {
+  return {
+    halted: true,
+    record: null,
+    failClosed: reason,
+    ...(failClosedRef === undefined ? {} : { failClosedRef }),
+  };
 }
 
 function isErrno(error: unknown): error is NodeJS.ErrnoException {
