@@ -280,7 +280,7 @@ describe("npm run sec", () => {
     const a = io();
     assert.equal(await runSecurityHalt(["halt", "owner stop"], store, a.sink), 0);
     assert.match(a.out.join("\n"), /HALTED \(requested 2026-11-20T01:00:00.000Z: owner stop\)/);
-    assert.match(a.out.join("\n"), /not a verified stop/);
+    assert.match(a.out.join("\n"), /not a verified stop/i);
 
     const b = io();
     assert.equal(await runSecurityHalt(["status"], store, b.sink), 0);

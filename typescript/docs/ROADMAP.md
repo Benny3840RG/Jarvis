@@ -1,16 +1,26 @@
 # Jarvis TypeScript Roadmap
 
+## Security halt cancels in-flight work (#839, 2026-11-21)
+
+Every governed tool execution now registers in a process-wide registry. While halted, a supervisor in the HTTP service cancels each registered execution every second. It writes an owner-private acknowledgement bound to the exact halt record. `npm run sec -- halt` waits up to 5 s and reports `requested`, `acknowledged` or `verified stopped`.
+
+- A halt before the effect starts gives a `safety-blocked` refusal.
+- A halt after the effect starts gives `indeterminate`, never `succeeded` or `failed`.
+- An effect that ignores its abort keeps the state at `acknowledged` until it settles.
+
+The states cover only governed tool executions in the service process. No new receipt codes, so Convex validators are unchanged.
+
+Next:
+
+1. Feed the halt record into the privileged-operation policy context once a broker exists.
+2. Show the halt state on the HUD and the system status (a voice/HUD change, so it needs a spoken check).
+3. Extend cancellation to non-tool background loops (reconciliation, reminders), if the owner wants those covered.
+
 ## Security halt dispatch gate (#839, 2026-11-20)
 
 `npm run sec -- halt|status|resume` writes and reads an owner halt record in the data directory. `ToolExecutionService` checks it before preflight and the single-use claim on every non-dry-run execution, and refuses with `safety-blocked`. A missing record means running. An unreadable, symlinked, oversized or unknown record means halted. A refused attempt consumes nothing. The existing error code is reused, so Convex validators are unchanged.
 
 See [security halt](operators/security-halt.md).
-
-Next:
-
-1. Cancel in-flight workers and record `acknowledged` and `verified_stopped` separately from `requested`.
-2. Feed the halt record into the privileged-operation policy context once a broker exists.
-3. Show the halt state on the HUD and the system status (a voice/HUD change, so it needs a spoken check).
 
 ## Situation Snapshot MCP read surface (#837 slice 2, 2026-11-20)
 
