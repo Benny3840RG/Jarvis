@@ -1,5 +1,15 @@
 # Jarvis TypeScript Roadmap
 
+## Security halt in system status (#839, 2026-11-21)
+
+`GET /api/v1/status` now carries `securityHalt`: the halt `state` (`running`, `requested`, `acknowledged`, `verified-stopped` or `unverifiable`), whether dispatch is allowed, the timestamps and the unsettled count. The owner's reason text is never included. While dispatch is refused, the overall status is `degraded`. A reader failure is reported as refused and unverifiable. The status route derives the state with `summarizeSecurityHalt`. The CLI matches acknowledgements to the halt through the same `haltRefFor` binding.
+
+Next:
+
+1. Show `securityHalt` on the HUD (a HUD change, so it needs a spoken check).
+2. Feed the halt record into the privileged-operation policy context once a broker exists.
+3. Extend cancellation to non-tool background loops (reconciliation, reminders), if the owner wants those covered.
+
 ## Security halt cancels in-flight work (#839, 2026-11-21)
 
 Every governed tool execution now registers in a process-wide registry. While halted, a supervisor in the HTTP service cancels each registered execution every second. It writes an owner-private acknowledgement bound to the exact halt record. `npm run sec -- halt` waits up to 5 s and reports `requested`, `acknowledged` or `verified stopped`.
@@ -9,12 +19,6 @@ Every governed tool execution now registers in a process-wide registry. While ha
 - An effect that ignores its abort keeps the state at `acknowledged` until it settles.
 
 The states cover only governed tool executions in the service process. No new receipt codes, so Convex validators are unchanged.
-
-Next:
-
-1. Feed the halt record into the privileged-operation policy context once a broker exists.
-2. Show the halt state on the HUD and the system status (a voice/HUD change, so it needs a spoken check).
-3. Extend cancellation to non-tool background loops (reconciliation, reminders), if the owner wants those covered.
 
 ## Security halt dispatch gate (#839, 2026-11-20)
 

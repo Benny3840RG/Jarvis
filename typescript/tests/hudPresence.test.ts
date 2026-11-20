@@ -40,6 +40,15 @@ const BASE: SystemStatus = {
     autonomy: { status: "ready" },
     reliability: { status: "ready" },
   },
+  securityHalt: {
+    state: "running",
+    dispatch: "allowed",
+    failClosed: false,
+    requestedAt: null,
+    acknowledgedAt: null,
+    verifiedStoppedAt: null,
+    unsettledExecutions: null,
+  },
   zState: "active",
   checkedAt: "2026-08-21T00:00:00.000Z",
 };
