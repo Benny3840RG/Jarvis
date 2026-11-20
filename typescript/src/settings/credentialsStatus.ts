@@ -92,7 +92,7 @@ export type CredentialsSource = {
 };
 
 const FAIL_CLOSED_BANNER =
-  "Service token is missing. Jarvis is fail-closed until JARVIS_SERVICE_TOKEN is set. Dependent status will not authenticate.";
+  "Service token is missing. NOLAN is fail-closed until JARVIS_SERVICE_TOKEN is set. Dependent status will not authenticate.";
 
 const APPROVALS_UNAVAILABLE = "Approvals unavailable.";
 
@@ -362,7 +362,7 @@ export function captureCredentials(source: CredentialsSource): CredentialsRuntim
     previous: servicePrevious,
     owner: "jarvis-cli",
     missingStatus: "Missing",
-    note: "Authenticates trusted Jarvis clients to owner jarvis-cli. This is not a sign-in or a password.",
+    note: "Authenticates trusted NOLAN clients to owner jarvis-cli. This is not a sign-in or a password.",
     collision: false,
     warning: null,
   });

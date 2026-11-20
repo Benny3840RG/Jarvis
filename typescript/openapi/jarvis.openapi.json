@@ -577,7 +577,7 @@
         "description": "Read-only snapshot of what is going on now, composed from existing read models: local time, system health, NOLAN brain configuration, background reconciliation, open tasks, reminders due or coming up, today's jobs and pending approval counts. Every field carries source, observedAt and freshness (live, cached, stale or unknown). Unobserved fields carry no value and a reason; calendar, presence and devices are unknown until a source is commissioned and are never inferred. Cached data is never reported as live. It stages, approves and executes nothing and actuates no device.",
         "tags": ["System"],
         "x-mcp-tool": {
-          "exposed": false,
+          "exposed": true,
           "annotations": {
             "readOnlyHint": true,
             "destructiveHint": false,
@@ -740,6 +740,39 @@
         "responses": {
           "200": {
             "description": "Loopback Limits settings HTML. Provider-quota cards are UNKNOWN. Nothing is written or enforced.",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/settings/persistence": {
+      "get": {
+        "operationId": "getPersistenceSettingsPage",
+        "summary": "Open the loopback persistence settings page",
+        "description": "Serves the local operator Persistence page on a loopback bind only. This route is public (no Bearer token) so the Danger zone link to Persistence Backup (/settings/persistence#backup) resolves. It is a read-only projection of the backup CLI: the active provider and the exact npm run backup commands. The page has no script, runs nothing, does not store a Bearer token, and does not switch providers or offer a JSON fallback. Archive v4 stays labeled Partial / JSON-only. Running an action stays on POST /api/v1/settings/persistence/actions. Non-loopback binds do not serve the page.",
+        "tags": ["System"],
+        "security": [],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Loopback Persistence settings HTML. Read only; nothing is run.",
             "content": {
               "text/html": {
                 "schema": {

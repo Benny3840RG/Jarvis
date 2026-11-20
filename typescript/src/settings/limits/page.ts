@@ -33,7 +33,7 @@ function resourceCard(resource: ProviderQuotaResource): string {
   </article>`;
 }
 
-const PAGE_STYLE = `
+export const SETTINGS_PAGE_STYLE = `
     :root { color-scheme: dark; --bg:#1c1612; --panel:#2a211c; --line:#5c4a3d; --text:#f6efe6; --muted:#c4b5a5; --accent:#c47b4a; --gold:#d7a15f; --danger:#a33b32; }
     * { box-sizing: border-box; }
     body { margin:0; font:16px/1.45 Inter, ui-sans-serif, system-ui, sans-serif; background:var(--bg); color:var(--text); }
@@ -82,7 +82,7 @@ export function renderLimitsPage(model: ProviderQuotaReadModel): string {
   <meta name="referrer" content="no-referrer" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src 'none'; connect-src 'none'; base-uri 'none'; form-action 'none'" />
   <title>Jarvis Settings · Limits</title>
-  <style>${PAGE_STYLE}</style>
+  <style>${SETTINGS_PAGE_STYLE}</style>
 </head>
 <body>
   <main>

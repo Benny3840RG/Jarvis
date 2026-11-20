@@ -41,6 +41,7 @@ const PUBLIC_OPERATIONS = new Set([
   "GET /settings/credentials",
   "GET /settings/danger",
   "GET /settings/limits",
+  "GET /settings/persistence",
   "GET /hud",
   "GET /api/v1/hud/snapshot",
   // Owner decision queue (#801): the page shell and the read-only queue are
