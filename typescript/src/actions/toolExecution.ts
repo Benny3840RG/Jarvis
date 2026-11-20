@@ -970,6 +970,7 @@ export class ToolExecutionService {
     // release it while the other's effect still runs.
     let leaseExecutionId: string | undefined;
     let leaseRenewal: NodeJS.Timeout | undefined;
+    const controller = new AbortController();
     if (input.action.consumptionPolicy === "single-use") {
       const claim = await this.claims.claim(input.action, input.idempotencyKey);
       if (!claim.claimed) {
@@ -1002,13 +1003,32 @@ export class ToolExecutionService {
         );
       }
       leaseExecutionId = executionId;
+      // A lease that cannot be kept live must not end in "succeeded": a revoke
+      // could commit while the provider still runs. `renewed: false` means the
+      // lease already ended; two consecutive failed renewals stay inside the
+      // 35s lease but leave no margin. Either aborts the execution, which ends
+      // through the timeout path as indeterminate rather than succeeded.
+      // Renewal keeps running after a loss: a provider that ignores the abort
+      // is still acting, and a later successful renewal still blocks revoke.
+      let failedRenewals = 0;
+      const loseLease = () => controller.abort();
       leaseRenewal = setInterval(() => {
-        void this.eligibility.renew?.(input.action, executionId).catch(() => undefined);
+        const renew = this.eligibility.renew;
+        if (renew === undefined) return;
+        void renew.call(this.eligibility, input.action, executionId).then(
+          (result) => {
+            if (result.renewed === false) loseLease();
+            else failedRenewals = 0;
+          },
+          () => {
+            failedRenewals += 1;
+            if (failedRenewals >= 2) loseLease();
+          },
+        );
       }, this.leaseRenewMs);
       leaseRenewal.unref();
     }
 
-    const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
     const actionFingerprint = fingerprintToolAction(input.action);
     const externalReconciliationId = scope ? reconciliationId(scope) : undefined;
