@@ -331,7 +331,7 @@ describe("Jarvis MCP preview protocol", () => {
       if (isCancelledToolResult(outcome)) {
         assert.equal(outcome.isError, true);
         const text = outcome.content.find((item) => item.type === "text");
-        assert.equal(text?.text, "Jarvis API request was cancelled.");
+        assert.equal(text?.text, "NOLAN API request was cancelled.");
       }
     } finally {
       await client.close();

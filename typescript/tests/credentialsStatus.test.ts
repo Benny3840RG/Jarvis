@@ -17,6 +17,7 @@ import {
   selectCredentialsRuntime,
 } from "../src/settings/credentialsStatus.js";
 import { MCP_TOOL_OPERATIONS } from "../src/mcp/operationContract.js";
+import { bundleHud } from "../src/mcp/hud/bundle.mjs";
 
 const SERVICE = "service-token-value-0123456789abcdef-EXTRA";
 const APPROVAL = "approval-token-value-0123456789abcdef-EXTRA";
@@ -339,7 +340,7 @@ describe("credentials page and MCP surface", () => {
   });
 
   it("keeps the MCP widget on status and runbook links", () => {
-    const widget = readFileSync(new URL("../src/mcp/dashboard-v1.html", import.meta.url), "utf8");
+    const widget = bundleHud();
     const start = widget.indexOf('id="view-credentials"');
     const end = widget.indexOf('id="view-persistence"');
     assert.ok(start !== -1 && end > start, "Credentials view was not found");

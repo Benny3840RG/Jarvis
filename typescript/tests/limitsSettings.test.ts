@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { afterEach, describe, it } from "node:test";
 
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
@@ -24,8 +23,9 @@ import type {
   ReminderUpdate,
   Task,
 } from "../src/persistence/persistence.js";
+import { bundleHud } from "../src/mcp/hud/bundle.mjs";
 
-const widget = readFileSync(new URL("../src/mcp/dashboard-v1.html", import.meta.url), "utf8");
+const widget = bundleHud();
 const openApps: NestFastifyApplication[] = [];
 
 function persistence(): PersistenceProvider {

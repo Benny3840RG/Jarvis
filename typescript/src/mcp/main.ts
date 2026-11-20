@@ -19,7 +19,7 @@ async function main(): Promise<void> {
     undefined,
     createPostHogTelemetryFromEnv(),
   );
-  console.log(`Jarvis MCP preview is listening on ${running.url}`);
+  console.log(`NOLAN MCP preview is listening on ${running.url}`);
 
   const shutdown = async () => {
     await running.close();
@@ -31,7 +31,7 @@ async function main(): Promise<void> {
 
 main().catch(() => {
   console.error(
-    "Jarvis MCP preview failed to start. Check the service token, API URL, host and port configuration.",
+    "NOLAN MCP preview failed to start. Check the service token, API URL, host and port configuration.",
   );
   process.exitCode = 1;
 });

@@ -19,23 +19,10 @@ import { pathToFileURL } from "node:url";
  * Remove an entry as soon as a fixed version is available. Adding or renewing
  * an entry is an owner decision.
  */
-export const ALLOWLIST = new Map([
-  [
-    "GHSA-FC5Q-39XC-VJPF",
-    {
-      reason:
-        "picomatch ReDoS via repeated extglobs (high). Affects every published picomatch " +
-        "(<=4.0.7, latest at 2026-11-18), so no override or upgrade clears it. Reached only " +
-        "through dev tooling (typescript-eslint, @convex-dev/eslint-plugin, vite, vitest via " +
-        "tinyglobby/fdir), which match glob patterns from this repository's own config, not " +
-        "untrusted input. `npm audit fix --force` would downgrade vitest to 3.1.4 (breaking). " +
-        "Owner-approved 2026-11-18. Remove once a fixed picomatch is published.",
-      added: "2026-11-18",
-      expires: "2026-12-02",
-      devOnly: true,
-    },
-  ],
-]);
+// Empty: GHSA-fc5q-39xc-vjpf (picomatch), added 2026-11-18, was removed the same
+// day once `npm audit` stopped reporting it. Add entries only with an owner decision.
+/** @type {Map<string, {reason: string, added: string, expires: string, devOnly: boolean}>} */
+export const ALLOWLIST = new Map();
 
 const BLOCKING_SEVERITIES = new Set(["moderate", "high", "critical"]);
 
