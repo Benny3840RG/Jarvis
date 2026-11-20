@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -152,6 +153,16 @@ describe("halt record", () => {
     );
     await symlink(target, haltPath);
     assert.equal((await store.read()).halted, true);
+  });
+
+  it("fails closed, without hanging, when the record path is a FIFO with no writer", async () => {
+    execFileSync("mkfifo", [haltPath]);
+    const reading = await Promise.race([
+      new FileHaltStore(haltPath).read(),
+      new Promise<"hung">((resolve) => setTimeout(() => resolve("hung"), 2_000).unref()),
+    ]);
+    assert.notEqual(reading, "hung");
+    assert.equal(reading !== "hung" && reading.halted, true);
   });
 
   it("fails closed when the record path is a directory", async () => {

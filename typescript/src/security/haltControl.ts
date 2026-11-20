@@ -62,7 +62,12 @@ export class FileHaltStore {
     let raw: string;
     try {
       // O_NOFOLLOW: a symlinked halt file is refused (and so reads as halted).
-      const handle = await open(this.filePath, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
+      // O_NONBLOCK: opening a FIFO with no writer returns at once instead of
+      // hanging the dispatch gate; the regular-file check below then refuses it.
+      const handle = await open(
+        this.filePath,
+        fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW | fsConstants.O_NONBLOCK,
+      );
       try {
         const stat = await handle.stat();
         if (!stat.isFile()) return failClosed("halt record is not a regular file");
