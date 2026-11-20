@@ -32,6 +32,7 @@ import type {
 } from "../quotes/quoteRepository.js";
 import type { ToolAction, ToolActionState } from "../actions/toolActions.js";
 import type { SystemStatus } from "../http/contracts.js";
+import type { SituationSnapshot } from "../situation/situationSnapshot.js";
 import type { OperatorGeneralSettings } from "../reminders/due.js";
 import type { CredentialsStatus } from "../settings/credentialsStatus.js";
 import type {
@@ -289,6 +290,10 @@ export class JarvisApiClient {
 
   async getStatus(): Promise<SystemStatus> {
     return this.request<SystemStatus>("GET", "/api/v1/status");
+  }
+
+  async getSituationSnapshot(): Promise<SituationSnapshot> {
+    return this.request<SituationSnapshot>("GET", "/api/v1/situation");
   }
 
   async getOperatorGeneralSettings(): Promise<OperatorGeneralSettings> {

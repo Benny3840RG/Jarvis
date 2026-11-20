@@ -1,0 +1,846 @@
+<!doctype html>
+<html lang="en-AU" data-console-theme="system" data-console-contrast="default" data-console-motion="system">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>NOLAN // Command Centre</title>
+    <style><!--hud:include styles/01-base.css--></style>
+
+    <style id="console-02-fidelity"><!--hud:include styles/02-console-02-fidelity.css--></style>
+
+  
+    <style id="console-02-pass2"><!--hud:include styles/03-console-02-pass2.css--></style>
+    <style id="console-02-pass3"><!--hud:include styles/04-console-02-pass3.css--></style>
+    <style id="console-02-readable-controls"><!--hud:include styles/05-console-02-readable-controls.css--></style>
+    <style id="console-02-declutter"><!--hud:include styles/06-console-02-declutter.css--></style>
+    <style id="console-02-legibility"><!--hud:include styles/07-console-02-legibility.css--></style>
+    <style><!--hud:include styles/08-extra.css--></style>
+</head>
+  <body data-backdrop-severity="UNKNOWN" data-console-view="focus"><!-- JARVIS // OPERATOR CONSOLE · LANDSCAPE COMMAND CENTRE -->
+    <canvas id="hud-backdrop" class="hud-backdrop" aria-hidden="true"></canvas>
+    <div class="hud-vignette" aria-hidden="true"></div>
+    <div class="bezel" aria-hidden="true"></div>
+    <svg class="bezel-art bezel-base" viewBox="0 0 1920 1080" preserveAspectRatio="none" aria-hidden="true">
+      <defs>
+        <linearGradient id="baseline-frame-brass" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#3a2c1c"/>
+          <stop offset="0.18" stop-color="#1c140e"/>
+          <stop offset="0.55" stop-color="#2e2116"/>
+          <stop offset="0.82" stop-color="#120e0a"/>
+          <stop offset="1" stop-color="#241a12"/>
+        </linearGradient>
+      </defs>
+      <path fill="url(#baseline-frame-brass)" fill-rule="evenodd" d="M46 0 H1874 A46 46 0 0 1 1920 46 V1034 A46 46 0 0 1 1874 1080 H46 A46 46 0 0 1 0 1034 V46 A46 46 0 0 1 46 0 Z M96 78 H1824 A22 22 0 0 1 1846 100 V980 A22 22 0 0 1 1824 1002 H96 A22 22 0 0 1 74 980 V100 A22 22 0 0 1 96 78 Z"/>
+      <path fill="none" stroke="#9a7848" stroke-width="2" d="M70 4 H1850"/>
+      <path fill="none" stroke="#0c0a08" stroke-width="14" d="M96 78 H1824 A22 22 0 0 1 1846 100 V980 A22 22 0 0 1 1824 1002 H96 A22 22 0 0 1 74 980 V100 A22 22 0 0 1 96 78 Z"/>
+    </svg>
+    <svg class="bezel-art bezel-focus" viewBox="0 0 1920 1080" preserveAspectRatio="none" aria-hidden="true">
+      <defs>
+        <linearGradient id="frame-steel" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#8a8174"/>
+          <stop offset="0.04" stop-color="#3a3834"/>
+          <stop offset="0.12" stop-color="#161513"/>
+          <stop offset="0.42" stop-color="#2a2826"/>
+          <stop offset="0.7" stop-color="#121110"/>
+          <stop offset="0.9" stop-color="#0c0b0a"/>
+          <stop offset="1" stop-color="#4a4338"/>
+        </linearGradient>
+        <linearGradient id="frame-brass" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stop-color="#6a5434"/>
+          <stop offset="0.4" stop-color="#e7d3a4"/>
+          <stop offset="0.7" stop-color="#8a6840"/>
+          <stop offset="1" stop-color="#f0e2c4"/>
+        </linearGradient>
+        <radialGradient id="rivet-face" cx="35%" cy="30%" r="65%">
+          <stop offset="0" stop-color="#f6ead4"/>
+          <stop offset="0.4" stop-color="#8d7348"/>
+          <stop offset="0.78" stop-color="#2a2118"/>
+          <stop offset="1" stop-color="#0c0a08"/>
+        </radialGradient>
+      </defs>
+      <path fill="url(#frame-steel)" fill-rule="evenodd" d="M0 0 H1920 V1080 H0 Z M146 112 H1774 A72 72 0 0 1 1846 184 V888 A72 72 0 0 1 1774 960 H146 A72 72 0 0 1 74 888 V184 A72 72 0 0 1 146 112 Z"/>
+      <path fill="none" stroke="#0a0908" stroke-width="8" d="M146 112 H1774 A72 72 0 0 1 1846 184 V888 A72 72 0 0 1 1774 960 H146 A72 72 0 0 1 74 888 V184 A72 72 0 0 1 146 112 Z"/>
+      <path fill="none" stroke="url(#frame-brass)" stroke-width="2.4" d="M128 94 H1792 A84 84 0 0 1 1876 178 V894 A84 84 0 0 1 1792 978 H128 A84 84 0 0 1 44 894 V178 A84 84 0 0 1 128 94 Z"/>
+      <path fill="#000" opacity="0.45" d="M0 0 H1920 V28 H0 Z M0 1048 H1920 V1080 H0 Z M0 0 H34 V1080 H0 Z M1886 0 H1920 V1080 H1886 Z"/>
+      <g fill="#000" opacity="0.35">
+        <ellipse cx="240" cy="22" rx="90" ry="10"/><ellipse cx="860" cy="18" rx="140" ry="9"/><ellipse cx="1500" cy="26" rx="110" ry="11"/>
+        <ellipse cx="180" cy="1058" rx="120" ry="10"/><ellipse cx="1100" cy="1062" rx="160" ry="8"/><ellipse cx="1680" cy="1054" rx="90" ry="12"/>
+        <ellipse cx="16" cy="420" rx="10" ry="70"/><ellipse cx="1904" cy="640" rx="11" ry="90"/>
+      </g>
+      <g fill="none" stroke="#c4a36a" stroke-width="1" opacity="0.35">
+        <path d="M80 40 H260"/><path d="M1480 36 H1760"/><path d="M220 1052 H480"/><path d="M40 240 V420"/>
+      </g>
+      <path fill="none" stroke="#1a140e" stroke-width="2" opacity="0.8" d="M0 0 H1920"/>
+      <g fill="url(#rivet-face)" stroke="#120e0a" stroke-width="1">
+        <circle cx="120" cy="38" r="6.5"/><circle cx="250" cy="38" r="6.5"/><circle cx="380" cy="38" r="6.5"/><circle cx="510" cy="38" r="6.5"/>
+        <circle cx="1410" cy="38" r="6.5"/><circle cx="1540" cy="38" r="6.5"/><circle cx="1670" cy="38" r="6.5"/><circle cx="1800" cy="38" r="6.5"/>
+        <circle cx="140" cy="1042" r="6.5"/><circle cx="340" cy="1042" r="6.5"/><circle cx="1580" cy="1042" r="6.5"/><circle cx="1780" cy="1042" r="6.5"/>
+        <circle cx="30" cy="160" r="6.5"/><circle cx="30" cy="320" r="6.5"/><circle cx="30" cy="500" r="6.5"/><circle cx="30" cy="680" r="6.5"/><circle cx="30" cy="860" r="6.5"/>
+        <circle cx="1890" cy="160" r="6.5"/><circle cx="1890" cy="320" r="6.5"/><circle cx="1890" cy="500" r="6.5"/><circle cx="1890" cy="680" r="6.5"/><circle cx="1890" cy="860" r="6.5"/>
+      </g>
+    </svg>
+    <div class="bezel-lip" aria-hidden="true"></div>
+    <div class="crt-glass" aria-hidden="true"></div>
+    <div class="hud-photo" aria-hidden="true"></div>
+    <div class="rivets" aria-hidden="true"><i class="rivet"></i><i class="rivet"></i><i class="rivet"></i><i class="rivet"></i><i class="rivet"></i><i class="rivet"></i><i class="rivet"></i><i class="rivet"></i><i class="rivet"></i><i class="rivet"></i><i class="rivet"></i><i class="rivet"></i><i class="rivet"></i><i class="rivet"></i><i class="rivet"></i><i class="rivet"></i><i class="rivet"></i><i class="rivet"></i><i class="rivet"></i><i class="rivet"></i></div>
+    <div class="totality-title title-plate">
+      <h1><span class="wordmark">NOLAN TOTALITY</span><span class="console-no">CONSOLE 02 <span aria-hidden="true">⚡</span></span></h1>
+      <p class="sub-plate">OPTIMIZED TOTALITY STATE</p>
+      <p class="live-state" id="totality-state-value">UNKNOWN</p>
+    </div>
+    <main class="shell">
+      <section class="hud-frame" aria-label="NOLAN landscape command centre">
+        <div class="top-glow"></div>
+        <header class="topbar">
+          <div class="brand">
+            <svg class="mark tree-mark" viewBox="0 0 64 64" aria-hidden="true"><path d="M30 54 C30 42 29 36 32 28 C35 36 34 42 34 54 Z" fill="#6b4424"/><path d="M32 30 C22 26 12 20 12 10 C22 12 28 20 32 28 Z" fill="#c4a574"/><path d="M32 30 C42 24 54 16 52 8 C42 12 36 20 32 28 Z" fill="#e7d3a4"/><ellipse cx="46" cy="18" rx="6" ry="3.2" fill="#1a140e" transform="rotate(-16 46 18)"/><path d="M42 17 h4 M45 19 h4" stroke="#ff7a18" stroke-width="1.4" stroke-linecap="round"/></svg>
+            <div class="plaque">
+              <p class="brand-kicker">THE BEEZ TREEZ</p>
+              <p><b class="brand-legal">Beez Treez</b> Property Solutions</p>
+            </div>
+          </div>
+            <nav class="panel green team-nav" aria-label="Command centre sections">
+              <div class="panel-content nav-stack">
+                <button class="rail-button active" type="button" data-view="focus"><span class="rail-icon">◎</span><span><strong>Focus</strong><small>Current mission</small></span><span class="rail-count" id="nav-focus-count">0</span></button>
+                <button class="rail-button" type="button" data-view="board"><span class="rail-icon">▦</span><span><strong>Task Board</strong><small>Durable queue</small></span><span class="rail-count" id="nav-board-count">0</span></button>
+                <button class="rail-button" type="button" data-view="reminders"><span class="rail-icon">◷</span><span><strong>Reminders</strong><small>Time contacts</small></span><span class="rail-count" id="nav-reminder-count">0</span></button>
+                <button class="rail-button" type="button" data-view="operations"><span class="rail-icon">⌁</span><span><strong>Operations</strong><small>Daily brief</small></span><span class="rail-count" id="nav-operations-count">0</span></button>
+                <button class="rail-button" type="button" data-view="livework"><span class="rail-icon">⛭</span><span><strong>Live Work</strong><small>Mission pipeline</small></span><span class="rail-count" id="nav-livework-count">0</span></button>
+                <button class="rail-button" type="button" data-view="systems"><span class="rail-icon">◇</span><span><strong>Systems</strong><small>Runtime layers</small></span><span class="rail-count" id="nav-system-count">0</span></button>
+                <button class="rail-button" type="button" data-view="voice"><span class="rail-icon">⌨</span><span><strong>Voice</strong><small>Guarded speech</small></span><span class="rail-count" id="nav-voice-count">0</span></button>
+                <button class="rail-button" type="button" data-view="settings"><span class="rail-icon">⚙</span><span><strong>Settings</strong><small>General, credentials, persistence, limits, danger</small></span><span class="rail-count" id="nav-settings-count">0</span></button>
+              </div>
+            </nav>
+          <div class="top-actions">
+            <span class="pill team-chip" id="chip-crew">Crew · UNKNOWN</span>
+            <span class="pill team-chip" id="chip-load">Load · UNKNOWN</span>
+            <span class="pill team-chip" id="chip-next">Next · UNKNOWN</span>
+            <span class="pill team-chip" id="chip-presence">Presence · CONNECTING</span>
+            <span class="pill source-pill" id="source-pill">SOURCE · CONNECTING</span>
+            <span class="pill ok" id="status-pill"><span class="dot"></span><span id="status-label">CONNECTING</span></span>
+            <a class="pill limits-now" id="limits-now-chip" data-now-chip="limits" href="/settings/limits">Limits · UNKNOWN</a>
+            <span class="pill" id="clock">00:00:00</span>
+            <button class="pill capture-toggle" id="capture-toggle" type="button" aria-controls="capture-drawer" aria-expanded="false">+ Add</button>
+            <button class="icon-button" id="refresh" type="button" aria-label="Refresh NOLAN">↻</button>
+          </div>
+        </header>
+        <section class="telemetry" aria-label="Live NOLAN state">
+          <div><span>Owner</span><b>BENNY</b></div>
+          <div><span>Persistence</span><b class="good" id="telemetry-provider">CONNECTING</b></div>
+          <div><span>Deployment</span><b id="telemetry-deployment">DEVELOPMENT</b></div>
+          <div><span>Command queue</span><b id="telemetry-queue">0 TASKS</b></div>
+          <div><span>Z-State</span><b id="telemetry-z-state">UNKNOWN</b></div>
+          <div><span>Production</span><b class="guard">NOT AUTHORISED</b></div>
+        </section>
+        <section class="hud-grid">
+          <aside class="left-rail">
+            <section class="panel violet left-core">
+              <div class="panel-content">
+                <div class="panel-header"><h2>System readiness</h2><span id="ready-layer-count">0 / 8 READY</span></div>
+                <div class="core-wrap">
+                  <div class="core-gauge">
+                    <svg viewBox="0 0 120 120" aria-hidden="true">
+                      <circle cx="60" cy="60" r="51" fill="none" stroke="var(--line)" stroke-width="2" />
+                      <circle class="spin" cx="60" cy="60" r="45" fill="none" stroke="var(--violet)" stroke-width="2" stroke-dasharray="12 7 2 6" />
+                      <circle class="spin reverse" cx="60" cy="60" r="37" fill="none" stroke="var(--green)" stroke-width="1.3" stroke-dasharray="5 6" />
+                      <circle cx="60" cy="60" r="29" fill="var(--violet-soft)" stroke="var(--violet)" />
+                      <circle id="readiness-ring" cx="60" cy="60" r="23" pathLength="100" fill="none" stroke="var(--green)" stroke-width="4" stroke-linecap="round" stroke-dasharray="0 100" transform="rotate(-90 60 60)" />
+                    </svg>
+                    <div class="core-label"><span>READINESS</span><b id="readiness-percent">0%</b><small id="readiness-state">AWAITING STATUS</small></div>
+                  </div>
+                </div>
+                <div class="mini-stats">
+                  <div class="mini-stat"><b id="active-count">0</b><span>Active</span></div>
+                  <div class="mini-stat"><b id="done-count">0</b><span>Cleared</span></div>
+                  <div class="mini-stat"><b id="reminder-count">0</b><span>Reminders</span></div>
+                </div>
+              </div>
+            </section>
+            <section class="panel violet left-priorities">
+              <div class="panel-content">
+                <div class="panel-header"><h2>Priority stack</h2><span id="priority-count">0 QUEUED</span></div>
+                <ul class="priority-list" id="left-priority-list"></ul>
+              </div>
+            </section>
+          </aside>
+          <section class="panel violet workspace">
+            <div class="panel-content">
+              <section class="view active" id="view-focus">
+                <div class="console-deck">
+                  <div class="console-col col-left">
+                    <section class="plate">
+                      <h2>PREDICTOR CORE</h2>
+                      <svg class="chart" viewBox="0 0 300 120" role="img" aria-label="Predictor Core"><g class="chart-grid" stroke="rgba(255,154,60,0.62)" stroke-width="1.15" fill="none"><path d="M16 24 H284 M16 52 H284 M16 80 H284 M16 104 H284"/><path d="M16 16 V108 M86 16 V108 M156 16 V108 M226 16 V108 M284 16 V108"/></g><g fill="#ffb15a" font-size="8" font-family="Rajdhani, sans-serif"><text x="2" y="20">100</text><text x="6" y="56">50</text><text x="10" y="108">0</text></g><path d="M16 104 H284" stroke="#d98938" stroke-width="1.6" fill="none"/><g class="ornament" aria-hidden="true"><polyline points="8.0,65.0 18.5,69.4 29.0,72.9 39.6,73.8 50.1,71.0 60.6,64.8 71.1,56.5 81.6,48.5 92.1,43.3 102.7,42.8 113.2,47.6 123.7,56.7 134.2,67.6 144.7,77.3 155.3,83.1 165.8,83.2 176.3,77.8 186.8,68.6 197.3,58.2 207.9,49.6 218.4,45.0 228.9,45.3 239.4,49.8 249.9,56.6 260.4,63.5 271.0,68.5 281.5,70.5 292.0,69.7" fill="none" stroke="rgba(255,241,220,0.55)" stroke-width="1.3"/><polyline points="8.0,83.0 18.5,84.6 29.0,82.5 39.6,76.9 50.1,70.3 60.6,66.7 71.1,68.7 81.6,76.2 92.1,85.7 102.7,92.1 113.2,91.6 123.7,83.9 134.2,72.8 144.7,64.1 155.3,62.3 165.8,68.5 176.3,79.2 186.8,88.8 197.3,92.6 207.9,88.9 218.4,80.4 228.9,71.7 239.4,67.2 249.9,68.6 260.4,74.1 271.0,80.3 281.5,83.8 292.0,83.5" fill="none" stroke="#ffb15a" stroke-width="1.35" opacity="0.8"/><polyline points="8.0,93.4 18.5,92.8 29.0,91.2 39.6,88.8 50.1,86.0 60.6,83.2 71.1,81.1 81.6,80.2 92.1,80.7 102.7,82.7 113.2,86.0 123.7,90.1 134.2,94.5 144.7,98.2 155.3,100.8 165.8,101.9 176.3,101.1 186.8,98.9 197.3,95.5 207.9,91.6 218.4,87.8 228.9,84.8 239.4,83.0 249.9,82.5 260.4,83.2 271.0,84.8 281.5,86.8 292.0,88.7" fill="none" stroke="#ff7a18" stroke-width="1.2" opacity="0.55"/><text x="214" y="18" fill="#ffb15a" font-size="8" font-family="Rajdhani, sans-serif">ORNAMENT</text></g><polyline id="predictor-line" points="" fill="none" stroke="#ff7a18" stroke-width="2.4"/></svg>
+                      <p class="signal-tag" title="Ornament traces are not a reading." id="predictor-state">UNKNOWN</p>
+                    </section>
+                    <section class="plate">
+                      <h2>WAVEFORM ANALYSIS</h2>
+                      <svg class="chart" viewBox="0 0 300 72" aria-hidden="true"><g class="chart-grid" stroke="rgba(255,154,60,0.62)" stroke-width="1.15" fill="none"><path d="M8 14 H292 M8 36 H292 M8 58 H292"/><path d="M8 8 V64 M80 8 V64 M150 8 V64 M220 8 V64 M292 8 V64"/></g><g class="ornament" aria-hidden="true"><polyline points="8.0,35.0 12.5,38.3 17.0,39.8 21.5,38.0 26.0,33.7 30.5,28.9 35.0,26.4 39.6,28.0 44.1,33.2 48.6,39.3 53.1,43.1 57.6,42.1 62.1,36.5 66.6,29.0 71.1,23.8 75.6,23.9 80.1,29.6 84.6,38.0 89.1,44.7 93.7,45.8 98.2,40.5 102.7,31.5 107.2,23.4 111.7,20.9 116.2,25.4 120.7,34.7 125.2,43.8 129.7,47.8 134.2,44.4 138.7,35.4 143.2,25.6 147.7,20.2 152.3,22.2 156.8,30.6 161.3,40.7 165.8,47.1 170.3,46.6 174.8,39.3 179.3,29.4 183.8,22.1 188.3,21.3 192.8,27.2 197.3,36.5 201.8,44.2 206.3,46.2 210.9,41.7 215.4,33.4 219.9,25.8 224.4,22.9 228.9,25.9 233.4,33.0 237.9,40.1 242.4,43.5 246.9,41.8 251.4,36.2 255.9,30.0 260.4,26.4 265.0,27.1 269.5,31.2 274.0,36.3 278.5,39.6 283.0,39.6 287.5,36.8 292.0,33.0" fill="none" stroke="rgba(255,244,230,0.7)" stroke-width="1.15"/><polyline points="8.0,43.4 12.5,43.6 17.0,42.7 21.5,40.8 26.0,38.4 30.5,36.2 35.0,34.7 39.6,34.6 44.1,36.0 48.6,38.6 53.1,42.0 57.6,45.0 62.1,47.0 66.6,47.1 71.1,45.3 75.6,41.9 80.1,37.8 84.6,34.0 89.1,31.7 93.7,31.5 98.2,33.6 102.7,37.5 107.2,42.2 111.7,46.5 116.2,49.2 120.7,49.4 125.2,47.2 129.7,43.0 134.2,37.9 138.7,33.4 143.2,30.5 147.7,30.2 152.3,32.5 156.8,36.7 161.3,41.8 165.8,46.4 170.3,49.2 174.8,49.6 179.3,47.5 183.8,43.4 188.3,38.6 192.8,34.2 197.3,31.5 201.8,31.1 206.3,33.0 210.9,36.7 215.4,41.0 219.9,44.9 224.4,47.3 228.9,47.6 233.4,46.0 237.9,43.0 242.4,39.4 246.9,36.2 251.4,34.3 255.9,34.0 260.4,35.3 265.0,37.6 269.5,40.3 274.0,42.6 278.5,44.0 283.0,44.1 287.5,43.2 292.0,41.6" fill="none" stroke="#ff7a18" stroke-width="1.35" opacity="0.75"/><text x="214" y="12" fill="#ffb15a" font-size="8" font-family="Rajdhani, sans-serif">ORNAMENT</text></g><path d="M8 36 H292" stroke="#ff7a18" fill="none" stroke-width="2"/><g fill="#ffb15a" font-size="8" font-family="Rajdhani, sans-serif"><text x="2" y="12">100</text><text x="6" y="40">50</text><text x="10" y="62">0</text></g></svg>
+                      <p class="signal-tag" title="The wave is ornament, not a signal." id="waveform-state">No waveform signal.</p>
+                    </section>
+                    <section class="plate">
+                      <h2>STABILITY MONITOR</h2>
+                      <div class="dial-row">
+                        <div class="dial"><svg class="mini-dial" viewBox="0 0 80 80" aria-hidden="true"><circle cx="40" cy="40" r="39" fill="#120e0a"/><circle cx="40" cy="40" r="36" fill="#8d6a3a"/><circle cx="40" cy="40" r="33" fill="#f4ead4"/><circle cx="40" cy="40" r="31" fill="#fff8ee"/><g stroke="#3a2e1c" stroke-linecap="round"><line x1="40" y1="12" x2="40" y2="17" stroke-width="1.4"/><line x1="54" y1="15.5" x2="52.2" y2="20" stroke-width="1"/><line x1="66" y1="26" x2="62.2" y2="29" stroke-width="1.4"/><line x1="73" y1="40" x2="68" y2="40" stroke-width="1"/><line x1="66" y1="54" x2="62.2" y2="51" stroke-width="1.4"/><line x1="54" y1="64.5" x2="52.2" y2="60" stroke-width="1"/><line x1="40" y1="68" x2="40" y2="63" stroke-width="1.4"/><line x1="26" y1="64.5" x2="27.8" y2="60" stroke-width="1"/><line x1="14" y1="54" x2="17.8" y2="51" stroke-width="1.4"/><line x1="7" y1="40" x2="12" y2="40" stroke-width="1"/><line x1="14" y1="26" x2="17.8" y2="29" stroke-width="1.4"/><line x1="26" y1="15.5" x2="27.8" y2="20" stroke-width="1"/></g><circle cx="40" cy="40" r="24" fill="none" stroke="#c47b4a" stroke-width="1" opacity="0.45"/><line x1="40" y1="40" x2="22" y2="54" stroke="#1a140e" stroke-width="2.3" stroke-linecap="round"/><circle cx="40" cy="40" r="4.2" fill="#d98938" stroke="#3a2c18" stroke-width="0.6"/><ellipse cx="28" cy="24" rx="14" ry="6" fill="rgba(255,255,255,0.42)" transform="rotate(-32 28 24)"/></svg><span>HOST</span><b id="dial-host">UNKNOWN</b></div>
+                        <div class="dial"><svg class="mini-dial" viewBox="0 0 80 80" aria-hidden="true"><circle cx="40" cy="40" r="39" fill="#120e0a"/><circle cx="40" cy="40" r="36" fill="#8d6a3a"/><circle cx="40" cy="40" r="33" fill="#f4ead4"/><circle cx="40" cy="40" r="31" fill="#fff8ee"/><g stroke="#3a2e1c" stroke-linecap="round"><line x1="40" y1="12" x2="40" y2="17" stroke-width="1.4"/><line x1="54" y1="15.5" x2="52.2" y2="20" stroke-width="1"/><line x1="66" y1="26" x2="62.2" y2="29" stroke-width="1.4"/><line x1="73" y1="40" x2="68" y2="40" stroke-width="1"/><line x1="66" y1="54" x2="62.2" y2="51" stroke-width="1.4"/><line x1="54" y1="64.5" x2="52.2" y2="60" stroke-width="1"/><line x1="40" y1="68" x2="40" y2="63" stroke-width="1.4"/><line x1="26" y1="64.5" x2="27.8" y2="60" stroke-width="1"/><line x1="14" y1="54" x2="17.8" y2="51" stroke-width="1.4"/><line x1="7" y1="40" x2="12" y2="40" stroke-width="1"/><line x1="14" y1="26" x2="17.8" y2="29" stroke-width="1.4"/><line x1="26" y1="15.5" x2="27.8" y2="20" stroke-width="1"/></g><circle cx="40" cy="40" r="24" fill="none" stroke="#c47b4a" stroke-width="1" opacity="0.45"/><line x1="40" y1="40" x2="22" y2="54" stroke="#1a140e" stroke-width="2.3" stroke-linecap="round"/><circle cx="40" cy="40" r="4.2" fill="#d98938" stroke="#3a2c18" stroke-width="0.6"/><ellipse cx="28" cy="24" rx="14" ry="6" fill="rgba(255,255,255,0.42)" transform="rotate(-32 28 24)"/></svg><span>MEM</span><b id="dial-mem">UNKNOWN</b></div>
+                        <div class="dial"><svg class="mini-dial" viewBox="0 0 80 80" aria-hidden="true"><circle cx="40" cy="40" r="39" fill="#120e0a"/><circle cx="40" cy="40" r="36" fill="#8d6a3a"/><circle cx="40" cy="40" r="33" fill="#f4ead4"/><circle cx="40" cy="40" r="31" fill="#fff8ee"/><g stroke="#3a2e1c" stroke-linecap="round"><line x1="40" y1="12" x2="40" y2="17" stroke-width="1.4"/><line x1="54" y1="15.5" x2="52.2" y2="20" stroke-width="1"/><line x1="66" y1="26" x2="62.2" y2="29" stroke-width="1.4"/><line x1="73" y1="40" x2="68" y2="40" stroke-width="1"/><line x1="66" y1="54" x2="62.2" y2="51" stroke-width="1.4"/><line x1="54" y1="64.5" x2="52.2" y2="60" stroke-width="1"/><line x1="40" y1="68" x2="40" y2="63" stroke-width="1.4"/><line x1="26" y1="64.5" x2="27.8" y2="60" stroke-width="1"/><line x1="14" y1="54" x2="17.8" y2="51" stroke-width="1.4"/><line x1="7" y1="40" x2="12" y2="40" stroke-width="1"/><line x1="14" y1="26" x2="17.8" y2="29" stroke-width="1.4"/><line x1="26" y1="15.5" x2="27.8" y2="20" stroke-width="1"/></g><circle cx="40" cy="40" r="24" fill="none" stroke="#c47b4a" stroke-width="1" opacity="0.45"/><line x1="40" y1="40" x2="22" y2="54" stroke="#1a140e" stroke-width="2.3" stroke-linecap="round"/><circle cx="40" cy="40" r="4.2" fill="#d98938" stroke="#3a2c18" stroke-width="0.6"/><ellipse cx="28" cy="24" rx="14" ry="6" fill="rgba(255,255,255,0.42)" transform="rotate(-32 28 24)"/></svg><span>STORE</span><b id="dial-store">UNKNOWN</b></div>
+                        <div class="dial"><svg class="mini-dial" viewBox="0 0 80 80" aria-hidden="true"><circle cx="40" cy="40" r="39" fill="#120e0a"/><circle cx="40" cy="40" r="36" fill="#8d6a3a"/><circle cx="40" cy="40" r="33" fill="#f4ead4"/><circle cx="40" cy="40" r="31" fill="#fff8ee"/><g stroke="#3a2e1c" stroke-linecap="round"><line x1="40" y1="12" x2="40" y2="17" stroke-width="1.4"/><line x1="54" y1="15.5" x2="52.2" y2="20" stroke-width="1"/><line x1="66" y1="26" x2="62.2" y2="29" stroke-width="1.4"/><line x1="73" y1="40" x2="68" y2="40" stroke-width="1"/><line x1="66" y1="54" x2="62.2" y2="51" stroke-width="1.4"/><line x1="54" y1="64.5" x2="52.2" y2="60" stroke-width="1"/><line x1="40" y1="68" x2="40" y2="63" stroke-width="1.4"/><line x1="26" y1="64.5" x2="27.8" y2="60" stroke-width="1"/><line x1="14" y1="54" x2="17.8" y2="51" stroke-width="1.4"/><line x1="7" y1="40" x2="12" y2="40" stroke-width="1"/><line x1="14" y1="26" x2="17.8" y2="29" stroke-width="1.4"/><line x1="26" y1="15.5" x2="27.8" y2="20" stroke-width="1"/></g><circle cx="40" cy="40" r="24" fill="none" stroke="#c47b4a" stroke-width="1" opacity="0.45"/><line x1="40" y1="40" x2="22" y2="54" stroke="#1a140e" stroke-width="2.3" stroke-linecap="round"/><circle cx="40" cy="40" r="4.2" fill="#d98938" stroke="#3a2c18" stroke-width="0.6"/><ellipse cx="28" cy="24" rx="14" ry="6" fill="rgba(255,255,255,0.42)" transform="rotate(-32 28 24)"/></svg><span>LINK</span><b id="dial-link">UNKNOWN</b></div>
+                      </div>
+                      <p class="signal-tag" title="Host meters are not exposed. Needles stay parked.">UNKNOWN</p>
+                    </section>
+                  </div>
+                  <div class="console-col col-center">
+                    <section class="plate overview-plate">
+                      <h2>SYSTEM OVERVIEW</h2>
+                      <div class="overview-row">
+                        <div class="ring-gauge"><svg viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r="56" fill="none" stroke="#ffb15a" stroke-width="2" stroke-dasharray="2 5"/><line x1="60.0" y1="10.0" x2="60.0" y2="4.0" stroke="#ffb15a" stroke-width="1.4"/><line x1="72.9" y1="11.7" x2="74.5" y2="5.9" stroke="#ffb15a" stroke-width="1.4"/><line x1="85.0" y1="16.7" x2="88.0" y2="11.5" stroke="#ffb15a" stroke-width="1.4"/><line x1="95.4" y1="24.6" x2="99.6" y2="20.4" stroke="#ffb15a" stroke-width="1.4"/><line x1="103.3" y1="35.0" x2="108.5" y2="32.0" stroke="#ffb15a" stroke-width="1.4"/><line x1="108.3" y1="47.1" x2="114.1" y2="45.5" stroke="#ffb15a" stroke-width="1.4"/><line x1="110.0" y1="60.0" x2="116.0" y2="60.0" stroke="#ffb15a" stroke-width="1.4"/><line x1="108.3" y1="72.9" x2="114.1" y2="74.5" stroke="#ffb15a" stroke-width="1.4"/><line x1="103.3" y1="85.0" x2="108.5" y2="88.0" stroke="#ffb15a" stroke-width="1.4"/><line x1="95.4" y1="95.4" x2="99.6" y2="99.6" stroke="#ffb15a" stroke-width="1.4"/><line x1="85.0" y1="103.3" x2="88.0" y2="108.5" stroke="#ffb15a" stroke-width="1.4"/><line x1="72.9" y1="108.3" x2="74.5" y2="114.1" stroke="#ffb15a" stroke-width="1.4"/><line x1="60.0" y1="110.0" x2="60.0" y2="116.0" stroke="#ffb15a" stroke-width="1.4"/><line x1="47.1" y1="108.3" x2="45.5" y2="114.1" stroke="#ffb15a" stroke-width="1.4"/><line x1="35.0" y1="103.3" x2="32.0" y2="108.5" stroke="#ffb15a" stroke-width="1.4"/><line x1="24.6" y1="95.4" x2="20.4" y2="99.6" stroke="#ffb15a" stroke-width="1.4"/><line x1="16.7" y1="85.0" x2="11.5" y2="88.0" stroke="#ffb15a" stroke-width="1.4"/><line x1="11.7" y1="72.9" x2="5.9" y2="74.5" stroke="#ffb15a" stroke-width="1.4"/><line x1="10.0" y1="60.0" x2="4.0" y2="60.0" stroke="#ffb15a" stroke-width="1.4"/><line x1="11.7" y1="47.1" x2="5.9" y2="45.5" stroke="#ffb15a" stroke-width="1.4"/><line x1="16.7" y1="35.0" x2="11.5" y2="32.0" stroke="#ffb15a" stroke-width="1.4"/><line x1="24.6" y1="24.6" x2="20.4" y2="20.4" stroke="#ffb15a" stroke-width="1.4"/><line x1="35.0" y1="16.7" x2="32.0" y2="11.5" stroke="#ffb15a" stroke-width="1.4"/><line x1="47.1" y1="11.7" x2="45.5" y2="5.9" stroke="#ffb15a" stroke-width="1.4"/><circle cx="60" cy="60" r="44" fill="none" stroke="rgba(255,186,120,0.28)" stroke-width="12" stroke-dasharray="8 4"/><circle id="ring-layers-arc" cx="60" cy="60" r="44" fill="none" stroke="#ff7a18" stroke-width="12" pathLength="100" stroke-dasharray="0 100" transform="rotate(-90 60 60)"/></svg><b id="ring-layers">UNKNOWN</b><span>LAYERS</span></div>
+                        <div class="ring-gauge"><svg viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r="56" fill="none" stroke="#ffb15a" stroke-width="2" stroke-dasharray="2 5"/><line x1="60.0" y1="10.0" x2="60.0" y2="4.0" stroke="#ffb15a" stroke-width="1.4"/><line x1="72.9" y1="11.7" x2="74.5" y2="5.9" stroke="#ffb15a" stroke-width="1.4"/><line x1="85.0" y1="16.7" x2="88.0" y2="11.5" stroke="#ffb15a" stroke-width="1.4"/><line x1="95.4" y1="24.6" x2="99.6" y2="20.4" stroke="#ffb15a" stroke-width="1.4"/><line x1="103.3" y1="35.0" x2="108.5" y2="32.0" stroke="#ffb15a" stroke-width="1.4"/><line x1="108.3" y1="47.1" x2="114.1" y2="45.5" stroke="#ffb15a" stroke-width="1.4"/><line x1="110.0" y1="60.0" x2="116.0" y2="60.0" stroke="#ffb15a" stroke-width="1.4"/><line x1="108.3" y1="72.9" x2="114.1" y2="74.5" stroke="#ffb15a" stroke-width="1.4"/><line x1="103.3" y1="85.0" x2="108.5" y2="88.0" stroke="#ffb15a" stroke-width="1.4"/><line x1="95.4" y1="95.4" x2="99.6" y2="99.6" stroke="#ffb15a" stroke-width="1.4"/><line x1="85.0" y1="103.3" x2="88.0" y2="108.5" stroke="#ffb15a" stroke-width="1.4"/><line x1="72.9" y1="108.3" x2="74.5" y2="114.1" stroke="#ffb15a" stroke-width="1.4"/><line x1="60.0" y1="110.0" x2="60.0" y2="116.0" stroke="#ffb15a" stroke-width="1.4"/><line x1="47.1" y1="108.3" x2="45.5" y2="114.1" stroke="#ffb15a" stroke-width="1.4"/><line x1="35.0" y1="103.3" x2="32.0" y2="108.5" stroke="#ffb15a" stroke-width="1.4"/><line x1="24.6" y1="95.4" x2="20.4" y2="99.6" stroke="#ffb15a" stroke-width="1.4"/><line x1="16.7" y1="85.0" x2="11.5" y2="88.0" stroke="#ffb15a" stroke-width="1.4"/><line x1="11.7" y1="72.9" x2="5.9" y2="74.5" stroke="#ffb15a" stroke-width="1.4"/><line x1="10.0" y1="60.0" x2="4.0" y2="60.0" stroke="#ffb15a" stroke-width="1.4"/><line x1="11.7" y1="47.1" x2="5.9" y2="45.5" stroke="#ffb15a" stroke-width="1.4"/><line x1="16.7" y1="35.0" x2="11.5" y2="32.0" stroke="#ffb15a" stroke-width="1.4"/><line x1="24.6" y1="24.6" x2="20.4" y2="20.4" stroke="#ffb15a" stroke-width="1.4"/><line x1="35.0" y1="16.7" x2="32.0" y2="11.5" stroke="#ffb15a" stroke-width="1.4"/><line x1="47.1" y1="11.7" x2="45.5" y2="5.9" stroke="#ffb15a" stroke-width="1.4"/><circle cx="60" cy="60" r="44" fill="none" stroke="rgba(255,186,120,0.28)" stroke-width="12" stroke-dasharray="8 4"/></svg><b id="ring-persistence">UNKNOWN</b><span>PERSISTENCE</span></div>
+                        <div class="ring-gauge"><svg viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r="56" fill="none" stroke="#ffb15a" stroke-width="2" stroke-dasharray="2 5"/><line x1="60.0" y1="10.0" x2="60.0" y2="4.0" stroke="#ffb15a" stroke-width="1.4"/><line x1="72.9" y1="11.7" x2="74.5" y2="5.9" stroke="#ffb15a" stroke-width="1.4"/><line x1="85.0" y1="16.7" x2="88.0" y2="11.5" stroke="#ffb15a" stroke-width="1.4"/><line x1="95.4" y1="24.6" x2="99.6" y2="20.4" stroke="#ffb15a" stroke-width="1.4"/><line x1="103.3" y1="35.0" x2="108.5" y2="32.0" stroke="#ffb15a" stroke-width="1.4"/><line x1="108.3" y1="47.1" x2="114.1" y2="45.5" stroke="#ffb15a" stroke-width="1.4"/><line x1="110.0" y1="60.0" x2="116.0" y2="60.0" stroke="#ffb15a" stroke-width="1.4"/><line x1="108.3" y1="72.9" x2="114.1" y2="74.5" stroke="#ffb15a" stroke-width="1.4"/><line x1="103.3" y1="85.0" x2="108.5" y2="88.0" stroke="#ffb15a" stroke-width="1.4"/><line x1="95.4" y1="95.4" x2="99.6" y2="99.6" stroke="#ffb15a" stroke-width="1.4"/><line x1="85.0" y1="103.3" x2="88.0" y2="108.5" stroke="#ffb15a" stroke-width="1.4"/><line x1="72.9" y1="108.3" x2="74.5" y2="114.1" stroke="#ffb15a" stroke-width="1.4"/><line x1="60.0" y1="110.0" x2="60.0" y2="116.0" stroke="#ffb15a" stroke-width="1.4"/><line x1="47.1" y1="108.3" x2="45.5" y2="114.1" stroke="#ffb15a" stroke-width="1.4"/><line x1="35.0" y1="103.3" x2="32.0" y2="108.5" stroke="#ffb15a" stroke-width="1.4"/><line x1="24.6" y1="95.4" x2="20.4" y2="99.6" stroke="#ffb15a" stroke-width="1.4"/><line x1="16.7" y1="85.0" x2="11.5" y2="88.0" stroke="#ffb15a" stroke-width="1.4"/><line x1="11.7" y1="72.9" x2="5.9" y2="74.5" stroke="#ffb15a" stroke-width="1.4"/><line x1="10.0" y1="60.0" x2="4.0" y2="60.0" stroke="#ffb15a" stroke-width="1.4"/><line x1="11.7" y1="47.1" x2="5.9" y2="45.5" stroke="#ffb15a" stroke-width="1.4"/><line x1="16.7" y1="35.0" x2="11.5" y2="32.0" stroke="#ffb15a" stroke-width="1.4"/><line x1="24.6" y1="24.6" x2="20.4" y2="20.4" stroke="#ffb15a" stroke-width="1.4"/><line x1="35.0" y1="16.7" x2="32.0" y2="11.5" stroke="#ffb15a" stroke-width="1.4"/><line x1="47.1" y1="11.7" x2="45.5" y2="5.9" stroke="#ffb15a" stroke-width="1.4"/><circle cx="60" cy="60" r="44" fill="none" stroke="rgba(255,186,120,0.28)" stroke-width="12" stroke-dasharray="8 4"/></svg><b id="ring-z">UNKNOWN</b><span>Z-STATE</span></div>
+                      </div>
+                      <div class="core-row">
+                        <div class="core-stage">
+                        <div class="core-cross" aria-hidden="true"></div>
+                        <svg class="core-rings" viewBox="0 0 400 400" aria-hidden="true">
+  <defs>
+    <filter id="core-glow" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="3.2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    <filter id="core-bloom" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="2.2"/></filter>
+    <radialGradient id="core-well" cx="48%" cy="42%" r="58%">
+      <stop offset="0%" stop-color="#3a2818"/>
+      <stop offset="62%" stop-color="#120c08"/>
+      <stop offset="100%" stop-color="#050403"/>
+    </radialGradient>
+  </defs>
+  <circle cx="200" cy="200" r="178" fill="none" stroke="rgba(255,140,40,0.1)" stroke-width="6" filter="url(#core-bloom)"/>
+  <circle cx="200" cy="200" r="156" fill="rgba(255,122,24,0.05)"/>
+  <g class="spin-slow">
+    <path d="M355.3 87.1 A192.0 192.0 0 0 1 92.6 359.2" fill="none" stroke="#ffb15a" stroke-width="2.4" stroke-linecap="round" opacity="0.9" stroke-dasharray="2.2 7"/><path d="M37.2 301.7 A192.0 192.0 0 0 1 92.6 40.8" fill="none" stroke="#ffb15a" stroke-width="2.4" stroke-linecap="round" opacity="0.9" stroke-dasharray="2.2 7"/><path d="M160.1 12.2 A192.0 192.0 0 0 1 384.6 147.1" fill="none" stroke="#ffb15a" stroke-width="2.4" stroke-linecap="round" opacity="0.9" stroke-dasharray="2.2 7"/>
+    <path d="M374.8 263.6 A186.0 186.0 0 0 1 25.2 136.4" fill="none" stroke="#ffd7a0" stroke-width="1.4" stroke-linecap="round" opacity="0.55" stroke-dasharray="8 14"/>
+    <path d="M80.4 57.5 A186.0 186.0 0 0 1 374.8 136.4" fill="none" stroke="#ff9a22" stroke-width="1.4" stroke-linecap="round" opacity="0.4" stroke-dasharray="8 16"/>
+  </g>
+  <circle cx="200" cy="200" r="172" fill="none" stroke="rgba(255,177,90,0.55)" stroke-width="1.15"/>
+  <line x1="200.0" y1="40.0" x2="200.0" y2="20.0" stroke="#ffc56a" stroke-width="1.8" opacity="0.95"/><line x1="213.2" y1="32.5" x2="213.7" y2="26.5" stroke="#ffc56a" stroke-width="0.7" opacity="0.45"/><line x1="226.3" y1="34.1" x2="227.2" y2="28.1" stroke="#ffc56a" stroke-width="0.7" opacity="0.45"/><line x1="239.2" y1="36.6" x2="240.6" y2="30.8" stroke="#ffc56a" stroke-width="0.7" opacity="0.45"/><line x1="250.7" y1="44.0" x2="254.4" y2="32.6" stroke="#ffc56a" stroke-width="1.15" opacity="0.7"/><line x1="264.3" y1="44.8" x2="266.6" y2="39.2" stroke="#ffc56a" stroke-width="0.7" opacity="0.45"/><line x1="276.3" y1="50.3" x2="279.0" y2="45.0" stroke="#ffc56a" stroke-width="0.7" opacity="0.45"/><line x1="287.8" y1="56.8" x2="290.9" y2="51.6" stroke="#ffc56a" stroke-width="0.7" opacity="0.45"/><line x1="294.0" y1="70.6" x2="305.8" y2="54.4" stroke="#ffc56a" stroke-width="1.8" opacity="0.95"/><line x1="309.1" y1="72.3" x2="313.0" y2="67.7" stroke="#ffc56a" stroke-width="0.7" opacity="0.45"/><line x1="318.8" y1="81.2" x2="323.0" y2="77.0" stroke="#ffc56a" stroke-width="0.7" opacity="0.45"/><line x1="327.7" y1="90.9" x2="332.3" y2="87.0" stroke="#ffc56a" stroke-width="0.7" opacity="0.45"/><line x1="332.7" y1="103.6" x2="342.4" y2="96.5" stroke="#ffc56a" stroke-width="1.15" opacity="0.7"/><line x1="343.2" y1="112.2" x2="348.4" y2="109.1" stroke="#ffc56a" stroke-width="0.7" opacity="0.45"/><line x1="349.7" y1="123.7" x2="355.0" y2="121.0" stroke="#ffc56a" stroke-width="0.7" opacity="0.45"/><line x1="355.2" y1="135.7" x2="360.8" y2="133.4" stroke="#ffc56a" stroke-width="0.7" opacity="0.45"/><line x1="352.2" y1="150.6" x2="371.2" y2="144.4" stroke="#ffc56a" stroke-width="1.8" opacity="0.95"/><line x1="363.4" y1="160.8" x2="369.2" y2="159.4" stroke="#ffc56a" stroke-width="0.7" opacity="0.45"/><line x1="365.9" y1="173.7" x2="371.9" y2="172.8" stroke="#ffc56a" stroke-width="0.7" opacity="0.45"/><line x1="367.5" y1="186.8" x2="373.5" y2="186.3" stroke="#ffc56a" stroke-width="0.7" opacity="0.45"/><line x1="364.0" y1="200.0" x2="376.0" y2="200.0" stroke="#ffc56a" stroke-width="1.15" opacity="0.7"/><line x1="367.5" y1="213.2" x2="373.5" y2="213.7" stroke="#ffc56a" stroke-width="0.7" opacity="0.45"/><line x1="365.9" y1="226.3" x2="371.9" y2="227.2" stroke="#ffc56a" stroke-width="0.7" opacity="0.45"/><line x1="363.4" y1="239.2" x2="369.2" y2="240.6" stroke="#ffc56a" stroke-width="0.7" opacity="0.45"/><line x1="352.2" y1="249.4" x2="371.2" y2="255.6" stroke="#ffc56a" stroke-width="1.8" opacity="0.95"/><line x1="355.2" y1="264.3" x2="360.8" y2="266.6" stroke="#ffc56a" stroke-width="0.7" opacity="0.45"/><line x1="349.7" y1="276.3" x2="355.0" y2="279.0" stroke="#ffc56a" stroke-width="0.7" opacity="0.45"/><line x1="343.2" y1="287.8" x2="348.4" y2="290.9" stroke="#ffc56a" stroke-width="0.7" opacity="0.45"/><line x1="332.7" y1="296.4" x2="342.4" y2="303.5" stroke="#ffc56a" stroke-width="1.15" opacity="0.7"/><line x1="327.7" y1="309.1" x2="332.3" y2="313.0" stroke="#ffc56a" stroke-width="0.7" opacity="0.45"/><line x1="318.8" y1="318.8" x2="323.0" y2="323.0" stroke="#ffc56a" stroke-width="0.7" opacity="0.45"/><line x1="309.1" y1="327.7" x2="313.0" y2="332.3" stroke="#ffc56a" stroke-width="0.7" opacity="0.45"/><line x1="294.0" y1="329.4" x2="305.8" y2="345.6" stroke="#ffc56a" stroke-width="1.8" opacity="0.95"/><line x1="287.8" y1="343.2" x2="290.9" y2="348.4" stroke="#ffc56a" stroke-width="0.7" opacity="0.45"/><line x1="276.3" y1="349.7" x2="279.0" y2="355.0" stroke="#ffc56a" stroke-width="0.7" opacity="0.45"/><line x1="264.3" y1="355.2" x2="266.6" y2="360.8" stroke="#ffc56a" stroke-width="0.7" opacity="0.45"/><line x1="250.7" y1="356.0" x2="254.4" y2="367.4" stroke="#ffc56a" stroke-width="1.15" opacity="0.7"/><line x1="239.2" y1="363.4" x2="240.6" y2="369.2" stroke="#ffc56a" stroke-width="0.7" opacity="0.45"/><line x1="226.3" y1="365.9" x2="227.2" y2="371.9" stroke="#ffc56a" stroke-width="0.7" opacity="0.45"/><line x1="213.2" y1="367.5" x2="213.7" y2="373.5" stroke="#ffc56a" stroke-width="0.7" opacity="0.45"/><line x1="200.0" y1="360.0" x2="200.0" y2="380.0" stroke="#ffc56a" stroke-width="1.8" opacity="0.95"/><line x1="186.8" y1="367.5" x2="186.3" y2="373.5" stroke="#ffc56a" stroke-width="0.7" opacity="0.45"/><line x1="173.7" y1="365.9" x2="172.8" y2="371.9" stroke="#ffc56a" stroke-width="0.7" opacity="0.45"/><line x1="160.8" y1="363.4" x2="159.4" y2="369.2" stroke="#ffc56a" stroke-width="0.7" opacity="0.45"/><line x1="149.3" y1="356.0" x2="145.6" y2="367.4" stroke="#ffc56a" stroke-width="1.15" opacity="0.7"/><line x1="135.7" y1="355.2" x2="133.4" y2="360.8" stroke="#ffc56a" stroke-width="0.7" opacity="0.45"/><line x1="123.7" y1="349.7" x2="121.0" y2="355.0" stroke="#ffc56a" stroke-width="0.7" opacity="0.45"/><line x1="112.2" y1="343.2" x2="109.1" y2="348.4" stroke="#ffc56a" stroke-width="0.7" opacity="0.45"/><line x1="106.0" y1="329.4" x2="94.2" y2="345.6" stroke="#ffc56a" stroke-width="1.8" opacity="0.95"/><line x1="90.9" y1="327.7" x2="87.0" y2="332.3" stroke="#ffc56a" stroke-width="0.7" opacity="0.45"/><line x1="81.2" y1="318.8" x2="77.0" y2="323.0" stroke="#ffc56a" stroke-width="0.7" opacity="0.45"/><line x1="72.3" y1="309.1" x2="67.7" y2="313.0" stroke="#ffc56a" stroke-width="0.7" opacity="0.45"/><line x1="67.3" y1="296.4" x2="57.6" y2="303.5" stroke="#ffc56a" stroke-width="1.15" opacity="0.7"/><line x1="56.8" y1="287.8" x2="51.6" y2="290.9" stroke="#ffc56a" stroke-width="0.7" opacity="0.45"/><line x1="50.3" y1="276.3" x2="45.0" y2="279.0" stroke="#ffc56a" stroke-width="0.7" opacity="0.45"/><line x1="44.8" y1="264.3" x2="39.2" y2="266.6" stroke="#ffc56a" stroke-width="0.7" opacity="0.45"/><line x1="47.8" y1="249.4" x2="28.8" y2="255.6" stroke="#ffc56a" stroke-width="1.8" opacity="0.95"/><line x1="36.6" y1="239.2" x2="30.8" y2="240.6" stroke="#ffc56a" stroke-width="0.7" opacity="0.45"/><line x1="34.1" y1="226.3" x2="28.1" y2="227.2" stroke="#ffc56a" stroke-width="0.7" opacity="0.45"/><line x1="32.5" y1="213.2" x2="26.5" y2="213.7" stroke="#ffc56a" stroke-width="0.7" opacity="0.45"/><line x1="36.0" y1="200.0" x2="24.0" y2="200.0" stroke="#ffc56a" stroke-width="1.15" opacity="0.7"/><line x1="32.5" y1="186.8" x2="26.5" y2="186.3" stroke="#ffc56a" stroke-width="0.7" opacity="0.45"/><line x1="34.1" y1="173.7" x2="28.1" y2="172.8" stroke="#ffc56a" stroke-width="0.7" opacity="0.45"/><line x1="36.6" y1="160.8" x2="30.8" y2="159.4" stroke="#ffc56a" stroke-width="0.7" opacity="0.45"/><line x1="47.8" y1="150.6" x2="28.8" y2="144.4" stroke="#ffc56a" stroke-width="1.8" opacity="0.95"/><line x1="44.8" y1="135.7" x2="39.2" y2="133.4" stroke="#ffc56a" stroke-width="0.7" opacity="0.45"/><line x1="50.3" y1="123.7" x2="45.0" y2="121.0" stroke="#ffc56a" stroke-width="0.7" opacity="0.45"/><line x1="56.8" y1="112.2" x2="51.6" y2="109.1" stroke="#ffc56a" stroke-width="0.7" opacity="0.45"/><line x1="67.3" y1="103.6" x2="57.6" y2="96.5" stroke="#ffc56a" stroke-width="1.15" opacity="0.7"/><line x1="72.3" y1="90.9" x2="67.7" y2="87.0" stroke="#ffc56a" stroke-width="0.7" opacity="0.45"/><line x1="81.2" y1="81.2" x2="77.0" y2="77.0" stroke="#ffc56a" stroke-width="0.7" opacity="0.45"/><line x1="90.9" y1="72.3" x2="87.0" y2="67.7" stroke="#ffc56a" stroke-width="0.7" opacity="0.45"/><line x1="106.0" y1="70.6" x2="94.2" y2="54.4" stroke="#ffc56a" stroke-width="1.8" opacity="0.95"/><line x1="112.2" y1="56.8" x2="109.1" y2="51.6" stroke="#ffc56a" stroke-width="0.7" opacity="0.45"/><line x1="123.7" y1="50.3" x2="121.0" y2="45.0" stroke="#ffc56a" stroke-width="0.7" opacity="0.45"/><line x1="135.7" y1="44.8" x2="133.4" y2="39.2" stroke="#ffc56a" stroke-width="0.7" opacity="0.45"/><line x1="149.3" y1="44.0" x2="145.6" y2="32.6" stroke="#ffc56a" stroke-width="1.15" opacity="0.7"/><line x1="160.8" y1="36.6" x2="159.4" y2="30.8" stroke="#ffc56a" stroke-width="0.7" opacity="0.45"/><line x1="173.7" y1="34.1" x2="172.8" y2="28.1" stroke="#ffc56a" stroke-width="0.7" opacity="0.45"/><line x1="186.8" y1="32.5" x2="186.3" y2="26.5" stroke="#ffc56a" stroke-width="0.7" opacity="0.45"/>
+  <g class="spin-slow rev">
+    <path d="M340.7 137.4 A154.0 154.0 0 0 1 281.6 330.6" fill="none" stroke="#ffe0a0" stroke-width="8" stroke-linecap="round" opacity="0.9"/><path d="M210.7 353.6 A154.0 154.0 0 0 1 78.6 294.8" fill="none" stroke="#ff8a1e" stroke-width="7" stroke-linecap="round" opacity="0.62"/><path d="M46.4 210.7 A154.0 154.0 0 0 1 113.9 72.3" fill="none" stroke="#c45a12" stroke-width="7" stroke-linecap="round" opacity="0.4"/><path d="M194.6 46.1 A154.0 154.0 0 0 1 330.6 118.4" fill="none" stroke="#ffd08a" stroke-width="8" stroke-linecap="round" opacity="0.78"/>
+  </g>
+  <path d="M228.3 67.0 A136.0 136.0 0 0 1 334.7 181.1" fill="none" stroke="#fff0cc" stroke-width="18" stroke-linecap="round" opacity="1"/><path d="M334.7 218.9 A136.0 136.0 0 0 1 242.0 329.3" fill="none" stroke="#ff9a22" stroke-width="15" stroke-linecap="round" opacity="0.96"/><path d="M195.3 335.9 A136.0 136.0 0 0 1 84.7 272.1" fill="none" stroke="#e06810" stroke-width="13" stroke-linecap="round" opacity="0.72"/><path d="M67.0 228.3 A136.0 136.0 0 0 1 109.0 98.9" fill="none" stroke="#8a3c0c" stroke-width="11" stroke-linecap="round" opacity="0.42"/><path d="M149.1 73.9 A136.0 136.0 0 0 1 250.9 73.9" fill="none" stroke="#ffb15a" stroke-width="14" stroke-linecap="round" opacity="0.82"/>
+  <circle cx="200" cy="200" r="116" fill="none" stroke="#4a2208" stroke-width="24"/>
+  <circle cx="200" cy="200" r="116" fill="none" stroke="#ff7a18" stroke-width="16" filter="url(#core-glow)"/>
+  <circle cx="200" cy="200" r="116" fill="none" stroke="#ffe6b8" stroke-width="5" opacity="0.9"/>
+  <circle cx="200" cy="200" r="102" fill="url(#core-well)"/>
+  <circle cx="200" cy="200" r="102" fill="none" stroke="#000" stroke-width="3" opacity="0.7"/>
+  <circle cx="200" cy="200" r="98" fill="none" stroke="rgba(255,186,110,0.22)" stroke-width="1"/>
+  <svg class="core-emblem" x="118" y="112" width="164" height="176" viewBox="0 0 164 176">
+    <path d="M78 168 C74 132 70 108 80 86 C90 108 88 132 86 168 Z" fill="#f0e2c8"/>
+    <path d="M80 96 C70 78 48 70 36 78" fill="none" stroke="#f6ead4" stroke-width="3"/>
+    <path d="M80 90 C92 72 118 64 132 74" fill="none" stroke="#f6ead4" stroke-width="3"/>
+    <path d="M80 108 C64 100 46 108 34 124" fill="none" stroke="#f6ead4" stroke-width="2.5"/>
+    <path d="M82 104 C98 96 122 104 136 118" fill="none" stroke="#f6ead4" stroke-width="2.5"/>
+    <path d="M78 78 C74 58 60 46 48 40" fill="none" stroke="#fff6e8" stroke-width="2.4"/>
+    <path d="M84 76 C96 56 118 46 132 42" fill="none" stroke="#fff6e8" stroke-width="2.4"/>
+    <ellipse cx="36" cy="74" rx="14" ry="8" fill="#c4a574" transform="rotate(-24 36 74)"/>
+    <ellipse cx="48" cy="36" rx="12" ry="7" fill="#e7d3a4" transform="rotate(-18 48 36)"/>
+    <ellipse cx="132" cy="70" rx="15" ry="8" fill="#e7d3a4" transform="rotate(20 132 70)"/>
+    <ellipse cx="128" cy="40" rx="11" ry="7" fill="#c4a574" transform="rotate(16 128 40)"/>
+    <ellipse cx="34" cy="122" rx="12" ry="7" fill="#d7c09a" transform="rotate(28 34 122)"/>
+    <ellipse cx="136" cy="116" rx="13" ry="7" fill="#c4a574" transform="rotate(-22 136 116)"/>
+    <ellipse cx="70" cy="48" rx="10" ry="6" fill="#f0e2c4" transform="rotate(-30 70 48)"/>
+    <ellipse cx="98" cy="44" rx="10" ry="6" fill="#e7d3a4" transform="rotate(24 98 44)"/>
+    <ellipse cx="118" cy="28" rx="16" ry="8" fill="#1a140e" transform="rotate(-16 118 28)"/>
+    <path d="M106 26 h8 M114 30 h9 M110 23 h6" stroke="#ff7a18" stroke-width="2" stroke-linecap="round" transform="rotate(-16 118 28)"/>
+    <ellipse cx="130" cy="20" rx="9" ry="3.4" fill="rgba(255,255,255,0.75)" transform="rotate(-28 130 20)"/>
+    <ellipse cx="108" cy="20" rx="8" ry="3" fill="rgba(255,255,255,0.55)" transform="rotate(18 108 20)"/>
+    <circle cx="104" cy="30" r="5.5" fill="#1a140e"/>
+    <circle cx="102" cy="28" r="1.3" fill="#ffb15a"/>
+    <path d="M100 26 q-6 -8 -2 -12" fill="none" stroke="#1a140e" stroke-width="1"/>
+  
+  </svg>
+</svg>
+                        </div>
+                        <div class="core-side">
+                        <div class="core-readout">
+                          <p class="sub-plate core-status-label">CORE STATUS</p>
+                          <b id="core-side-status" title="No device total is recorded. Facility names are not invented.">UNKNOWN</b>
+                        </div>
+                        <section class="plate tac-plate" title="Nodes are inbox items. Facility names are not invented.">
+                      <h2>TACTICAL OVERLAY</h2>
+                      <svg class="tac-chart" viewBox="0 0 480 260" aria-hidden="true"><g fill="none" stroke="#ffc56a" stroke-width="0.8" opacity="0.9"><path d="M48 78 L92 168"/><path d="M92 168 L58 214"/><path d="M48 78 L128 118"/><path d="M128 118 L92 168"/><path d="M150 46 L128 118"/><path d="M150 46 L214 92"/><path d="M214 92 L128 118"/><path d="M214 92 L196 176"/><path d="M196 176 L92 168"/><path d="M196 176 L268 210"/><path d="M268 210 L236 132"/><path d="M236 132 L214 92"/><path d="M236 132 L310 64"/><path d="M310 64 L214 92"/><path d="M310 64 L348 128"/><path d="M348 128 L236 132"/><path d="M348 128 L292 198"/><path d="M292 198 L268 210"/><path d="M348 128 L402 78"/><path d="M402 78 L310 64"/><path d="M402 78 L446 150"/><path d="M446 150 L348 128"/><path d="M446 150 L390 206"/><path d="M390 206 L292 198"/><path d="M390 206 L456 214"/><path d="M456 214 L446 150"/></g><g fill="#ff7a18" opacity="0.38"><circle cx="48" cy="78" r="11"/><circle cx="92" cy="168" r="10"/><circle cx="58" cy="214" r="9"/><circle cx="128" cy="118" r="10"/><circle cx="150" cy="46" r="9"/><circle cx="214" cy="92" r="11"/><circle cx="196" cy="176" r="9"/><circle cx="268" cy="210" r="8"/><circle cx="236" cy="132" r="10"/><circle cx="310" cy="64" r="9"/><circle cx="348" cy="128" r="11"/><circle cx="292" cy="198" r="8"/><circle cx="402" cy="78" r="10"/><circle cx="446" cy="150" r="9"/><circle cx="390" cy="206" r="8"/><circle cx="456" cy="214" r="8"/></g><g stroke="#fff6e4" stroke-width="1"><circle cx="48" cy="78" r="3.2" fill="#ffe6b8"/><circle cx="92" cy="168" r="3" fill="#ff7a18"/><circle cx="58" cy="214" r="2.6" fill="#fff6e8"/><circle cx="128" cy="118" r="3" fill="#ffb15a"/><circle cx="150" cy="46" r="2.8" fill="#ffe0b0"/><circle cx="214" cy="92" r="3.2" fill="#fff6e8"/><circle cx="196" cy="176" r="2.8" fill="#ff7a18"/><circle cx="268" cy="210" r="2.4" fill="#ffb15a"/><circle cx="236" cy="132" r="3" fill="#ffe6b8"/><circle cx="310" cy="64" r="2.8" fill="#ffd7a0"/><circle cx="348" cy="128" r="3.2" fill="#fff6e8"/><circle cx="292" cy="198" r="2.4" fill="#ff7a18"/><circle cx="402" cy="78" r="3" fill="#ffe0b0"/><circle cx="446" cy="150" r="2.8" fill="#ffb15a"/><circle cx="390" cy="206" r="2.6" fill="#fff6e8"/><circle cx="456" cy="214" r="2.4" fill="#ff7a18"/></g></svg>
+                      <div class="tac-map" id="tactical-map"></div>
+                      <p class="signal-tag" id="tactical-caption">NO SIGNAL</p>
+                    </section>
+                      </div>
+                    </section>
+                  </div>
+                  <div class="console-col col-right">
+                    <section class="plate">
+                      <h2>DATA LIST</h2>
+                      <div class="data-chrome" aria-hidden="true">
+                        <span class="tick-row"><i class="slot" aria-hidden="true"></i><i class="track" aria-hidden="true"></i></span>
+                        <span class="tick-row"><i class="slot" aria-hidden="true"></i><i class="track" aria-hidden="true"></i></span>
+                        <span class="tick-row"><i class="slot" aria-hidden="true"></i><i class="track" aria-hidden="true"></i></span>
+                        <span class="tick-row"><i class="slot" aria-hidden="true"></i><i class="track" aria-hidden="true"></i></span>
+                        <span class="tick-row"><i class="slot" aria-hidden="true"></i><i class="track" aria-hidden="true"></i></span>
+                        <span class="tick-row"><i class="slot" aria-hidden="true"></i><i class="track" aria-hidden="true"></i></span>
+                      </div>
+                      <div id="data-list"></div>
+                    </section>
+                    <section class="plate">
+                      <div class="tile-row">
+                        <div class="tile"><span>ACTIVE TASKS</span><b id="tile-tasks">UNKNOWN</b></div>
+                        <div class="tile"><span>REMINDERS</span><b id="tile-reminders">UNKNOWN</b></div>
+                        <div class="tile"><span>INBOX</span><b id="tile-inbox">UNKNOWN</b></div>
+                      </div>
+                    </section>
+                    <section class="plate network-plate">
+                      <div class="mascot-frame">
+                        <div class="mission-mascot" aria-hidden="true">
+                        <svg viewBox="0 0 180 180" focusable="false">
+                          <path d="M57 42h66l14 30v45c0 25-21 44-47 44s-47-19-47-44V72z" fill="#d8dde8" stroke="#06070c" stroke-width="8"/>
+                          <path d="M60 45l12-25h36l12 25" fill="none" stroke="#ff9a35" stroke-width="10" stroke-linecap="round"/>
+                          <path d="M71 22h38" stroke="#c4a574" stroke-width="5" stroke-linecap="round"/>
+                          <ellipse cx="73" cy="91" rx="14" ry="22" fill="#070912"/><ellipse cx="108" cy="91" rx="14" ry="22" fill="#070912"/>
+                          <ellipse cx="77" cy="84" rx="5" ry="8" fill="#c47b4a"/><ellipse cx="112" cy="84" rx="5" ry="8" fill="#c4a574"/>
+                          <circle cx="90" cy="111" r="7" fill="#070912"/>
+                          <path d="M67 127c13 14 33 14 46 0" fill="none" stroke="#070912" stroke-width="8" stroke-linecap="round"/>
+                          <path d="M44 76H31v39h13M136 76h13v39h-13" fill="#778093" stroke="#06070c" stroke-width="8"/>
+                        </svg>
+                      </div>
+                      </div>
+                      <div>
+                        <h2>NETWORK INTEGRITY</h2>
+                        <p id="network-version" title="Runtime version. No invented integrity percent.">UNKNOWN</p>
+                      </div>
+                    </section>
+                    <section class="plate">
+                      <h2>DEV STATUS</h2>
+                      <div class="status-rows" aria-hidden="true">
+                        <span class="tick-row"><i class="slot" aria-hidden="true"></i><i class="track" aria-hidden="true"></i><i class="check" aria-hidden="true"></i></span>
+                        <span class="tick-row"><i class="slot" aria-hidden="true"></i><i class="track" aria-hidden="true"></i><i class="check" aria-hidden="true"></i></span>
+                        <span class="tick-row"><i class="slot" aria-hidden="true"></i><i class="track" aria-hidden="true"></i><i class="check" aria-hidden="true"></i></span>
+                        <span class="tick-row"><i class="slot" aria-hidden="true"></i><i class="track" aria-hidden="true"></i><i class="check" aria-hidden="true"></i></span>
+                        <span class="tick-row"><i class="slot" aria-hidden="true"></i><i class="track" aria-hidden="true"></i><i class="check" aria-hidden="true"></i></span>
+                      </div>
+                      <p id="dev-status">DEVELOPMENT · NOT AUTHORISED</p>
+                    </section>
+                    <section class="plate">
+                      <h2>AUX TELEMETRY</h2>
+                      <div class="status-rows" aria-hidden="true">
+                        <span class="tick-row"><i class="slot" aria-hidden="true"></i><i class="track" aria-hidden="true"></i><i class="check" aria-hidden="true"></i></span>
+                        <span class="tick-row"><i class="slot" aria-hidden="true"></i><i class="track" aria-hidden="true"></i><i class="check" aria-hidden="true"></i></span>
+                        <span class="tick-row"><i class="slot" aria-hidden="true"></i><i class="track" aria-hidden="true"></i><i class="check" aria-hidden="true"></i></span>
+                        <span class="tick-row"><i class="slot" aria-hidden="true"></i><i class="track" aria-hidden="true"></i><i class="check" aria-hidden="true"></i></span>
+                        <span class="tick-row"><i class="slot" aria-hidden="true"></i><i class="track" aria-hidden="true"></i><i class="check" aria-hidden="true"></i></span>
+                      </div>
+                      <p class="signal-tag" title="No auxiliary feed is wired. Nothing is invented.">UNKNOWN</p>
+                    </section>
+                  </div>
+
+                    
+                </div>
+                <div class="focus-layout now-strip">
+                  <article class="panel mission-panel green" data-hud-panel="now">
+                    <div class="mission-core">
+    <div class="mission-copy">
+                        <p class="eyebrow">NOW</p>
+                        <h2 id="current-task">Waiting for NOLAN…</h2>
+                        <p id="current-subtitle">Live durable task state will appear here.</p>
+                        <div class="chips" id="current-meta"></div>
+                        <div class="actions" id="current-actions"></div>
+                      </div>
+                      <div class="mission-ring">
+                        <svg viewBox="0 0 160 160" aria-hidden="true">
+                          <circle cx="80" cy="80" r="68" fill="none" stroke="var(--line)" />
+                          <circle class="spin" cx="80" cy="80" r="61" fill="none" stroke="var(--violet)" stroke-width="2" stroke-dasharray="16 8 3 8" />
+                          <circle class="spin reverse" cx="80" cy="80" r="51" fill="none" stroke="var(--green)" stroke-dasharray="6 8" />
+                          <circle id="mission-progress-ring" cx="80" cy="80" r="40" pathLength="100" fill="var(--violet-soft)" stroke="var(--green)" stroke-width="4" stroke-linecap="round" stroke-dasharray="0 100" transform="rotate(-90 80 80)" />
+                        </svg>
+                        <div class="mission-ring-copy"><span>MISSION STATE</span><b id="mission-state">STANDBY</b></div>
+                      </div>
+                    </div>
+                    <div class="mission-footer">
+                      <div><span>Active tasks</span><b id="focus-active">0</b></div>
+                      <div><span>Cleared tasks</span><b id="focus-done">0</b></div>
+                      <div><span>Reminders</span><b id="focus-reminders">0</b></div>
+                    </div>
+                  </article>
+                  <article class="panel queue-panel violet" data-hud-panel="next">
+                    <div class="panel-header"><h3>Next 3</h3><span id="queue-count">0 QUEUED</span></div>
+                    <p class="next-caption" id="next-caption">Showing 0 of 0</p>
+                    <ul class="priority-list scroll-list" id="focus-queue"></ul>
+                  </article>
+                </div>
+                <div class="console-lower">
+                  <section class="plate gauge-face">
+                    <span>SYSTEM LOAD</span>
+                    <svg class="analogue" viewBox="0 0 160 160" aria-hidden="true"><circle cx="80" cy="80" r="78" fill="#120e0a"/><circle cx="80" cy="80" r="76" fill="#f3e6c4"/><circle cx="80" cy="80" r="71" fill="#8d6a3a"/><circle cx="80" cy="80" r="64" fill="#1a120c"/><circle cx="80" cy="80" r="60" fill="#efe6d2"/><ellipse cx="54" cy="38" rx="30" ry="13" fill="rgba(255,255,255,0.46)" transform="rotate(-28 54 38)"/><ellipse cx="102" cy="112" rx="16" ry="6" fill="rgba(255,255,255,0.14)" transform="rotate(18 102 112)"/><circle cx="80" cy="80" r="58" fill="none" stroke="#c4a36a" stroke-width="2"/><line x1="37.1" y1="116.0" x2="44.8" y2="110.0" stroke="#3a2e1c" stroke-width="1.6"/><line x1="25.7" y1="93.5" x2="31.5" y2="92.1" stroke="#3a2e1c" stroke-width="0.8"/><line x1="25.2" y1="68.4" x2="35.0" y2="70.4" stroke="#3a2e1c" stroke-width="1.6"/><line x1="35.9" y1="45.5" x2="40.6" y2="49.2" stroke="#3a2e1c" stroke-width="0.8"/><line x1="55.5" y1="29.7" x2="59.8" y2="38.7" stroke="#3a2e1c" stroke-width="1.6"/><line x1="80.0" y1="24.0" x2="80.0" y2="30.0" stroke="#3a2e1c" stroke-width="0.8"/><line x1="104.5" y1="29.7" x2="100.2" y2="38.7" stroke="#3a2e1c" stroke-width="1.6"/><line x1="124.1" y1="45.5" x2="119.4" y2="49.2" stroke="#3a2e1c" stroke-width="0.8"/><line x1="134.8" y1="68.4" x2="125.0" y2="70.4" stroke="#3a2e1c" stroke-width="1.6"/><line x1="134.3" y1="93.5" x2="128.5" y2="92.1" stroke="#3a2e1c" stroke-width="0.8"/><line x1="122.9" y1="116.0" x2="115.2" y2="110.0" stroke="#3a2e1c" stroke-width="1.6"/><text x="50.9" y="104.4" text-anchor="middle" dominant-baseline="central" font-size="8" fill="#2c2416" font-family="sans-serif">0</text><text x="42.8" y="72.1" text-anchor="middle" dominant-baseline="central" font-size="8" fill="#2c2416" font-family="sans-serif">20</text><text x="63.3" y="45.8" text-anchor="middle" dominant-baseline="central" font-size="8" fill="#2c2416" font-family="sans-serif">40</text><text x="96.7" y="45.8" text-anchor="middle" dominant-baseline="central" font-size="8" fill="#2c2416" font-family="sans-serif">60</text><text x="117.2" y="72.1" text-anchor="middle" dominant-baseline="central" font-size="8" fill="#2c2416" font-family="sans-serif">80</text><text x="109.1" y="104.4" text-anchor="middle" dominant-baseline="central" font-size="8" fill="#2c2416" font-family="sans-serif">100</text><line x1="80" y1="80" x2="57" y2="113" stroke="#d3121a" stroke-width="2.8" stroke-linecap="round"/><circle cx="80" cy="80" r="5" fill="#c47b4a" stroke="#3a2c18"/><ellipse cx="58" cy="46" rx="26" ry="12" fill="rgba(255,255,255,0.35)" transform="rotate(-28 58 46)"/></svg>
+                    <b id="gauge-load">UNKNOWN</b>
+                  </section>
+                  <section class="plate analyzer-plate">
+                    <h3>CORE ANALYZER</h3>
+                    <div class="analyzer">
+                      <div class="analyzer-row"><i class="knob" aria-hidden="true"></i><i class="slider"></i><i class="fader-scale" aria-hidden="true"><span>100</span><span>50</span><span>0</span></i><span>PERSISTENCE</span><b id="analyzer-persistence">UNKNOWN</b></div>
+                      <div class="analyzer-row"><i class="knob" aria-hidden="true"></i><i class="slider"></i><i class="fader-scale" aria-hidden="true"><span>100</span><span>50</span><span>0</span></i><span>Z-STATE</span><b id="analyzer-z">UNKNOWN</b></div>
+                      <div class="analyzer-row"><i class="knob" aria-hidden="true"></i><i class="slider"></i><i class="fader-scale" aria-hidden="true"><span>100</span><span>50</span><span>0</span></i><span>LIMITS</span><b id="analyzer-limits">UNKNOWN</b></div>
+                      <div class="analyzer-row"><i class="knob" aria-hidden="true"></i><i class="slider"></i><i class="fader-scale" aria-hidden="true"><span>100</span><span>50</span><span>0</span></i><span>PRESENCE</span><b id="analyzer-presence">UNKNOWN</b></div>
+                      <div class="analyzer-row"><i class="knob" aria-hidden="true"></i><i class="slider"></i><i class="fader-scale" aria-hidden="true"><span>100</span><span>50</span><span>0</span></i><span>LIVE WORK</span><b id="analyzer-live">UNKNOWN</b></div>
+                    </div>
+                    <div class="level" aria-hidden="true"><i id="totality-bar"></i></div>
+                    <p id="totality-bar-label">UNKNOWN</p>
+                  </section>
+                  <section class="plate gauge-face">
+                    <span>SYSTEM EFFICIENCY</span>
+                    <svg class="analogue" viewBox="0 0 160 160" aria-hidden="true"><circle cx="80" cy="80" r="78" fill="#120e0a"/><circle cx="80" cy="80" r="76" fill="#f3e6c4"/><circle cx="80" cy="80" r="71" fill="#8d6a3a"/><circle cx="80" cy="80" r="64" fill="#1a120c"/><circle cx="80" cy="80" r="60" fill="#efe6d2"/><ellipse cx="54" cy="38" rx="30" ry="13" fill="rgba(255,255,255,0.46)" transform="rotate(-28 54 38)"/><ellipse cx="102" cy="112" rx="16" ry="6" fill="rgba(255,255,255,0.14)" transform="rotate(18 102 112)"/><circle cx="80" cy="80" r="58" fill="none" stroke="#c4a36a" stroke-width="2"/><line x1="37.1" y1="116.0" x2="44.8" y2="110.0" stroke="#3a2e1c" stroke-width="1.6"/><line x1="25.7" y1="93.5" x2="31.5" y2="92.1" stroke="#3a2e1c" stroke-width="0.8"/><line x1="25.2" y1="68.4" x2="35.0" y2="70.4" stroke="#3a2e1c" stroke-width="1.6"/><line x1="35.9" y1="45.5" x2="40.6" y2="49.2" stroke="#3a2e1c" stroke-width="0.8"/><line x1="55.5" y1="29.7" x2="59.8" y2="38.7" stroke="#3a2e1c" stroke-width="1.6"/><line x1="80.0" y1="24.0" x2="80.0" y2="30.0" stroke="#3a2e1c" stroke-width="0.8"/><line x1="104.5" y1="29.7" x2="100.2" y2="38.7" stroke="#3a2e1c" stroke-width="1.6"/><line x1="124.1" y1="45.5" x2="119.4" y2="49.2" stroke="#3a2e1c" stroke-width="0.8"/><line x1="134.8" y1="68.4" x2="125.0" y2="70.4" stroke="#3a2e1c" stroke-width="1.6"/><line x1="134.3" y1="93.5" x2="128.5" y2="92.1" stroke="#3a2e1c" stroke-width="0.8"/><line x1="122.9" y1="116.0" x2="115.2" y2="110.0" stroke="#3a2e1c" stroke-width="1.6"/><text x="50.9" y="104.4" text-anchor="middle" dominant-baseline="central" font-size="8" fill="#2c2416" font-family="sans-serif">0</text><text x="42.8" y="72.1" text-anchor="middle" dominant-baseline="central" font-size="8" fill="#2c2416" font-family="sans-serif">20</text><text x="63.3" y="45.8" text-anchor="middle" dominant-baseline="central" font-size="8" fill="#2c2416" font-family="sans-serif">40</text><text x="96.7" y="45.8" text-anchor="middle" dominant-baseline="central" font-size="8" fill="#2c2416" font-family="sans-serif">60</text><text x="117.2" y="72.1" text-anchor="middle" dominant-baseline="central" font-size="8" fill="#2c2416" font-family="sans-serif">80</text><text x="109.1" y="104.4" text-anchor="middle" dominant-baseline="central" font-size="8" fill="#2c2416" font-family="sans-serif">100</text><line x1="80" y1="80" x2="57" y2="113" stroke="#d3121a" stroke-width="2.8" stroke-linecap="round"/><circle cx="80" cy="80" r="5" fill="#c47b4a" stroke="#3a2c18"/><ellipse cx="58" cy="46" rx="26" ry="12" fill="rgba(255,255,255,0.35)" transform="rotate(-28 58 46)"/></svg>
+                    <b id="gauge-efficiency">UNKNOWN</b>
+                  </section>
+                </div>
+              </section>
+              <section class="view" id="view-board">
+                <div class="two-column-view board-view">
+                  <article class="panel list-panel violet"><div class="panel-header"><h2>Active tasks</h2><span id="board-active-count"></span></div><div class="scroll-list" id="active-list"></div></article>
+                  <article class="panel list-panel green"><div class="panel-header"><h2>Completed</h2><span id="board-done-count"></span></div><div class="scroll-list" id="done-list"></div></article>
+                      <article class="panel violet board-load-panel">
+                        <div class="panel-content"><div class="panel-header"><h2>Task load by domain</h2><span>LIVE DURABLE STATE</span></div><div class="category-content"><div class="category-bars" id="category-bars"></div><div class="completion-card"><div class="completion-ring"><svg viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r="49" fill="none" stroke="var(--line)" stroke-width="8" /><circle id="completion-ring" cx="60" cy="60" r="49" pathLength="100" fill="none" stroke="var(--green)" stroke-width="8" stroke-linecap="round" stroke-dasharray="0 100" transform="rotate(-90 60 60)" /></svg><div class="completion-copy"><b id="completion-percent">0%</b><span>Complete</span></div></div></div></div></div>
+                      </article>
+                </div>
+              </section>
+              <section class="view" id="view-reminders">
+                <div class="two-column-view">
+                  <article class="panel list-panel violet"><div class="panel-header"><h2>Reminder contacts</h2><span id="reminders-total"></span></div><div class="scroll-list" id="reminder-list"></div></article>
+                  <article class="panel green"><div class="panel-header"><h2>Reminder timing distribution</h2><span>REAL DUE STATE</span></div><div class="chart-wrap"><svg viewBox="0 0 420 300" role="img" aria-label="Reminder timing distribution"><g stroke="var(--line)"><path d="M35 40H395 M35 100H395 M35 160H395 M35 220H395 M35 270H395" /></g><g id="reminder-chart-bars"></g><g fill="var(--muted)" font-size="11" text-anchor="middle"><text x="75" y="289">DUE</text><text x="165" y="289">24H</text><text x="255" y="289">LATER</text><text x="347" y="289">OPEN</text></g></svg></div></article>
+                </div>
+              </section>
+              <section class="view" id="view-voice">
+                <div class="two-column-view">
+                  <article class="panel violet">
+                    <div class="panel-header"><h2>Voice control</h2><span id="voice-capability">CHECKING…</span></div>
+                    <div class="voice-controls">
+                      <div class="voice-profiles" id="voice-profiles"></div>
+                      <div class="voice-actions">
+                        <button type="button" class="voice-btn" id="voice-enable">Enable microphone</button>
+                        <button type="button" class="voice-btn" id="voice-stop">Stop</button>
+                        <button type="button" class="voice-btn" id="voice-test-output">Test spoken output</button>
+                      </div>
+                      <p class="voice-hint">Say “<strong>Nolan</strong>” then a command. Partial speech never acts; critical commands need “Nolan confirm”. Equipment with no adapter fails closed.</p>
+                      <div class="voice-live"><small>HEARD</small><p id="voice-transcript">—</p></div>
+                      <div class="voice-pending" id="voice-pending" hidden></div>
+                      <div class="voice-result" id="voice-result" data-tone="muted">Idle.</div>
+                      <p class="voice-hint" id="voice-output-status" role="status" aria-live="polite">Spoken output has not been tested.</p>
+                      <p class="voice-hint" id="voice-latency">Dispatch latency: no sample yet.</p>
+                      <form id="voice-typed" class="voice-typed">
+                        <input id="voice-text" type="text" placeholder="Type a command (fallback)" autocomplete="off" aria-label="Type a voice command" />
+                        <button type="submit" class="voice-btn">Send</button>
+                      </form>
+                    </div>
+                  </article>
+                  <article class="panel green">
+                    <div class="panel-header"><h2>Commands</h2><span id="voice-profile-label">—</span></div>
+                    <div class="scroll-list" id="voice-command-list"></div>
+                  </article>
+                </div>
+              </section>
+              <section class="view" id="view-operations">
+                <div class="operations-view">
+                  <article class="panel green">
+                    <div class="panel-header"><h2>Operations snapshot</h2><span id="brief-generated">AWAITING BRIEF</span></div>
+                    <div class="operations-summary">
+                      <p class="operations-headline" id="brief-headline">Live daily operations will appear here.</p>
+                      <div class="matrix">
+                        <div class="matrix-item"><span>Reminders due</span><b id="brief-reminders-due">0</b></div>
+                        <div class="matrix-item"><span>Upcoming 24h</span><b id="brief-reminders-upcoming">0</b></div>
+                        <div class="matrix-item"><span>Active projects</span><b id="brief-project-count">0</b></div>
+                        <div class="matrix-item"><span>Finalised open</span><b id="brief-quote-count">0</b></div>
+                        <div class="matrix-item"><span>Draft quotes</span><b id="brief-draft-count">0</b></div>
+                        <div class="matrix-item"><span>Accepted value</span><b id="brief-accepted-total">$0.00</b></div>
+                        <div class="matrix-item"><span>Open enquiries</span><b id="brief-enquiry-count">0</b></div>
+                        <div class="matrix-item"><span>Owed to you</span><b id="brief-unpaid-total">$0.00</b></div>
+                        <div class="matrix-item"><span>Errands to run</span><b id="brief-errand-count">0</b></div>
+                        <div class="matrix-item"><span>Booked today</span><b id="brief-scheduled-today">0</b></div>
+                      </div>
+                    </div>
+                  </article>
+                  <article class="panel list-panel violet"><div class="panel-header"><h2>Active projects</h2><span id="operations-project-count">0 ACTIVE</span></div><ul class="compact-list scroll-list" id="operations-project-list"></ul></article>
+                  <article class="panel list-panel violet"><div class="panel-header"><h2>Scheduled jobs</h2><span id="operations-scheduled-count">0 TODAY · 0 THIS WEEK</span></div><ul class="compact-list scroll-list" id="operations-scheduled-list"></ul></article>
+                  <article class="panel list-panel green"><div class="panel-header"><h2>Open enquiries</h2><span id="operations-enquiry-count">0 OPEN</span></div><ul class="compact-list scroll-list" id="operations-enquiry-list"></ul></article>
+                  <article class="panel list-panel green"><div class="panel-header"><h2>Finalised open quote register</h2><span id="operations-quote-total">$0</span></div><ul class="compact-list scroll-list" id="operations-quote-list"></ul></article>
+                  <article class="panel list-panel violet"><div class="panel-header"><h2>Unpaid invoices</h2><span id="operations-invoice-count">0 UNPAID</span></div><ul class="compact-list scroll-list" id="operations-invoice-list"></ul></article>
+                  <article class="panel list-panel green"><div class="panel-header"><h2>Errands to run</h2><span id="operations-errand-count">0 TO RUN</span></div><ul class="compact-list scroll-list" id="operations-errand-list"></ul></article>
+                  <article class="panel list-panel violet"><div class="panel-header"><h2>Equipment maintenance</h2><span id="operations-maintenance-count">0 DUE</span></div><ul class="compact-list scroll-list" id="operations-maintenance-list"></ul></article>
+                  <article class="panel list-panel green quote-detail-panel">
+                    <div class="panel-header"><h2>Quote inspector</h2><span class="quote-detail-state" id="quote-detail-state">SELECT A REGISTER QUOTE</span></div>
+                    <div id="quote-detail-content">
+                      <div class="matrix">
+                        <div class="matrix-item"><span>Quote</span><b id="quote-detail-number">—</b></div>
+                        <div class="matrix-item"><span>Revision</span><b id="quote-detail-revision">—</b></div>
+                        <div class="matrix-item"><span>Lifecycle</span><b id="quote-detail-status">—</b></div>
+                        <div class="matrix-item"><span>Commercial</span><b id="quote-detail-commercial">—</b></div>
+                        <div class="matrix-item"><span>Subtotal</span><b id="quote-detail-subtotal">$0.00</b></div>
+                        <div class="matrix-item"><span>GST</span><b id="quote-detail-tax">$0.00</b></div>
+                        <div class="matrix-item"><span>Total</span><b id="quote-detail-total">$0.00</b></div>
+                        <div class="matrix-item"><span>Valid until</span><b id="quote-detail-valid">—</b></div>
+                      </div>
+                      <ul class="compact-list" id="quote-detail-items"></ul>
+                      <p class="operations-headline" id="quote-detail-notes"></p>
+                      <div class="quote-detail-actions"><button class="ghost" id="quote-detail-retry" type="button" hidden>RETRY</button></div>
+                      <span hidden>LOADING QUOTE</span><span hidden>QUOTE NOT FOUND</span>
+                    </div>
+                  </article>
+                  <article class="panel list-panel violet full-width-panel">
+                    <div class="panel-header"><h2>Operations inbox</h2><span id="inbox-summary">AWAITING INBOX</span></div>
+                    <ul class="compact-list scroll-list" id="inbox-item-list"></ul>
+                    <div id="inbox-source-list"></div>
+                  </article>
+                  <article class="panel list-panel green full-width-panel">
+                    <div class="panel-header"><h2>Activity timeline</h2><span id="activity-timeline-status">DURABLE · AWAITING DATA</span></div>
+                    <ul class="compact-list scroll-list" id="activity-timeline-list"></ul>
+                  </article>
+                </div>
+              </section>
+              <section class="view" id="view-livework">
+                <div class="livework-view">
+                  <article class="panel green">
+                    <div class="panel-header"><h2>Live work</h2><span id="livework-state">STANDBY</span></div>
+                    <p class="eyebrow">CURRENT MISSION</p>
+                    <h3 id="livework-objective">Waiting for NOLAN…</h3>
+                    <p id="livework-subject">Live development mission state will appear here.</p>
+                  </article>
+                  <article class="panel violet">
+                    <div class="panel-header"><h2>Pipeline</h2><span>MISSION → ΩΣ</span></div>
+                    <div class="lw-pipeline" id="livework-pipeline" aria-label="Persisted mission stages"></div>
+                    <p id="livework-bindings"></p>
+                    <ul class="compact-list" id="livework-omega-failures"></ul>
+                  </article>
+                  <article class="panel violet">
+                    <div class="panel-header"><h2>Mission details</h2><span>DURABLE EVIDENCE</span></div>
+                    <div class="lw-pipeline" id="livework-details">
+                      <div class="lw-node" id="lw-node-mission"><span class="lw-label"><span class="lw-dot"></span>Current mission</span><b class="lw-status" id="lw-status-mission">—</b><span class="lw-detail" id="lw-detail-mission">Awaiting mission.</span></div>
+                      <div class="lw-node" id="lw-node-stage"><span class="lw-label"><span class="lw-dot"></span>Stage</span><b class="lw-status" id="lw-status-stage">—</b><span class="lw-detail" id="lw-detail-stage">Awaiting stage.</span></div>
+                      <div class="lw-node" id="lw-node-issue"><span class="lw-label"><span class="lw-dot"></span>Issue</span><b class="lw-status" id="lw-status-issue">—</b><span class="lw-detail" id="lw-detail-issue">Not recorded by the mission yet.</span></div>
+                      <div class="lw-node" id="lw-node-pr"><span class="lw-label"><span class="lw-dot"></span>PR</span><b class="lw-status" id="lw-status-pr">—</b><span class="lw-detail" id="lw-detail-pr">Awaiting PR.</span></div>
+                      <div class="lw-node" id="lw-node-worker"><span class="lw-label"><span class="lw-dot"></span>Worker</span><b class="lw-status" id="lw-status-worker">—</b><span class="lw-detail" id="lw-detail-worker">Awaiting worker.</span></div>
+                      <div class="lw-node" id="lw-node-review"><span class="lw-label"><span class="lw-dot"></span>Review</span><b class="lw-status" id="lw-status-review">—</b><span class="lw-detail" id="lw-detail-review">Awaiting review.</span></div>
+                      <div class="lw-node" id="lw-node-ci"><span class="lw-label"><span class="lw-dot"></span>CI</span><b class="lw-status" id="lw-status-ci">—</b><span class="lw-detail" id="lw-detail-ci">Awaiting verification.</span></div>
+                      <div class="lw-node" id="lw-node-merge"><span class="lw-label"><span class="lw-dot"></span>Merge</span><b class="lw-status" id="lw-status-merge">—</b><span class="lw-detail" id="lw-detail-merge">Awaiting merge.</span></div>
+                      <div class="lw-node" id="lw-node-omega"><span class="lw-label"><span class="lw-dot"></span>ΩΣ</span><b class="lw-status" id="lw-status-omega">—</b><span class="lw-detail" id="lw-detail-omega">Awaiting ΩΣ completion.</span></div>
+                    </div>
+                  </article>
+                      <section class="panel" id="panel-crew" data-hud-panel="crew">
+                        <div class="panel-content">
+                          <div class="panel-header"><h2>Crew</h2><span id="crew-status">UNKNOWN</span></div>
+                          <p class="crew-detail" id="crew-detail">No crew roster is on this NOLAN. Names are not invented.</p>
+                        </div>
+                      </section>
+                  <article class="panel list-panel green">
+                    <div class="panel-header"><h2>Mission events</h2><span id="livework-events-status">AWAITING DATA</span></div>
+                    <ul class="compact-list scroll-list" id="livework-events"></ul>
+                  </article>
+                </div>
+              </section>
+              <section class="view" id="view-systems">
+                <div class="systems-view">
+                  <article class="panel violet">
+                    <div class="panel-header"><h2>Runtime health</h2><span id="checked-at"></span></div>
+                    <div class="system-grid">
+                      <div class="system-item"><span>Overall</span><b id="system-status">UNKNOWN</b></div>
+                      <div class="system-item"><span>Z-State</span><b id="z-state">UNKNOWN</b></div>
+                      <div class="system-item"><span>Persistence</span><b id="provider">UNKNOWN</b></div>
+                      <div class="system-item"><span>Deployment</span><b id="deployment">UNKNOWN</b></div>
+                      <div class="system-item"><span>Source</span><b id="source-version">UNKNOWN</b></div>
+                      <div class="system-item"><span>Timezone</span><b id="timezone">UNKNOWN</b></div>
+                    </div>
+                    <div class="layer-grid" id="layer-grid"></div>
+                  </article>
+                  <article class="panel green systems-governance">
+                    <div class="panel-header"><h2>Integration commissioning</h2><span>EVIDENCE-BACKED</span></div>
+                    <div class="system-grid" id="integration-grid"></div>
+                    <div class="panel-header"><h3>Reasoning</h3><span id="reasoning-verification">UNKNOWN</span></div>
+                    <div class="system-grid">
+                      <div class="system-item"><span>Provider / model</span><b id="reasoning-provider">UNKNOWN</b></div>
+                    </div>
+                    <div class="panel-header"><h3>Presence</h3><span>FROM STATUS</span></div>
+                    <div class="system-grid">
+                      <div class="system-item"><span>Derived presence</span><b id="hud-presence">CONNECTING</b></div>
+                    </div>
+                    <div class="panel-header"><h3>Approvals</h3><span id="approvals-stage">UNKNOWN</span></div>
+                    <p class="operations-headline" id="approvals-source">Tool-action proposals are not on this snapshot. This console does not approve, reject, or execute.</p>
+                    <p class="operations-headline"><a href="/settings/approvals">Review, approve and run staged changes on the Approvals page</a></p>
+                    <p class="operations-headline"><a href="/settings/owner-decisions">Open the owner decision queue</a></p>
+                  </article>
+                  <div class="systems-side">
+                    <article class="panel violet systems-radar"><div class="panel-header"><h2>Layer readiness radar</h2><span>LIVE STATUS</span></div><div class="chart-wrap"><svg viewBox="0 0 400 400" role="img" aria-label="NOLAN runtime layer readiness"><g class="radar-grid" id="radar-grid"></g><g class="radar-axes" id="radar-axes"></g><polygon id="layer-radar-polygon" points="200,200" fill="rgba(196,123,74,.18)" stroke="var(--violet)" stroke-width="3" /><g class="radar-labels" id="radar-labels"></g></svg></div></article>
+                      <section class="panel green systems-provider">
+                        <div class="panel-content">
+                          <div class="panel-header"><h2>Provider</h2><span id="provider-link-state">CONNECTING</span></div>
+                          <div class="provider-card"><span>Authorised provider</span><b id="right-provider">AWAITING SNAPSHOT</b></div>
+                          <div class="matrix">
+                            <div class="matrix-item"><span>Reachability</span><b id="provider-reachability">UNKNOWN</b></div>
+                            <div class="matrix-item"><span>Authentication</span><b id="provider-authentication">UNKNOWN</b></div>
+                            <div class="matrix-item"><span>Schema</span><b id="provider-schema">UNKNOWN</b></div>
+                            <div class="matrix-item"><span>Version</span><b id="provider-version">DEVELOPMENT</b></div>
+                          </div>
+                        </div>
+                      </section>
+                      <section class="panel violet systems-recent">
+                        <div class="panel-content"><div class="panel-header"><h2>Recent</h2><span>SESSION</span></div><ul class="activity-list" id="activity-list"></ul></div>
+                      </section>
+                  </div>
+                </div>
+              </section>
+              <section class="view" id="view-settings">
+                <div class="settings-shell">
+                  <h2 class="settings-title">Settings</h2>
+                  <nav class="settings-tabs" aria-label="Settings">
+                    <a class="active" href="#view-general" data-settings-tab="general" aria-current="page">General</a>
+                    <a href="#view-credentials" data-settings-tab="credentials">Credentials</a>
+                    <a href="#view-persistence" data-settings-tab="persistence">Persistence</a>
+                    <a href="#view-limits" data-settings-tab="limits">Limits</a>
+                    <a href="#view-danger" data-settings-tab="danger">Danger zone</a>
+                  </nav>
+                  <div class="settings-panel" data-settings-panel="credentials" id="view-credentials">
+                    <div class="credentials-view">
+                      <article class="panel violet">
+                        <div class="panel-header"><h2>Credentials</h2><span class="settings-status">Not verified</span></div>
+                        <div class="panel-content" style="padding:10px">
+                          <p id="credentials-intro">Machine credentials are not a sign-in. This console shows collapsed fingerprint chips and runbook links. It does not generate secrets or call Convex. End is not offered here. Idle stays Not verified. Guarding still has no End button.</p>
+                          <p class="cred-bad" id="credentials-banner" hidden></p>
+                          <p class="cred-warn" id="credentials-approvals" hidden></p>
+                          <div id="credentials-cards"></div>
+                          <p class="note" id="credentials-local"></p>
+                          <p><a href="/settings/danger#service">Open Danger zone for the service token</a></p>
+                          <p><a href="/settings/danger#approval">Open Danger zone for the approval token</a></p>
+                          <p><a href="/settings/danger#delivery">Open Danger zone for the delivery token</a></p>
+                          <ul id="credentials-links"></ul>
+                        </div>
+                      </article>
+                    </div>
+                  </div>
+                  <div class="settings-panel" data-settings-panel="persistence" id="view-persistence">
+                    <div class="settings-layout">
+                      <h2>Persistence</h2>
+                      <p id="persistence-honesty">Provider selection is explicit. NOLAN will not silently fall back from Convex to JSON.</p>
+                      <p class="settings-status" id="persistence-glance" role="status">Health checking</p>
+                      <div class="settings-actions" id="persistence-health-glance">
+                        <span class="fp-chip" id="persistence-provider-chip">Provider</span>
+                        <span class="fp-chip" id="persistence-health-chip">Health</span>
+                        <button type="button" id="persistence-refresh">Refresh health</button>
+                      </div>
+                      <article class="settings-card">
+                        <h3>Active provider</h3>
+                        <p id="persistence-banner" class="settings-banner" hidden></p>
+                        <p class="settings-status" id="persistence-provider-label">Read only</p>
+                        <p id="persistence-convex"></p>
+                        <p id="persistence-json"></p>
+                        <p>Change PERSISTENCE_PROVIDER in .env.local, then restart. This tab does not switch providers.</p>
+                      </article>
+                      <article class="settings-card" id="persistence-backup-card">
+                        <h3>Backup</h3>
+                        <p id="persistence-export-warning">Archives must not contain service, approval, or delivery tokens. NOLAN does not write those secrets into the backup file.</p>
+                        <p>Archive v4 is <span id="persistence-v4-label">Partial / JSON-only</span>. This is not a complete backup.</p>
+                        <div class="settings-actions">
+                          <button type="button" class="settings-save" id="persistence-backup">Backup</button>
+                        </div>
+                        <details id="persistence-classic-format">
+                          <summary>Classic</summary>
+                          <p>Provider-neutral archive for core assistant data.</p>
+                          <div class="settings-actions">
+                            <button type="button" id="persistence-verify-classic">Verify classic…</button>
+                            <button type="button" id="persistence-restore-classic">Restore…</button>
+                          </div>
+                        </details>
+                        <details id="persistence-v4-format">
+                          <summary>Archive v4</summary>
+                          <p>JSON-only. Broader groups; today always completeness: partial.</p>
+                          <p>Absent: notesAndEvidence, orchestration, quoteAggregate</p>
+                          <p id="persistence-v4-refusal" class="settings-banner" hidden></p>
+                          <div class="settings-actions">
+                            <button type="button" id="persistence-export-v4">Export v4…</button>
+                            <button type="button" id="persistence-verify-v4">Verify v4…</button>
+                            <button type="button" id="persistence-restore-v4">Restore v4…</button>
+                            <button type="button" id="persistence-resume-v4">Resume interrupted v4 restore…</button>
+                          </div>
+                          <p>Resume is a separate action. A failed restore does not turn into resume.</p>
+                        </details>
+                      </article>
+                      <section data-persistence-dialog id="persistence-dialog-export-classic" hidden>
+                        <article class="settings-card">
+                          <h3>Export classic backup</h3>
+                          <p>Archives must not contain service, approval, or delivery tokens. NOLAN does not write those secrets into the backup file.</p>
+                          <label>Destination <input id="persistence-export-classic-file" type="text" /></label>
+                          <p id="persistence-export-classic-result" role="status"></p>
+                          <div class="settings-actions">
+                            <button type="button" data-persistence-cancel autofocus>Cancel</button>
+                            <button type="button" id="persistence-export-classic-submit">Export</button>
+                          </div>
+                        </article>
+                      </section>
+                      <section data-persistence-dialog id="persistence-dialog-export-v4" hidden>
+                        <article class="settings-card">
+                          <h3>Export archive v4</h3>
+                          <p id="persistence-export-v4-blocked" class="settings-banner" hidden></p>
+                          <p>Completeness today: partial. Partial / JSON-only.</p>
+                          <p>Archives must not contain service, approval, or delivery tokens. NOLAN does not write those secrets into the backup file.</p>
+                          <label>Destination <input id="persistence-export-v4-file" type="text" /></label>
+                          <p id="persistence-export-v4-result" role="status"></p>
+                          <div class="settings-actions">
+                            <button type="button" data-persistence-cancel autofocus>Cancel</button>
+                            <button type="button" id="persistence-export-v4-submit">Export v4</button>
+                          </div>
+                        </article>
+                      </section>
+                      <section data-persistence-dialog id="persistence-dialog-restore-classic" hidden>
+                        <article class="settings-card">
+                          <h3>Restore classic backup</h3>
+                          <p>Empty-target only. Refuses if the provider already contains data. NOLAN will not merge.</p>
+                          <label>File <input id="persistence-restore-classic-file" type="text" /></label>
+                          <label class="settings-check"><input id="persistence-restore-classic-ack" type="checkbox" /> I understand IDs and timestamps are recreated</label>
+                          <label>Type restore <input id="persistence-restore-classic-phrase" type="text" autocomplete="off" /></label>
+                          <p id="persistence-restore-classic-result" role="status"></p>
+                          <div class="settings-actions">
+                            <button type="button" data-persistence-cancel autofocus>Cancel</button>
+                            <button type="button" id="persistence-restore-classic-submit">Restore</button>
+                          </div>
+                        </article>
+                      </section>
+                      <section data-persistence-dialog id="persistence-dialog-restore-v4" hidden>
+                        <article class="settings-card">
+                          <h3>Restore archive v4</h3>
+                          <p>Never merges. This is not full recovery while groups are absent. Resume stays off.</p>
+                          <label>Archive <input id="persistence-restore-v4-file" type="text" /></label>
+                          <label>Destination dir <input id="persistence-restore-v4-dir" type="text" /></label>
+                          <label class="settings-check"><input id="persistence-restore-v4-partial" type="checkbox" checked /> allow-partial</label>
+                          <label class="settings-check"><input id="persistence-restore-v4-ack" type="checkbox" /> I understand this is a staged development restore, not full recovery, while groups are absent.</label>
+                          <label>Type restore-v4 <input id="persistence-restore-v4-phrase" type="text" autocomplete="off" /></label>
+                          <p id="persistence-restore-v4-result" role="status"></p>
+                          <div class="settings-actions">
+                            <button type="button" data-persistence-cancel autofocus>Cancel</button>
+                            <button type="button" id="persistence-restore-v4-submit">Restore v4</button>
+                          </div>
+                        </article>
+                      </section>
+                      <section data-persistence-dialog id="persistence-dialog-resume-v4" hidden>
+                        <article class="settings-card">
+                          <h3>Resume interrupted v4 restore</h3>
+                          <p>Shown only as an explicit action. A failed restore does not turn into resume.</p>
+                          <label>Archive <input id="persistence-resume-v4-file" type="text" /></label>
+                          <label>Destination dir <input id="persistence-resume-v4-dir" type="text" /></label>
+                          <label class="settings-check"><input id="persistence-resume-v4-partial" type="checkbox" checked /> allow-partial</label>
+                          <label class="settings-check"><input id="persistence-resume-v4-ack" type="checkbox" /> I understand this is a staged development restore, not full recovery, while groups are absent.</label>
+                          <label>Type restore-v4 <input id="persistence-resume-v4-phrase" type="text" autocomplete="off" /></label>
+                          <p id="persistence-resume-v4-result" role="status"></p>
+                          <div class="settings-actions">
+                            <button type="button" data-persistence-cancel autofocus>Cancel</button>
+                            <button type="button" id="persistence-resume-v4-check">Check destination</button>
+                            <button type="button" id="persistence-resume-v4-submit" disabled>Resume v4</button>
+                          </div>
+                        </article>
+                      </section>
+                      <section data-persistence-dialog id="persistence-dialog-verify-classic" hidden>
+                        <article class="settings-card">
+                          <h3>Verify classic backup</h3>
+                          <p>Restores into isolated temporary JSON. Does not touch the live provider.</p>
+                          <label>File <input id="persistence-verify-classic-file" type="text" /></label>
+                          <p id="persistence-verify-classic-result" role="status"></p>
+                          <div class="settings-actions">
+                            <button type="button" data-persistence-cancel autofocus>Cancel</button>
+                            <button type="button" id="persistence-verify-classic-submit">Verify</button>
+                          </div>
+                        </article>
+                      </section>
+                      <section data-persistence-dialog id="persistence-dialog-verify-v4" hidden>
+                        <article class="settings-card">
+                          <h3>Verify archive v4</h3>
+                          <p>Throwaway directory. Never live storage.</p>
+                          <label>File <input id="persistence-verify-v4-file" type="text" /></label>
+                          <p id="persistence-verify-v4-result" role="status"></p>
+                          <div class="settings-actions">
+                            <button type="button" data-persistence-cancel autofocus>Cancel</button>
+                            <button type="button" id="persistence-verify-v4-submit">Verify v4</button>
+                          </div>
+                        </article>
+                      </section>
+                    </div>
+                  </div>
+                  <div class="settings-panel" data-settings-panel="limits" id="view-limits">
+                    <div class="settings-layout">
+                      <h2>Limits</h2>
+                      <p class="settings-banner" role="status">Limits are not durably enforced yet. The quota store is pending Benny's choice. This page is a read model only. Partial OK.</p>
+                      <p class="settings-status">UNKNOWN. Remaining is not invented.</p>
+                      <p>Operator only. There is no team-admin path. The NOW chip on this console is not editable.</p>
+                      <ul>
+                        <li>API / provider rate — Soft UNKNOWN — Hard No hard stop — Reset period Unknown</li>
+                        <li>Concurrency — Soft UNKNOWN — Hard No hard stop — Reset period Unknown</li>
+                        <li>Storage / backup — Soft UNKNOWN — Hard No hard stop — Reset period Unknown</li>
+                        <li>Retention — Soft UNKNOWN — Hard No hard stop — Reset period Unknown</li>
+                        <li>Delivery — Soft UNKNOWN — Hard No hard stop — Reset period Unknown</li>
+                      </ul>
+                      <p class="settings-actions"><a href="/settings/limits">Open Limits</a></p>
+                    </div>
+                  </div>
+                  <div class="settings-panel" data-settings-panel="danger" id="view-danger">
+                    <div class="settings-layout">
+                      <h2>Danger zone</h2>
+                      <p class="settings-status">Not verified</p>
+                      <p>End overlap, reset, and clear local run on the Danger zone page. This console does not store a Bearer token and does not wipe Convex owner data. Credentials does not remove a token.</p>
+                      <p class="settings-actions">
+                        <a href="/settings/danger#service">Service token</a>
+                        <a href="/settings/danger#approval">Approval token</a>
+                        <a href="/settings/danger#delivery">Delivery token</a>
+                        <a href="#persistence-backup" data-settings-jump="persistence">Open Persistence Backup</a>
+                      </p>
+                    </div>
+                  </div>
+                  <div class="settings-panel active" data-settings-panel="general" id="view-general" aria-labelledby="general-heading">
+                <div class="settings-layout">
+                  <h2 id="general-heading">General</h2>
+                  <p>Preferences for how NOLAN interprets time and how this console looks.</p>
+                  <p>This console projects operator preferences. It does not authorise ToolActions or record ΩΣ completion.</p>
+                  <article class="settings-card" aria-labelledby="timezone-heading">
+                    <h3 id="timezone-heading">Timezone</h3>
+                    <p id="timezone-banner" class="settings-banner" role="alert" hidden>Timezone is invalid. Reminder commands that need local wall-clock time will fail until this is a valid IANA timezone.</p>
+                    <dl class="settings-dl">
+                      <dt>Effective</dt>
+                      <dd id="tz-effective">Loading…</dd>
+                      <dt>Source</dt>
+                      <dd id="tz-source">Loading…</dd>
+                    </dl>
+                    <p id="tz-machine-note" class="settings-note" hidden></p>
+                    <p>Used when normalizing “tomorrow 9am”, weekdays, and local calendar dates into dueAt + dueTimezone. Ambiguous text stays as dueRaw only.</p>
+                    <p>Read-only. Edit in .env.local, then restart NOLAN. In-app timezone editing is not available.</p>
+                    <p class="settings-actions"><a href="https://github.com/Benny3840RG/Jarvis/blob/main/typescript/docs/architecture/reminder-due-model.md">Reminder due model docs</a></p>
+                  </article>
+                  <article class="settings-card" aria-labelledby="display-heading">
+                    <h3 id="display-heading">Display</h3>
+                    <fieldset class="settings-choice">
+                      <legend>Theme</legend>
+                      <label><input type="radio" name="console-theme" value="system" checked /> System</label>
+                      <label><input type="radio" name="console-theme" value="light" /> Light</label>
+                      <label><input type="radio" name="console-theme" value="dark" /> Dark</label>
+                    </fieldset>
+                    <label class="settings-check"><input id="console-contrast" type="checkbox" /> Increase contrast</label>
+                    <label class="settings-check"><input id="console-motion" type="checkbox" /> Reduce motion</label>
+                    <p>Applies to this console only. Does not change CLI output.</p>
+                    <button class="settings-save" id="save-display-preferences" type="button">Save display preferences</button>
+                    <p id="display-save-status" role="status"></p>
+                  </article>
+                </div>
+                  </div>
+                </div>
+              </section>
+            </div>
+          </section>
+          <aside class="right-rail">
+            <section class="panel green">
+              <div class="panel-content"><div class="panel-header"><h2>Upcoming</h2><span id="right-reminder-count">0 TRACKED</span></div><ul class="compact-list" id="right-reminder-list"></ul></div>
+            </section>
+          </aside>
+        </section>
+        <section class="capture-drawer" id="capture-drawer" aria-label="Command capture" hidden>
+            <article class="panel green capture-panel">
+              <div class="panel-content"><div class="panel-header"><h2>Command capture</h2><span>REAL MCP OPERATIONS</span></div><div class="capture-body"><div class="capture-tabs"><button class="capture-tab active" type="button" data-capture="task">TASK</button><button class="capture-tab" type="button" data-capture="reminder">REMINDER</button></div><form class="capture-form" id="capture-form"><label><span id="capture-title-label">Task command</span><input id="capture-title" maxlength="500" autocomplete="off" required /></label><label id="capture-detail-label"><span id="capture-detail-copy">Category</span><select id="capture-category"><option value="personal">Personal</option><option value="work">Work</option><option value="builds">Builds</option><option value="money">Money</option><option value="life">Life</option></select><input id="capture-due" maxlength="500" placeholder="Friday 9am" autocomplete="off" hidden /></label><button class="capture-submit" id="capture-submit" type="submit">ADD TASK</button></form></div></div>
+            </article>
+        </section>
+        <footer class="footer"><div class="stream"><span class="live">● LIVE</span><span id="footer-status">NOLAN bridge initialising</span><span>Warm Instrument · calm glass · one focus · standing distance</span><span>Durable operations snapshot</span><span class="guard">Production boundary secured</span></div><span>NOLAN · DEVELOPMENT</span></footer>
+      </section>
+    </main>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script><!--hud:include script.js--></script>
+  </body>
+</html>

@@ -33,6 +33,12 @@ The first preview includes:
 Totality reasoning, memory changes, tool-action approvals, backups and broad conversation execution
 remain REST-only. They are not exposed as preview MCP tools.
 
+`get_situation_snapshot` reads the existing `GET /api/v1/situation` response.
+It returns source, observation time, freshness and reasons for unavailable or
+unknown fields; it does not stage or execute actions. See
+[situation-snapshot.md](situation-snapshot.md). A configured
+`JARVIS_MCP_CAPABILITIES` allowlist must include this tool to grant it.
+
 ### Business tools (drafting only)
 
 These tools wrap existing HTTP routes. The HTTP API still validates every request, computes

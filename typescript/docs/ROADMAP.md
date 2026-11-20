@@ -12,6 +12,20 @@ Next:
 2. Feed the halt record into the privileged-operation policy context once a broker exists.
 3. Show the halt state on the HUD and the system status (a voice/HUD change, so it needs a spoken check).
 
+## Situation Snapshot MCP read surface (#837 slice 2, 2026-11-20)
+
+- Added one model-visible `get_situation_snapshot` tool over the existing
+  service-token HTTP client and `GET /api/v1/situation`; the existing composer
+  and strict snapshot schema remain the only source of snapshot semantics.
+- The MCP operation registry and OpenAPI `x-mcp-tool` metadata now declare the
+  same read-only operation. No HTTP response or route changed.
+- Deterministic MCP fixture coverage checks read-only annotations, the GET and
+  service-token boundary, unavailable/unknown/stale reasons, title limits and
+  absence of private task keys. No live provider or deployment proof was run.
+- Next: independent Claude review and exact-head CI, then Benny's merge
+  decision. HUD and voice exposure, and commissioned device health, remain
+  separate owner-scoped slices.
+
 ## Memory Governance V1, first slice (#838, PR #841, 2026-11-19)
 
 - Added `src/memory/memoryGovernance.ts`, a pure library over caller-supplied

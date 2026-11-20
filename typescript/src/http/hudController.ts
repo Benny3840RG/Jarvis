@@ -1,5 +1,3 @@
-import { readFileSync } from "node:fs";
-
 import { Controller, Get, Header, Inject, Optional, Res } from "@nestjs/common";
 import type { FastifyReply } from "fastify";
 
@@ -37,8 +35,9 @@ import {
   HTTP_QUOTE_STORE,
   HTTP_TOOL_ACTIONS,
 } from "./tokens.js";
+import { bundleHud } from "../mcp/hud/bundle.mjs";
 
-const HUD_HTML = readFileSync(new URL("../mcp/dashboard-v1.html", import.meta.url), "utf8");
+const HUD_HTML = bundleHud();
 
 const HUD_CSP =
   "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data: 'self'; font-src data:; connect-src 'self'; base-uri 'none'; form-action 'none'";

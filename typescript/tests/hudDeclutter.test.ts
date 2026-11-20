@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
+import { bundleHud } from "../src/mcp/hud/bundle.mjs";
 
-const widget = readFileSync(new URL("../src/mcp/dashboard-v1.html", import.meta.url), "utf8");
+const widget = bundleHud();
 const declutter = widget.match(/<style id="console-02-declutter">([\s\S]*?)<\/style>/)?.[1] ?? "";
 
 function viewMarkup(name: string): string {
