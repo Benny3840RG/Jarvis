@@ -487,6 +487,11 @@ export class ToolExecutionService {
     private readonly claims: SingleUseConsumptionClaimStore = new InMemorySingleUseConsumptionClaimStore(),
     private readonly eligibility: ExecutionEligibilityStore = new InMemoryExecutionEligibilityStore(),
     private readonly leaseRenewMs: number = EXECUTION_LEASE_RENEW_MS,
+    /**
+     * `nolan sec halt` (#839): resolves true while the owner has halted new
+     * dispatch. A throw or rejection is treated as halted (fail closed).
+     */
+    private readonly haltGate?: () => Promise<boolean>,
   ) {
     for (const definition of definitions) {
       const key = `${definition.tool}:${definition.operation}`;
@@ -738,6 +743,14 @@ export class ToolExecutionService {
     return bound.receipt;
   }
 
+  private async isHalted(gate: () => Promise<boolean>): Promise<boolean> {
+    try {
+      return (await gate()) !== false;
+    } catch {
+      return true;
+    }
+  }
+
   private async persistDecision(
     key: string,
     decision: ToolExecutionReceipt,
@@ -860,6 +873,18 @@ export class ToolExecutionService {
       return this.persistDecision(
         key,
         receipt(input.action, input.idempotencyKey, "dry-run", undefined, startedAt, input),
+      );
+    }
+
+    // `nolan sec halt` blocks every new dispatch. It runs before preflight and
+    // before the single-use claim, so a halted attempt consumes nothing and
+    // the same approved action can run after the owner resumes. The existing
+    // `safety-blocked` code is reused so persisted receipts need no new
+    // validator literal.
+    if (this.haltGate !== undefined && (await this.isHalted(this.haltGate))) {
+      return this.persistDecision(
+        key,
+        receipt(input.action, input.idempotencyKey, "blocked", "safety-blocked", startedAt, input),
       );
     }
 
