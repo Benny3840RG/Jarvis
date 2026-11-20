@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import type { z } from "zod";
 
 import type {
@@ -987,7 +986,10 @@ export class ToolExecutionService {
         );
       }
     } else {
-      const executionId = randomUUID();
+      // Web Crypto global, not `node:crypto`: Convex default-runtime modules
+      // import this file (for fingerprints), and their bundle cannot resolve
+      // Node built-ins (tests/convexRuntimeImports.test.ts).
+      const executionId = globalThis.crypto.randomUUID();
       const verification = await this.eligibility.verify(input.action, executionId);
       if (!verification.eligible) {
         return this.persistDecision(
