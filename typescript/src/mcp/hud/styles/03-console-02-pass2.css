@@ -1,0 +1,226 @@
+
+      /* Second presentation pass. Still no invented readings. */
+      html, body { background: #12100e; }
+      .crt-glass {
+        inset: 70px 52px 68px;
+        border-radius: 28px;
+        background:
+          radial-gradient(ellipse 80% 22% at 50% 0%, rgba(255, 236, 210, 0.16), transparent 70%),
+          radial-gradient(ellipse 78% 70% at 50% 48%, transparent 42%, rgba(0, 0, 0, 0.42) 100%);
+        box-shadow: inset 0 0 90px rgba(0, 0, 0, 0.42), inset 0 0 0 1px rgba(255, 220, 180, 0.14);
+      }
+      @media (min-width: 1400px) {
+        body[data-console-view] .rivets { display: none; }
+        body[data-console-view] .brand-legal {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          overflow: hidden;
+          clip: rect(0 0 0 0);
+        }
+        body[data-console-view] .hud-frame,
+        body[data-console-view] .hud-frame::before,
+        body[data-console-view] .hud-frame::after {
+          border: 0;
+          box-shadow: none;
+          background: transparent;
+          outline: 0;
+        }
+        body[data-console-view][data-backdrop-severity="UNKNOWN"] .hud-photo {
+          filter: saturate(0.8) brightness(1.14) contrast(1.06) hue-rotate(20deg);
+        }
+        body[data-console-view][data-backdrop-severity="OK"] .hud-photo {
+          filter: saturate(0.78) brightness(1.08) contrast(1.02) hue-rotate(10deg);
+        }
+        body[data-console-view][data-backdrop-severity="WARN"] .hud-photo {
+          filter: sepia(0.18) saturate(0.62) brightness(0.68) contrast(1.04);
+        }
+        body[data-console-view][data-backdrop-severity="STOPPED"] .hud-photo {
+          filter: saturate(0.4) brightness(0.52) hue-rotate(8deg);
+        }
+        body[data-console-view] .hud-vignette {
+          background:
+            linear-gradient(180deg, rgba(10, 18, 28, 0.12), rgba(8, 36, 42, 0.1) 55%, rgba(4, 16, 22, 0.2)),
+            radial-gradient(ellipse 86% 76% at 50% 48%, rgba(4, 12, 18, 0.0), rgba(2, 8, 12, 0.22) 100%);
+        }
+        body[data-console-view] .shell { z-index: 10; padding: 118px 96px 210px; }
+        body[data-console-view="focus"] .console-deck {
+          grid-template-columns: minmax(250px, 0.78fr) minmax(0, 1.72fr) minmax(230px, 0.74fr);
+        }
+        body[data-console-view="focus"] .console-deck .plate {
+          background-color: rgba(7, 24, 32, 0.3);
+          border: 1px solid rgba(232, 190, 130, 0.55);
+          border-radius: 16px;
+          box-shadow:
+            inset 0 0 0 1px rgba(120, 170, 170, 0.08),
+            0 0 14px rgba(255, 150, 60, 0.08);
+        }
+        body[data-console-view="focus"] .plate h2,
+        body[data-console-view="focus"] .plate h3,
+        body[data-console-view="focus"] .analyzer-plate h3 {
+          border-bottom: 0;
+          padding-bottom: 0;
+          font-variant: small-caps;
+          font-stretch: condensed;
+          letter-spacing: 0.2em;
+          font-size: 13px;
+          color: #f3e2c0;
+          text-shadow: 0 0 8px rgba(255, 176, 90, 0.35);
+        }
+        body[data-console-view="focus"] .plate h2::before,
+        body[data-console-view="focus"] .analyzer-plate h3::before { display: none; }
+        body[data-console-view="focus"] .chart-grid {
+          stroke: rgba(186, 206, 198, 0.38);
+          stroke-width: 1px;
+        }
+        body[data-console-view="focus"] .chart .ornament { opacity: 0.42; }
+        body[data-console-view="focus"] .tick-row .track {
+          height: 6px;
+          background: repeating-linear-gradient(90deg, rgba(196, 176, 140, 0.28) 0 1px, transparent 1px 7px);
+          box-shadow: inset 0 0 0 1px rgba(232, 200, 150, 0.16);
+        }
+        body[data-console-view="focus"] .tick-row .slot,
+        body[data-console-view="focus"] .tick-row .check { opacity: 0.4; }
+        body[data-console-view="focus"] .overview-plate {
+          background: transparent;
+          border: 0;
+          box-shadow: none;
+          overflow: visible;
+          grid-template-rows: auto auto auto minmax(0, 1fr) 0px;
+        }
+        body[data-console-view="focus"] .overview-row { gap: 8px; }
+        body[data-console-view="focus"] .ring-gauge svg { width: 118px; height: 118px; }
+        body[data-console-view="focus"] .ring-gauge b {
+          font-size: 13px;
+          letter-spacing: 0.08em;
+          color: #f6ead4;
+          text-shadow: none;
+        }
+        body[data-console-view="focus"] .core-stage {
+          width: 600px;
+          height: 600px;
+          max-width: none;
+          max-height: none;
+          aspect-ratio: auto;
+          z-index: 1;
+        }
+        body[data-console-view="focus"] .core-stage::before {
+          inset: -10%;
+          background: radial-gradient(circle, rgba(255, 150, 48, 0.34), rgba(255, 90, 16, 0.05) 46%, transparent 68%);
+        }
+        body[data-console-view="focus"] .core-cross {
+          position: absolute;
+          left: 50%;
+          top: 50%;
+          width: 920px;
+          height: 1px;
+          transform: translate(-50%, -50%);
+          background: linear-gradient(90deg, transparent, rgba(255, 186, 110, 0.45), transparent);
+          pointer-events: none;
+          z-index: 0;
+        }
+        body[data-console-view="focus"] .core-cross::before {
+          content: "";
+          position: absolute;
+          left: 50%;
+          top: 50%;
+          width: 1px;
+          height: 640px;
+          transform: translate(-50%, -50%);
+          background: linear-gradient(transparent, rgba(255, 186, 110, 0.4), transparent);
+        }
+        body[data-console-view="focus"] .core-side .tac-plate {
+          position: absolute;
+          left: 4%;
+          right: 4%;
+          bottom: 0;
+          height: 132px;
+          background: transparent;
+          border: 0;
+          box-shadow: none;
+          z-index: 2;
+          pointer-events: none;
+        }
+        body[data-console-view="focus"] .core-side .tac-plate h2,
+        body[data-console-view="focus"] .core-side .tac-plate p {
+          text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
+        }
+        body[data-console-view="focus"] .tac-chart path { stroke-width: 2.2px; }
+        body[data-console-view="focus"] .now-strip {
+          position: fixed;
+          left: 300px;
+          right: 300px;
+          bottom: 236px;
+          z-index: 13;
+          max-height: 46px;
+        }
+        body[data-console-view="focus"] .console-lower {
+          position: fixed;
+          z-index: 14;
+          left: 70px;
+          right: 70px;
+          bottom: 18px;
+          height: 228px;
+          margin: 0;
+          grid-template-columns: 250px minmax(0, 1fr) 250px;
+          pointer-events: none;
+        }
+        body[data-console-view="focus"] .gauge-face {
+          width: 252px;
+          height: 252px;
+          z-index: 12;
+          pointer-events: auto;
+          background:
+            radial-gradient(circle at 50% 36%, #6a5436 0%, #1c140e 62%, #0c0a08 78%);
+        }
+        body[data-console-view="focus"] .gauge-face svg {
+          width: 228px;
+          height: 228px;
+          margin: 12px auto 0;
+        }
+        body[data-console-view="focus"] .analyzer-plate {
+          height: 210px;
+          pointer-events: auto;
+          background:
+            linear-gradient(180deg, #4a4034 0%, #241e18 18%, #14110e 100%);
+          border-color: #c4a36a;
+        }
+        body[data-console-view="focus"] .analyzer-plate h3,
+        body[data-console-view="focus"] .analyzer-row span,
+        body[data-console-view="focus"] .analyzer-row b,
+        body[data-console-view="focus"] #totality-bar-label {
+          color: #f0e2c4;
+        }
+        body[data-console-view="focus"] .analyzer-row { position: relative; }
+        body[data-console-view="focus"] .analyzer-row .slider {
+          width: 16px;
+          flex: 0 0 92px;
+          height: 92px;
+          max-height: 92px;
+          border-radius: 6px;
+          background: repeating-linear-gradient(#070605 0 3px, #1c1814 3px 6px);
+          box-shadow: inset 0 0 0 1px #8a7a5c, inset 0 3px 5px rgba(0, 0, 0, 0.8);
+        }
+        body[data-console-view="focus"] .analyzer-row .slider::after {
+          width: 22px;
+          height: 8px;
+          border-radius: 2px;
+          background: linear-gradient(180deg, #f7f4ee, #b7b2a8 45%, #5c5954);
+          box-shadow: inset 0 1px 0 #fff, 0 1px 2px rgba(0, 0, 0, 0.6);
+        }
+        body[data-console-view="focus"] .fader-scale {
+          position: absolute;
+          left: calc(50% - 34px);
+          top: 30px;
+          height: 92px;
+          display: flex;
+          flex-direction: column;
+          justify-content: space-between;
+          font-family: "Rajdhani", Inter, sans-serif;
+          font-size: 9px;
+          letter-spacing: 0.04em;
+          color: #d9c7a4;
+          pointer-events: none;
+        }
+      }
+    

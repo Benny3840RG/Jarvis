@@ -1,0 +1,92 @@
+
+      /* One shell for every view: the Console 02 header, a full-width workspace,
+         and panels that scroll inside themselves instead of clipping. */
+      .capture-drawer[hidden] { display: none; }
+      .capture-drawer {
+        position: fixed; z-index: 30; right: 96px; top: 92px;
+        width: min(640px, calc(100vw - 32px));
+        box-shadow: 0 18px 48px rgba(0, 0, 0, 0.6);
+      }
+      .capture-drawer .capture-panel {
+        height: auto; min-height: 0; padding-bottom: 4px;
+        background: rgba(16, 12, 9, 0.97); border: 1px solid rgba(255, 177, 90, 0.55);
+        backdrop-filter: blur(12px);
+      }
+      .capture-drawer .capture-body { height: auto; }
+      .top-actions .capture-toggle { cursor: pointer; font-weight: 800; color: #1a0f06; background: #ffb15a; border-color: #ffb15a; }
+      .top-actions .capture-toggle[aria-expanded="true"] { color: #ffb15a; background: rgba(12, 10, 8, 0.6); }
+      .workspace .scroll-list, .systems-governance, .systems-recent .panel-content, #quote-detail-content {
+        overflow-y: auto; overscroll-behavior: contain;
+        scrollbar-width: thin; scrollbar-color: rgba(255, 177, 90, 0.55) transparent;
+        mask-image: linear-gradient(180deg, #000 calc(100% - 22px), transparent);
+      }
+      @media (min-width: 1400px) {
+        body:not([data-console-view="focus"]) .shell { padding-bottom: 92px; }
+        body:not([data-console-view="focus"]) .workspace > .panel-content { overflow: hidden; }
+        body:not([data-console-view="focus"]) .view.active { height: 100%; min-height: 0; overflow: hidden; }
+        body:not([data-console-view="focus"]) .view.active > div { height: 100%; min-height: 0; box-sizing: border-box; }
+        .view .panel { min-height: 0; }
+        .view .list-panel { display: grid; grid-template-rows: auto minmax(0, 1fr); overflow: hidden; }
+
+        .board-view { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(300px, 0.8fr); }
+        .board-load-panel .panel-content { display: flex; flex-direction: column; }
+        .board-load-panel .category-content { flex: 1 1 auto; height: auto; grid-template-columns: 1fr; grid-template-rows: auto auto; align-content: start; gap: 24px; }
+        .board-load-panel .category-bars, .board-load-panel .completion-card { border: 0; padding: 0; }
+
+        .systems-view { grid-template-columns: minmax(0, 1fr) minmax(0, 0.9fr) minmax(0, 1fr); overflow: hidden; }
+        .systems-view > .panel { overflow-y: auto; }
+        .systems-side { display: grid; grid-template-rows: minmax(0, 1fr) auto minmax(120px, 0.55fr); gap: 9px; min-height: 0; }
+        .systems-side .chart-wrap { height: calc(100% - 44px); }
+        .systems-side .chart-wrap svg { height: 100%; width: 100%; }
+        .systems-recent .panel-content { display: grid; grid-template-rows: auto minmax(0, 1fr); }
+
+        .operations-view {
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          grid-template-rows: minmax(0, 0.9fr) minmax(0, 1fr) minmax(0, 1fr);
+          overflow: hidden;
+        }
+        .operations-view {
+          grid-template-areas:
+            "snapshot snapshot inbox timeline"
+            "projects scheduled enquiries errands"
+            "quotes invoices maintenance inspector";
+        }
+        .operations-view > .panel:first-child { grid-area: snapshot; overflow-y: auto; }
+        .operations-view > :has(#inbox-item-list) { grid-area: inbox; }
+        .operations-view > :has(#activity-timeline-list) { grid-area: timeline; }
+        .operations-view > :has(#operations-project-list) { grid-area: projects; }
+        .operations-view > :has(#operations-scheduled-list) { grid-area: scheduled; }
+        .operations-view > :has(#operations-enquiry-list) { grid-area: enquiries; }
+        .operations-view > :has(#operations-errand-list) { grid-area: errands; }
+        .operations-view > :has(#operations-quote-list) { grid-area: quotes; }
+        .operations-view > :has(#operations-invoice-list) { grid-area: invoices; }
+        .operations-view > :has(#operations-maintenance-list) { grid-area: maintenance; }
+        .operations-view > .quote-detail-panel { grid-area: inspector; }
+        .operations-view > :has(#inbox-item-list) { grid-template-rows: auto minmax(0, 1fr) auto; }
+        .operations-view .operations-summary .matrix { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+        .operations-view .quote-detail-panel { display: grid; grid-template-rows: auto minmax(0, 1fr); }
+
+        .livework-view {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          grid-template-rows: minmax(0, 0.8fr) auto minmax(0, 1fr);
+          grid-template-areas: "mission pipeline" "details details" "events crew";
+          gap: 9px; padding: 9px; align-content: stretch; height: 100%; overflow: hidden;
+        }
+        .livework-view > .panel:nth-child(1) { grid-area: mission; }
+        .livework-view > .panel:nth-child(2) { grid-area: pipeline; }
+        .livework-view > :has(#livework-details) { grid-area: details; }
+        .livework-view > #panel-crew { grid-area: crew; }
+        .livework-view > :has(#livework-events) { grid-area: events; }
+        .livework-view #livework-details { display: grid; grid-template-columns: repeat(9, minmax(0, 1fr)); }
+        .livework-view > .panel { overflow-y: auto; }
+        #view-voice .two-column-view > .panel { display: grid; grid-template-rows: auto minmax(0, 1fr); overflow: hidden; }
+        #view-voice .voice-controls { overflow-y: auto; }
+        #view-voice #voice-command-list { padding: 4px 12px 12px; }
+        body[data-console-view] .top-actions { right: 40px; width: calc(31vw - 64px); max-width: 560px; }
+      }
+      @media (min-width: 1400px) and (max-width: 1699px) {
+        /* The status chips wrap to a third row here; drop the nav below them. */
+        body[data-console-view] .team-nav { top: 86px; }
+        body[data-console-view] .shell { padding-top: 132px; }
+      }
+    
