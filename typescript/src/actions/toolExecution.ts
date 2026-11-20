@@ -1008,21 +1008,33 @@ export class ToolExecutionService {
       // lease already ended; two consecutive failed renewals stay inside the
       // 35s lease but leave no margin. Either aborts the execution, which ends
       // through the timeout path as indeterminate rather than succeeded.
+      // A renewal still pending at the next tick counts as failed, so a hung
+      // renew() aborts within two ticks too, instead of stacking more calls.
       // Renewal keeps running after a loss: a provider that ignores the abort
       // is still acting, and a later successful renewal still blocks revoke.
       let failedRenewals = 0;
-      const loseLease = () => controller.abort();
+      let renewalPending = false;
+      const renewalFailed = () => {
+        failedRenewals += 1;
+        if (failedRenewals >= 2) controller.abort();
+      };
       leaseRenewal = setInterval(() => {
         const renew = this.eligibility.renew;
         if (renew === undefined) return;
+        if (renewalPending) {
+          renewalFailed();
+          return;
+        }
+        renewalPending = true;
         void renew.call(this.eligibility, input.action, executionId).then(
           (result) => {
-            if (result.renewed === false) loseLease();
+            renewalPending = false;
+            if (result.renewed === false) controller.abort();
             else failedRenewals = 0;
           },
           () => {
-            failedRenewals += 1;
-            if (failedRenewals >= 2) loseLease();
+            renewalPending = false;
+            renewalFailed();
           },
         );
       }, this.leaseRenewMs);

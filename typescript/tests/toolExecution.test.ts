@@ -677,6 +677,7 @@ describe("consent-lifecycle execution enforcement (R-048/R-049/R-050)", () => {
 
   for (const [label, renew, expectAbort] of [
     ["an ended lease (renewed: false)", async () => ({ renewed: false }), true],
+    ["a renewal that never settles", () => new Promise<{ renewed: boolean }>(() => {}), true],
     [
       "two consecutive failed renewals",
       async () => {
