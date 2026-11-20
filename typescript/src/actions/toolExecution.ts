@@ -1167,7 +1167,11 @@ export class ToolExecutionService {
       await this.receipts.save(key, result);
       return result;
     } catch (error: unknown) {
-      const timedOut = error instanceof Error && error.message === "timeout";
+      // Any abort this service issued (timeout or a lost lease) leaves the
+      // effect's outcome unknown, even when an abort-aware provider rejects
+      // first with its own error, so it must never be recorded as "failed".
+      const timedOut =
+        controller.signal.aborted || (error instanceof Error && error.message === "timeout");
       if (isAttemptAlreadyInProgress(error)) {
         return this.persistDecision(
           key,

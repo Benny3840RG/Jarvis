@@ -725,6 +725,44 @@ describe("consent-lifecycle execution enforcement (R-048/R-049/R-050)", () => {
       assert.equal(result.errorCode, "indeterminate");
       assert.equal(aborted, expectAbort);
     });
+
+    it(`records an abort-aware provider's own rejection after ${label} as indeterminate`, async () => {
+      const abortAware = {
+        ...definition({ count: 0 }),
+        async execute(_args: Record<string, unknown>, signal: AbortSignal) {
+          // Rejects first with its own AbortError, before the service's race.
+          await new Promise<void>((_, reject) => {
+            signal.addEventListener("abort", () =>
+              reject(new DOMException("provider aborted", "AbortError")),
+            );
+            setTimeout(() => reject(new Error("should have been aborted")), 500);
+          });
+          return { now: "never" };
+        },
+      };
+      const executor = new ToolExecutionService(
+        [abortAware],
+        new InMemoryToolExecutionReceiptStore(),
+        undefined,
+        undefined,
+        {
+          async verify() {
+            return { eligible: true };
+          },
+          renew,
+          async release() {},
+        },
+        5,
+      );
+      const result = await executor.execute({
+        action,
+        authority: "T1",
+        idempotencyKey: `lease-lost-abort-aware-${label}`,
+        timeoutMs: 1_000,
+      });
+      assert.equal(result.status, "indeterminate");
+      assert.equal(result.errorCode, "indeterminate");
+    });
   }
 
   it("tolerates a single failed renewal while the lease is still live", async () => {
