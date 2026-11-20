@@ -18,6 +18,12 @@ Cancelling sends the provider an abort. A provider that ignores aborts can't be 
 
 `GET /api/v1/status` reports the same state as `securityHalt`, without your reason text. The overall status is `degraded` while dispatch is refused.
 
+The HUD shows a halt as follows:
+
+- The status pill reads **HALTED**, and presence reads **BLOCKED**.
+- The backdrop goes to its stopped severity.
+- The footer gives the stage: verified stopped, stopping (with how many are still running), not acknowledged, or cannot be verified.
+
 The behaviour, including what counts as halted when the record can't be read, is defined and tested in:
 
 - `src/security/haltControl.ts` (the halt record)

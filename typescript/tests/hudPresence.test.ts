@@ -64,6 +64,25 @@ describe("deriveHudPresence", () => {
     assert.equal(deriveHudPresence({ status: { ...BASE, status: "unavailable" } }), "offline");
     assert.equal(deriveHudPresence({ status: { ...BASE, status: "degraded" } }), "degraded");
     assert.equal(deriveHudPresence({ status: { ...BASE, zState: "suspended" } }), "blocked");
+    for (const state of [
+      "requested",
+      "acknowledged",
+      "verified-stopped",
+      "unverifiable",
+    ] as const) {
+      assert.equal(
+        deriveHudPresence({
+          status: {
+            ...BASE,
+            status: "degraded",
+            securityHalt: { ...BASE.securityHalt, state, dispatch: "refused" },
+          },
+          proposedApprovalCount: 3,
+        }),
+        "blocked",
+        `a ${state} security halt reads as blocked`,
+      );
+    }
     assert.equal(
       deriveHudPresence({
         status: { ...BASE, reconciliation: { state: "degraded", enabled: true } },

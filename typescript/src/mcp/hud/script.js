@@ -199,10 +199,11 @@
             return;
           }
           const healthy = status.status === "ok";
+          const halt = securityHaltWords(status);
           if (!healthy) pill.classList.add("bad");
           text(
             byId("status-label"),
-            healthy ? "OPERATIONAL" : status.status.toUpperCase()
+            halt ? "HALTED" : healthy ? "OPERATIONAL" : status.status.toUpperCase()
           );
           text(byId("system-status"), status.status.toUpperCase());
           text(byId("z-state"), status.zState.toUpperCase());
@@ -287,10 +288,25 @@
           text(byId("source-pill"), `SOURCE · ${status.sourceVersion || "UNKNOWN"}`);
           text(
             byId("footer-status"),
-            `NOLAN ${status.status} · ${provider.name || "unknown"} persistence`
+            halt
+              ? `NOLAN halted · ${halt}`
+              : `NOLAN ${status.status} · ${provider.name || "unknown"} persistence`
           );
           renderReadiness();
           renderRadar();
+        }
+        // `npm run sec -- halt` (#839). Null while dispatch is allowed or the
+        // service predates the field; otherwise plain words for the stage.
+        function securityHaltWords(status) {
+          const halt = status && status.securityHalt;
+          if (!halt || halt.dispatch !== "refused") return null;
+          if (halt.state === "verified-stopped") return "verified stopped";
+          if (halt.state === "acknowledged") {
+            const left = Number(halt.unsettledExecutions) || 0;
+            return `stopping · ${left} still running`;
+          }
+          if (halt.state === "requested") return "not acknowledged by the service";
+          return "cannot be verified";
         }
         function renderCategories() { const counts = new Map(); state.tasks.forEach((task) => { const category = task.category || "personal"; counts.set(category,(counts.get(category) || 0) + 1); }); const entries = [...counts.entries()].sort((a,b) => b[1] - a[1]).slice(0,5); const max = Math.max(1,...entries.map(([,value]) => value)); const bars = byId("category-bars"); bars.replaceChildren(); if (!entries.length) bars.append(empty("No task-domain data yet.")); else entries.forEach(([category,value]) => { const row = document.createElement("div"); row.className = "category-row"; const name = document.createElement("span"); text(name,category); const track = document.createElement("div"); track.className = "bar-track"; const fill = document.createElement("div"); fill.className = "bar-fill"; fill.style.width = `${Math.round((value / max) * 100)}%`; track.append(fill); const count = document.createElement("b"); text(count,value); row.append(name,track,count); bars.append(row); }); const total = state.counts.activeTasks + state.counts.completedTasks; const percent = total ? Math.round((state.counts.completedTasks / total) * 100) : 0; text(byId("completion-percent"),`${percent}%`); byId("completion-ring").setAttribute("stroke-dasharray",`${percent} ${100 - percent}`); }
         function renderPriorities() { const tasks = activeTasks().slice(0,4); fillList(byId("left-priority-list"),tasks,(task) => taskRow(task,true,false),"No active priorities."); text(byId("priority-count"),`${tasks.length} QUEUED`); }
@@ -532,7 +548,7 @@
           if (!snapshot || !snapshot.status) return "UNKNOWN";
           const readings = [];
           const status = snapshot.status;
-          if (status.status === "unavailable" || status.zState === "suspended") readings.push("STOPPED");
+          if (status.status === "unavailable" || status.zState === "suspended" || (status.securityHalt && status.securityHalt.dispatch === "refused")) readings.push("STOPPED");
           else if (status.status === "degraded") readings.push("WARN");
           else if (status.status === "ok") readings.push("OK");
           else readings.push("UNKNOWN");
@@ -553,6 +569,7 @@
           if (!status) return "connecting";
           if (status.status === "unavailable") return "offline";
           if (status.zState === "suspended") return "blocked";
+          if (status.securityHalt && status.securityHalt.dispatch === "refused") return "blocked";
           const reconciliation = status.reconciliation || {};
           if (reconciliation.state === "degraded" || reconciliation.lastCycleOutcome === "failed") return "reconciling";
           if (status.status === "degraded") return "degraded";
