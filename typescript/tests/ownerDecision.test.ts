@@ -144,12 +144,17 @@ test("the shipped manifest keeps its structural promises", () => {
     ),
   );
 
-  // Totality reasoning uses the Anthropic key already on the host, and stays
-  // not ready until that provider is merged.
+  // Totality reasoning uses the Anthropic key already on the host. The
+  // provider is merged (#870), so the card is ready and pins that PR.
   const reasoningKey = byId.get("voice-model-provider-key");
   assert.ok(reasoningKey);
   assert.match(reasoningKey.proposedAction, /TOTALITY_REASONER_PROVIDER=anthropic/);
-  assert.equal(reasoningKey.missingPrerequisites.length, 1);
+  assert.deepEqual(reasoningKey.missingPrerequisites, []);
+  assert.ok(
+    reasoningKey.evidence.some(
+      (item) => item.pin.kind === "pull-request" && item.pin.number === 870,
+    ),
+  );
 
   // No dependency cycle: every chain of dependsOn ends.
   const visiting = new Set<string>();
