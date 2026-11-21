@@ -115,5 +115,20 @@ absolute path outside the repository to also write that JSON with mode `0600`.
 Do not commit the package. A nonzero exit means the proof failed; it is not a
 successful send.
 
+The JSON also has a `trace` object that records what the owner decision card
+`outlook-evidence-acceptance` asks for (#866):
+
+- `repeatSend`: the repeat send's own receipt (id, status, error code and times),
+  not just the kit's assertion.
+- `deliveries`: each delivery attempt's status and timestamps (created,
+  execution started, reconciled). The recipient is not repeated here.
+- `reconciliation`: its attempt count and last error code. For example, a first
+  attempt that saw `outlook-message-still-draft` before resolving.
+- `sameMessageIdDraftToSent`: true when the reconciliation saw the message first
+  as a draft, then resolved it as sent under the delivery's Graph id. This is
+  behavioural evidence that the id stayed stable from Drafts to Sent Items. It is
+  not a trace of the `Prefer: IdType="ImmutableId"` request header.
+- `workers`: every sequential and parallel worker result, in order.
+
 No Graph message is sent by installing this command. The host run is still
 required, and it must not target a customer mailbox.
