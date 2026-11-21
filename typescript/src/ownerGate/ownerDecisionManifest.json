@@ -927,11 +927,27 @@
             "number": 697,
             "revision": "2026-11-20T01:26:12Z"
           }
+        },
+        {
+          "label": "Beez Treez end-to-end workflow proven on merged main b11f1a4f: all 14 checks",
+          "pin": {
+            "kind": "comment",
+            "id": 7066902191,
+            "on": 869,
+            "revision": "2026-11-21T17:58:09Z"
+          }
+        },
+        {
+          "label": "End-to-end workflow proof kit, merged in #875",
+          "pin": {
+            "kind": "pull-request",
+            "number": 875,
+            "revision": "b37afa39ba379fbda6ac32a20829c30e742fcf9d"
+          }
         }
       ],
       "missingPrerequisites": [
         "No release candidate commit has been frozen.",
-        "The complete Beez Treez workflow has not been proven end to end.",
         "No integrated dogfood pass has been recorded.",
         "No independent review of a release candidate exists.",
         "The operator runbook and release evidence are not recorded."
