@@ -8,7 +8,7 @@
       "issues": [294, 297],
       "proposedAction": "Close the quote delivery gate (#294) and the Outlook reconciliation gate (#297) on the development commissioning evidence.",
       "consequence": "Both gates close and the Local V1 checklist item for Outlook delivery is met.",
-      "scope": "Development only. One non-customer quote, already sent and reconciled once. No new send, no customer recipient, no production.",
+      "scope": "Development only. The 2026-11-22 commissioning run on main 56280fa9: one non-customer quote, sent from the owner's Outlook to the owner's own Gmail and reconciled once. No new send, no customer recipient, no production.",
       "environment": "development",
       "risk": "standard",
       "subjects": [
@@ -26,7 +26,24 @@
       "dependsOn": [],
       "evidence": [
         {
-          "label": "Commissioning evidence and gaps (ledger comment on #697)",
+          "label": "2026-11-22 commissioning run: immutable-id confirmed, full transition history, parallel race, recorded repeat block",
+          "pin": {
+            "kind": "comment",
+            "id": 7065797361,
+            "on": 869,
+            "revision": "2026-11-21T16:38:30Z"
+          }
+        },
+        {
+          "label": "Ledger transition history and Graph immutable-id confirmation, merged in #873",
+          "pin": {
+            "kind": "pull-request",
+            "number": 873,
+            "revision": "5192dbb07d3ee7f251ff201ef389c221c744d0c2"
+          }
+        },
+        {
+          "label": "Earlier commissioning evidence and its gaps (ledger comment on #697)",
           "pin": {
             "kind": "comment",
             "id": 6243177909,
@@ -51,12 +68,7 @@
           }
         }
       ],
-      "missingPrerequisites": [
-        "No direct trace shows the immutable-ID header on draft creation (required by #294).",
-        "No recorded pending, executing, provider-reference and indeterminate transition history exists for the delivery (required by #294).",
-        "No live run shows that parallel workers cannot produce duplicate terminal records (required by #297).",
-        "The blocked repeat send is evidenced only by the tool's own assertion, not by the repeat action's recorded status."
-      ],
+      "missingPrerequisites": [],
       "rollback": "Reopen #294 and #297. Nothing was changed on the runtime by accepting the evidence.",
       "expiresAt": "2026-12-12T00:00:00.000Z"
     },
