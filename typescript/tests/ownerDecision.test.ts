@@ -167,6 +167,21 @@ test("the shipped manifest keeps its structural promises", () => {
   );
   assert.ok(outlookPins.some((pin) => pin.kind === "pull-request" && pin.number === 873));
 
+  // The release stays undecidable until every remaining prerequisite is met, but
+  // the end-to-end workflow is recorded as proven and pinned to its evidence.
+  const release = byId.get("local-v1-release");
+  assert.ok(release);
+  assert.equal(
+    release.missingPrerequisites.some((item) => /Beez Treez workflow/.test(item)),
+    false,
+  );
+  assert.equal(release.missingPrerequisites.length, 4);
+  const releasePins = release.evidence.map((item) => item.pin);
+  assert.ok(
+    releasePins.some((pin) => pin.kind === "comment" && pin.id === 7066902191 && pin.on === 869),
+  );
+  assert.ok(releasePins.some((pin) => pin.kind === "pull-request" && pin.number === 875));
+
   // No dependency cycle: every chain of dependsOn ends.
   const visiting = new Set<string>();
   const done = new Set<string>();
