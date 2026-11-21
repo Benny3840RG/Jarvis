@@ -41,6 +41,18 @@ describe("unexpected 5xx log line", () => {
     }
   });
 
+  it("masks a quoted value through escaped quotes and to the end when unterminated", () => {
+    for (const message of [
+      'Object: {deliveryToken: "prefix\\"UNMASKED-ONE", next: 1}',
+      "Object: {apiKey: 'it\\'s UNMASKED-TWO'}",
+      'Object: {secret: "never closed UNMASKED-THREE',
+    ]) {
+      const line = unexpectedErrorLogLine(new Error(message), 500, "GET", "/x", "r", CONFIG);
+      assert.ok(line);
+      assert.doesNotMatch(line, /UNMASKED/u, message);
+    }
+  });
+
   it("stays quiet for expected client errors and bounds the length", () => {
     assert.equal(unexpectedErrorLogLine(new Error("nope"), 404, "GET", "/x", "r", CONFIG), null);
     const long = unexpectedErrorLogLine(

@@ -197,12 +197,12 @@ export function unexpectedErrorLogLine(
     exception instanceof Error
       ? `${exception.name}: ${exception.message}`
       : `non-error exception: ${typeof exception}`;
-  const fieldsMasked = raw
-    .slice(0, MAX_LOGGED_CAUSE * 4)
-    .replace(
-      /([A-Za-z0-9_]*(?:token|secret|key|password)[A-Za-z0-9_]*"?\s*[:=]\s*)("[^"]*"|'[^']*'|[^\s,}]+)/giu,
-      "$1[REDACTED]",
-    );
+  const fieldsMasked = raw.slice(0, MAX_LOGGED_CAUSE * 4).replace(
+    // A quoted value runs to its first unescaped closing quote, or to the end
+    // of the text when it is never closed, so an escaped quote cannot end it early.
+    /([A-Za-z0-9_]*(?:token|secret|key|password)[A-Za-z0-9_]*"?\s*[:=]\s*)("(?:[^"\\]|\\.)*(?:"|$)|'(?:[^'\\]|\\.)*(?:'|$)|[^\s,}]+)/giu,
+    "$1[REDACTED]",
+  );
   const secrets = configuredSecrets(config);
   const cause = redact(fieldsMasked, secrets).replace(/\s+/gu, " ").slice(0, MAX_LOGGED_CAUSE);
   return `Unexpected ${status} ${method} ${redact(path, secrets)} requestId=${requestId}: ${cause}`;
