@@ -159,9 +159,17 @@
             "number": 697,
             "revision": "2026-11-20T01:26:12Z"
           }
+        },
+        {
+          "label": "Anthropic Totality provider, merged in #870",
+          "pin": {
+            "kind": "pull-request",
+            "number": 870,
+            "revision": "e7009743340da69a402e2bc9044b1de300181556"
+          }
         }
       ],
-      "missingPrerequisites": ["The Anthropic Totality provider (#870) is not merged yet."],
+      "missingPrerequisites": [],
       "rollback": "Remove TOTALITY_REASONER_PROVIDER from the runtime environment and restart; reasoning reports not-configured again.",
       "expiresAt": "2026-12-12T00:00:00.000Z"
     },
