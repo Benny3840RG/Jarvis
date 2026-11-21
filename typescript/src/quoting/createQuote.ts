@@ -30,7 +30,7 @@ async function askRequired(
   for (;;) {
     const answer = (await io.question(prompt)).trim();
     if (answer.length > 0) return answer;
-    write("Jarvis: This field can't be blank — please try again.");
+    write("NOLAN: This field can't be blank — please try again.");
   }
 }
 
@@ -39,7 +39,7 @@ async function askAmount(io: QuoteIntakeIo, write: QuoteIntakeWriter): Promise<n
     const answer = (await io.question("Amount inc GST? ")).trim();
     const amount = Number(answer);
     if (Number.isFinite(amount) && amount > 0) return amount;
-    write("Jarvis: Please enter a positive number, e.g. 4850.");
+    write("NOLAN: Please enter a positive number, e.g. 4850.");
   }
 }
 
@@ -52,7 +52,7 @@ async function askYesNo(
     const answer = (await io.question(prompt)).trim().toLowerCase();
     if (answer === "y" || answer === "yes") return true;
     if (answer === "n" || answer === "no") return false;
-    write('Jarvis: Please answer "y" or "n".');
+    write('NOLAN: Please answer "y" or "n".');
   }
 }
 
@@ -69,7 +69,7 @@ async function collectItems(io: QuoteIntakeIo, write: QuoteIntakeWriter): Promis
 async function collectNotes(io: QuoteIntakeIo, write: QuoteIntakeWriter): Promise<string[]> {
   if (!(await askYesNo(io, write, "Add notes? (y/n) "))) return [];
 
-  write("Jarvis: Enter notes (one per line, blank line to finish):");
+  write("NOLAN: Enter notes (one per line, blank line to finish):");
   const notes: string[] = [];
   for (;;) {
     const line = (await io.question("> ")).trim();
@@ -124,7 +124,7 @@ export async function runCreateQuote(
   options: CreateQuoteOptions = {},
   store?: QuoteStore,
 ): Promise<QuoteData> {
-  write('Jarvis: Let\'s build a quote. Answer the prompts below (or "y"/"n" where asked).');
+  write('NOLAN: Let\'s build a quote. Answer the prompts below (or "y"/"n" where asked).');
   try {
     let quote = await collectQuoteData(io, write, options);
     if (store) {
@@ -133,17 +133,17 @@ export async function runCreateQuote(
         quote = result.quote;
         if (!result.saved) {
           write(
-            `Jarvis: Could not save quote #${quote.quoteNumber} (${result.error}). The quote below was not saved — copy it now if you need it.`,
+            `NOLAN: Could not save quote #${quote.quoteNumber} (${result.error}). The quote below was not saved — copy it now if you need it.`,
           );
         } else if (result.warning) {
-          write(`Jarvis: ${result.warning}`);
+          write(`NOLAN: ${result.warning}`);
         }
       } else {
         try {
           await saveQuoteRecord(store, quote);
         } catch (error: unknown) {
           write(
-            `Jarvis: Could not save quote #${quote.quoteNumber} (${
+            `NOLAN: Could not save quote #${quote.quoteNumber} (${
               error instanceof Error ? error.message : String(error)
             }). The quote below was not saved — copy it now if you need it.`,
           );

@@ -56,6 +56,15 @@ const STATUS: SystemStatus = {
     autonomy: { status: "ready" },
     reliability: { status: "ready" },
   },
+  securityHalt: {
+    state: "running",
+    dispatch: "allowed",
+    failClosed: false,
+    requestedAt: null,
+    acknowledgedAt: null,
+    verifiedStoppedAt: null,
+    unsettledExecutions: null,
+  },
   zState: "active",
   checkedAt: "2026-07-18T12:00:00.000Z",
 };

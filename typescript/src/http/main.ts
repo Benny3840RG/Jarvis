@@ -1,6 +1,14 @@
 import { loadEnvFile } from "node:process";
 
+import { processRunningExecutions } from "../actions/runningExecutions.js";
 import { createToolExecutionServiceFromEnv } from "../actions/toolExecutionFactory.js";
+import { jarvisDataFile } from "../persistence/jarvisDataPaths.js";
+import { FileHaltStore, HALT_FILE_BASENAME } from "../security/haltControl.js";
+import {
+  FileHaltAckStore,
+  HALT_ACK_FILE_BASENAME,
+  HaltSupervisor,
+} from "../security/haltSupervisor.js";
 import { createMicrosoftOutlookRuntimeFromEnv } from "../auth/microsoftOutlookRuntime.js";
 import { assertOutlookReconciliationPairing } from "../auth/outlookReconciliationGuard.js";
 import { createOutlookRuntimeReconciliationFactories } from "../reconciliation/outlookRuntimeReconciliation.js";
@@ -41,10 +49,21 @@ async function main(): Promise<void> {
     telemetry,
   });
 
+  // `nolan sec halt` (#839): cancels this process's running governed tool
+  // executions while halted, and reports acknowledged / verified stopped.
+  const haltSupervisor = new HaltSupervisor(
+    new FileHaltStore(jarvisDataFile(HALT_FILE_BASENAME)),
+    new FileHaltAckStore(jarvisDataFile(HALT_ACK_FILE_BASENAME)),
+    processRunningExecutions,
+    { onError: () => console.error("Security halt acknowledgement could not be written.") },
+  );
+  haltSupervisor.start();
+
   try {
     await app.listen(listen);
     await reconciliation.start();
   } catch (error: unknown) {
+    await haltSupervisor.stop();
     await reconciliation.stop();
     await app.close();
     throw error;
@@ -56,6 +75,7 @@ async function main(): Promise<void> {
   const shutdown = async () => {
     if (closing) return;
     closing = true;
+    await haltSupervisor.stop();
     await reconciliation.stop();
     await app.close();
     process.exit(0);

@@ -275,9 +275,10 @@ Evidence: host `~/lv1-01/restart-proof.md`, quote body sha256 `c7fd9977…dbb8`.
 That run needed workarounds. A host re-proof of `990bd8c2` passed capture,
 restore, field fidelity, quote sha256 equality, and tombstoned replay refusal,
 and the restart step failed because the child was not given the delivery
-token. The harness now passes that token. Full end-to-end recovery on
-realistic data stays **NOT YET MET** until the host repeats that restart
-step. `npm run commission:local-v1-recovery` drives that restart step: it reads
+token. The harness now passes that token. The host repeated the full
+capture, isolated restore and two-process restart at `ca7f256f` on 21 Nov
+2026, and it passed on the synthetic Gate B data set (host
+`~/lv1-01/recovery-proof-ca7f256f.md`). That is evidence, not acceptance. `npm run commission:local-v1-recovery` drives that restart step: it reads
 `JARVIS_LV1_ISOLATED_CONVEX_URL` (a loopback backend, refused if it is the
 configured `CONVEX_URL` or a cloud host; DNS names beginning with `127.` are not loopback literals), `JARVIS_DELIVERY_RUNTIME_TOKEN`, the
 restored `JARVIS_LV1_JSON_DIR`, and the representative ids, runs the proof, and

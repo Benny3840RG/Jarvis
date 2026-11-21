@@ -3,7 +3,7 @@
  * Chrome/Chromium (CHROME_PATH may select it). No application server is started.
  *
  * node scripts/check-hud-layout.mjs --output-dir /tmp/hud-layout
- * git show <sha>:typescript/src/mcp/dashboard-v1.html > /tmp/baseline.html
+ * git show <sha>:typescript/src/mcp/dashboard-v1.html > /tmp/baseline.html   (before the split)
  * node scripts/check-hud-layout.mjs --html /tmp/baseline.html
  *
  * The exact input bytes are served by CDP request interception. Only synthetic
@@ -18,6 +18,7 @@ import { tmpdir } from "node:os";
 import { delimiter, dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
+import { bundleHud } from "../src/mcp/hud/bundle.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const origin = "https://hud-layout.test";
@@ -28,7 +29,8 @@ const viewports = [
 ];
 
 export function parseArgs(args) {
-  const options = { html: join(repoRoot, "typescript/src/mcp/dashboard-v1.html") };
+  // Default: the HUD assembled from src/mcp/hud/; --html checks a saved single-file page.
+  const options = { html: null };
   const names = { "--html": "html", "--output-dir": "outputDir" };
   for (let index = 0; index < args.length; index += 1) {
     const name = names[args[index]];
@@ -790,14 +792,14 @@ async function stopBrowser(child) {
 
 async function main() {
   const options = parseArgs(process.argv.slice(2));
-  const html = await readFile(options.html);
+  const html = options.html ? await readFile(options.html) : Buffer.from(bundleHud(), "utf8");
   if (options.outputDir) await mkdir(options.outputDir, { recursive: true });
   const evidence = {
     checkoutSha: execFileSync("git", ["rev-parse", "HEAD"], {
       cwd: repoRoot,
       encoding: "utf8",
     }).trim(),
-    htmlPath: options.html,
+    htmlPath: options.html ?? "typescript/src/mcp/hud (assembled)",
     htmlSha256: createHash("sha256").update(html).digest("hex"),
     scenarios: [],
   };

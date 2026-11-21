@@ -10,7 +10,12 @@ data/
 dist/
 jarvis-console-01/
 package-lock.json
-src/mcp/dashboard-v1.html
-**/src/mcp/dashboard-v1.html
+# HUD source pieces are joined byte-for-byte by src/mcp/hud/bundle.mjs.
+src/mcp/hud/dashboard-v1.template.html
+src/mcp/hud/script.js
+src/mcp/hud/styles/
+**/src/mcp/hud/dashboard-v1.template.html
+**/src/mcp/hud/script.js
+**/src/mcp/hud/styles/
 tests/mcpWidget.test.ts
 **/tests/mcpWidget.test.ts

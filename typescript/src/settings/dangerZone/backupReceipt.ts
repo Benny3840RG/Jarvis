@@ -197,7 +197,7 @@ export async function assertVerifiedBackup(options: {
   if (overlapsLiveDataDir(requested, options.dataDir)) {
     throw new DangerZoneRefusal(
       "path",
-      `Refusing backup path ${requested}: it overlaps the live Jarvis data directory ${path.resolve(options.dataDir)}.`,
+      `Refusing backup path ${requested}: it overlaps the live NOLAN data directory ${path.resolve(options.dataDir)}.`,
     );
   }
   const recent = (await listRecentVerifiedBackups(options)).find(

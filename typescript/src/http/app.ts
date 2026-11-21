@@ -113,6 +113,13 @@ import { evaluateRemoteGatewayRequest } from "./remoteGateway.js";
 import { createOidcVerifier, type OidcVerifier } from "./oidcVerifier.js";
 import { JarvisHttpModule } from "./jarvisHttpModule.js";
 import type { VoiceConversationService } from "../voice/voiceConversation.js";
+import { FileHaltStore, HALT_FILE_BASENAME } from "../security/haltControl.js";
+import {
+  FileHaltAckStore,
+  HALT_ACK_FILE_BASENAME,
+  securityHaltStatusReader,
+  type SecurityHaltStatus,
+} from "../security/haltSupervisor.js";
 import {
   createVoiceConversationFromEnv,
   resolveVoiceConversationStatus,
@@ -178,6 +185,8 @@ export type CreateJarvisHttpAppOptions = (
    */
   voiceSessionRegistry?: VoiceSessionRegistry;
   voiceConversation?: VoiceConversationService | null;
+  /** Defaults to reading the halt record and acknowledgement in the data directory. */
+  securityHaltStatus?: () => Promise<SecurityHaltStatus>;
   /** Dedicated project voice safe writes stage against (owner decision on #815). */
   voiceWriteTarget?: VoiceWriteTarget | null;
   telemetry?: PostHogTelemetry;
@@ -554,6 +563,12 @@ export async function createJarvisHttpApp(
           ? resolvedVoiceConversation.service
           : options.voiceConversation,
       voiceConversationStatus: resolvedVoiceConversation.status,
+      securityHaltStatus:
+        options.securityHaltStatus ??
+        securityHaltStatusReader(
+          new FileHaltStore(jarvisDataFile(HALT_FILE_BASENAME)),
+          new FileHaltAckStore(jarvisDataFile(HALT_ACK_FILE_BASENAME)),
+        ),
     }),
     adapter,
     { logger: options.logger, abortOnError: false },

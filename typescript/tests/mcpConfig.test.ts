@@ -52,7 +52,7 @@ describe("Jarvis MCP preview configuration", () => {
           JARVIS_SERVICE_TOKEN: "test-service-token",
           JARVIS_API_BASE_URL: "https://api.example.test/jarvis",
         }),
-      /Remote Jarvis API access is disabled/,
+      /Remote NOLAN API access is disabled/,
     );
     assert.throws(
       () =>
