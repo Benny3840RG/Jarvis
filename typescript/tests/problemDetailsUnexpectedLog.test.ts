@@ -53,6 +53,22 @@ describe("unexpected 5xx log line", () => {
     }
   });
 
+  it("masks every sensitive field, not only the first", () => {
+    const line = unexpectedErrorLogLine(
+      new Error(
+        'Object: {deliveryToken: "LEAK-A", clientSecret: "LEAK-B", api_key: LEAK-C, password: "LEAK-D"}',
+      ),
+      500,
+      "POST",
+      "/x",
+      "r",
+      CONFIG,
+    );
+    assert.ok(line);
+    assert.doesNotMatch(line, /LEAK-/u);
+    assert.equal(line.split("[REDACTED]").length - 1, 4);
+  });
+
   it("stays quiet for expected client errors and bounds the length", () => {
     assert.equal(unexpectedErrorLogLine(new Error("nope"), 404, "GET", "/x", "r", CONFIG), null);
     const long = unexpectedErrorLogLine(
