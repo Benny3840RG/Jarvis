@@ -11,6 +11,7 @@ import {
   invoiceIdsFrom,
   lineItemsFrom,
   readBriefCounts,
+  readHud,
   startBeezTreezWorkflow,
   type EnquiryObservation,
   type HudObservation,
@@ -359,6 +360,79 @@ describe("Beez Treez workflow steps", () => {
       lineItems: [],
     });
     assert.equal(finished.enquiry.convertedProjectId, null);
+  });
+
+  it("records an unavailable brief as null counts before the send instead of aborting", async () => {
+    const { call } = recorder({
+      "POST /api/v1/properties": { data: { id: "property-1", clientId: "client-1" } },
+      "POST /api/v1/enquiries": { data: { id: "enquiry-1" } },
+      "POST /api/v1/enquiries/enquiry-1/convert-project": {
+        data: { project: { id: "project-1" } },
+      },
+    });
+    const started = await startBeezTreezWorkflow({ call, clientId: "client-1", marker: "m" });
+    assert.deepEqual(started.briefBefore, {
+      draftInvoices: null,
+      sentQuotes: null,
+      quoteAwaitingResponse: false,
+    });
+  });
+
+  it("never throws after the send: every failed call becomes a null observation", async () => {
+    const call: WorkflowCall = async () => {
+      throw new Error("route unavailable");
+    };
+    const finished = await finishBeezTreezWorkflow({
+      call,
+      clientId: "client-1",
+      marker: "m",
+      enquiryId: "enquiry-1",
+      projectId: "project-1",
+      quoteId: "quote-1",
+      lineItems: [{ description: "Line", quantity: 1, unitPrice: 1 }],
+    });
+    assert.equal(finished.invoiceId, null);
+    assert.equal(finished.invoice.lineItems, null);
+    assert.equal(finished.clientDraftInvoiceIds, null);
+    assert.equal(finished.enquiry.status, null);
+    assert.equal(finished.briefAfter.draftInvoices, null);
+    assert.equal(finished.hud.available, false);
+    const input = passing();
+    const result = assessBeezTreezWorkflow({
+      ...input,
+      invoiceId: finished.invoiceId,
+      invoice: finished.invoice,
+      clientDraftInvoiceIds: finished.clientDraftInvoiceIds,
+      enquiry: finished.enquiry,
+      briefAfter: finished.briefAfter,
+      hud: finished.hud,
+    });
+    assert.equal(result.proven, false);
+    assert.equal(result.checks.invoiceListedAsClientDraft, false);
+  });
+
+  it("rejects a HUD register that lists the quote twice or holds a malformed entry", () => {
+    const register = (quotes: unknown[]) => ({ quoteRegister: { status: "ready", quotes } });
+    assert.deepEqual(
+      readHud(register([{ quoteId: "quote-1", projectId: "project-1" }]), "quote-1").registerEntry,
+      { quoteId: "quote-1", projectId: "project-1" },
+    );
+    assert.equal(
+      readHud(
+        register([
+          { quoteId: "quote-1", projectId: "project-1" },
+          { quoteId: "quote-1", projectId: "other" },
+        ]),
+        "quote-1",
+      ).registerEntry,
+      null,
+    );
+    assert.equal(
+      readHud(register([{ quoteId: "quote-1", projectId: "project-1" }, "bad"]), "quote-1")
+        .registerEntry,
+      null,
+    );
+    assert.equal(readHud({ quoteRegister: { status: "ready" } }, "quote-1").registerEntry, null);
   });
 
   it("reports the HUD as unavailable rather than failing the run", async () => {

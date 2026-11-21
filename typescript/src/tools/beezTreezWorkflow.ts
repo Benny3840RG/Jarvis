@@ -59,18 +59,34 @@ export function readBriefCounts(body: unknown, quoteId: string): BriefCounts {
 export type HudObservation = {
   available: boolean;
   quoteRegisterReady: boolean;
+  /**
+   * This quote's single register entry. Null when it is absent, listed more than
+   * once, or the register holds a malformed entry: an ambiguous HUD never passes.
+   */
   registerEntry: { quoteId: string; projectId: string | null } | null;
 };
 
-function readHud(body: unknown, quoteId: string): HudObservation {
+export function readHud(body: unknown, quoteId: string): HudObservation {
   const register = isRecord(body) && isRecord(body.quoteRegister) ? body.quoteRegister : null;
-  const quotes = register && Array.isArray(register.quotes) ? register.quotes : [];
-  const entry = quotes.find((quote) => isRecord(quote) && quote.quoteId === quoteId);
+  const quotes = register && Array.isArray(register.quotes) ? register.quotes : null;
+  const wellFormed =
+    quotes !== null &&
+    quotes.every((quote) => isRecord(quote) && typeof quote.quoteId === "string");
+  const matches = wellFormed
+    ? (quotes as Record<string, unknown>[]).filter((quote) => quote.quoteId === quoteId)
+    : [];
+  const entry = matches.length === 1 ? matches[0] : undefined;
   return {
     available: isRecord(body),
     quoteRegisterReady: register?.status === "ready",
-    registerEntry: isRecord(entry) ? { quoteId, projectId: text(entry.projectId) } : null,
+    registerEntry: entry ? { quoteId, projectId: text(entry.projectId) } : null,
   };
+}
+
+/** Reads the brief; an unavailable brief yields null counts, so its checks fail. */
+async function briefCounts(call: WorkflowCall, quoteId: string): Promise<BriefCounts> {
+  const body: unknown = await call("GET", "/api/v1/brief").catch(() => null);
+  return readBriefCounts(body, quoteId);
 }
 
 export type WorkflowStart = {
@@ -90,7 +106,7 @@ export async function startBeezTreezWorkflow(input: {
 }): Promise<WorkflowStart> {
   const { call, clientId, marker } = input;
   // The quote does not exist yet, so only the counts matter here.
-  const briefBefore = readBriefCounts(await call("GET", "/api/v1/brief"), "");
+  const briefBefore = await briefCounts(call, "");
   const property = await call(
     "POST",
     "/api/v1/properties",
@@ -197,7 +213,8 @@ function sameLineItems(
 }
 
 export type WorkflowFinish = {
-  invoiceId: string;
+  /** Null when the invoice draft could not be created or returned no id. */
+  invoiceId: string | null;
   invoice: InvoiceObservation;
   /** Draft invoice ids listed for the run's disposable client, from the store the brief reads. */
   clientDraftInvoiceIds: string[] | null;
@@ -214,7 +231,11 @@ export type EnquiryObservation = {
   convertedProjectId: string | null;
 };
 
-/** Invoice draft from the sent quote, then the enquiry, brief and HUD read back. */
+/**
+ * Invoice draft from the sent quote, then the enquiry, brief and HUD read back.
+ * This runs after the email has gone, so it never throws: a failed call becomes a
+ * null observation whose checks fail, and the evidence is still written.
+ */
 export async function finishBeezTreezWorkflow(input: {
   call: WorkflowCall;
   clientId: string;
@@ -225,7 +246,8 @@ export async function finishBeezTreezWorkflow(input: {
   lineItems: ReadonlyArray<{ description: string; quantity: number; unitPrice: number }>;
 }): Promise<WorkflowFinish> {
   const { call } = input;
-  const created = await call(
+  const unavailable = (): null => null;
+  const created: unknown = await call(
     "POST",
     "/api/v1/invoices",
     {
@@ -236,20 +258,21 @@ export async function finishBeezTreezWorkflow(input: {
       lineItems: input.lineItems.map((item) => ({ ...item })),
     },
     201,
-  );
-  const invoiceId = requiredId(created, "Create invoice draft");
+  ).catch(unavailable);
   const invoice = dataOf(created);
-  const listed = await call(
+  const invoiceId = typeof invoice.id === "string" && invoice.id ? invoice.id : null;
+  const listed: unknown = await call(
     "GET",
     `/api/v1/invoices?clientId=${encodeURIComponent(input.clientId)}&status=draft`,
-  );
+  ).catch(unavailable);
   const clientDraftInvoiceIds = invoiceIdsFrom(listed);
   const enquiry = dataOf(
-    await call("GET", `/api/v1/enquiries/${encodeURIComponent(input.enquiryId)}`),
+    await call("GET", `/api/v1/enquiries/${encodeURIComponent(input.enquiryId)}`).catch(
+      unavailable,
+    ),
   );
-  const briefAfter = readBriefCounts(await call("GET", "/api/v1/brief"), input.quoteId);
-  // An unavailable HUD is recorded as such and fails the proof; it is not a crash.
-  const hudBody: unknown = await call("GET", "/api/v1/hud/snapshot").catch(() => null);
+  const briefAfter = await briefCounts(call, input.quoteId);
+  const hudBody: unknown = await call("GET", "/api/v1/hud/snapshot").catch(unavailable);
   return {
     invoiceId,
     invoice: {
@@ -307,7 +330,7 @@ export function assessBeezTreezWorkflow(input: {
   enquiry: EnquiryObservation;
   quoteProjectId: string | null;
   reconciledOutcome: string | null;
-  invoiceId: string;
+  invoiceId: string | null;
   invoice: InvoiceObservation;
   clientDraftInvoiceIds: readonly string[] | null;
   /** The quote's line items, which the invoice draft must carry unchanged. */
@@ -334,6 +357,7 @@ export function assessBeezTreezWorkflow(input: {
     invoiceCarriesQuoteLines: sameLineItems(input.invoice.lineItems, input.quoteLineItems),
     // The client is disposable, so its draft list must be exactly this invoice.
     invoiceListedAsClientDraft:
+      input.invoiceId !== null &&
       input.clientDraftInvoiceIds !== null &&
       input.clientDraftInvoiceIds.length === 1 &&
       input.clientDraftInvoiceIds[0] === input.invoiceId,

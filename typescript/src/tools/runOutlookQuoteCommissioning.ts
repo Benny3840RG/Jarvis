@@ -261,7 +261,7 @@ export type BeezTreezWorkflowEvidence = {
   enquiryId: string;
   projectId: string;
   quoteId: string;
-  invoiceId: string;
+  invoiceId: string | null;
   briefBefore: WorkflowStart["briefBefore"];
   briefAfter: WorkflowFinish["briefAfter"];
   hud: WorkflowFinish["hud"];
