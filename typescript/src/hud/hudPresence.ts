@@ -35,6 +35,8 @@ export function deriveHudPresence(input: {
   if (!status) return "connecting";
   if (status.status === "unavailable") return "offline";
   if (status.zState === "suspended") return "blocked";
+  // `nolan sec halt` (#839): governed dispatch is refused.
+  if (status.securityHalt?.dispatch === "refused") return "blocked";
   if (
     status.reconciliation.state === "degraded" ||
     status.reconciliation.lastCycleOutcome === "failed"

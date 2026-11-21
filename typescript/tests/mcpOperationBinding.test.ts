@@ -9,9 +9,20 @@ import { JarvisApiClient } from "../src/mcp/jarvisApiClient.js";
 import { createJarvisMcpServer } from "../src/mcp/server.js";
 import { MCP_TOOL_OPERATIONS, formatOperation } from "../src/mcp/operationContract.js";
 import { buildPersistenceSettingsView } from "../src/settings/persistenceSettings.js";
+import { composeSituationSnapshot } from "../src/situation/situationSnapshot.js";
 
 const HTTP_METHODS = new Set(["get", "post", "put", "patch", "delete"]);
 const SERVICE_TOKEN = "binding-test-token";
+const SITUATION_SNAPSHOT = await composeSituationSnapshot({
+  now: () => Date.UTC(2026, 10, 17),
+  timezone: "Australia/Melbourne",
+  status: null,
+  tasks: null,
+  reminders: null,
+  projects: null,
+  approvals: null,
+  reconciliation: null,
+});
 
 // A mutating tool refreshes the operator console after its write, so its recorded
 // request set legitimately includes these dashboard read operations in addition to
@@ -63,6 +74,15 @@ const STATUS: SystemStatus = {
     adaptive: { status: "ready" },
     autonomy: { status: "ready" },
     reliability: { status: "ready" },
+  },
+  securityHalt: {
+    state: "running",
+    dispatch: "allowed",
+    failClosed: false,
+    requestedAt: null,
+    acknowledgedAt: null,
+    verifiedStoppedAt: null,
+    unsettledExecutions: null,
   },
   zState: "active",
   checkedAt: "2026-07-18T12:00:00.000Z",
@@ -281,6 +301,7 @@ function sampleInvoice(id = "invoice-1") {
 /** Schema-valid mock responses so tool output validation never short-circuits a probe. */
 function mockResponse(method: string, path: string): Response {
   if (path === "/api/v1/status") return Response.json(STATUS);
+  if (path === "/api/v1/situation") return Response.json(SITUATION_SNAPSHOT);
   if (path === "/api/v1/properties") {
     return method === "POST"
       ? Response.json({ data: sampleProperty() })
@@ -497,6 +518,7 @@ function classify(matchers: OpenApiOperation[], request: RecordedRequest): strin
 const TOOL_INVOCATIONS: Record<string, Record<string, unknown>> = {
   show_jarvis_dashboard: {},
   get_jarvis_status: {},
+  get_situation_snapshot: {},
   get_general_settings: {},
   show_persistence_settings: {},
   run_persistence_settings_action: { action: "verify-classic", file: "backups/jarvis.json" },

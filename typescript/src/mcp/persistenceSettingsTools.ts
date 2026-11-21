@@ -40,7 +40,7 @@ function toolError(error: unknown) {
   const message =
     error instanceof JarvisApiError
       ? `${error.message}${error.requestId ? ` Request ID: ${error.requestId}.` : ""}`
-      : "Jarvis preview could not complete the request.";
+      : "NOLAN preview could not complete the request.";
   return {
     isError: true,
     content: [{ type: "text" as const, text: message }],
@@ -65,7 +65,7 @@ export function registerPersistenceSettingsTools(server: McpServer, client: Jarv
               csp: { connectDomains: [], resourceDomains: [] },
             },
             "openai/widgetDescription":
-              "Jarvis Settings → Persistence. Read-only provider display and backup commands. Not a second recovery authority.",
+              "NOLAN Settings → Persistence. Read-only provider display and backup commands. Not a second recovery authority.",
           },
         },
       ],
@@ -98,7 +98,7 @@ export function registerPersistenceSettingsTools(server: McpServer, client: Jarv
             {
               type: "text" as const,
               text: settings.provider.misconfigured
-                ? "Persistence provider is misconfigured. Jarvis will not silently fall back."
+                ? "Persistence provider is misconfigured. NOLAN will not silently fall back."
                 : `Active persistence provider: ${settings.provider.active ?? "unset"}.`,
             },
           ],

@@ -1,6 +1,6 @@
 /**
  * Terminal renderer for the live-work pipeline — the console-native twin of the
- * `src/mcp/dashboard-v1.html` "Live Work" view. Pure: given a `LiveWorkResult`
+ * HUD (`src/mcp/hud/`) "Live Work" view. Pure: given a `LiveWorkResult`
  * (and a deterministic `now`) it returns the exact string to print, so it is
  * fully testable and the polling loop in `src/tools/runLiveWorkMonitor.ts` stays
  * a thin shell.

@@ -70,6 +70,7 @@ import { ServiceTokenGuard } from "./serviceTokenGuard.js";
 import { CredentialsController } from "./credentialsController.js";
 import { HudController } from "./hudController.js";
 import { LimitsController } from "./limitsController.js";
+import { PersistencePageController } from "./persistencePageController.js";
 import { GeneralSettingsController } from "./generalSettingsController.js";
 import { HealthController, OperatorSystemController } from "./systemControllers.js";
 import { SystemStatusService } from "./systemStatusService.js";
@@ -81,6 +82,7 @@ import type { VoiceSessionRegistry } from "../voice/voiceSessionRegistry.js";
 import type { VoiceConversationService } from "../voice/voiceConversation.js";
 import type { VoiceConversationStatus } from "../voice/voiceConversationFactory.js";
 import type { VoiceWriteTarget } from "../voice/voiceWriteTarget.js";
+import type { SecurityHaltStatus } from "../security/haltSupervisor.js";
 import {
   HTTP_APP_CONFIG,
   HTTP_CREDENTIALS,
@@ -118,6 +120,7 @@ import {
   HTTP_VOICE_CONVERSATION,
   HTTP_VOICE_CONVERSATION_STATUS,
   HTTP_VOICE_WRITE_TARGET,
+  HTTP_SECURITY_HALT_STATUS,
 } from "./tokens.js";
 
 export type JarvisHttpModuleOptions = {
@@ -156,6 +159,8 @@ export type JarvisHttpModuleOptions = {
   voiceSessionRegistry: VoiceSessionRegistry;
   voiceConversation: VoiceConversationService | null;
   voiceConversationStatus: VoiceConversationStatus;
+  /** `nolan sec halt` read model for `GET /api/v1/status` (#839). */
+  securityHaltStatus: () => Promise<SecurityHaltStatus>;
   voiceWriteTarget?: VoiceWriteTarget | null;
 };
 
@@ -170,6 +175,7 @@ export class JarvisHttpModule {
         GeneralSettingsController,
         CredentialsController,
         LimitsController,
+        PersistencePageController,
         HudController,
         TotalityController,
         MemoryChangeSetController,
@@ -277,6 +283,7 @@ export class JarvisHttpModule {
         { provide: HTTP_VOICE_REGISTRY, useValue: options.voiceSessionRegistry },
         { provide: HTTP_VOICE_CONVERSATION, useValue: options.voiceConversation },
         { provide: HTTP_VOICE_CONVERSATION_STATUS, useValue: options.voiceConversationStatus },
+        { provide: HTTP_SECURITY_HALT_STATUS, useValue: options.securityHaltStatus },
         { provide: HTTP_VOICE_WRITE_TARGET, useValue: options.voiceWriteTarget ?? null },
         SystemStatusService,
         { provide: APP_GUARD, useClass: ServiceTokenGuard },

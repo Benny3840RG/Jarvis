@@ -1,0 +1,110 @@
+
+      /* Legibility pass over the photographic backdrop: an 11px floor for real
+         labels and values, denser glass behind text, and decorative marks moved
+         clear of the text they frame. */
+      :root {
+        --glass: rgba(6, 10, 16, 0.6);
+        --glass-strong: rgba(6, 10, 16, 0.52);
+      }
+      body .telemetry span,
+      body .mini-stat span,
+      body .core-label span,
+      body .core-label small,
+      body .system-item span,
+      body .matrix-item span,
+      body .provider-card span,
+      body .completion-copy span,
+      body .priority-row small,
+      body .activity-row small,
+      body .compact-row small,
+      body .panel-header > span,
+      body #capture-title-label,
+      body #capture-detail-copy,
+      body .capture-tab,
+      body .chip,
+      body .priority-row > button.ghost,
+      body .dial span,
+      body .dial b,
+      body .source-status-row > span,
+      body .layer > span,
+      body .category-row > span,
+      body .category-row > b,
+      body .analyzer-row > b,
+      body[data-console-view="focus"] .analyzer-row > b,
+      body .layer > b,
+      body .panel small,
+      body .panel .empty,
+      body .panel > p.eyebrow {
+        font-size: 11px;
+      }
+      body .matrix-item > b,
+      body .system-item > b,
+      body .priority-row strong,
+      body .compact-row > strong,
+      body .activity-row > strong {
+        font-size: 12px;
+      }
+      body .panel > p.eyebrow { color: #e0a070; }
+      body .lw-node .lw-label,
+      body .lw-node .lw-status,
+      body .lw-node .lw-detail,
+      body .lw-pipeline > .empty,
+      body .compact-list > .empty {
+        font-size: 11px;
+        line-height: 1.35;
+      }
+      body .lw-node { min-height: min-content; }
+      body .footer { min-height: 44px; padding-block: 8px; line-height: 1.4; }
+      /* Views and rails scroll inside their own area instead of running under the lower dock. */
+      body #view-livework.active { min-height: 0; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--brass) transparent; }
+      body .livework-view > .panel { min-height: 0; }
+      body .left-rail { grid-template-rows: max-content minmax(max-content, 1fr) max-content; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--brass) transparent; }
+      body .core-label span { letter-spacing: 0.08em; }
+      body #view-settings { scrollbar-width: thin; scrollbar-color: var(--brass) transparent; }
+      body #voice-command-list .operations-row { display: grid; gap: 2px; padding-block: 5px; }
+      body #voice-command-list .operations-row small { display: block; font-size: 11px; line-height: 1.35; }
+      body .top-actions .pill,
+      body .top-actions .team-chip,
+      body .top-actions .source-pill,
+      body .top-actions a.limits-now,
+      body[data-console-view] .top-actions .pill,
+      body[data-console-view] .top-actions .team-chip,
+      body[data-console-view] .top-actions .source-pill,
+      body[data-console-view] .top-actions a.limits-now {
+        font-size: 11px;
+      }
+      body[data-console-view="focus"] .console-deck .plate {
+        background-size: 10px 2px, 2px 10px, 10px 2px, 2px 10px, 10px 2px, 2px 10px, 10px 2px, 2px 10px;
+        background-position: 3px 3px, 3px 3px, right 3px top 3px, right 3px top 3px, left 3px bottom 3px, left 3px bottom 3px, right 3px bottom 3px, right 3px bottom 3px;
+      }
+      body[data-console-view="focus"] .console-deck .console-col > .plate {
+        background-color: rgba(7, 14, 22, 0.56);
+      }
+      body[data-console-view="focus"] .data-row { grid-template-columns: minmax(0, 1fr) 32px max-content; }
+      body .chart text { paint-order: stroke; stroke: rgba(8, 10, 14, 0.85); stroke-width: 3px; }
+      /* State reads on the same line as its label so the plate stays clear of the nav rail. */
+      body[data-console-view] .title-plate {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        align-items: baseline;
+        column-gap: 10px;
+      }
+      body[data-console-view] .title-plate h1 { flex: 0 0 100%; }
+      body[data-console-view] .title-plate .sub-plate,
+      body[data-console-view] .title-plate .live-state { margin: 0; line-height: 1.2; }
+      body[data-console-view] .title-plate .live-state { font-size: 11px; }
+      body[data-console-view="focus"] #current-meta .chip,
+      body[data-console-view="focus"] #queue-count,
+      body[data-console-view="focus"] .next-caption { font-size: 12px; }
+      @media (min-width: 1400px) {
+        /* The fixed lower deck must fit inside a 1080px-tall viewport. */
+        body[data-console-view="focus"] .console-lower { bottom: 16px; height: 232px; margin: 0; align-items: end; }
+        body[data-console-view="focus"] .gauge-face { width: 232px; height: 232px; }
+        body[data-console-view="focus"] .gauge-face svg { width: 210px; height: 210px; margin: 11px auto 0; }
+        body[data-console-view="focus"] .gauge-face > span { top: 84px; font-size: 12px; }
+        body[data-console-view="focus"] .gauge-face > b { bottom: 48px; }
+        body[data-console-view="focus"] .analyzer-plate { height: 200px; }
+        body[data-console-view="focus"] #totality-bar-label { font-size: 10px; line-height: 1.2; }
+      }
+    

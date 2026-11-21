@@ -16,6 +16,7 @@ import {
   startWithRetry,
   startupFailureRecord,
 } from "./check-hud-layout.mjs";
+import { bundleHud } from "../src/mcp/hud/bundle.mjs";
 
 const rect = (left, top, right, bottom) => ({ left, top, right, bottom });
 const measurement = (overrides = {}) => ({
@@ -142,7 +143,7 @@ test("display:contents ancestors do not produce fictional zero-sized clipping bo
 });
 
 test("inbox fixtures execute the actual dashboard inbox renderer", () => {
-  const source = readFileSync(new URL("../src/mcp/dashboard-v1.html", import.meta.url), "utf8");
+  const source = bundleHud();
   const match = source.match(
     /(function inboxHasDegradedSource\(inbox\)[\s\S]*?function renderInbox\(\) \{[^\n]+\})/,
   );

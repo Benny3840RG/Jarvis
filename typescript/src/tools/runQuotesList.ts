@@ -7,7 +7,7 @@ async function main(): Promise<void> {
   const summaries = await listRecentQuoteRecords(store, 20);
 
   if (summaries.length === 0) {
-    console.log("Jarvis: No quotes saved yet.");
+    console.log("NOLAN: No quotes saved yet.");
     return;
   }
 

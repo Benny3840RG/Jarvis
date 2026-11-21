@@ -1,16 +1,20 @@
 # Operator HUD (Console 02)
 
-The operator HUD is `src/mcp/dashboard-v1.html`, served as the MCP widget
-`ui://jarvis/dashboard-v1.html`. It is a projection over the Jarvis HTTP API.
+The operator HUD is served as the MCP widget `ui://jarvis/dashboard-v1.html`.
+Its source is split into small files under `src/mcp/hud/` (template, one CSS
+file per style block, `script.js`) plus fonts and the backdrop photo in
+`src/mcp/assets/`. `src/mcp/hud/bundle.mjs` joins them, at load time, into the
+one self-contained page that both the MCP server and `GET /hud` serve. It is a projection over the Jarvis HTTP API.
 It does not own tasks, reminders, quotes, approvals, or missions.
 
 On a loopback bind the HTTP server also serves the same page at `GET /hud`
 (for example `http://127.0.0.1:3000/hud`). That route is public only because
 the bind is loopback. The HTML contains no token. The page fetches
 `GET /api/v1/hud/snapshot` with no `Authorization` header and refuses write
-tools. A non-loopback bind returns 404 for both routes. Open a file preview
-with `src/mcp/dashboard-preview-host.html`. That host iframes the widget and
-does not inject a sample snapshot.
+tools. A non-loopback bind returns 404 for both routes. Since the HUD source
+was split there is no single HTML file to open from disk: use `GET /hud`.
+`src/mcp/dashboard-preview-host.html` iframes `/hud`, so it works only when
+served from the same loopback origin. It does not inject a sample snapshot.
 
 ## Layout
 
@@ -170,7 +174,7 @@ window.JarvisHud.registerPanel({
 Rules:
 
 1. `id` is lowercase letters, digits, and hyphens, at most 64 characters.
-2. Put the mount element in `dashboard-v1.html` and give it a `data-hud-panel`.
+2. Put the mount element in `src/mcp/hud/dashboard-v1.template.html` and give it a `data-hud-panel`.
 3. Write with `textContent`. Do not use `innerHTML`.
 4. If the field is missing, show `UNKNOWN` or the existing unavailable copy.
 5. Do not add a delete control, a credential, or a new write tool.
