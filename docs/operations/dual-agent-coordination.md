@@ -35,7 +35,8 @@ Both agents may:
 - run development tests and checks;
 - leave factual coordination or review comments that grant no authority.
 
-Neither agent may:
+Neither agent may, except under the
+[standing merge delegation](#standing-merge-delegation-to-claude) below:
 
 - merge, squash, rebase-merge, enable auto-merge or mark a draft PR ready;
 - approve its own or the other agent's PR through a formal approval review;
@@ -47,7 +48,33 @@ Neither agent may:
   candidate pass.
 
 Every merge and deployment requires a fresh, explicit decision from Benny
-against the exact candidate or release.
+against the exact candidate or release, except merges under the standing
+delegation below.
+
+### Standing merge delegation to Claude
+
+Owner decision, 2026-11-18 ("I'm handing you the reins"; chose "Yes, when
+checks pass"). Claude may mark ready and squash-merge **its own** PR into
+`main` only when all of these hold on the exact head being merged:
+
+1. every check the branch-protection policy requires has passed;
+2. an independent review has passed on that head with no unresolved finding.
+   For a PR Claude built, that is the automated `jarvis-pr-maintenance/review`
+   (which runs Codex) reporting `awaiting-owner`, its clean result. Claude
+   never merges a PR Codex built;
+3. for a change to voice or HUD behaviour (`typescript/src/voice/`,
+   `typescript/src/mcp/hud/`), Benny's spoken check on the Lenovo is recorded on
+   the PR;
+4. the PR does not change branch protection, a required check, what a review
+   or audit must find to pass, a secret, or this delegation. Those still need
+   Benny's own decision. Recording this delegation is the exception: Benny
+   ordered it in chat.
+
+A `blocked` automated review is not a pass. Claude then resolves what it asked
+for and pushes a new head, or leaves the merge to Benny. The delegation covers
+merging only: deployment to the Lenovo, commissioning, external sends and
+physical actuation still need Benny. Benny can withdraw it at any time in chat
+or on GitHub. It ends at Local V1 sign-off unless renewed.
 
 Jarvis supplies machine evidence, not owner approval. A candidate is not
 eligible for Benny's merge decision until the exact head has every trusted check
@@ -55,7 +82,9 @@ that the **current branch-protection source of truth actually requires**, plus t
 mission-specific proof required by its acceptance criteria and a clean independent
 peer review. Missing, pending, failed, stale or differently bound required evidence
 blocks. A new commit or base change invalidates the prior peer review and
-candidate-bound evidence.
+candidate-bound evidence, except for the merge-only carry-over in
+[Review carry-over and automated peer review](#review-carry-over-and-automated-peer-review).
+Required CI is always re-run and must pass on the new head.
 
 `jarvis-pr-maintenance/review` is additional advisory machine-review evidence
 unless the current effective branch-protection policy explicitly names it as a
@@ -192,6 +221,49 @@ If branch protection is later changed to require this status, that change needs
 its own owner-approved configuration and live refusal/success proof. Until then,
 required CI, mission-specific proof, independent peer review, unresolved concrete
 findings and Benny's exact-candidate decision remain separate gates.
+
+## Review carry-over and automated peer review
+
+Owner decision, 2026-11-18, after a council review of the process. Revisit when
+Local V1 is signed off, or before NOLAN gains users other than Benny or actions
+that cannot be undone, whichever comes first.
+
+**Merge-only carry-over.** A clean peer review of head `X` stays valid for a new
+head `Y` only when all of these hold:
+
+1. every commit after `X` is a merge of `main` (no other commit on the branch);
+2. the PR's own diff is unchanged: `git diff <main at X>...X` and
+   `git diff <main at Y>...Y` produce the same `git patch-id --stable`;
+3. between the two bases, `main` changed no file in a directory the PR
+   changes, and no shared configuration: any `package.json`, lockfile,
+   `tsconfig*.json`, ESLint or Prettier config, `convex/schema.ts`,
+   `openapi/jarvis.openapi.json`, or anything under `.github/`;
+4. every required check passes on `Y`.
+
+Condition 3 is deliberately broad, because a change elsewhere can still alter
+the PR's behaviour (an import it calls, shared configuration). When unsure,
+treat the carry-over as not applying. Any other change needs a fresh review.
+The builder lists `main`'s changed files between the two bases and states which
+of the four conditions it checked in its handoff; the owner decides.
+
+**Merge `main` only when needed.** Merge `main` into a PR only to resolve a
+conflict, to pick up a fix a required check needs, or just before the owner's
+merge decision.
+
+**Automated peer review.** The automated `jarvis-pr-maintenance/review` runs
+Codex. A completed result on the exact head counts as the independent peer
+review only when the builder is **not** Codex. When Codex is the builder, the
+peer review must come from Claude (a manual review, or the `claude-review`
+workflow's result on the exact head). Then no model reviews its own work. When
+Claude builds, the owner no longer has to relay a manual Codex review between
+chat sessions; a manual review remains optional.
+A `blocked` result from missing context or infrastructure is not a review, so
+the owner then chooses between a manual review and the owner check below.
+
+**Owner check for voice and HUD changes.** Before merging a change to
+`typescript/src/voice/` or the HUD (`typescript/src/mcp/hud/`), Benny runs the
+relevant spoken checks in `typescript/docs/operators/voice.md` on the Lenovo.
+A defect found by hand gets a regression test in the repair.
 
 ## Handoff format
 

@@ -73,7 +73,7 @@
         {
           "kind": "issue",
           "number": 697,
-          "revision": "2026-11-10T12:37:40Z"
+          "revision": "2026-11-20T01:26:12Z"
         }
       ],
       "dependsOn": [],
@@ -83,7 +83,7 @@
           "pin": {
             "kind": "issue",
             "number": 697,
-            "revision": "2026-11-10T12:37:40Z"
+            "revision": "2026-11-20T01:26:12Z"
           }
         },
         {
@@ -112,26 +112,35 @@
       "id": "voice-model-provider-key",
       "title": "Authorise a model-provider key for Totality reasoning",
       "issues": [567, 697],
-      "proposedAction": "Configure a model-provider API key on the Lenovo development runtime through the approved secret onboarding path.",
-      "consequence": "The HUD and API reasoning service stops reporting not-configured and can produce proposal-only reasoning. This starts paid usage on the provider account. It does not change voice: the voice path does not call the model.",
-      "scope": "Development runtime only. One secret, stored where the runtime reads its other secrets. Not committed.",
+      "proposedAction": "Point Totality reasoning on the Lenovo development runtime at the Anthropic key it already holds: set TOTALITY_REASONER_PROVIDER=anthropic and restart jarvis.service.",
+      "consequence": "The HUD and API reasoning service stops reporting not-configured and can produce proposal-only reasoning. This adds Totality usage to the same Anthropic account that voice conversation already uses. Voice behaviour does not change.",
+      "scope": "Development runtime only. One non-secret setting in the runtime's existing environment file. No new secret, nothing committed.",
       "environment": "development",
       "risk": "standard",
       "subjects": [
         {
           "kind": "issue",
           "number": 567,
-          "revision": "2026-11-12T22:14:16Z"
+          "revision": "2026-11-21T13:08:17Z"
         }
       ],
       "dependsOn": [],
       "evidence": [
         {
-          "label": "Issue #567",
+          "label": "Issue #567, closed as commissioned",
           "pin": {
             "kind": "issue",
             "number": 567,
-            "revision": "2026-11-12T22:14:16Z"
+            "revision": "2026-11-21T13:08:17Z"
+          }
+        },
+        {
+          "label": "Voice acceptance recorded on #567",
+          "pin": {
+            "kind": "comment",
+            "id": 7063052190,
+            "on": 567,
+            "revision": "2026-11-21T13:08:15Z"
           }
         },
         {
@@ -148,12 +157,12 @@
           "pin": {
             "kind": "issue",
             "number": 697,
-            "revision": "2026-11-10T12:37:40Z"
+            "revision": "2026-11-20T01:26:12Z"
           }
         }
       ],
-      "missingPrerequisites": [],
-      "rollback": "Remove the key from the runtime and revoke it at the provider.",
+      "missingPrerequisites": ["The Anthropic Totality provider (#870) is not merged yet."],
+      "rollback": "Remove TOTALITY_REASONER_PROVIDER from the runtime environment and restart; reasoning reports not-configured again.",
       "expiresAt": "2026-12-12T00:00:00.000Z"
     },
     {
@@ -169,7 +178,7 @@
         {
           "kind": "issue",
           "number": 567,
-          "revision": "2026-11-12T22:14:16Z"
+          "revision": "2026-11-13T21:54:25Z"
         }
       ],
       "dependsOn": [],
@@ -179,7 +188,7 @@
           "pin": {
             "kind": "issue",
             "number": 567,
-            "revision": "2026-11-12T22:14:16Z"
+            "revision": "2026-11-13T21:54:25Z"
           }
         },
         {
@@ -190,13 +199,26 @@
             "on": 567,
             "revision": "2026-11-12T22:14:15Z"
           }
+        },
+        {
+          "label": "Spoken run on the Lenovo, 13 Nov: microphone, audibility and 12 latency samples (includes #804)",
+          "pin": {
+            "kind": "comment",
+            "id": 6851388839,
+            "on": 567,
+            "revision": "2026-11-13T11:23:21Z"
+          }
+        },
+        {
+          "label": "Fix for that run's findings: accept \"confirmed\" and keep the microphone listening (merged, running on the host)",
+          "pin": {
+            "kind": "pull-request",
+            "number": 809,
+            "revision": "7934acb3a8e425550b447c667f229482d0275f35"
+          }
         }
       ],
-      "missingPrerequisites": [
-        "Pull request #804 (the HUD shows and speaks the clarification question) is not merged and running on the host.",
-        "No microphone and audibility acceptance run has been recorded on the real host.",
-        "Ten dispatch round-trip samples from the owner's own HUD session have not been recorded."
-      ],
+      "missingPrerequisites": [],
       "rollback": "Reopen #567. Voice can be disabled by leaving the microphone off; no hardware adapter ships.",
       "expiresAt": "2026-12-12T00:00:00.000Z"
     },
@@ -204,9 +226,9 @@
       "id": "google-home-announcement",
       "title": "Authorise one governed Google Home announcement",
       "issues": [697],
-      "proposedAction": "Pin one named speaker and play one governed test announcement through the existing ToolAction path.",
+      "proposedAction": "Pin the speaker \"Tayah’s bedside\" (Google Nest Hub), as recorded in the owner's choice on #869, and play one governed test announcement on it through the existing ToolAction path.",
       "consequence": "A speaker in the house plays audio once. This commissions the home announcement path for Local V1.",
-      "scope": "One pinned Cast device, one announcement, development runtime. The ToolAction approval for the announcement itself is still required separately.",
+      "scope": "One Cast device, pinned by that exact name in the host's private address map (mode 0600, never committed); any other name fails closed. One announcement, development runtime. The ToolAction approval for the announcement itself is still required separately.",
       "environment": "development",
       "risk": "high",
       "highRiskKind": "hardware-actuation",
@@ -214,7 +236,7 @@
         {
           "kind": "issue",
           "number": 697,
-          "revision": "2026-11-10T12:37:40Z"
+          "revision": "2026-11-20T01:26:12Z"
         }
       ],
       "dependsOn": [],
@@ -224,13 +246,20 @@
           "pin": {
             "kind": "issue",
             "number": 697,
-            "revision": "2026-11-10T12:37:40Z"
+            "revision": "2026-11-20T01:26:12Z"
+          }
+        },
+        {
+          "label": "Owner's speaker choice: \"Tayah’s bedside\"",
+          "pin": {
+            "kind": "comment",
+            "id": 7063313389,
+            "on": 869,
+            "revision": "2026-11-21T13:29:14Z"
           }
         }
       ],
-      "missingPrerequisites": [
-        "No pinned speaker target has been named; the pinned-target map is absent."
-      ],
+      "missingPrerequisites": [],
       "rollback": "Remove the pinned-target map; the announcement path then fails closed again.",
       "expiresAt": "2026-12-12T00:00:00.000Z"
     },
@@ -861,7 +890,7 @@
         {
           "kind": "issue",
           "number": 697,
-          "revision": "2026-11-10T12:37:40Z"
+          "revision": "2026-11-20T01:26:12Z"
         }
       ],
       "dependsOn": [
@@ -876,7 +905,7 @@
           "pin": {
             "kind": "issue",
             "number": 697,
-            "revision": "2026-11-10T12:37:40Z"
+            "revision": "2026-11-20T01:26:12Z"
           }
         }
       ],

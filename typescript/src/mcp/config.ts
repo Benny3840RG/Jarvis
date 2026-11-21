@@ -27,7 +27,7 @@ export type JarvisMcpConfig = {
 
 function requiredSecret(value: string | undefined, field: string): string {
   if (value === undefined || value.trim().length === 0) {
-    throw new Error(`${field} is required for the Jarvis MCP preview.`);
+    throw new Error(`${field} is required for the NOLAN MCP preview.`);
   }
   if (/\s/.test(value)) throw new Error(`${field} must not contain whitespace.`);
   return value;
@@ -161,7 +161,7 @@ function resolveApiBaseUrl(env: NodeJS.ProcessEnv): URL {
   }
   if (!isLoopbackHost(url.hostname)) {
     throw new Error(
-      "Remote Jarvis API access is disabled until the approved OAuth 2.1, TLS, and deployment boundary exists.",
+      "Remote NOLAN API access is disabled until the approved OAuth 2.1, TLS, and deployment boundary exists.",
     );
   }
   url.pathname = url.pathname.endsWith("/") ? url.pathname : `${url.pathname}/`;
