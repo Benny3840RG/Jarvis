@@ -10,6 +10,7 @@ import {
   finishBeezTreezWorkflow,
   readBriefCounts,
   startBeezTreezWorkflow,
+  type EnquiryObservation,
   type HudObservation,
   type WorkflowCall,
 } from "../src/tools/beezTreezWorkflow.js";
@@ -29,9 +30,14 @@ function brief(input: { draftInvoices: number; sentQuotes: number; awaiting: str
 
 function passing() {
   return {
+    propertyId: "property-1",
     projectId: "project-1",
     quoteId: "quote-1",
-    enquiry: { status: "converted", projectId: "project-1" },
+    enquiry: {
+      status: "converted",
+      propertyId: "property-1",
+      convertedProjectId: "project-1",
+    } as EnquiryObservation,
     quoteProjectId: "project-1",
     reconciledOutcome: "succeeded",
     invoice: { status: "draft", quoteId: "quote-1", projectId: "project-1" },
@@ -74,8 +80,10 @@ describe("Beez Treez workflow assessment", () => {
   });
 
   const failures: Array<[string, (input: ReturnType<typeof passing>) => void]> = [
+    ["enquiryOnProperty", (input) => (input.enquiry.propertyId = "other")],
     ["enquiryConverted", (input) => (input.enquiry.status = "open")],
-    ["enquiryLinkedToProject", (input) => (input.enquiry.projectId = "other")],
+    ["enquiryLinkedToProject", (input) => (input.enquiry.convertedProjectId = "other")],
+    ["enquiryLinkedToProject", (input) => (input.enquiry.convertedProjectId = null)],
     ["quoteOnProject", (input) => (input.quoteProjectId = "other")],
     ["sendReconciledSucceeded", (input) => (input.reconciledOutcome = "failed")],
     ["invoiceDraftFromQuote", (input) => (input.invoice.quoteId = "other")],
@@ -190,7 +198,12 @@ describe("Beez Treez workflow steps", () => {
         data: { id: "invoice-1", status: "draft", quoteId: "quote-1", projectId: "project-1" },
       },
       "GET /api/v1/enquiries/enquiry-1": {
-        data: { id: "enquiry-1", status: "converted", projectId: "project-1" },
+        data: {
+          id: "enquiry-1",
+          status: "converted",
+          propertyId: "property-1",
+          convertedProjectId: "project-1",
+        },
       },
       "GET /api/v1/brief": brief({ draftInvoices: 1, sentQuotes: 1, awaiting: ["quote-1"] }),
       "GET /api/v1/hud/snapshot": {
@@ -214,13 +227,38 @@ describe("Beez Treez workflow steps", () => {
     assert.equal(invoiceBody.projectId, "project-1");
     assert.deepEqual(invoiceBody.lineItems, [{ description: "Line", quantity: 1, unitPrice: 1 }]);
     assert.equal(finished.invoice.status, "draft");
-    assert.equal(finished.enquiry.status, "converted");
+    assert.deepEqual(finished.enquiry, {
+      status: "converted",
+      propertyId: "property-1",
+      convertedProjectId: "project-1",
+    });
     assert.equal(finished.briefAfter.quoteAwaitingResponse, true);
     assert.deepEqual(finished.hud, {
       available: true,
       quoteRegisterReady: true,
       registerEntry: { quoteId: "quote-1", projectId: "project-1" },
     });
+  });
+
+  it("reads the enquiry's project link only from the contract field convertedProjectId", async () => {
+    // Regression: the first live run showed the API names it convertedProjectId.
+    const { call } = recorder({
+      "POST /api/v1/invoices": { data: { id: "invoice-1", status: "draft" } },
+      "GET /api/v1/enquiries/enquiry-1": {
+        data: { status: "converted", projectId: "project-1" },
+      },
+      "GET /api/v1/brief": brief({ draftInvoices: 1, sentQuotes: 1, awaiting: [] }),
+    });
+    const finished = await finishBeezTreezWorkflow({
+      call,
+      clientId: "client-1",
+      marker: "m",
+      enquiryId: "enquiry-1",
+      projectId: "project-1",
+      quoteId: "quote-1",
+      lineItems: [],
+    });
+    assert.equal(finished.enquiry.convertedProjectId, null);
   });
 
   it("reports the HUD as unavailable rather than failing the run", async () => {

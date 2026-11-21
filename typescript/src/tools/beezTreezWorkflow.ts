@@ -129,9 +129,16 @@ export async function startBeezTreezWorkflow(input: {
 export type WorkflowFinish = {
   invoiceId: string;
   invoice: { status: string | null; quoteId: string | null; projectId: string | null };
-  enquiry: { status: string | null; projectId: string | null };
+  enquiry: EnquiryObservation;
   briefAfter: BriefCounts;
   hud: HudObservation;
+};
+
+/** The enquiry as the API returns it after conversion (field names as in the contract). */
+export type EnquiryObservation = {
+  status: string | null;
+  propertyId: string | null;
+  convertedProjectId: string | null;
 };
 
 /** Invoice draft from the sent quote, then the enquiry, brief and HUD read back. */
@@ -172,13 +179,18 @@ export async function finishBeezTreezWorkflow(input: {
       quoteId: text(invoice.quoteId),
       projectId: text(invoice.projectId),
     },
-    enquiry: { status: text(enquiry.status), projectId: text(enquiry.projectId) },
+    enquiry: {
+      status: text(enquiry.status),
+      propertyId: text(enquiry.propertyId),
+      convertedProjectId: text(enquiry.convertedProjectId),
+    },
     briefAfter,
     hud: readHud(hudBody, input.quoteId),
   };
 }
 
 export type WorkflowChecks = {
+  enquiryOnProperty: boolean;
   enquiryConverted: boolean;
   enquiryLinkedToProject: boolean;
   quoteOnProject: boolean;
@@ -197,9 +209,10 @@ function increased(before: number | null, after: number | null): boolean {
 
 /** Each link of the chain, read from the API; the workflow is proven only if all hold. */
 export function assessBeezTreezWorkflow(input: {
+  propertyId: string;
   projectId: string;
   quoteId: string;
-  enquiry: { status: string | null; projectId: string | null };
+  enquiry: EnquiryObservation;
   quoteProjectId: string | null;
   reconciledOutcome: string | null;
   invoice: { status: string | null; quoteId: string | null; projectId: string | null };
@@ -208,8 +221,9 @@ export function assessBeezTreezWorkflow(input: {
   hud: HudObservation;
 }): { checks: WorkflowChecks; proven: boolean } {
   const checks: WorkflowChecks = {
+    enquiryOnProperty: input.enquiry.propertyId === input.propertyId,
     enquiryConverted: input.enquiry.status === "converted",
-    enquiryLinkedToProject: input.enquiry.projectId === input.projectId,
+    enquiryLinkedToProject: input.enquiry.convertedProjectId === input.projectId,
     quoteOnProject: input.quoteProjectId === input.projectId,
     sendReconciledSucceeded: input.reconciledOutcome === "succeeded",
     invoiceDraftFromQuote:

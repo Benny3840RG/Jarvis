@@ -166,8 +166,9 @@ An enquiry needs a client, so the kit runs the steps in this order:
 The evidence JSON gains a `workflow` object with the record ids, the brief
 counts before and after, the HUD observation, and these `checks`:
 
+- `enquiryOnProperty`: the enquiry is on the property the run created.
 - `enquiryConverted` and `enquiryLinkedToProject`: the enquiry is `converted`
-  and points at the new project.
+  and its `convertedProjectId` is the new project.
 - `quoteOnProject`: the quote carries the project id.
 - `sendReconciledSucceeded`: the sent delivery reconciled as `succeeded`.
 - `invoiceDraftFromQuote` and `invoiceOnProject`: the invoice is a draft that

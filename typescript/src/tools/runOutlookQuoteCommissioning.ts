@@ -812,6 +812,7 @@ async function runCommissioning(input: {
       (entry) => entry.providerRequestId === trace.reconciliation?.providerRequestId,
     );
     const assessed = assessBeezTreezWorkflow({
+      propertyId: workflowStart.propertyId,
       projectId: workflowStart.projectId,
       quoteId: snapshot.quoteId,
       enquiry: finished.enquiry,
