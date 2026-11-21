@@ -201,7 +201,11 @@ export function createQuoteSendToolDefinition(
           },
           signal,
           register: async (reference) => {
-            await context.registerProviderAttempt(reference);
+            await context.registerProviderAttempt({
+              provider: reference.provider,
+              providerRequestId: reference.providerRequestId,
+              providerCorrelationId: reference.providerCorrelationId,
+            });
             providerReferenceRegistered = true;
             await project(() =>
               deliveries.bindProviderReference({
@@ -209,6 +213,9 @@ export function createQuoteSendToolDefinition(
                 expectedStatus: "executing",
                 providerRequestId: reference.providerRequestId,
                 providerCorrelationId: reference.providerCorrelationId,
+                ...(reference.immutableIdApplied === undefined
+                  ? {}
+                  : { immutableIdApplied: reference.immutableIdApplied }),
                 reconciliationId: computeExternalReconciliationId(
                   context.action,
                   context.idempotencyKey,

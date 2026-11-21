@@ -184,9 +184,46 @@ export type CommissioningTrace = {
    * it is not a trace of the request header.
    */
   sameMessageIdDraftToSent: boolean;
+  /**
+   * True only when this delivery's ledger history records Graph confirming
+   * `Preference-Applied: IdType="ImmutableId"` on draft creation (gap 1).
+   */
+  draftImmutableIdApplied: boolean;
   /** Every sequential and parallel worker run, in order (gap 3). */
   workers: CommissioningWorkerRun[];
+  /** True when the parallel pair ran first, before any worker had resolved the work (gap 3). */
+  parallelRaceBeforeResolution: boolean;
+  /** Worker runs that resolved a record; more than one would be a duplicate terminal effect. */
+  resolvedWorkerRuns: number;
 };
+
+const TRANSITION_EVENTS = new Set([
+  "pending",
+  "executing",
+  "provider-reference",
+  "indeterminate",
+  "succeeded",
+  "failed",
+  "reconciled",
+]);
+
+function transitionsFrom(value: unknown): Record<string, unknown>[] | null {
+  if (!Array.isArray(value)) return null;
+  return value.flatMap((entry) => {
+    if (!isRecord(entry) || typeof entry.event !== "string" || !TRANSITION_EVENTS.has(entry.event))
+      return [];
+    if (typeof entry.at !== "number") return [];
+    return [
+      {
+        event: entry.event,
+        at: entry.at,
+        ...(typeof entry.immutableIdApplied === "boolean"
+          ? { immutableIdApplied: entry.immutableIdApplied }
+          : {}),
+      },
+    ];
+  });
+}
 
 export type CommissioningRunEvidence = OutlookCommissioningEvidence & {
   quoteId: string;
@@ -212,8 +249,8 @@ export function commissioningTrace(input: {
   const listed =
     isRecord(input.deliveries) && Array.isArray(input.deliveries.data) ? input.deliveries.data : [];
   const deliveries = listed
-    .map((entry) =>
-      pick(entry, [
+    .map((entry) => {
+      const picked = pick(entry, [
         "deliveryAttemptId",
         "status",
         "reconciledOutcome",
@@ -221,8 +258,10 @@ export function commissioningTrace(input: {
         "createdAt",
         "executionStartedAt",
         "reconciledAt",
-      ]),
-    )
+      ]);
+      const transitions = transitionsFrom(isRecord(entry) ? entry.transitions : undefined);
+      return picked && transitions ? { ...picked, transitions } : picked;
+    })
     .filter((entry): entry is Record<string, unknown> => entry !== null);
   const reconciliation = pick(
     isRecord(input.reconciliationDetail) ? input.reconciliationDetail.reconciliation : null,
@@ -247,13 +286,34 @@ export function commissioningTrace(input: {
     typeof reconciliation.attemptCount === "number" &&
     reconciliation.attemptCount >= 2 &&
     deliveries.some((entry) => entry.providerRequestId === messageId);
+  const draftImmutableIdApplied =
+    typeof messageId === "string" &&
+    deliveries.some(
+      (entry) =>
+        entry.providerRequestId === messageId &&
+        Array.isArray(entry.transitions) &&
+        (entry.transitions as Record<string, unknown>[]).some(
+          (step) => step.event === "provider-reference" && step.immutableIdApplied === true,
+        ),
+    );
+  const workers = [...input.workers];
+  // The pair must be the first runs (so nothing had resolved the work yet), and at
+  // least one of them must have claimed it; two idle runs prove no race at all.
+  const firstPair = workers.slice(0, 2);
+  const parallelRaceBeforeResolution =
+    firstPair.length === 2 &&
+    firstPair.every((run) => /-par-[ab]$/.test(run.workerId)) &&
+    firstPair.some((run) => run.result.status !== "idle");
   return {
     repeatSend: repeatSend && Object.keys(repeatSend).length > 0 ? repeatSend : null,
     deliveries,
     reconciliation:
       reconciliation && Object.keys(reconciliation).length > 0 ? reconciliation : null,
     sameMessageIdDraftToSent,
-    workers: [...input.workers],
+    draftImmutableIdApplied,
+    workers,
+    parallelRaceBeforeResolution,
+    resolvedWorkerRuns: workers.filter((run) => run.result.status === "resolved").length,
   };
 }
 
@@ -459,17 +519,14 @@ async function executeSend(input: {
   return { ...readReceipt(body), body };
 }
 
-async function drainWorker(
-  worker: ReconciliationWorker,
+export async function drainWorker(
+  worker: Pick<ReconciliationWorker, "runOnce">,
   marker: string,
   runs: CommissioningWorkerRun[],
 ): Promise<void> {
   const signal = AbortSignal.timeout(20_000);
-  for (let index = 0; index < 3; index += 1) {
-    const workerId = `${marker}-seq-${index}`;
-    runs.push({ workerId, result: await worker.runOnce({ workerId, leaseMs: 10_000, signal }) });
-  }
-  // Two workers race for the same work; the trace keeps both results (#866 gap 3).
+  // Two workers race first, while the work is still unresolved, so the trace shows
+  // whether they can produce duplicate terminal records (#866 gap 3).
   const parallel = [`${marker}-par-a`, `${marker}-par-b`];
   const results = await Promise.all(
     parallel.map((workerId) => worker.runOnce({ workerId, leaseMs: 10_000, signal })),
@@ -478,6 +535,11 @@ async function drainWorker(
     const result = results[index];
     if (result) runs.push({ workerId, result });
   });
+  // Sequential runs then finish any work the race released or left due.
+  for (let index = 0; index < 3; index += 1) {
+    const workerId = `${marker}-seq-${index}`;
+    runs.push({ workerId, result: await worker.runOnce({ workerId, leaseMs: 10_000, signal }) });
+  }
 }
 
 async function readReconciliations(input: {

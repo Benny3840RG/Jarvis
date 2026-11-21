@@ -53,6 +53,9 @@ export async function prepareRegisterAndSendQuoteEmail(
     provider: input.provider.name,
     providerRequestId: prepared.providerRequestId,
     providerCorrelationId: prepared.providerCorrelationId,
+    ...(prepared.immutableIdApplied === undefined
+      ? {}
+      : { immutableIdApplied: prepared.immutableIdApplied }),
   });
   const acceptance = await input.provider.sendPrepared(prepared, input.signal);
   if (acceptance.status !== "accepted") {

@@ -24,6 +24,12 @@ export type QuoteEmailPrepareInput = QuoteEmailSendInput & {
 export type QuoteEmailPreparedReference = {
   providerRequestId: string;
   providerCorrelationId: string;
+  /**
+   * Set by providers that can tell: whether the provider confirmed it applied the
+   * immutable-id preference when it created the draft. Evidence only; it never
+   * changes the send path.
+   */
+  immutableIdApplied?: boolean;
 };
 
 export type QuoteEmailSendAcceptance = {

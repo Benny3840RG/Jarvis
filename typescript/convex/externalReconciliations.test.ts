@@ -343,6 +343,8 @@ describe("terminal quote delivery projection", () => {
     expect(delivery?.status).toBe("reconciled");
     expect(delivery?.reconciledOutcome).toBe("succeeded");
     expect(delivery?.reconciledAt).toBe(now);
+    // An attempt recorded before transition history existed gains one from here on.
+    expect(delivery?.transitions).toEqual([{ event: "reconciled", at: now }]);
 
     const evidence = await t.run((ctx) =>
       ctx.db

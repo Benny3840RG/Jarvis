@@ -32,6 +32,7 @@ import {
   quoteDeliveryChannelValidator,
   quoteDeliveryReconciledOutcomeValidator,
   quoteDeliveryStatusValidator,
+  quoteDeliveryTransitionValidator,
 } from "./quoteDeliveryValidators.js";
 import { quotePdfPartyValidator } from "./quotePdfArtifactValidators.js";
 import {
@@ -510,6 +511,8 @@ export default defineSchema({
     completedAt: v.optional(v.number()),
     reconciledAt: v.optional(v.number()),
     updatedAt: v.number(),
+    // Bounded by MAX_QUOTE_DELIVERY_TRANSITIONS; optional so older attempts stay valid.
+    transitions: v.optional(v.array(quoteDeliveryTransitionValidator)),
   })
     .index("by_owner_and_delivery_attempt_id", ["ownerId", "deliveryAttemptId"])
     .index("by_owner_and_send_scope", ["ownerId", "quoteId", "revision", "recipient", "channel"])

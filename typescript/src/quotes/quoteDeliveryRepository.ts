@@ -33,6 +33,22 @@ export type QuoteDeliveryAttempt = {
   completedAt?: number;
   reconciledAt?: number;
   updatedAt: number;
+  /** Lifecycle steps in order; absent on attempts recorded before history existed. */
+  transitions?: QuoteDeliveryTransition[];
+};
+
+export type QuoteDeliveryTransition = {
+  event:
+    | "pending"
+    | "executing"
+    | "provider-reference"
+    | "indeterminate"
+    | "succeeded"
+    | "failed"
+    | "reconciled";
+  at: number;
+  /** Only on `provider-reference`: whether the provider confirmed the immutable-id preference. */
+  immutableIdApplied?: boolean;
 };
 
 export type CreateQuoteDeliveryInput = QuoteSendScope & {
@@ -58,6 +74,8 @@ export type BindQuoteProviderReferenceInput = {
   providerRequestId: string;
   providerCorrelationId?: string;
   reconciliationId?: string;
+  /** Whether the provider confirmed the immutable-id preference on the draft. */
+  immutableIdApplied?: boolean;
   updatedAt?: number;
 };
 

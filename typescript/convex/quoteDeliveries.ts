@@ -2,6 +2,7 @@ import { v } from "convex/values";
 
 import { collectBounded, requireDeliveryRuntimeToken, requireOwner } from "./authHelpers.js";
 import {
+  appendQuoteDeliveryTransition,
   quoteDeliveryAttemptDocumentValidator,
   quoteDeliveryChannelValidator,
   quoteDeliveryReconciledOutcomeValidator,
@@ -132,6 +133,7 @@ export const createPending = mutation({
       provider: cleanRequiredText(args.provider, "Provider"),
       createdAt: now,
       updatedAt: now,
+      transitions: [{ event: "pending", at: now }],
     });
     const attempt = await ctx.db.get("quoteDeliveryAttempts", id);
     if (!attempt) throw new Error("Quote delivery attempt creation failed.");
@@ -173,6 +175,10 @@ export const markExecuting = mutation({
       status: "executing",
       executionStartedAt: now,
       updatedAt: now,
+      transitions: appendQuoteDeliveryTransition(attempt.transitions, {
+        event: "executing",
+        at: now,
+      }),
     });
     const updated = await ctx.db.get("quoteDeliveryAttempts", attempt._id);
     if (!updated) throw new Error("Quote delivery attempt update failed.");
@@ -189,6 +195,8 @@ export const bindProviderReference = mutation({
     providerRequestId: v.string(),
     providerCorrelationId: v.optional(v.string()),
     reconciliationId: v.optional(v.string()),
+    /** Whether the provider confirmed the immutable-id preference on the draft. */
+    immutableIdApplied: v.optional(v.boolean()),
   },
   returns: quoteDeliveryAttemptDocumentValidator,
   handler: async (ctx, args) => {
@@ -196,13 +204,21 @@ export const bindProviderReference = mutation({
     requireDeliveryRuntimeToken(args.deliveryRuntimeToken);
     const attempt = await requiredDeliveryAttempt(ctx, ownerId, args.deliveryAttemptId);
     requireExpectedStatus(attempt, args.expectedStatus);
+    const now = Date.now();
     await ctx.db.patch("quoteDeliveryAttempts", attempt._id, {
       providerRequestId: cleanRequiredText(args.providerRequestId, "Provider request ID"),
       ...(args.providerCorrelationId === undefined
         ? {}
         : { providerCorrelationId: args.providerCorrelationId }),
       ...(args.reconciliationId === undefined ? {} : { reconciliationId: args.reconciliationId }),
-      updatedAt: Date.now(),
+      updatedAt: now,
+      transitions: appendQuoteDeliveryTransition(attempt.transitions, {
+        event: "provider-reference",
+        at: now,
+        ...(args.immutableIdApplied === undefined
+          ? {}
+          : { immutableIdApplied: args.immutableIdApplied }),
+      }),
     });
     const updated = await ctx.db.get("quoteDeliveryAttempts", attempt._id);
     if (!updated) throw new Error("Quote delivery attempt update failed.");
@@ -233,6 +249,10 @@ export const complete = mutation({
         : { providerErrorCode: args.providerErrorCode }),
       completedAt: now,
       updatedAt: now,
+      transitions: appendQuoteDeliveryTransition(attempt.transitions, {
+        event: args.outcome,
+        at: now,
+      }),
     });
     const updated = await ctx.db.get("quoteDeliveryAttempts", attempt._id);
     if (!updated) throw new Error("Quote delivery attempt update failed.");
@@ -255,13 +275,18 @@ export const markIndeterminate = mutation({
     requireDeliveryRuntimeToken(args.deliveryRuntimeToken);
     const attempt = await requiredDeliveryAttempt(ctx, ownerId, args.deliveryAttemptId);
     requireExpectedStatus(attempt, args.expectedStatus);
+    const now = Date.now();
     await ctx.db.patch("quoteDeliveryAttempts", attempt._id, {
       status: "indeterminate",
       reconciliationId: cleanRequiredText(args.reconciliationId, "Reconciliation ID"),
       ...(args.providerErrorCode === undefined
         ? {}
         : { providerErrorCode: args.providerErrorCode }),
-      updatedAt: Date.now(),
+      updatedAt: now,
+      transitions: appendQuoteDeliveryTransition(attempt.transitions, {
+        event: "indeterminate",
+        at: now,
+      }),
     });
     const updated = await ctx.db.get("quoteDeliveryAttempts", attempt._id);
     if (!updated) throw new Error("Quote delivery attempt update failed.");
@@ -299,6 +324,10 @@ export const reconcile = mutation({
         : { providerErrorCode: args.providerErrorCode }),
       reconciledAt: now,
       updatedAt: now,
+      transitions: appendQuoteDeliveryTransition(attempt.transitions, {
+        event: "reconciled",
+        at: now,
+      }),
     });
     const updated = await ctx.db.get("quoteDeliveryAttempts", attempt._id);
     if (!updated) throw new Error("Quote delivery attempt update failed.");

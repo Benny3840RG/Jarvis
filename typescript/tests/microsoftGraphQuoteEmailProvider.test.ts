@@ -63,6 +63,40 @@ function providerWith(
   });
 }
 
+describe("MicrosoftGraphQuoteEmailProvider immutable-id confirmation", () => {
+  async function preparedWith(preferenceApplied: string | null) {
+    const requests: RecordedRequest[] = [];
+    const headers: Record<string, string> = { "content-type": "application/json" };
+    if (preferenceApplied !== null) headers["preference-applied"] = preferenceApplied;
+    const provider = providerWith(
+      [
+        new Response(JSON.stringify({ id: "immutable-message-id", isDraft: true }), {
+          status: 201,
+          headers,
+        }),
+      ],
+      requests,
+    );
+    return provider.prepare(input(), new AbortController().signal);
+  }
+
+  it("records that Graph applied the immutable-id preference to the draft", async () => {
+    assert.equal((await preparedWith('IdType="ImmutableId"')).immutableIdApplied, true);
+  });
+
+  it("finds the preference among several applied preferences, ignoring case", async () => {
+    assert.equal(
+      (await preparedWith('odata.maxpagesize=10, idtype="immutableid"')).immutableIdApplied,
+      true,
+    );
+  });
+
+  it("does not claim the preference for another id type or a lookalike value", async () => {
+    assert.equal((await preparedWith('IdType="RestId"')).immutableIdApplied, false);
+    assert.equal((await preparedWith('IdType="ImmutableIdV2"')).immutableIdApplied, false);
+  });
+});
+
 describe("MicrosoftGraphQuoteEmailProvider", () => {
   it("creates a quote-only draft with the exact locked PDF and captures its immutable ID", async () => {
     const requests: RecordedRequest[] = [];
@@ -78,9 +112,11 @@ describe("MicrosoftGraphQuoteEmailProvider", () => {
 
     const prepared = await provider.prepare(input(), new AbortController().signal);
 
+    // Graph did not confirm the preference here, so the reference says so.
     assert.deepEqual(prepared, {
       providerRequestId: "immutable-message-id",
       providerCorrelationId: "immutable-message-id",
+      immutableIdApplied: false,
     });
     assert.equal(requests.length, 1);
     assert.equal(
