@@ -137,6 +137,12 @@ test("the shipped manifest keeps its structural promises", () => {
   assert.deepEqual(speaker.missingPrerequisites, []);
   assert.match(speaker.proposedAction, /Tayah’s bedside/);
   assert.doesNotMatch(speaker.proposedAction, /picture box/i);
+  // The choice is pinned to its recorded owner comment, not asserted by the card.
+  assert.ok(
+    speaker.evidence.some(
+      (item) => item.pin.kind === "comment" && item.pin.id === 7063313389 && item.pin.on === 869,
+    ),
+  );
 
   // Totality reasoning uses the Anthropic key already on the host, and stays
   // not ready until that provider is merged.

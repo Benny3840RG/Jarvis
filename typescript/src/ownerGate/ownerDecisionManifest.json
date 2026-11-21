@@ -127,11 +127,20 @@
       "dependsOn": [],
       "evidence": [
         {
-          "label": "Issue #567 (closed as commissioned on 22 Nov)",
+          "label": "Issue #567, closed as commissioned",
           "pin": {
             "kind": "issue",
             "number": 567,
             "revision": "2026-11-21T13:08:17Z"
+          }
+        },
+        {
+          "label": "Voice acceptance recorded on #567",
+          "pin": {
+            "kind": "comment",
+            "id": 7063052190,
+            "on": 567,
+            "revision": "2026-11-21T13:08:15Z"
           }
         },
         {
@@ -217,9 +226,9 @@
       "id": "google-home-announcement",
       "title": "Authorise one governed Google Home announcement",
       "issues": [697],
-      "proposedAction": "Pin the speaker \"Tayah’s bedside\" (Google Nest Hub), chosen by the owner on 22 Nov, and play one governed test announcement on it through the existing ToolAction path.",
+      "proposedAction": "Pin the speaker \"Tayah’s bedside\" (Google Nest Hub), as recorded in the owner's choice on #869, and play one governed test announcement on it through the existing ToolAction path.",
       "consequence": "A speaker in the house plays audio once. This commissions the home announcement path for Local V1.",
-      "scope": "One pinned Cast device, one announcement, development runtime. The ToolAction approval for the announcement itself is still required separately.",
+      "scope": "One Cast device, pinned by that exact name in the host's private address map (mode 0600, never committed); any other name fails closed. One announcement, development runtime. The ToolAction approval for the announcement itself is still required separately.",
       "environment": "development",
       "risk": "high",
       "highRiskKind": "hardware-actuation",
@@ -238,6 +247,15 @@
             "kind": "issue",
             "number": 697,
             "revision": "2026-11-20T01:26:12Z"
+          }
+        },
+        {
+          "label": "Owner's speaker choice: \"Tayah’s bedside\"",
+          "pin": {
+            "kind": "comment",
+            "id": 7063313389,
+            "on": 869,
+            "revision": "2026-11-21T13:29:14Z"
           }
         }
       ],
