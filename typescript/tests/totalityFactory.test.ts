@@ -75,7 +75,8 @@ describe("createTotalityPipelineFromEnv", () => {
     process.env.TOTALITY_REASONER_PROVIDER = "anthropic";
     process.env.OPENAI_API_KEY = "unrelated-to-anthropic";
     assert.equal(createTotalityPipelineFromEnv(), null);
-  });});
+  });
+});
 
 describe("resolveTotalityReasoningStatus", () => {
   const keys = [
