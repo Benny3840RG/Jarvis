@@ -156,7 +156,7 @@ test("the shipped manifest keeps its structural promises", () => {
     ),
   );
 
-  // The Outlook gates are decidable only on the recorded 2026-11-22 run and the
+  // The Outlook gates are decidable only on the recorded traced run and the
   // merged ledger tracing (#873) that made each gap observable.
   const outlook = byId.get("outlook-evidence-acceptance");
   assert.ok(outlook);

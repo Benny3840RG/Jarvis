@@ -8,7 +8,7 @@
       "issues": [294, 297],
       "proposedAction": "Close the quote delivery gate (#294) and the Outlook reconciliation gate (#297) on the development commissioning evidence.",
       "consequence": "Both gates close and the Local V1 checklist item for Outlook delivery is met.",
-      "scope": "Development only. The 2026-11-22 commissioning run on main 56280fa9: one non-customer quote, sent from the owner's Outlook to the owner's own Gmail and reconciled once. No new send, no customer recipient, no production.",
+      "scope": "Development only. The traced commissioning run on main 56280fa9: one non-customer quote, sent from the owner's Outlook to the owner's own Gmail and reconciled once. No new send, no customer recipient, no production.",
       "environment": "development",
       "risk": "standard",
       "subjects": [
@@ -26,7 +26,7 @@
       "dependsOn": [],
       "evidence": [
         {
-          "label": "2026-11-22 commissioning run: immutable-id confirmed, full transition history, parallel race, recorded repeat block",
+          "label": "Traced commissioning run on main 56280fa9: immutable-id confirmed, full transition history, parallel race, recorded repeat block",
           "pin": {
             "kind": "comment",
             "id": 7065797361,
