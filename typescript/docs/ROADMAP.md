@@ -1,14 +1,24 @@
 # Jarvis TypeScript Roadmap
 
+## Security halt on the HUD (#839, 2026-11-21)
+
+The HUD reads `securityHalt` from status. While dispatch is refused:
+
+- the status pill reads HALTED;
+- presence is `blocked`, ahead of approvals and reconciliation;
+- the backdrop is STOPPED;
+- the footer names the stage.
+
+A service without the field shows no halt. It uses existing elements only, with no layout change. It needs the owner's spoken check before merge.
+
 ## Security halt in system status (#839, 2026-11-21)
 
 `GET /api/v1/status` now carries `securityHalt`: the halt `state` (`running`, `requested`, `acknowledged`, `verified-stopped` or `unverifiable`), whether dispatch is allowed, the timestamps and the unsettled count. The owner's reason text is never included. While dispatch is refused, the overall status is `degraded`. A reader failure is reported as refused and unverifiable. The status route derives the state with `summarizeSecurityHalt`. The CLI matches acknowledgements to the halt through the same `haltRefFor` binding.
 
 Next:
 
-1. Show `securityHalt` on the HUD (a HUD change, so it needs a spoken check).
-2. Feed the halt record into the privileged-operation policy context once a broker exists.
-3. Extend cancellation to non-tool background loops (reconciliation, reminders), if the owner wants those covered.
+1. Feed the halt record into the privileged-operation policy context once a broker exists.
+2. Extend cancellation to non-tool background loops (reconciliation, reminders), if the owner wants those covered.
 
 ## Security halt cancels in-flight work (#839, 2026-11-21)
 
