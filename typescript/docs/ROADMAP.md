@@ -405,8 +405,8 @@ maps a persistence "no longer available" refusal to a non-retryable 409,
 projects HUD and brief tasks and reminders through the public HTTP shape, and
 restores a direct-create receipt only when it matches an entity key and
 fingerprint or a tombstone. Quote and receipt rows are stored under
-`jarvis-cli`. Full end-to-end recovery on realistic data stays NOT YET MET
-until the host repeats that restart step. `npm run commission:local-v1-recovery`
+`jarvis-cli`. The host repeated the full run at `ca7f256f` on 21 Nov 2026,
+and it passed on synthetic data (evidence, not acceptance). `npm run commission:local-v1-recovery`
 (`runLocalV1RestartProof`) drives that restart step from environment config
 against the isolated loopback backend and writes a dated evidence file with the
 quote body sha256; it automates only the restart proof and lists capture,
