@@ -121,6 +121,19 @@ test("the shipped manifest keeps its structural promises", () => {
   // not wait on a provider key (and so on new spending).
   assert.equal(dependsOn("voice-host-commissioning").includes("voice-model-provider-key"), false);
 
+  // Voice is decidable only on recorded host evidence: the spoken run on the
+  // Lenovo and the merged fix for what it found, each pinned.
+  const voice = byId.get("voice-host-commissioning");
+  assert.ok(voice);
+  assert.deepEqual(voice.missingPrerequisites, []);
+  const voicePins = voice.evidence.map((item) => item.pin);
+  assert.ok(voicePins.some((pin) => pin.kind === "comment" && pin.id === 6851388839));
+  assert.ok(voicePins.some((pin) => pin.kind === "pull-request" && pin.number === 809));
+
+  // A speaker plays only after the owner names one, so the Google Home card
+  // stays not ready until then.
+  assert.equal(byId.get("google-home-announcement")?.missingPrerequisites.length, 1);
+
   // No dependency cycle: every chain of dependsOn ends.
   const visiting = new Set<string>();
   const done = new Set<string>();

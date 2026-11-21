@@ -73,7 +73,7 @@
         {
           "kind": "issue",
           "number": 697,
-          "revision": "2026-11-10T12:37:40Z"
+          "revision": "2026-11-20T01:26:12Z"
         }
       ],
       "dependsOn": [],
@@ -83,7 +83,7 @@
           "pin": {
             "kind": "issue",
             "number": 697,
-            "revision": "2026-11-10T12:37:40Z"
+            "revision": "2026-11-20T01:26:12Z"
           }
         },
         {
@@ -121,7 +121,7 @@
         {
           "kind": "issue",
           "number": 567,
-          "revision": "2026-11-12T22:14:16Z"
+          "revision": "2026-11-13T21:54:25Z"
         }
       ],
       "dependsOn": [],
@@ -131,7 +131,7 @@
           "pin": {
             "kind": "issue",
             "number": 567,
-            "revision": "2026-11-12T22:14:16Z"
+            "revision": "2026-11-13T21:54:25Z"
           }
         },
         {
@@ -148,7 +148,7 @@
           "pin": {
             "kind": "issue",
             "number": 697,
-            "revision": "2026-11-10T12:37:40Z"
+            "revision": "2026-11-20T01:26:12Z"
           }
         }
       ],
@@ -169,7 +169,7 @@
         {
           "kind": "issue",
           "number": 567,
-          "revision": "2026-11-12T22:14:16Z"
+          "revision": "2026-11-13T21:54:25Z"
         }
       ],
       "dependsOn": [],
@@ -179,7 +179,7 @@
           "pin": {
             "kind": "issue",
             "number": 567,
-            "revision": "2026-11-12T22:14:16Z"
+            "revision": "2026-11-13T21:54:25Z"
           }
         },
         {
@@ -190,13 +190,26 @@
             "on": 567,
             "revision": "2026-11-12T22:14:15Z"
           }
+        },
+        {
+          "label": "Spoken run on the Lenovo, 13 Nov: microphone, audibility and 12 latency samples (includes #804)",
+          "pin": {
+            "kind": "comment",
+            "id": 6851388839,
+            "on": 567,
+            "revision": "2026-11-13T11:23:21Z"
+          }
+        },
+        {
+          "label": "Fix for that run's findings: accept \"confirmed\" and keep the microphone listening (merged, running on the host)",
+          "pin": {
+            "kind": "pull-request",
+            "number": 809,
+            "revision": "7934acb3a8e425550b447c667f229482d0275f35"
+          }
         }
       ],
-      "missingPrerequisites": [
-        "Pull request #804 (the HUD shows and speaks the clarification question) is not merged and running on the host.",
-        "No microphone and audibility acceptance run has been recorded on the real host.",
-        "Ten dispatch round-trip samples from the owner's own HUD session have not been recorded."
-      ],
+      "missingPrerequisites": [],
       "rollback": "Reopen #567. Voice can be disabled by leaving the microphone off; no hardware adapter ships.",
       "expiresAt": "2026-12-12T00:00:00.000Z"
     },
@@ -214,7 +227,7 @@
         {
           "kind": "issue",
           "number": 697,
-          "revision": "2026-11-10T12:37:40Z"
+          "revision": "2026-11-20T01:26:12Z"
         }
       ],
       "dependsOn": [],
@@ -224,12 +237,12 @@
           "pin": {
             "kind": "issue",
             "number": 697,
-            "revision": "2026-11-10T12:37:40Z"
+            "revision": "2026-11-20T01:26:12Z"
           }
         }
       ],
       "missingPrerequisites": [
-        "No pinned speaker target has been named; the pinned-target map is absent."
+        "The owner has not yet chosen which speaker to pin. Discovery on 21 Nov found two: \"Tayah’s bedside\" (Google Nest Hub) and \"The picture box\" (Google TV Streamer)."
       ],
       "rollback": "Remove the pinned-target map; the announcement path then fails closed again.",
       "expiresAt": "2026-12-12T00:00:00.000Z"
@@ -861,7 +874,7 @@
         {
           "kind": "issue",
           "number": 697,
-          "revision": "2026-11-10T12:37:40Z"
+          "revision": "2026-11-20T01:26:12Z"
         }
       ],
       "dependsOn": [
@@ -876,7 +889,7 @@
           "pin": {
             "kind": "issue",
             "number": 697,
-            "revision": "2026-11-10T12:37:40Z"
+            "revision": "2026-11-20T01:26:12Z"
           }
         }
       ],
