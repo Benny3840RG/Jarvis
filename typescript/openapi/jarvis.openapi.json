@@ -15343,7 +15343,7 @@
             "oneOf": [
               {
                 "type": "string",
-                "enum": ["openai", "gemini"]
+                "enum": ["openai", "gemini", "anthropic"]
               },
               {
                 "type": "null"

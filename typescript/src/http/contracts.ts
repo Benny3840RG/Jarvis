@@ -88,7 +88,7 @@ export function integrationStatusFromStage(stage: LifecycleStage): IntegrationSt
 // of truth this mirrors.
 export type ReasoningStatus = {
   status: "not-configured" | "configured";
-  provider: "openai" | "gemini" | null;
+  provider: "openai" | "gemini" | "anthropic" | null;
   model: string | null;
   reason: string;
 };

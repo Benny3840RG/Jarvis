@@ -1,4 +1,8 @@
 import {
+  AnthropicTotalityReasoner,
+  resolveAnthropicTotalityConfig,
+} from "../integrations/anthropic/totalityReasoner.js";
+import {
   GeminiTotalityReasoner,
   resolveGeminiTotalityConfig,
 } from "../integrations/gemini/totalityReasoner.js";
@@ -13,7 +17,7 @@ import {
 } from "../persistence/providerSelection.js";
 import { TotalityPipeline } from "./totalityPipeline.js";
 
-export type TotalityReasonerProviderName = "openai" | "gemini";
+export type TotalityReasonerProviderName = "openai" | "gemini" | "anthropic";
 
 /**
  * Read-only description of the Totality reasoning integration for status
@@ -77,7 +81,9 @@ export function resolveTotalityReasoningStatus(
     const model =
       provider === "gemini"
         ? resolveGeminiTotalityConfig().model
-        : resolveOpenAITotalityConfig().model;
+        : provider === "anthropic"
+          ? resolveAnthropicTotalityConfig().model
+          : resolveOpenAITotalityConfig().model;
     return { status: "configured", provider, model, reason: UNVERIFIED_REASON };
   } catch (error) {
     return {
@@ -95,8 +101,9 @@ export function resolveTotalityReasonerProviderName(
   const provider = (configured ?? "openai").trim().toLowerCase();
   if (provider === "" || provider === "openai") return "openai";
   if (provider === "gemini") return "gemini";
+  if (provider === "anthropic") return "anthropic";
   throw new Error(
-    `Invalid TOTALITY_REASONER_PROVIDER '${configured}'. Valid values: unset, openai, gemini.`,
+    `Invalid TOTALITY_REASONER_PROVIDER '${configured}'. Valid values: unset, openai, gemini, anthropic.`,
   );
 }
 
@@ -108,6 +115,14 @@ export function createTotalityPipelineFromEnv(): TotalityPipeline | null {
     if (!process.env.GEMINI_API_KEY) return null;
     return new TotalityPipeline(
       new GeminiTotalityReasoner(resolveGeminiTotalityConfig()),
+      new ConvexTotalityJournal(),
+    );
+  }
+
+  if (provider === "anthropic") {
+    if (!process.env.ANTHROPIC_API_KEY) return null;
+    return new TotalityPipeline(
+      new AnthropicTotalityReasoner(resolveAnthropicTotalityConfig()),
       new ConvexTotalityJournal(),
     );
   }
