@@ -166,6 +166,8 @@ An enquiry needs a client, so the kit runs the steps in this order:
 The evidence JSON gains a `workflow` object with the record ids, the brief
 counts before and after, the HUD observation, and these `checks`:
 
+- `recordsOwnedByClient`: the property, enquiry, quote and invoice all report the
+  run's disposable client as their `clientId`, as each API returned it.
 - `enquiryOnProperty`: the enquiry is on the property the run created.
 - `enquiryConverted` and `enquiryLinkedToProject`: the enquiry is `converted`
   and its `convertedProjectId` is the new project.
@@ -175,9 +177,16 @@ counts before and after, the HUD observation, and these `checks`:
   references the quote and the project.
 - `invoiceCarriesQuoteLines`: the line items the invoice API returned match the
   finalised quote revision's line items, as that API returned them, field by
-  field. Empty lists on both sides do not count.
+  field. A list with any malformed entry is unreadable and fails; empty lists on
+  both sides do not count.
+- `invoiceListedAsClientDraft`: listing draft invoices for the disposable client
+  returns exactly this invoice. That list comes from the same store the brief
+  is built from.
 - `briefCountsDraftInvoice` and `briefCountsSentQuote`: the brief's draft
-  invoice count and sent quote count both rose during the run.
+  invoice count and sent quote count each rose by exactly one, the number this
+  run created. Unrelated activity in the same window makes these fail rather
+  than pass. The brief only counts drafts, so `invoiceListedAsClientDraft` is
+  the per-record link.
 - `briefShowsQuoteAwaitingResponse`: the brief lists this quote as awaiting a
   response.
 - `hudShowsQuoteOnProject`: the HUD snapshot's quote register is ready and

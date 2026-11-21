@@ -21,10 +21,12 @@ import { ReconciliationWorker } from "../reconciliation/reconciliationWorker.js"
 import {
   assessBeezTreezWorkflow,
   finishBeezTreezWorkflow,
+  lineItemsFrom,
   startBeezTreezWorkflow,
   type WorkflowCall,
   type WorkflowChecks,
   type WorkflowFinish,
+  type WorkflowLineItem,
   type WorkflowStart,
 } from "./beezTreezWorkflow.js";
 import {
@@ -102,8 +104,9 @@ function readSnapshot(body: Json): {
   status: string;
   fingerprint?: string;
   projectId?: string;
-  /** The revision's line items as the API returned them. */
-  lineItems: Array<{ description: string; quantity: number; unitPrice: number }>;
+  clientId: string | null;
+  /** The revision's line items as the API returned them; null if any entry is malformed. */
+  lineItems: WorkflowLineItem[] | null;
 } {
   if (!isRecord(body) || !isRecord(body.data)) {
     throw new Error("Quote response did not include data.");
@@ -129,16 +132,8 @@ function readSnapshot(body: Json): {
   }
   const fingerprint = revision.fingerprint;
   const projectId = aggregate.projectId;
-  const lineItems = Array.isArray(revision.lineItems)
-    ? revision.lineItems.flatMap((item) =>
-        isRecord(item) &&
-        typeof item.description === "string" &&
-        typeof item.quantity === "number" &&
-        typeof item.unitPrice === "number"
-          ? [{ description: item.description, quantity: item.quantity, unitPrice: item.unitPrice }]
-          : [],
-      )
-    : [];
+  const lineItems = lineItemsFrom(revision.lineItems);
+  const clientId = typeof aggregate.clientId === "string" ? aggregate.clientId : null;
   return {
     quoteId,
     aggregateVersion,
@@ -147,6 +142,7 @@ function readSnapshot(body: Json): {
     status,
     ...(typeof fingerprint === "string" ? { fingerprint } : {}),
     ...(typeof projectId === "string" ? { projectId } : {}),
+    clientId,
     lineItems,
   };
 }
@@ -820,20 +816,26 @@ async function runCommissioning(input: {
       projectId: workflowStart.projectId,
       quoteId: snapshot.quoteId,
       // The finalised revision's lines as the API returned them, not the kit's own copy.
-      lineItems: snapshot.lineItems,
+      // If they could not be read, the kit's lines are sent and the check fails on null.
+      lineItems: snapshot.lineItems ?? lineItems,
     });
     const sent = trace.deliveries.find(
       (entry) => entry.providerRequestId === trace.reconciliation?.providerRequestId,
     );
     const assessed = assessBeezTreezWorkflow({
+      clientId,
       propertyId: workflowStart.propertyId,
+      propertyClientId: workflowStart.propertyClientId,
       projectId: workflowStart.projectId,
       quoteId: snapshot.quoteId,
+      quoteClientId: snapshot.clientId,
       enquiry: finished.enquiry,
       quoteProjectId,
       reconciledOutcome:
         typeof sent?.reconciledOutcome === "string" ? sent.reconciledOutcome : null,
+      invoiceId: finished.invoiceId,
       invoice: finished.invoice,
+      clientDraftInvoiceIds: finished.clientDraftInvoiceIds,
       quoteLineItems: snapshot.lineItems,
       briefBefore: workflowStart.briefBefore,
       briefAfter: finished.briefAfter,

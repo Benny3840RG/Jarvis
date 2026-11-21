@@ -75,6 +75,8 @@ function readHud(body: unknown, quoteId: string): HudObservation {
 
 export type WorkflowStart = {
   propertyId: string;
+  /** The property's owner as the create response returned it. */
+  propertyClientId: string | null;
   enquiryId: string;
   projectId: string;
   briefBefore: BriefCounts;
@@ -89,15 +91,14 @@ export async function startBeezTreezWorkflow(input: {
   const { call, clientId, marker } = input;
   // The quote does not exist yet, so only the counts matter here.
   const briefBefore = readBriefCounts(await call("GET", "/api/v1/brief"), "");
-  const propertyId = requiredId(
-    await call(
-      "POST",
-      "/api/v1/properties",
-      { clientId, address: `Commissioning site ${marker}`.slice(0, 500) },
-      201,
-    ),
-    "Create property",
+  const property = await call(
+    "POST",
+    "/api/v1/properties",
+    { clientId, address: `Commissioning site ${marker}`.slice(0, 500) },
+    201,
   );
+  const propertyId = requiredId(property, "Create property");
+  const propertyClientId = text(dataOf(property).clientId);
   const enquiryId = requiredId(
     await call(
       "POST",
@@ -123,36 +124,52 @@ export async function startBeezTreezWorkflow(input: {
   );
   const projectId = isRecord(converted.project) ? text(converted.project.id) : null;
   if (!projectId) throw new Error("Convert enquiry response did not include a project id.");
-  return { propertyId, enquiryId, projectId, briefBefore };
+  return { propertyId, propertyClientId, enquiryId, projectId, briefBefore };
 }
 
 export type WorkflowLineItem = { description: string; quantity: number; unitPrice: number };
 
 export type InvoiceObservation = {
+  clientId: string | null;
   status: string | null;
   quoteId: string | null;
   projectId: string | null;
-  /** The invoice's line items as the API returned them; malformed entries are dropped. */
-  lineItems: WorkflowLineItem[];
+  /**
+   * The invoice's line items as the API returned them, or null when the list is
+   * missing or any entry is malformed. Nothing is dropped to make a match.
+   */
+  lineItems: WorkflowLineItem[] | null;
 };
 
-function lineItemsFrom(value: unknown): WorkflowLineItem[] {
-  if (!Array.isArray(value)) return [];
-  return value.flatMap((item) =>
-    isRecord(item) &&
-    typeof item.description === "string" &&
-    typeof item.quantity === "number" &&
-    typeof item.unitPrice === "number"
-      ? [{ description: item.description, quantity: item.quantity, unitPrice: item.unitPrice }]
-      : [],
-  );
+/** Every entry must be well formed, or the whole list is unreadable (null). */
+export function lineItemsFrom(value: unknown): WorkflowLineItem[] | null {
+  if (!Array.isArray(value)) return null;
+  const items: WorkflowLineItem[] = [];
+  for (const item of value) {
+    if (
+      !isRecord(item) ||
+      typeof item.description !== "string" ||
+      typeof item.quantity !== "number" ||
+      typeof item.unitPrice !== "number"
+    ) {
+      return null;
+    }
+    items.push({
+      description: item.description,
+      quantity: item.quantity,
+      unitPrice: item.unitPrice,
+    });
+  }
+  return items;
 }
 
 function sameLineItems(
-  actual: readonly WorkflowLineItem[],
-  expected: readonly WorkflowLineItem[],
+  actual: readonly WorkflowLineItem[] | null,
+  expected: readonly WorkflowLineItem[] | null,
 ): boolean {
   return (
+    actual !== null &&
+    expected !== null &&
     expected.length > 0 &&
     actual.length === expected.length &&
     expected.every(
@@ -167,6 +184,8 @@ function sameLineItems(
 export type WorkflowFinish = {
   invoiceId: string;
   invoice: InvoiceObservation;
+  /** Draft invoice ids listed for the run's disposable client, from the store the brief reads. */
+  clientDraftInvoiceIds: string[] | null;
   enquiry: EnquiryObservation;
   briefAfter: BriefCounts;
   hud: HudObservation;
@@ -174,6 +193,7 @@ export type WorkflowFinish = {
 
 /** The enquiry as the API returns it after conversion (field names as in the contract). */
 export type EnquiryObservation = {
+  clientId: string | null;
   status: string | null;
   propertyId: string | null;
   convertedProjectId: string | null;
@@ -204,6 +224,16 @@ export async function finishBeezTreezWorkflow(input: {
   );
   const invoiceId = requiredId(created, "Create invoice draft");
   const invoice = dataOf(created);
+  const listed = await call(
+    "GET",
+    `/api/v1/invoices?clientId=${encodeURIComponent(input.clientId)}&status=draft`,
+  );
+  const clientDraftInvoiceIds =
+    isRecord(listed) && Array.isArray(listed.data)
+      ? listed.data.flatMap((entry) =>
+          isRecord(entry) && typeof entry.id === "string" ? [entry.id] : [],
+        )
+      : null;
   const enquiry = dataOf(
     await call("GET", `/api/v1/enquiries/${encodeURIComponent(input.enquiryId)}`),
   );
@@ -213,12 +243,15 @@ export async function finishBeezTreezWorkflow(input: {
   return {
     invoiceId,
     invoice: {
+      clientId: text(invoice.clientId),
       status: text(invoice.status),
       quoteId: text(invoice.quoteId),
       projectId: text(invoice.projectId),
       lineItems: lineItemsFrom(invoice.lineItems),
     },
+    clientDraftInvoiceIds,
     enquiry: {
+      clientId: text(enquiry.clientId),
       status: text(enquiry.status),
       propertyId: text(enquiry.propertyId),
       convertedProjectId: text(enquiry.convertedProjectId),
@@ -229,6 +262,7 @@ export async function finishBeezTreezWorkflow(input: {
 }
 
 export type WorkflowChecks = {
+  recordsOwnedByClient: boolean;
   enquiryOnProperty: boolean;
   enquiryConverted: boolean;
   enquiryLinkedToProject: boolean;
@@ -237,32 +271,48 @@ export type WorkflowChecks = {
   invoiceDraftFromQuote: boolean;
   invoiceOnProject: boolean;
   invoiceCarriesQuoteLines: boolean;
+  invoiceListedAsClientDraft: boolean;
   briefCountsDraftInvoice: boolean;
   briefCountsSentQuote: boolean;
   briefShowsQuoteAwaitingResponse: boolean;
   hudShowsQuoteOnProject: boolean;
 };
 
-function increased(before: number | null, after: number | null): boolean {
-  return before !== null && after !== null && after > before;
+/**
+ * Exactly one more: the run created one invoice draft and sent one quote. Any
+ * other change in the same window makes this fail rather than pass on noise.
+ */
+function roseByExactlyOne(before: number | null, after: number | null): boolean {
+  return before !== null && after !== null && after - before === 1;
 }
 
 /** Each link of the chain, read from the API; the workflow is proven only if all hold. */
 export function assessBeezTreezWorkflow(input: {
+  clientId: string;
   propertyId: string;
+  propertyClientId: string | null;
   projectId: string;
   quoteId: string;
+  quoteClientId: string | null;
   enquiry: EnquiryObservation;
   quoteProjectId: string | null;
   reconciledOutcome: string | null;
+  invoiceId: string;
   invoice: InvoiceObservation;
+  clientDraftInvoiceIds: readonly string[] | null;
   /** The quote's line items, which the invoice draft must carry unchanged. */
-  quoteLineItems: readonly WorkflowLineItem[];
+  quoteLineItems: readonly WorkflowLineItem[] | null;
   briefBefore: BriefCounts;
   briefAfter: BriefCounts;
   hud: HudObservation;
 }): { checks: WorkflowChecks; proven: boolean } {
   const checks: WorkflowChecks = {
+    recordsOwnedByClient: [
+      input.propertyClientId,
+      input.enquiry.clientId,
+      input.quoteClientId,
+      input.invoice.clientId,
+    ].every((owner) => owner === input.clientId),
     enquiryOnProperty: input.enquiry.propertyId === input.propertyId,
     enquiryConverted: input.enquiry.status === "converted",
     enquiryLinkedToProject: input.enquiry.convertedProjectId === input.projectId,
@@ -272,11 +322,19 @@ export function assessBeezTreezWorkflow(input: {
       input.invoice.status === "draft" && input.invoice.quoteId === input.quoteId,
     invoiceOnProject: input.invoice.projectId === input.projectId,
     invoiceCarriesQuoteLines: sameLineItems(input.invoice.lineItems, input.quoteLineItems),
-    briefCountsDraftInvoice: increased(
+    // The client is disposable, so its draft list must be exactly this invoice.
+    invoiceListedAsClientDraft:
+      input.clientDraftInvoiceIds !== null &&
+      input.clientDraftInvoiceIds.length === 1 &&
+      input.clientDraftInvoiceIds[0] === input.invoiceId,
+    briefCountsDraftInvoice: roseByExactlyOne(
       input.briefBefore.draftInvoices,
       input.briefAfter.draftInvoices,
     ),
-    briefCountsSentQuote: increased(input.briefBefore.sentQuotes, input.briefAfter.sentQuotes),
+    briefCountsSentQuote: roseByExactlyOne(
+      input.briefBefore.sentQuotes,
+      input.briefAfter.sentQuotes,
+    ),
     briefShowsQuoteAwaitingResponse: input.briefAfter.quoteAwaitingResponse,
     hudShowsQuoteOnProject:
       input.hud.available &&

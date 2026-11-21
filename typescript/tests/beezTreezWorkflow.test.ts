@@ -8,6 +8,7 @@ import {
 import {
   assessBeezTreezWorkflow,
   finishBeezTreezWorkflow,
+  lineItemsFrom,
   readBriefCounts,
   startBeezTreezWorkflow,
   type EnquiryObservation,
@@ -31,23 +32,31 @@ function brief(input: { draftInvoices: number; sentQuotes: number; awaiting: str
 
 function passing() {
   return {
+    clientId: "client-1",
     propertyId: "property-1",
+    propertyClientId: "client-1" as string | null,
     projectId: "project-1",
     quoteId: "quote-1",
+    quoteClientId: "client-1" as string | null,
     enquiry: {
+      clientId: "client-1",
       status: "converted",
       propertyId: "property-1",
       convertedProjectId: "project-1",
     } as EnquiryObservation,
     quoteProjectId: "project-1",
     reconciledOutcome: "succeeded",
+    invoiceId: "invoice-1",
     invoice: {
+      clientId: "client-1",
       status: "draft",
       quoteId: "quote-1",
       projectId: "project-1",
       lineItems: [{ description: "Fence", quantity: 2, unitPrice: 50 }],
     } as InvoiceObservation,
-    quoteLineItems: [{ description: "Fence", quantity: 2, unitPrice: 50 }],
+    clientDraftInvoiceIds: ["invoice-1"] as string[] | null,
+    quoteLineItems: [{ description: "Fence", quantity: 2, unitPrice: 50 }] as
+      { description: string; quantity: number; unitPrice: number }[] | null,
     briefBefore: readBriefCounts(
       brief({ draftInvoices: 2, sentQuotes: 4, awaiting: [] }),
       "quote-1",
@@ -87,6 +96,22 @@ describe("Beez Treez workflow assessment", () => {
   });
 
   const failures: Array<[string, (input: ReturnType<typeof passing>) => void]> = [
+    ["recordsOwnedByClient", (input) => (input.propertyClientId = "other")],
+    ["recordsOwnedByClient", (input) => (input.enquiry.clientId = "other")],
+    ["recordsOwnedByClient", (input) => (input.quoteClientId = null)],
+    ["recordsOwnedByClient", (input) => (input.invoice.clientId = "other")],
+    ["invoiceListedAsClientDraft", (input) => (input.clientDraftInvoiceIds = [])],
+    ["invoiceListedAsClientDraft", (input) => (input.clientDraftInvoiceIds = null)],
+    [
+      "invoiceListedAsClientDraft",
+      (input) => (input.clientDraftInvoiceIds = ["invoice-1", "someone-elses"]),
+    ],
+    // Unrelated activity in the same window must fail, not pass on a bigger count.
+    ["briefCountsDraftInvoice", (input) => (input.briefAfter.draftInvoices = 4)],
+    ["briefCountsSentQuote", (input) => (input.briefAfter.sentQuotes = 6)],
+    // An unreadable list never matches, even when the readable part would.
+    ["invoiceCarriesQuoteLines", (input) => (input.invoice.lineItems = null)],
+    ["invoiceCarriesQuoteLines", (input) => (input.quoteLineItems = null)],
     ["enquiryOnProperty", (input) => (input.enquiry.propertyId = "other")],
     ["enquiryConverted", (input) => (input.enquiry.status = "open")],
     ["enquiryLinkedToProject", (input) => (input.enquiry.convertedProjectId = "other")],
@@ -104,7 +129,7 @@ describe("Beez Treez workflow assessment", () => {
       "invoiceCarriesQuoteLines",
       (input) =>
         (input.invoice.lineItems = [
-          ...input.invoice.lineItems,
+          ...(input.invoice.lineItems ?? []),
           { description: "Extra", quantity: 1, unitPrice: 1 },
         ]),
     ],
@@ -134,6 +159,15 @@ describe("Beez Treez workflow assessment", () => {
       assert.equal(result.proven, false);
     });
   }
+
+  it("treats a line-item list with any malformed entry as unreadable", () => {
+    const good = { description: "Fence", quantity: 2, unitPrice: 50 };
+    assert.deepEqual(lineItemsFrom([good]), [good]);
+    assert.equal(lineItemsFrom([good, "bad"]), null);
+    assert.equal(lineItemsFrom([good, { description: "x", quantity: "1", unitPrice: 1 }]), null);
+    assert.equal(lineItemsFrom(undefined), null);
+    assert.deepEqual(lineItemsFrom([{ ...good, extra: "ignored" }]), [good]);
+  });
 
   it("never proves anything from missing brief counts", () => {
     const input = passing();
@@ -191,7 +225,7 @@ describe("Beez Treez workflow steps", () => {
 
   it("creates the property, the enquiry on it, and converts it to a project", async () => {
     const { calls, call } = recorder({
-      "POST /api/v1/properties": { data: { id: "property-1" } },
+      "POST /api/v1/properties": { data: { id: "property-1", clientId: "client-1" } },
       "POST /api/v1/enquiries": { data: { id: "enquiry-1" } },
       "POST /api/v1/enquiries/enquiry-1/convert-project": {
         data: { project: { id: "project-1" }, enquiry: { id: "enquiry-1" }, replayed: false },
@@ -202,10 +236,16 @@ describe("Beez Treez workflow steps", () => {
     assert.deepEqual(
       {
         propertyId: started.propertyId,
+        propertyClientId: started.propertyClientId,
         enquiryId: started.enquiryId,
         projectId: started.projectId,
       },
-      { propertyId: "property-1", enquiryId: "enquiry-1", projectId: "project-1" },
+      {
+        propertyId: "property-1",
+        propertyClientId: "client-1",
+        enquiryId: "enquiry-1",
+        projectId: "project-1",
+      },
     );
     assert.deepEqual(
       calls.map((entry) => `${entry.method} ${entry.path}`),
@@ -225,15 +265,18 @@ describe("Beez Treez workflow steps", () => {
       "POST /api/v1/invoices": {
         data: {
           id: "invoice-1",
+          clientId: "client-1",
           status: "draft",
           quoteId: "quote-1",
           projectId: "project-1",
-          lineItems: [{ description: "Line", quantity: 1, unitPrice: 1, extra: "ignored" }, "bad"],
+          lineItems: [{ description: "Line", quantity: 1, unitPrice: 1, extra: "ignored" }],
         },
       },
+      "GET /api/v1/invoices": { data: [{ id: "invoice-1" }], count: 1 },
       "GET /api/v1/enquiries/enquiry-1": {
         data: {
           id: "enquiry-1",
+          clientId: "client-1",
           status: "converted",
           propertyId: "property-1",
           convertedProjectId: "project-1",
@@ -261,11 +304,19 @@ describe("Beez Treez workflow steps", () => {
     assert.equal(invoiceBody.projectId, "project-1");
     assert.deepEqual(invoiceBody.lineItems, [{ description: "Line", quantity: 1, unitPrice: 1 }]);
     assert.equal(finished.invoice.status, "draft");
-    // The returned lines are read back, keeping only well-formed entries and fields.
+    assert.equal(finished.invoice.clientId, "client-1");
+    // The returned lines are read back with only the compared fields.
     assert.deepEqual(finished.invoice.lineItems, [
       { description: "Line", quantity: 1, unitPrice: 1 },
     ]);
+    // The client's draft list is read from the store the brief is composed from.
+    assert.equal(
+      calls.find((entry) => entry.path.startsWith("/api/v1/invoices?"))?.path,
+      "/api/v1/invoices?clientId=client-1&status=draft",
+    );
+    assert.deepEqual(finished.clientDraftInvoiceIds, ["invoice-1"]);
     assert.deepEqual(finished.enquiry, {
+      clientId: "client-1",
       status: "converted",
       propertyId: "property-1",
       convertedProjectId: "project-1",
@@ -282,6 +333,7 @@ describe("Beez Treez workflow steps", () => {
     // Regression: the first live run showed the API names it convertedProjectId.
     const { call } = recorder({
       "POST /api/v1/invoices": { data: { id: "invoice-1", status: "draft" } },
+      "GET /api/v1/invoices": { data: [], count: 0 },
       "GET /api/v1/enquiries/enquiry-1": {
         data: { status: "converted", projectId: "project-1" },
       },
@@ -302,6 +354,7 @@ describe("Beez Treez workflow steps", () => {
   it("reports the HUD as unavailable rather than failing the run", async () => {
     const { call } = recorder({
       "POST /api/v1/invoices": { data: { id: "invoice-1", status: "draft" } },
+      "GET /api/v1/invoices": { data: [], count: 0 },
       "GET /api/v1/enquiries/enquiry-1": { data: { status: "converted" } },
       "GET /api/v1/brief": brief({ draftInvoices: 1, sentQuotes: 1, awaiting: [] }),
     });
