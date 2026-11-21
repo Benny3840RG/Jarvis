@@ -163,6 +163,21 @@ export function lineItemsFrom(value: unknown): WorkflowLineItem[] | null {
   return items;
 }
 
+/**
+ * The ids in an invoice list response, or null when the list is missing or any
+ * entry lacks a string id. Nothing is dropped, so a malformed list cannot shrink
+ * into a match.
+ */
+export function invoiceIdsFrom(body: unknown): string[] | null {
+  if (!isRecord(body) || !Array.isArray(body.data)) return null;
+  const ids: string[] = [];
+  for (const entry of body.data) {
+    if (!isRecord(entry) || typeof entry.id !== "string" || !entry.id) return null;
+    ids.push(entry.id);
+  }
+  return ids;
+}
+
 function sameLineItems(
   actual: readonly WorkflowLineItem[] | null,
   expected: readonly WorkflowLineItem[] | null,
@@ -228,12 +243,7 @@ export async function finishBeezTreezWorkflow(input: {
     "GET",
     `/api/v1/invoices?clientId=${encodeURIComponent(input.clientId)}&status=draft`,
   );
-  const clientDraftInvoiceIds =
-    isRecord(listed) && Array.isArray(listed.data)
-      ? listed.data.flatMap((entry) =>
-          isRecord(entry) && typeof entry.id === "string" ? [entry.id] : [],
-        )
-      : null;
+  const clientDraftInvoiceIds = invoiceIdsFrom(listed);
   const enquiry = dataOf(
     await call("GET", `/api/v1/enquiries/${encodeURIComponent(input.enquiryId)}`),
   );

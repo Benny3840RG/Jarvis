@@ -8,6 +8,7 @@ import {
 import {
   assessBeezTreezWorkflow,
   finishBeezTreezWorkflow,
+  invoiceIdsFrom,
   lineItemsFrom,
   readBriefCounts,
   startBeezTreezWorkflow,
@@ -167,6 +168,15 @@ describe("Beez Treez workflow assessment", () => {
     assert.equal(lineItemsFrom([good, { description: "x", quantity: "1", unitPrice: 1 }]), null);
     assert.equal(lineItemsFrom(undefined), null);
     assert.deepEqual(lineItemsFrom([{ ...good, extra: "ignored" }]), [good]);
+  });
+
+  it("treats an invoice list with any entry lacking an id as unreadable", () => {
+    assert.deepEqual(invoiceIdsFrom({ data: [{ id: "invoice-1" }] }), ["invoice-1"]);
+    assert.deepEqual(invoiceIdsFrom({ data: [] }), []);
+    assert.equal(invoiceIdsFrom({ data: [{ id: "invoice-1" }, { number: "x" }] }), null);
+    assert.equal(invoiceIdsFrom({ data: [{ id: "invoice-1" }, "bad"] }), null);
+    assert.equal(invoiceIdsFrom({ data: [{ id: "" }] }), null);
+    assert.equal(invoiceIdsFrom({}), null);
   });
 
   it("never proves anything from missing brief counts", () => {
