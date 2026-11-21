@@ -13,8 +13,8 @@ Jarvis does not fall back to JSON persistence or return an unaudited model resul
 ## Reasoning provider selection
 
 `TOTALITY_REASONER_PROVIDER` selects which reasoning provider `src/totality/totalityFactory.ts` wires
-up. It defaults to `openai` when unset (backward compatible with existing deployments); the only other
-accepted value is `gemini`. Any other value is a configuration error and throws rather than silently
+up. It defaults to `openai` when unset (backward compatible with existing deployments); the other
+accepted values are `gemini` and `anthropic`. Any other value is a configuration error and throws rather than silently
 falling back. Only the selected provider's API key is required — the other provider's key, if present,
 is ignored.
 
@@ -56,6 +56,33 @@ The Gemini adapter (`src/integrations/gemini/totalityReasoner.ts`) sends the API
 access logs, proxy logs, or a `Referer` header. `tsx src/tools/runGeminiSmoke.ts "<goal text>"` (or
 `npm run smoke:gemini -- "<goal text>"`) makes a single ad hoc call for manual testing; it is not part
 of `npm test`/`npm run check`.
+
+### Anthropic
+
+```text
+PERSISTENCE_PROVIDER=convex
+CONVEX_URL=<existing Convex development deployment URL>
+JARVIS_SERVICE_TOKEN=<existing strong service token>
+TOTALITY_REASONER_PROVIDER=anthropic
+ANTHROPIC_API_KEY=<server-side Anthropic API key>
+```
+
+Optional values are:
+
+```text
+TOTALITY_ANTHROPIC_MODEL=claude-opus-5-5
+TOTALITY_ANTHROPIC_EFFORT=low
+TOTALITY_ANTHROPIC_TIMEOUT_MS=60000
+```
+
+The Anthropic adapter (`src/integrations/anthropic/totalityReasoner.ts`) calls the Messages API through
+the official SDK. It uses structured output with the same draft schema as the OpenAI adapter, and the
+server-side refusal fallback (`fallbacks: "default"`). The key is the same `ANTHROPIC_API_KEY` that voice
+conversation reads, so both features share one provider account and its usage. Thinking cannot be
+turned off on the default model, and it counts against `JARVIS_TOTALITY_MAX_OUTPUT_TOKENS`, which is 4096 by
+default. The default effort is therefore `low`. Raise the effort only together with the output cap. A
+`refusal` or `max_tokens` stop is a failure, never a partial draft. An empty credit balance maps to
+`reasoning-quota-exhausted`.
 
 Whichever provider is selected, its API key is read only by that provider's server-side adapter. It
 must not appear in request bodies, Convex documents, client code, logs, URLs, or tool arguments.

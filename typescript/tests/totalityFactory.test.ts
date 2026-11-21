@@ -21,7 +21,7 @@ describe("resolveTotalityReasonerProviderName", () => {
 
   it("rejects an unrecognised provider name", () => {
     assert.throws(
-      () => resolveTotalityReasonerProviderName("anthropic"),
+      () => resolveTotalityReasonerProviderName("mistral"),
       /Invalid TOTALITY_REASONER_PROVIDER/,
     );
   });
@@ -33,6 +33,7 @@ describe("createTotalityPipelineFromEnv", () => {
     "TOTALITY_REASONER_PROVIDER",
     "OPENAI_API_KEY",
     "GEMINI_API_KEY",
+    "ANTHROPIC_API_KEY",
   ] as const;
   const originalValues = new Map<string, string | undefined>();
 
@@ -68,7 +69,13 @@ describe("createTotalityPipelineFromEnv", () => {
     process.env.OPENAI_API_KEY = "unrelated-to-gemini";
     assert.equal(createTotalityPipelineFromEnv(), null);
   });
-});
+
+  it("returns null for the anthropic provider without ANTHROPIC_API_KEY", () => {
+    process.env.PERSISTENCE_PROVIDER = "convex";
+    process.env.TOTALITY_REASONER_PROVIDER = "anthropic";
+    process.env.OPENAI_API_KEY = "unrelated-to-anthropic";
+    assert.equal(createTotalityPipelineFromEnv(), null);
+  });});
 
 describe("resolveTotalityReasoningStatus", () => {
   const keys = [

@@ -572,7 +572,7 @@ const statusSchema = z.object({
   // resolveTotalityReasoningStatus in totalityFactory.ts.
   reasoning: z.object({
     status: z.enum(["not-configured", "configured"]),
-    provider: z.enum(["openai", "gemini"]).nullable(),
+    provider: z.enum(["openai", "gemini", "anthropic"]).nullable(),
     model: z.string().nullable(),
     reason: z.string(),
   }),

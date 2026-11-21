@@ -76,7 +76,8 @@ const MEMORY_PROPOSAL_SCHEMA = {
   ],
 } as const;
 
-const TOTALITY_DRAFT_SCHEMA = {
+/** Shared with the Anthropic reasoner, which sends the same schema as structured output. */
+export const TOTALITY_DRAFT_SCHEMA = {
   type: "object",
   properties: {
     answer: { type: "string" },
