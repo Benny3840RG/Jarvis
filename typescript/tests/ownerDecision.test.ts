@@ -130,9 +130,20 @@ test("the shipped manifest keeps its structural promises", () => {
   assert.ok(voicePins.some((pin) => pin.kind === "comment" && pin.id === 6851388839));
   assert.ok(voicePins.some((pin) => pin.kind === "pull-request" && pin.number === 809));
 
-  // A speaker plays only after the owner names one, so the Google Home card
-  // stays not ready until then.
-  assert.equal(byId.get("google-home-announcement")?.missingPrerequisites.length, 1);
+  // The owner named the speaker, and the card names it in the proposed action,
+  // so approving it can only ever pin that one device.
+  const speaker = byId.get("google-home-announcement");
+  assert.ok(speaker);
+  assert.deepEqual(speaker.missingPrerequisites, []);
+  assert.match(speaker.proposedAction, /Tayah’s bedside/);
+  assert.doesNotMatch(speaker.proposedAction, /picture box/i);
+
+  // Totality reasoning uses the Anthropic key already on the host, and stays
+  // not ready until that provider is merged.
+  const reasoningKey = byId.get("voice-model-provider-key");
+  assert.ok(reasoningKey);
+  assert.match(reasoningKey.proposedAction, /TOTALITY_REASONER_PROVIDER=anthropic/);
+  assert.equal(reasoningKey.missingPrerequisites.length, 1);
 
   // No dependency cycle: every chain of dependsOn ends.
   const visiting = new Set<string>();
