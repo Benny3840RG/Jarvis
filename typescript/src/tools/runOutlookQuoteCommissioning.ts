@@ -102,6 +102,8 @@ function readSnapshot(body: Json): {
   status: string;
   fingerprint?: string;
   projectId?: string;
+  /** The revision's line items as the API returned them. */
+  lineItems: Array<{ description: string; quantity: number; unitPrice: number }>;
 } {
   if (!isRecord(body) || !isRecord(body.data)) {
     throw new Error("Quote response did not include data.");
@@ -127,6 +129,16 @@ function readSnapshot(body: Json): {
   }
   const fingerprint = revision.fingerprint;
   const projectId = aggregate.projectId;
+  const lineItems = Array.isArray(revision.lineItems)
+    ? revision.lineItems.flatMap((item) =>
+        isRecord(item) &&
+        typeof item.description === "string" &&
+        typeof item.quantity === "number" &&
+        typeof item.unitPrice === "number"
+          ? [{ description: item.description, quantity: item.quantity, unitPrice: item.unitPrice }]
+          : [],
+      )
+    : [];
   return {
     quoteId,
     aggregateVersion,
@@ -135,6 +147,7 @@ function readSnapshot(body: Json): {
     status,
     ...(typeof fingerprint === "string" ? { fingerprint } : {}),
     ...(typeof projectId === "string" ? { projectId } : {}),
+    lineItems,
   };
 }
 
@@ -806,7 +819,8 @@ async function runCommissioning(input: {
       enquiryId: workflowStart.enquiryId,
       projectId: workflowStart.projectId,
       quoteId: snapshot.quoteId,
-      lineItems,
+      // The finalised revision's lines as the API returned them, not the kit's own copy.
+      lineItems: snapshot.lineItems,
     });
     const sent = trace.deliveries.find(
       (entry) => entry.providerRequestId === trace.reconciliation?.providerRequestId,
@@ -820,6 +834,7 @@ async function runCommissioning(input: {
       reconciledOutcome:
         typeof sent?.reconciledOutcome === "string" ? sent.reconciledOutcome : null,
       invoice: finished.invoice,
+      quoteLineItems: snapshot.lineItems,
       briefBefore: workflowStart.briefBefore,
       briefAfter: finished.briefAfter,
       hud: finished.hud,

@@ -173,6 +173,9 @@ counts before and after, the HUD observation, and these `checks`:
 - `sendReconciledSucceeded`: the sent delivery reconciled as `succeeded`.
 - `invoiceDraftFromQuote` and `invoiceOnProject`: the invoice is a draft that
   references the quote and the project.
+- `invoiceCarriesQuoteLines`: the line items the invoice API returned match the
+  finalised quote revision's line items, as that API returned them, field by
+  field. Empty lists on both sides do not count.
 - `briefCountsDraftInvoice` and `briefCountsSentQuote`: the brief's draft
   invoice count and sent quote count both rose during the run.
 - `briefShowsQuoteAwaitingResponse`: the brief lists this quote as awaiting a

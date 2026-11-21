@@ -12,6 +12,7 @@ import {
   startBeezTreezWorkflow,
   type EnquiryObservation,
   type HudObservation,
+  type InvoiceObservation,
   type WorkflowCall,
 } from "../src/tools/beezTreezWorkflow.js";
 
@@ -40,7 +41,13 @@ function passing() {
     } as EnquiryObservation,
     quoteProjectId: "project-1",
     reconciledOutcome: "succeeded",
-    invoice: { status: "draft", quoteId: "quote-1", projectId: "project-1" },
+    invoice: {
+      status: "draft",
+      quoteId: "quote-1",
+      projectId: "project-1",
+      lineItems: [{ description: "Fence", quantity: 2, unitPrice: 50 }],
+    } as InvoiceObservation,
+    quoteLineItems: [{ description: "Fence", quantity: 2, unitPrice: 50 }],
     briefBefore: readBriefCounts(
       brief({ draftInvoices: 2, sentQuotes: 4, awaiting: [] }),
       "quote-1",
@@ -88,6 +95,27 @@ describe("Beez Treez workflow assessment", () => {
     ["sendReconciledSucceeded", (input) => (input.reconciledOutcome = "failed")],
     ["invoiceDraftFromQuote", (input) => (input.invoice.quoteId = "other")],
     ["invoiceOnProject", (input) => (input.invoice.projectId = "other")],
+    ["invoiceCarriesQuoteLines", (input) => (input.invoice.lineItems = [])],
+    [
+      "invoiceCarriesQuoteLines",
+      (input) => (input.invoice.lineItems = [{ description: "Fence", quantity: 2, unitPrice: 5 }]),
+    ],
+    [
+      "invoiceCarriesQuoteLines",
+      (input) =>
+        (input.invoice.lineItems = [
+          ...input.invoice.lineItems,
+          { description: "Extra", quantity: 1, unitPrice: 1 },
+        ]),
+    ],
+    // Two empty lists must never count as "the same lines".
+    [
+      "invoiceCarriesQuoteLines",
+      (input) => {
+        input.invoice.lineItems = [];
+        input.quoteLineItems = [];
+      },
+    ],
     ["briefCountsDraftInvoice", (input) => (input.briefAfter.draftInvoices = 2)],
     ["briefCountsSentQuote", (input) => (input.briefAfter.sentQuotes = 4)],
     [
@@ -195,7 +223,13 @@ describe("Beez Treez workflow steps", () => {
   it("drafts the invoice from the quote and reads the enquiry, brief and HUD afterwards", async () => {
     const { calls, call } = recorder({
       "POST /api/v1/invoices": {
-        data: { id: "invoice-1", status: "draft", quoteId: "quote-1", projectId: "project-1" },
+        data: {
+          id: "invoice-1",
+          status: "draft",
+          quoteId: "quote-1",
+          projectId: "project-1",
+          lineItems: [{ description: "Line", quantity: 1, unitPrice: 1, extra: "ignored" }, "bad"],
+        },
       },
       "GET /api/v1/enquiries/enquiry-1": {
         data: {
@@ -227,6 +261,10 @@ describe("Beez Treez workflow steps", () => {
     assert.equal(invoiceBody.projectId, "project-1");
     assert.deepEqual(invoiceBody.lineItems, [{ description: "Line", quantity: 1, unitPrice: 1 }]);
     assert.equal(finished.invoice.status, "draft");
+    // The returned lines are read back, keeping only well-formed entries and fields.
+    assert.deepEqual(finished.invoice.lineItems, [
+      { description: "Line", quantity: 1, unitPrice: 1 },
+    ]);
     assert.deepEqual(finished.enquiry, {
       status: "converted",
       propertyId: "property-1",

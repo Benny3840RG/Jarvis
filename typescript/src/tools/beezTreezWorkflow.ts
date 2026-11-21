@@ -126,9 +126,47 @@ export async function startBeezTreezWorkflow(input: {
   return { propertyId, enquiryId, projectId, briefBefore };
 }
 
+export type WorkflowLineItem = { description: string; quantity: number; unitPrice: number };
+
+export type InvoiceObservation = {
+  status: string | null;
+  quoteId: string | null;
+  projectId: string | null;
+  /** The invoice's line items as the API returned them; malformed entries are dropped. */
+  lineItems: WorkflowLineItem[];
+};
+
+function lineItemsFrom(value: unknown): WorkflowLineItem[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) =>
+    isRecord(item) &&
+    typeof item.description === "string" &&
+    typeof item.quantity === "number" &&
+    typeof item.unitPrice === "number"
+      ? [{ description: item.description, quantity: item.quantity, unitPrice: item.unitPrice }]
+      : [],
+  );
+}
+
+function sameLineItems(
+  actual: readonly WorkflowLineItem[],
+  expected: readonly WorkflowLineItem[],
+): boolean {
+  return (
+    expected.length > 0 &&
+    actual.length === expected.length &&
+    expected.every(
+      (item, index) =>
+        actual[index]?.description === item.description &&
+        actual[index]?.quantity === item.quantity &&
+        actual[index]?.unitPrice === item.unitPrice,
+    )
+  );
+}
+
 export type WorkflowFinish = {
   invoiceId: string;
-  invoice: { status: string | null; quoteId: string | null; projectId: string | null };
+  invoice: InvoiceObservation;
   enquiry: EnquiryObservation;
   briefAfter: BriefCounts;
   hud: HudObservation;
@@ -178,6 +216,7 @@ export async function finishBeezTreezWorkflow(input: {
       status: text(invoice.status),
       quoteId: text(invoice.quoteId),
       projectId: text(invoice.projectId),
+      lineItems: lineItemsFrom(invoice.lineItems),
     },
     enquiry: {
       status: text(enquiry.status),
@@ -197,6 +236,7 @@ export type WorkflowChecks = {
   sendReconciledSucceeded: boolean;
   invoiceDraftFromQuote: boolean;
   invoiceOnProject: boolean;
+  invoiceCarriesQuoteLines: boolean;
   briefCountsDraftInvoice: boolean;
   briefCountsSentQuote: boolean;
   briefShowsQuoteAwaitingResponse: boolean;
@@ -215,7 +255,9 @@ export function assessBeezTreezWorkflow(input: {
   enquiry: EnquiryObservation;
   quoteProjectId: string | null;
   reconciledOutcome: string | null;
-  invoice: { status: string | null; quoteId: string | null; projectId: string | null };
+  invoice: InvoiceObservation;
+  /** The quote's line items, which the invoice draft must carry unchanged. */
+  quoteLineItems: readonly WorkflowLineItem[];
   briefBefore: BriefCounts;
   briefAfter: BriefCounts;
   hud: HudObservation;
@@ -229,6 +271,7 @@ export function assessBeezTreezWorkflow(input: {
     invoiceDraftFromQuote:
       input.invoice.status === "draft" && input.invoice.quoteId === input.quoteId,
     invoiceOnProject: input.invoice.projectId === input.projectId,
+    invoiceCarriesQuoteLines: sameLineItems(input.invoice.lineItems, input.quoteLineItems),
     briefCountsDraftInvoice: increased(
       input.briefBefore.draftInvoices,
       input.briefAfter.draftInvoices,
