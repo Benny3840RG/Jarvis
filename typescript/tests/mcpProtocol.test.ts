@@ -46,6 +46,15 @@ const STATUS: SystemStatus = {
     autonomy: { status: "ready" },
     reliability: { status: "ready" },
   },
+  securityHalt: {
+    state: "running",
+    dispatch: "allowed",
+    failClosed: false,
+    requestedAt: null,
+    acknowledgedAt: null,
+    verifiedStoppedAt: null,
+    unsettledExecutions: null,
+  },
   zState: "active",
   checkedAt: "2026-07-18T12:00:00.000Z",
 };
@@ -331,7 +340,7 @@ describe("Jarvis MCP preview protocol", () => {
       if (isCancelledToolResult(outcome)) {
         assert.equal(outcome.isError, true);
         const text = outcome.content.find((item) => item.type === "text");
-        assert.equal(text?.text, "Jarvis API request was cancelled.");
+        assert.equal(text?.text, "NOLAN API request was cancelled.");
       }
     } finally {
       await client.close();

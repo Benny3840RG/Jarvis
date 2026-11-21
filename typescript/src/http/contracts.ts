@@ -102,6 +102,7 @@ export type SystemStatus = {
   integrations: IntegrationStatus[];
   reasoning: ReasoningStatus;
   voiceConversation: import("../voice/voiceConversationFactory.js").VoiceConversationStatus;
+  securityHalt: import("../security/haltSupervisor.js").SecurityHaltStatus;
   timezone: string;
   layers: LayersStatus;
   zState: "disabled" | "stabilising" | "active" | "suspended";

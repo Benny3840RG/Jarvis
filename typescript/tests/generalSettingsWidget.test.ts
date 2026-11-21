@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { Script } from "node:vm";
 import { describe, it } from "node:test";
+import { bundleHud } from "../src/mcp/hud/bundle.mjs";
 
-const widget = readFileSync(new URL("../src/mcp/dashboard-v1.html", import.meta.url), "utf8");
+const widget = bundleHud();
 
 function generalSection(): string {
   const start = widget.indexOf('id="view-general"');

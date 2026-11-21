@@ -53,7 +53,7 @@ async function assertRegularFileInside(dataDir: string, filePath: string): Promi
     throw new DangerZoneRefusal(
       "path",
       outside
-        ? `Refusing ${filePath}: symbolic link resolves to ${target ?? "an unknown path"}, outside the Jarvis data directory ${dataDir}.`
+        ? `Refusing ${filePath}: symbolic link resolves to ${target ?? "an unknown path"}, outside the NOLAN data directory ${dataDir}.`
         : `Refusing ${filePath}: symbolic link resolves to ${target}. Danger zone will not follow links.`,
     );
   }
@@ -67,7 +67,7 @@ async function assertRegularFileInside(dataDir: string, filePath: string): Promi
   if (!isInside(dataDir, realFile)) {
     throw new DangerZoneRefusal(
       "path",
-      `Refusing ${filePath}: it resolves to ${realFile}, outside the Jarvis data directory ${dataDir}.`,
+      `Refusing ${filePath}: it resolves to ${realFile}, outside the NOLAN data directory ${dataDir}.`,
     );
   }
   return true;
@@ -87,7 +87,7 @@ async function withLocks<T>(
     return await runAt(0);
   } catch (error: unknown) {
     if (error instanceof DangerZoneRefusal) throw error;
-    throw refusalForFilesystem(error, files[0] ?? "the Jarvis data file");
+    throw refusalForFilesystem(error, files[0] ?? "the NOLAN data file");
   }
 }
 
@@ -106,7 +106,7 @@ export async function quarantineNamedFiles(options: {
     if (basename !== path.basename(basename) || basename.includes("..")) {
       throw new DangerZoneRefusal(
         "path",
-        `Refusing ${basename}: Danger zone only quarantines file names inside the Jarvis data directory.`,
+        `Refusing ${basename}: Danger zone only quarantines file names inside the NOLAN data directory.`,
       );
     }
   }

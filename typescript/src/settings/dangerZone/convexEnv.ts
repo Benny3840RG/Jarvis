@@ -46,7 +46,7 @@ export async function removeConvexPreviousEnv(
   if (!ALLOWED_REMOVALS.has(variableName)) {
     throw new DangerZoneRefusal(
       "overlap-unchanged",
-      "Refusing to remove an environment variable that is not a Jarvis previous-token overlap. Overlap was left in place.",
+      "Refusing to remove an environment variable that is not a NOLAN previous-token overlap. Overlap was left in place.",
     );
   }
   let result: CommandResult;
@@ -85,7 +85,7 @@ export async function removeLocalEnvAssignment(
   if (!ALLOWED_REMOVALS.has(key)) {
     throw new DangerZoneRefusal(
       "overlap-unchanged",
-      "Refusing to edit a local env entry that is not a Jarvis previous-token overlap.",
+      "Refusing to edit a local env entry that is not a NOLAN previous-token overlap.",
     );
   }
   let raw: string;

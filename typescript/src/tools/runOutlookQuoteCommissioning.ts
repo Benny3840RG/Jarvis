@@ -155,6 +155,108 @@ function readReceipt(body: Json): {
   };
 }
 
+function pick(value: unknown, keys: readonly string[]): Record<string, unknown> | null {
+  if (!isRecord(value)) return null;
+  const out: Record<string, unknown> = {};
+  for (const key of keys) {
+    const field = value[key];
+    if (typeof field === "string" || typeof field === "number") out[key] = field;
+  }
+  return out;
+}
+
+export type CommissioningWorkerRun = {
+  workerId: string;
+  result: { status: string; [key: string]: unknown };
+};
+
+export type CommissioningTrace = {
+  /** The repeat send's own receipt as the execute route returned it (#866 gap 4). */
+  repeatSend: Record<string, unknown> | null;
+  /** Each delivery attempt's status and timestamps, without the recipient (gap 2). */
+  deliveries: Record<string, unknown>[];
+  /** The reconciliation's attempt history (gap 2). */
+  reconciliation: Record<string, unknown> | null;
+  /**
+   * True when the reconciliation first saw the message still as a draft and then
+   * resolved it as sent under the same Graph id as the delivery. Behavioural
+   * evidence that the id was immutable across the move to Sent Items (gap 1);
+   * it is not a trace of the request header.
+   */
+  sameMessageIdDraftToSent: boolean;
+  /** Every sequential and parallel worker run, in order (gap 3). */
+  workers: CommissioningWorkerRun[];
+};
+
+export type CommissioningRunEvidence = OutlookCommissioningEvidence & {
+  quoteId: string;
+  revision: number;
+  recipient: string;
+  trace: CommissioningTrace;
+};
+
+/** Collects the facts the owner decision card asks for from responses the kit already has. */
+export function commissioningTrace(input: {
+  repeatReceipt: Json;
+  deliveries: Json;
+  reconciliationDetail: Json;
+  workers: readonly CommissioningWorkerRun[];
+}): CommissioningTrace {
+  const repeatSend = pick(input.repeatReceipt, [
+    "receiptId",
+    "status",
+    "errorCode",
+    "startedAt",
+    "completedAt",
+  ]);
+  const listed =
+    isRecord(input.deliveries) && Array.isArray(input.deliveries.data) ? input.deliveries.data : [];
+  const deliveries = listed
+    .map((entry) =>
+      pick(entry, [
+        "deliveryAttemptId",
+        "status",
+        "reconciledOutcome",
+        "providerRequestId",
+        "createdAt",
+        "executionStartedAt",
+        "reconciledAt",
+      ]),
+    )
+    .filter((entry): entry is Record<string, unknown> => entry !== null);
+  const reconciliation = pick(
+    isRecord(input.reconciliationDetail) ? input.reconciliationDetail.reconciliation : null,
+    [
+      "reconciliationId",
+      "providerRequestId",
+      "state",
+      "terminalStatus",
+      "attemptCount",
+      "lastErrorCode",
+      "createdAt",
+      "resolvedAt",
+    ],
+  );
+  const messageId = reconciliation?.providerRequestId;
+  const sameMessageIdDraftToSent =
+    reconciliation !== null &&
+    typeof messageId === "string" &&
+    reconciliation.state === "resolved" &&
+    reconciliation.terminalStatus === "succeeded" &&
+    reconciliation.lastErrorCode === "outlook-message-still-draft" &&
+    typeof reconciliation.attemptCount === "number" &&
+    reconciliation.attemptCount >= 2 &&
+    deliveries.some((entry) => entry.providerRequestId === messageId);
+  return {
+    repeatSend: repeatSend && Object.keys(repeatSend).length > 0 ? repeatSend : null,
+    deliveries,
+    reconciliation:
+      reconciliation && Object.keys(reconciliation).length > 0 ? reconciliation : null,
+    sameMessageIdDraftToSent,
+    workers: [...input.workers],
+  };
+}
+
 function observationFrom(value: unknown): ReconciliationObservation | null {
   if (
     !isRecord(value) ||
@@ -337,35 +439,45 @@ async function executeSend(input: {
   plan: CommissioningPlan;
   token: string;
   actionId: string;
-}): Promise<{ status: string; providerRequestId?: string; reconciliationId?: string }> {
-  return readReceipt(
-    expectStatus(
-      await input.request({
-        baseUrl: input.plan.apiBaseUrl,
-        token: input.token,
-        method: "POST",
-        path: `/api/v1/projects/${encodeURIComponent(input.plan.projectKey)}/tool-actions/${encodeURIComponent(input.actionId)}/execute`,
-        body: { idempotencyKey: input.actionId },
-      }),
-      200,
-      "Execute quotes:send",
-    ),
+}): Promise<{
+  status: string;
+  providerRequestId?: string;
+  reconciliationId?: string;
+  body: Json;
+}> {
+  const body = expectStatus(
+    await input.request({
+      baseUrl: input.plan.apiBaseUrl,
+      token: input.token,
+      method: "POST",
+      path: `/api/v1/projects/${encodeURIComponent(input.plan.projectKey)}/tool-actions/${encodeURIComponent(input.actionId)}/execute`,
+      body: { idempotencyKey: input.actionId },
+    }),
+    200,
+    "Execute quotes:send",
   );
+  return { ...readReceipt(body), body };
 }
 
-async function drainWorker(worker: ReconciliationWorker, marker: string): Promise<void> {
+async function drainWorker(
+  worker: ReconciliationWorker,
+  marker: string,
+  runs: CommissioningWorkerRun[],
+): Promise<void> {
   const signal = AbortSignal.timeout(20_000);
   for (let index = 0; index < 3; index += 1) {
-    await worker.runOnce({
-      workerId: `${marker}-seq-${index}`,
-      leaseMs: 10_000,
-      signal,
-    });
+    const workerId = `${marker}-seq-${index}`;
+    runs.push({ workerId, result: await worker.runOnce({ workerId, leaseMs: 10_000, signal }) });
   }
-  await Promise.all([
-    worker.runOnce({ workerId: `${marker}-par-a`, leaseMs: 10_000, signal }),
-    worker.runOnce({ workerId: `${marker}-par-b`, leaseMs: 10_000, signal }),
-  ]);
+  // Two workers race for the same work; the trace keeps both results (#866 gap 3).
+  const parallel = [`${marker}-par-a`, `${marker}-par-b`];
+  const results = await Promise.all(
+    parallel.map((workerId) => worker.runOnce({ workerId, leaseMs: 10_000, signal })),
+  );
+  parallel.forEach((workerId, index) => {
+    const result = results[index];
+    if (result) runs.push({ workerId, result });
+  });
 }
 
 async function readReconciliations(input: {
@@ -415,9 +527,7 @@ async function runCommissioning(input: {
   outlook: MicrosoftOutlookRuntime;
   reconciliation: EnabledRuntimeReconciliationConfig;
   projectRevision: number;
-}): Promise<
-  OutlookCommissioningEvidence & { quoteId: string; revision: number; recipient: string }
-> {
+}): Promise<CommissioningRunEvidence> {
   const { request, environment, plan, outlook, reconciliation } = input;
   const projectRevisionNumber = input.projectRevision;
   const token = environment.JARVIS_SERVICE_TOKEN?.trim() ?? "";
@@ -524,7 +634,8 @@ async function runCommissioning(input: {
     );
   }
   const worker = createOutlookReconciliationWorker(outlook, reconciliation);
-  await drainWorker(worker, `${marker}-first`);
+  const workerRuns: CommissioningWorkerRun[] = [];
+  await drainWorker(worker, `${marker}-first`, workerRuns);
   await stageSend({
     request,
     plan,
@@ -536,7 +647,7 @@ async function runCommissioning(input: {
     fingerprint: snapshot.fingerprint,
   });
   const repeated = await executeSend({ request, plan, token, actionId: `${marker}-repeat` });
-  await drainWorker(worker, `${marker}-again`);
+  await drainWorker(worker, `${marker}-again`, workerRuns);
   const deliveries = expectStatus(
     await request({
       baseUrl: plan.apiBaseUrl,
@@ -561,11 +672,27 @@ async function runCommissioning(input: {
     deliveryCount,
     records,
   });
+  const reconciliationDetail = expectStatus(
+    await request({
+      baseUrl: plan.apiBaseUrl,
+      token,
+      method: "GET",
+      path: `/api/v1/reconciliations/${encodeURIComponent(sent.reconciliationId)}`,
+    }),
+    200,
+    "Get reconciliation",
+  );
   return {
     ...proof,
     quoteId: snapshot.quoteId,
     revision: snapshot.revision,
     recipient: plan.recipient,
+    trace: commissioningTrace({
+      repeatReceipt: repeated.body,
+      deliveries,
+      reconciliationDetail,
+      workers: workerRuns,
+    }),
   };
 }
 
@@ -576,9 +703,7 @@ export async function executeOutlookQuoteCommissioning(
     loadProjectRevision?: (plan: CommissioningPlan, serviceToken: string) => Promise<number | null>;
     createOutlookRuntime?: typeof createMicrosoftOutlookRuntimeFromEnv;
   } = {},
-): Promise<
-  OutlookCommissioningEvidence & { quoteId: string; revision: number; recipient: string }
-> {
+): Promise<CommissioningRunEvidence> {
   const normalised = normaliseCommissioningEnvironment(environment);
   const request = overrides.request ?? requestJson;
   const token = normalised.JARVIS_SERVICE_TOKEN?.trim() ?? "";

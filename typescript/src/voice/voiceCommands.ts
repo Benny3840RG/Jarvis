@@ -72,9 +72,14 @@ export type VoiceCommand = Readonly<{
  * Session-level control phrases, handled by the session rather than the
  * catalog. Kept distinct from every command phrase (enforced by test) so a
  * confirmation can never be mistaken for a fresh command and vice versa.
+ *
+ * "confirmed" is accepted because browser speech recognition often returns it
+ * for a spoken "confirm" (host run of 13 Nov 2026, #567). It is the same word
+ * in another inflection, matched as a whole utterance like the others.
+ * Sound-alikes such as "concern" are deliberately not accepted.
  */
 export const VOICE_CONTROL_PHRASES = {
-  confirm: ["confirm", "confirm command", "yes confirm"],
+  confirm: ["confirm", "confirmed", "confirm command", "yes confirm"],
   cancel: ["cancel", "cancel command", "belay that"],
 } as const;
 

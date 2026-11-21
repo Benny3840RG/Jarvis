@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 
 import { buildDangerZoneModel } from "../src/settings/dangerZone/catalog.js";
 import { renderDangerZonePage } from "../src/settings/dangerZone/page.js";
+import { bundleHud } from "../src/mcp/hud/bundle.mjs";
 
-const widget = readFileSync(new URL("../src/mcp/dashboard-v1.html", import.meta.url), "utf8");
+const widget = bundleHud();
 
 describe("settings shell", () => {
   it("keeps one Settings rail and puts Limits before Danger", () => {

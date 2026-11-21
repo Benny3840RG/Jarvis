@@ -1,0 +1,19 @@
+
+      /* NOLAN HUD polish: final overrides, kept last so they win the cascade. */
+      /* Totality meter label was boxed into the 14px meter column and clipped ("UNKN"). */
+      body[data-console-view="focus"] #totality-bar-label {
+        grid-column: 1 / -1;
+        justify-self: end;
+        width: auto;
+        white-space: nowrap;
+      }
+      /* Bezel rivets are fixed to the viewport; below the full console they float over live content. */
+      @media (max-width: 1399px) {
+        .rivets { display: none; }
+      }
+      @media (max-width: 780px) {
+        .title-plate { width: auto; max-width: calc(100% - 32px); box-sizing: border-box; padding-inline: 16px; }
+        .title-plate h1 { flex-wrap: wrap; row-gap: 2px; }
+        .top-actions { justify-content: flex-start; min-width: 0; max-width: 100%; }
+      }
+    

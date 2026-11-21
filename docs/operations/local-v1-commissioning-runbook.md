@@ -277,7 +277,17 @@ and fail closed (already covered by Stage 3 step 6 and the absent-hardware tests
 
 ## Stage 8 — Recovery + restart (LV1-09, DoD items 11 & 12)
 
-**Status: BLOCKED on owner authorisation, and only partly packaged.** The restart
+**Status: host proof PASSED at `ca7f256f` (21 Nov 2026), on synthetic data; evidence, not acceptance.**
+The owner approved decision card `recovery-isolated-proof`. Capture from an isolated
+source, restore into a new empty isolated target, and two separate restarted
+`src/http/main.ts` processes all passed. The client, task, build and quote GETs were
+byte-identical, the quote sha256 `c7fd9977…dbb8` matched, and the live data directory
+was unchanged. The owner decision ledger was captured and its card statuses matched
+after restore. The data was the small synthetic Gate B set, not live business data.
+Evidence: host `~/lv1-01/recovery-proof-ca7f256f.md`. The out-of-repo driver is
+`~/lv1-01/gateb/proof-v2.mts`. The ledger records the card as executed.
+
+Earlier status, kept for the record: **blocked on owner authorisation, and only partly packaged.** The restart
 step has an operator command since PR #765: `npm run commission:local-v1-recovery`
 (`typescript/src/tools/runLocalV1Recovery.ts`). Capture, isolated restore and
 reread still have **no** packaged command: `captureLocalV1Archive`,
@@ -367,8 +377,10 @@ Prior evidence: quote GET across a real restart is **PROVEN** at `2d34a741`
 (host `~/lv1-01/restart-proof.md`, quote sha256 `c7fd9977…dbb8`, with
 workarounds). A `990bd8c2` re-proof passed capture/restore/field-fidelity/sha256
 and failed only the restart step for a missing delivery token (now passed by the
-harness). Realistic end-to-end recovery stays **NOT YET MET** until this host
-repeats the restart step.
+harness). The host repeated the full run at `ca7f256f` on 21 Nov 2026 and it
+passed on the synthetic Gate B set (see the status at the top of this stage).
+Capture no longer needs the October validator workaround, and restored builds keep
+every field. The orphaned direct-create receipt case was not exercised.
 
 Danger-zone note: `clear-local` no longer accepts a classic verify receipt that
 omits core/memory/business checksums. Do not quarantine business JSON on the
@@ -417,23 +429,23 @@ makes it.
 
 ## Quick status map to #697 definition of done
 
-| DoD item                                       | Stage | Owner-only / host-side?                                                                                                                                                         |
-| ---------------------------------------------- | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| maintained checks + OpenAPI lint               | 1     | provable off-host (✅ green on `ee3340e`)                                                                                                                                       |
-| known-good runtime locked                      | 0 + 2 | host                                                                                                                                                                            |
-| HUD + MCP usable on dev persistence            | 2     | host                                                                                                                                                                            |
-| #567 voice commissioning                       | 3     | host (real mic)                                                                                                                                                                 |
-| voice read queries authoritative               | —     | ✅ merged tests                                                                                                                                                                 |
-| safe voice writes reuse paths                  | —     | ✅ merged tests                                                                                                                                                                 |
-| #294 + #297 Outlook                            | 4     | host (live mailbox)                                                                                                                                                             |
-| golden workflow end to end                     | 5     | host                                                                                                                                                                            |
-| home + Google Home commissioned                | 6     | host (pinned devices)                                                                                                                                                           |
-| workshop daily-driver                          | 7     | host                                                                                                                                                                            |
-| dataset recoverable (isolated restore)         | 8     | host (isolated backend); **BLOCKED — restart step has a command (`commission:local-v1-recovery`), capture and restore still need a manual driver, host end-to-end NOT YET MET** |
-| restart preserves state, hardware fails closed | 8 + 3 | host                                                                                                                                                                            |
-| dogfood, no blocker                            | 9     | host                                                                                                                                                                            |
-| independent review, no blocker                 | 10    | owner                                                                                                                                                                           |
-| exact SHA + evidence + runbook recorded        | 10    | owner                                                                                                                                                                           |
+| DoD item                                       | Stage | Owner-only / host-side?                                                                                                                                        |
+| ---------------------------------------------- | ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| maintained checks + OpenAPI lint               | 1     | provable off-host (✅ green on `ee3340e`)                                                                                                                      |
+| known-good runtime locked                      | 0 + 2 | host                                                                                                                                                           |
+| HUD + MCP usable on dev persistence            | 2     | host                                                                                                                                                           |
+| #567 voice commissioning                       | 3     | host (real mic)                                                                                                                                                |
+| voice read queries authoritative               | —     | ✅ merged tests                                                                                                                                                |
+| safe voice writes reuse paths                  | —     | ✅ merged tests                                                                                                                                                |
+| #294 + #297 Outlook                            | 4     | host (live mailbox)                                                                                                                                            |
+| golden workflow end to end                     | 5     | host                                                                                                                                                           |
+| home + Google Home commissioned                | 6     | host (pinned devices)                                                                                                                                          |
+| workshop daily-driver                          | 7     | host                                                                                                                                                           |
+| dataset recoverable (isolated restore)         | 8     | host (isolated backend); **host proof PASSED at `ca7f256f` on synthetic data (owner-approved, executed); capture and restore still use an out-of-repo driver** |
+| restart preserves state, hardware fails closed | 8 + 3 | host                                                                                                                                                           |
+| dogfood, no blocker                            | 9     | host                                                                                                                                                           |
+| independent review, no blocker                 | 10    | owner                                                                                                                                                          |
+| exact SHA + evidence + runbook recorded        | 10    | owner                                                                                                                                                          |
 
 ## Out of Local V1 scope (do not let these block)
 

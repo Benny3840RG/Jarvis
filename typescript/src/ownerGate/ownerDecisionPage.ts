@@ -174,14 +174,15 @@ const SCRIPT = `
           body: JSON.stringify(body),
         });
         const payload = await response.json().catch(() => ({}));
-        if (!response.ok) {
-          result.textContent = (payload.detail || "The decision was refused.") + " Nothing was recorded.";
-          await load(false);
-          return;
-        }
+        // Reloading redraws every card, so the message is written after it,
+        // onto the redrawn card; otherwise a refusal vanishes without a word.
+        const message = !response.ok
+          ? (payload.detail || "The decision was refused.") + " Nothing was recorded."
+          : payload.data.replayed ? "Already recorded. Nothing new was written." : "Recorded. This records your decision only; it does not run anything.";
+        result.textContent = message;
         await load(false);
         const fresh = document.querySelector('[data-decision="' + card.entry.id + '"] .result');
-        if (fresh) fresh.textContent = payload.data.replayed ? "Already recorded. Nothing new was written." : "Recorded. This records your decision only; it does not run anything.";
+        if (fresh) fresh.textContent = message;
       } catch {
         result.textContent = "The request did not complete. Reload to see whether it was recorded.";
       }

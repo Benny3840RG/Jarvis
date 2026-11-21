@@ -1,0 +1,84 @@
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
+
+import type { HttpAppConfig } from "../src/http/config.js";
+import { unexpectedErrorLogLine } from "../src/http/problemDetails.js";
+
+const SERVICE = "service-token-0123456789abcdef0123456789abcdef";
+const APPROVAL = "approval-token-0123456789abcdef0123456789abcdef";
+const OTHER = "delivery-token-not-in-config-0123456789abcdef";
+
+const CONFIG: HttpAppConfig = {
+  version: "0.1.0",
+  sourceVersion: "test",
+  deploymentVersion: null,
+  timezone: "Australia/Melbourne",
+  currentToken: SERVICE,
+  previousToken: undefined,
+  currentApprovalToken: APPROVAL,
+};
+
+describe("unexpected 5xx log line", () => {
+  it("names the cause of a 500 without any credential", () => {
+    // The shape of a real Convex ArgumentValidationError, which dumps its arguments.
+    const error = new Error(
+      `[Request ID: 88fe] Server Error\nArgumentValidationError: Object contains extra field \`executionId\` that is not in the validator.\n\nObject: {actionId: "a-1", deliveryToken: "${OTHER}", serviceToken: "${SERVICE}", approval: "${APPROVAL}"}`,
+    );
+    const line = unexpectedErrorLogLine(
+      error,
+      500,
+      "POST",
+      `/api/v1/x?token=${SERVICE}`,
+      "req-1",
+      CONFIG,
+    );
+    assert.ok(line);
+    assert.match(line, /500 POST/);
+    assert.match(line, /req-1/);
+    assert.match(line, /extra field `executionId`/);
+    for (const secret of [SERVICE, APPROVAL, OTHER]) {
+      assert.equal(line.includes(secret), false, "no credential reaches the log");
+    }
+  });
+
+  it("masks a quoted value through escaped quotes and to the end when unterminated", () => {
+    for (const message of [
+      'Object: {deliveryToken: "prefix\\"UNMASKED-ONE", next: 1}',
+      "Object: {apiKey: 'it\\'s UNMASKED-TWO'}",
+      'Object: {secret: "never closed UNMASKED-THREE',
+    ]) {
+      const line = unexpectedErrorLogLine(new Error(message), 500, "GET", "/x", "r", CONFIG);
+      assert.ok(line);
+      assert.doesNotMatch(line, /UNMASKED/u, message);
+    }
+  });
+
+  it("masks every sensitive field, not only the first", () => {
+    const line = unexpectedErrorLogLine(
+      new Error(
+        'Object: {deliveryToken: "LEAK-A", clientSecret: "LEAK-B", api_key: LEAK-C, password: "LEAK-D"}',
+      ),
+      500,
+      "POST",
+      "/x",
+      "r",
+      CONFIG,
+    );
+    assert.ok(line);
+    assert.doesNotMatch(line, /LEAK-/u);
+    assert.equal(line.split("[REDACTED]").length - 1, 4);
+  });
+
+  it("stays quiet for expected client errors and bounds the length", () => {
+    assert.equal(unexpectedErrorLogLine(new Error("nope"), 404, "GET", "/x", "r", CONFIG), null);
+    const long = unexpectedErrorLogLine(
+      new Error("x".repeat(10_000)),
+      503,
+      "GET",
+      "/x",
+      "r",
+      CONFIG,
+    );
+    assert.ok(long && long.length <= 2_200);
+  });
+});

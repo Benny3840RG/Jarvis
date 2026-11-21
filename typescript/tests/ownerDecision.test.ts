@@ -121,6 +121,36 @@ test("the shipped manifest keeps its structural promises", () => {
   // not wait on a provider key (and so on new spending).
   assert.equal(dependsOn("voice-host-commissioning").includes("voice-model-provider-key"), false);
 
+  // Voice is decidable only on recorded host evidence: the spoken run on the
+  // Lenovo and the merged fix for what it found, each pinned.
+  const voice = byId.get("voice-host-commissioning");
+  assert.ok(voice);
+  assert.deepEqual(voice.missingPrerequisites, []);
+  const voicePins = voice.evidence.map((item) => item.pin);
+  assert.ok(voicePins.some((pin) => pin.kind === "comment" && pin.id === 6851388839));
+  assert.ok(voicePins.some((pin) => pin.kind === "pull-request" && pin.number === 809));
+
+  // The owner named the speaker, and the card names it in the proposed action,
+  // so approving it can only ever pin that one device.
+  const speaker = byId.get("google-home-announcement");
+  assert.ok(speaker);
+  assert.deepEqual(speaker.missingPrerequisites, []);
+  assert.match(speaker.proposedAction, /Tayah’s bedside/);
+  assert.doesNotMatch(speaker.proposedAction, /picture box/i);
+  // The choice is pinned to its recorded owner comment, not asserted by the card.
+  assert.ok(
+    speaker.evidence.some(
+      (item) => item.pin.kind === "comment" && item.pin.id === 7063313389 && item.pin.on === 869,
+    ),
+  );
+
+  // Totality reasoning uses the Anthropic key already on the host, and stays
+  // not ready until that provider is merged.
+  const reasoningKey = byId.get("voice-model-provider-key");
+  assert.ok(reasoningKey);
+  assert.match(reasoningKey.proposedAction, /TOTALITY_REASONER_PROVIDER=anthropic/);
+  assert.equal(reasoningKey.missingPrerequisites.length, 1);
+
   // No dependency cycle: every chain of dependsOn ends.
   const visiting = new Set<string>();
   const done = new Set<string>();

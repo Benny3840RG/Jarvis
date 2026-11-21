@@ -160,7 +160,7 @@ function toolError(error: unknown) {
   const message =
     error instanceof JarvisApiError
       ? `${error.message}${error.requestId ? ` Request ID: ${error.requestId}.` : ""}`
-      : "Jarvis preview could not complete the request.";
+      : "NOLAN preview could not complete the request.";
   return {
     isError: true,
     content: [{ type: "text" as const, text: message }],
@@ -563,7 +563,7 @@ export function registerBusinessTools(server: McpServer, client: JarvisApiClient
     {
       title: "Draft an invoice",
       description:
-        "Use this when Benny asks to prepare an invoice. Creates a DRAFT only; Jarvis computes the totals. Issuing, voiding and recording payments are not available here.",
+        "Use this when Benny asks to prepare an invoice. Creates a DRAFT only; NOLAN computes the totals. Issuing, voiding and recording payments are not available here.",
       inputSchema: {
         clientId: id,
         number: id,

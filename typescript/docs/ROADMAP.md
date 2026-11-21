@@ -1,5 +1,122 @@
 # Jarvis TypeScript Roadmap
 
+## Security halt on the HUD (#839, 2026-11-21)
+
+The HUD reads `securityHalt` from status. While dispatch is refused:
+
+- the status pill reads HALTED;
+- presence is `blocked`, ahead of approvals and reconciliation;
+- the backdrop is STOPPED;
+- the footer names the stage.
+
+A service without the field shows no halt. It uses existing elements only, with no layout change. It needs the owner's spoken check before merge.
+
+## Security halt in system status (#839, 2026-11-21)
+
+`GET /api/v1/status` now carries `securityHalt`: the halt `state` (`running`, `requested`, `acknowledged`, `verified-stopped` or `unverifiable`), whether dispatch is allowed, the timestamps and the unsettled count. The owner's reason text is never included. While dispatch is refused, the overall status is `degraded`. A reader failure is reported as refused and unverifiable. The status route derives the state with `summarizeSecurityHalt`. The CLI matches acknowledgements to the halt through the same `haltRefFor` binding.
+
+Next:
+
+1. Feed the halt record into the privileged-operation policy context once a broker exists.
+2. Extend cancellation to non-tool background loops (reconciliation, reminders), if the owner wants those covered.
+
+## Security halt cancels in-flight work (#839, 2026-11-21)
+
+Every governed tool execution now registers in a process-wide registry. While halted, a supervisor in the HTTP service cancels each registered execution every second. It writes an owner-private acknowledgement bound to the exact halt record. `npm run sec -- halt` waits up to 5 s and reports `requested`, `acknowledged` or `verified stopped`.
+
+- A halt before the effect starts gives a `safety-blocked` refusal.
+- A halt after the effect starts gives `indeterminate`, never `succeeded` or `failed`.
+- An effect that ignores its abort keeps the state at `acknowledged` until it settles.
+
+The states cover only governed tool executions in the service process. No new receipt codes, so Convex validators are unchanged.
+
+## Security halt dispatch gate (#839, 2026-11-20)
+
+`npm run sec -- halt|status|resume` writes and reads an owner halt record in the data directory. `ToolExecutionService` checks it before preflight and the single-use claim on every non-dry-run execution, and refuses with `safety-blocked`. A missing record means running. An unreadable, symlinked, oversized or unknown record means halted. A refused attempt consumes nothing. The existing error code is reused, so Convex validators are unchanged.
+
+See [security halt](operators/security-halt.md).
+
+## Situation Snapshot MCP read surface (#837 slice 2, 2026-11-20)
+
+- Added one model-visible `get_situation_snapshot` tool over the existing
+  service-token HTTP client and `GET /api/v1/situation`; the existing composer
+  and strict snapshot schema remain the only source of snapshot semantics.
+- The MCP operation registry and OpenAPI `x-mcp-tool` metadata now declare the
+  same read-only operation. No HTTP response or route changed.
+- Deterministic MCP fixture coverage checks read-only annotations, the GET and
+  service-token boundary, unavailable/unknown/stale reasons, title limits and
+  absence of private task keys. No live provider or deployment proof was run.
+- Next: independent Claude review and exact-head CI, then Benny's merge
+  decision. HUD and voice exposure, and commissioned device health, remain
+  separate owner-scoped slices.
+
+## Memory Governance V1, first slice (#838, PR #841, 2026-11-19)
+
+- Added `src/memory/memoryGovernance.ts`, a pure library over caller-supplied
+  records. It adds no memory store, HTTP route or Convex schema, and its only
+  side effect is staging a proposed change set.
+- Governed records are strict zod schemas covering purpose, scope, category,
+  provenance, consent, sensitivity, status, lineage, pin/hold/dependents and
+  an optional expiry.
+- Retention defaults are privacy-first and deeply frozen. Overrides can only
+  shorten them. Audit retention stays unconfigured until it has a verification
+  reference, and is capped at 36,500 days.
+- `previewRetention` is a deterministic dry run that executes zero deletions
+  and fails closed:
+  - review conditions, duplicate IDs and unconfigured audit retention take
+    precedence over expiry and sensitive discard;
+  - all ordering is by Unicode code point;
+  - a SHA-256 digest binds the whole preview, and `buildDeletionReceipt`
+    refuses a tampered preview;
+  - only resolved policies are accepted.
+- Promotion is consent-gated and only proposes. Approval stays with the user
+  through the existing change-set flow.
+- Review: Grok, then ten automated Codex rounds. Rounds 1–9 found real edge
+  cases, each fixed with a test; round 10 passed. The focused suite has 60
+  tests.
+- Note: `docs/architecture/memory-governance.md`.
+- Next: an HTTP/HUD inventory surface; migrating existing memories into
+  governed records; live pruning behind an owner-authorised receipt. Each is a
+  separate owner-scoped follow-up.
+
+## Review process: automated Codex review covers the HUD (2026-11-18)
+
+- Cause found: the automated Codex reviewer refused any PR touching a file over
+  512 KB, and `src/mcp/dashboard-v1.html` is 533 KB, so every voice/HUD PR was
+  `blocked` and the owner relayed manual Codex reviews instead.
+- Fix: the fetch and segment caps in `.github/automation/` are now 1 MB (GitHub's
+  inline-content limit). The existing segmented review splits the file; #809's
+  real before/after HUD plans into 6 of 24 segments.
+- Protocol (`docs/operations/dual-agent-coordination.md`): a completed automated
+  Codex review counts as the peer review when Claude built the change (Codex
+  builds still need a Claude review); merge-only pushes that leave the PR diff
+  byte-identical, and where main changed nothing nearby or shared, keep the
+  review; merge `main` only when needed; owner runs the
+  spoken voice checks before merging voice/HUD changes. Revisit at Local V1
+  sign-off.
+- Next: split `dashboard-v1.html` into HTML/CSS/JS with no behaviour change;
+  tally which review layer caught what over the last ~20 PRs before pruning
+  workflows.
+
+## Dated dev-only audit allowlist (2026-11-18)
+
+- CI's `typescript/` audit step now runs `npm run audit:ci`
+  (`scripts/check-audit.mjs`) instead of `npm audit --audit-level=moderate`.
+  Every moderate-or-worse advisory still blocks, except an allowlisted one
+  that has no fixed version, appears only in development dependencies (the
+  gate also audits `--omit=dev` and blocks if it reaches production) and has
+  not passed its `expires` date (at most 30 days after it was added).
+- First entry: GHSA-fc5q-39xc-vjpf (picomatch, all versions <=4.0.7) via
+  eslint/vite/vitest, owner-approved, expires 2026-12-02. The same id is in
+  the console's allowlist as a stopgap until the console is removed.
+- Reason: with no published fix, the advisory made both required checks red
+  on main and on every PR (e.g. #809).
+- 2026-11-18 (later): `npm audit` stopped reporting the advisory (picomatch
+  still 4.0.7), so both allowlist entries were removed; the gate stays.
+- Next: remove
+  `jarvis-console-01` (owner decision 2026-11-18), which needs its required
+  check removed from branch protection by the owner.
+
 ## Provider mutation contract suite (2026-11-16)
 
 - One case table (`tests/contracts/providerMutationContract.ts`) now runs
@@ -288,8 +405,8 @@ maps a persistence "no longer available" refusal to a non-retryable 409,
 projects HUD and brief tasks and reminders through the public HTTP shape, and
 restores a direct-create receipt only when it matches an entity key and
 fingerprint or a tombstone. Quote and receipt rows are stored under
-`jarvis-cli`. Full end-to-end recovery on realistic data stays NOT YET MET
-until the host repeats that restart step. `npm run commission:local-v1-recovery`
+`jarvis-cli`. The host repeated the full run at `ca7f256f` on 21 Nov 2026,
+and it passed on synthetic data (evidence, not acceptance). `npm run commission:local-v1-recovery`
 (`runLocalV1RestartProof`) drives that restart step from environment config
 against the isolated loopback backend and writes a dated evidence file with the
 quote body sha256; it automates only the restart proof and lists capture,

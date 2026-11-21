@@ -1,8 +1,10 @@
 # NOLAN situation snapshot
 
 `GET /api/v1/situation` (service token required) returns a read-only summary of
-what is going on now, built from the read models Jarvis already has. It is the
-first slice of #837.
+what is going on now, built from the read models Jarvis already has. The MCP
+tool `get_situation_snapshot` returns the same schema-validated snapshot through
+the existing MCP-to-HTTP service-token client. It takes no arguments and is
+model-visible, with no HUD or voice wiring.
 
 ## Fields
 
@@ -38,4 +40,4 @@ Every field has `status` (`available`, `unavailable` or `unknown`), `source`,
   executes a ToolAction and never actuates a device. Titles are capped at five
   per field. No tokens or private record fields are included.
 
-The snapshot is not exposed as an MCP tool or shown on the HUD in this slice.
+The snapshot is not shown on the HUD or wired into voice in this slice.
