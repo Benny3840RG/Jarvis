@@ -13131,6 +13131,40 @@
           },
           "updatedAt": {
             "$ref": "#/components/schemas/TimestampMs"
+          },
+          "transitions": {
+            "type": "array",
+            "description": "Lifecycle steps in the order they were recorded. Absent on attempts recorded before history existed.",
+            "maxItems": 8,
+            "items": {
+              "$ref": "#/components/schemas/QuoteDeliveryTransition"
+            }
+          }
+        }
+      },
+      "QuoteDeliveryTransition": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["event", "at"],
+        "properties": {
+          "event": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "executing",
+              "provider-reference",
+              "indeterminate",
+              "succeeded",
+              "failed",
+              "reconciled"
+            ]
+          },
+          "at": {
+            "$ref": "#/components/schemas/TimestampMs"
+          },
+          "immutableIdApplied": {
+            "type": "boolean",
+            "description": "Only on provider-reference: whether the provider confirmed it applied the immutable-id preference when it created the draft."
           }
         }
       },

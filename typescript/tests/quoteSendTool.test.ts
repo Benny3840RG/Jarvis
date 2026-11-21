@@ -593,6 +593,43 @@ describe("AM-013 send quote tool", () => {
     assert.ok(ledger[0].reconciliationId);
   });
 
+  it("passes the provider's immutable-id confirmation to the ledger's provider reference only", async () => {
+    const provider = new RecordingEmailProvider();
+    provider.result = { ...provider.result, immutableIdApplied: true };
+    const bound: BindQuoteProviderReferenceInput[] = [];
+    class RecordingDeliveries extends InMemoryQuoteDeliveryRepository {
+      override async bindProviderReference(input: BindQuoteProviderReferenceInput) {
+        bound.push(input);
+        return super.bindProviderReference(input);
+      }
+    }
+    const reconciliations = new FakeReconciliationStore();
+    const service = new ToolExecutionService(
+      [
+        createQuoteSendToolDefinition(
+          quoteRepositoryStub(snapshot()),
+          provider,
+          new RecordingDeliveries(),
+          quotePdfArtifactsStub(),
+        ),
+      ],
+      undefined,
+      reconciliations,
+    );
+
+    const result = await service.execute({
+      action: action(),
+      authority: "T2",
+      idempotencyKey: "execute-send-immutable",
+    });
+
+    assert.equal(result.status, "indeterminate");
+    assert.equal(bound.length, 1);
+    assert.equal(bound[0]?.immutableIdApplied, true);
+    // The registered provider attempt keeps its existing shape.
+    assert.equal(JSON.stringify(result).includes("immutableIdApplied"), false);
+  });
+
   it("fails without contacting the provider when the revision is stale", async () => {
     const provider = new RecordingEmailProvider();
     const quotes = quoteRepositoryStub(

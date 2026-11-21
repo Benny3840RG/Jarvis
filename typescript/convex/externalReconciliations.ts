@@ -9,6 +9,7 @@ import {
 } from "./externalReconciliationValidators.js";
 import { requireOwner } from "./authHelpers.js";
 import { reconcileOmegaContractFromReceipt } from "./omegaReconciliation.js";
+import { appendQuoteDeliveryTransition } from "./quoteDeliveryValidators.js";
 import { cleanRequiredText } from "./toolActionLogic.js";
 import {
   toolExecutionReceiptDocumentValidator,
@@ -925,6 +926,10 @@ export const resolveClaim = mutation({
           : {}),
         reconciledAt: now,
         updatedAt: now,
+        transitions: appendQuoteDeliveryTransition(quoteDelivery.transitions, {
+          event: "reconciled",
+          at: now,
+        }),
       });
     }
     const updatedReceipt = await ctx.db.get("toolExecutionReceipts", receipt._id);

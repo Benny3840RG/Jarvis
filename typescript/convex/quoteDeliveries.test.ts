@@ -167,6 +167,91 @@ describe("quote delivery ledger", () => {
     expect(reconciled.reconciledAt).toBeGreaterThan(0);
   });
 
+  it("records each lifecycle transition in order, with the immutable-id result on the provider reference", async () => {
+    const t = harness();
+    const created = await t.mutation(api.quoteDeliveries.createPending, createInput());
+    expect(created.transitions?.map((entry) => entry.event)).toEqual(["pending"]);
+    const base = {
+      serviceToken: SERVICE_TOKEN,
+      deliveryRuntimeToken: DELIVERY_RUNTIME_TOKEN,
+      deliveryAttemptId: created.deliveryAttemptId,
+    };
+    await t.mutation(api.quoteDeliveries.markExecuting, { ...base, expectedStatus: "pending" });
+    await t.mutation(api.quoteDeliveries.bindProviderReference, {
+      ...base,
+      expectedStatus: "executing",
+      providerRequestId: "graph-message-1",
+      reconciliationId: "reconciliation-abc",
+      immutableIdApplied: true,
+    });
+    await t.mutation(api.quoteDeliveries.markIndeterminate, {
+      ...base,
+      expectedStatus: "executing",
+      reconciliationId: "reconciliation-abc",
+    });
+    const reconciled = await t.mutation(api.quoteDeliveries.reconcile, {
+      ...base,
+      expectedStatus: "indeterminate",
+      reconciliationId: "reconciliation-abc",
+      outcome: "succeeded",
+    });
+
+    const transitions = reconciled.transitions ?? [];
+    expect(transitions.map((entry) => entry.event)).toEqual([
+      "pending",
+      "executing",
+      "provider-reference",
+      "indeterminate",
+      "reconciled",
+    ]);
+    for (let index = 1; index < transitions.length; index += 1) {
+      expect(transitions[index]!.at).toBeGreaterThanOrEqual(transitions[index - 1]!.at);
+    }
+    expect(transitions[2]!.immutableIdApplied).toBe(true);
+    expect(transitions.filter((entry) => entry.immutableIdApplied !== undefined)).toHaveLength(1);
+  });
+
+  it("records a direct terminal outcome as its own transition", async () => {
+    const t = harness();
+    const created = await t.mutation(api.quoteDeliveries.createPending, createInput());
+    const base = {
+      serviceToken: SERVICE_TOKEN,
+      deliveryRuntimeToken: DELIVERY_RUNTIME_TOKEN,
+      deliveryAttemptId: created.deliveryAttemptId,
+    };
+    await t.mutation(api.quoteDeliveries.markExecuting, { ...base, expectedStatus: "pending" });
+    const failed = await t.mutation(api.quoteDeliveries.complete, {
+      ...base,
+      expectedStatus: "executing",
+      outcome: "failed",
+      providerErrorCode: "outlook-draft-rejected-400",
+    });
+    expect(failed.transitions?.map((entry) => entry.event)).toEqual([
+      "pending",
+      "executing",
+      "failed",
+    ]);
+  });
+
+  it("refuses to grow the transition history past its bound", async () => {
+    const t = harness();
+    const created = await t.mutation(api.quoteDeliveries.createPending, createInput());
+    const base = {
+      serviceToken: SERVICE_TOKEN,
+      deliveryRuntimeToken: DELIVERY_RUNTIME_TOKEN,
+      deliveryAttemptId: created.deliveryAttemptId,
+    };
+    await t.mutation(api.quoteDeliveries.markExecuting, { ...base, expectedStatus: "pending" });
+    const rebind = () =>
+      t.mutation(api.quoteDeliveries.bindProviderReference, {
+        ...base,
+        expectedStatus: "executing",
+        providerRequestId: "graph-message-1",
+      });
+    for (let index = 0; index < 6; index += 1) await rebind();
+    await expect(rebind()).rejects.toThrow(/transition history is full/);
+  });
+
   it("lists delivery attempts for a quote, optionally scoped to one revision, newest first", async () => {
     const t = harness();
     await t.mutation(

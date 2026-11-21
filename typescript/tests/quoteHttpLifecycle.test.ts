@@ -430,6 +430,12 @@ describe("controlled quote HTTP lifecycle", () => {
       createdAt: 1,
       updatedAt: 1,
       completedAt: 1,
+      transitions: [
+        { event: "pending", at: 1 },
+        { event: "executing", at: 1 },
+        { event: "provider-reference", at: 1, immutableIdApplied: true },
+        { event: "succeeded", at: 1 },
+      ],
     };
     const deliveries: QuoteDeliveryRepository = {
       async getBySendScope() {
@@ -469,6 +475,7 @@ describe("controlled quote HTTP lifecycle", () => {
     assert.equal(body.data.length, 1);
     assert.equal(body.data[0].deliveryAttemptId, "delivery-1");
     assert.equal(body.data[0].status, "succeeded");
+    assert.deepEqual(body.data[0].transitions, attempt.transitions);
     assert.equal("ownerId" in body.data[0], false);
     assert.equal("sendFingerprint" in body.data[0], false);
     assert.equal("idempotencyKey" in body.data[0], false);

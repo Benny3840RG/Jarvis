@@ -87,6 +87,19 @@ function validatePrepareInput(input: QuoteEmailPrepareInput): {
   return { recipient, subject, body, filename };
 }
 
+/**
+ * Whether Graph's `Preference-Applied` response header confirms
+ * `IdType="ImmutableId"`. The header may list several preferences.
+ */
+export function immutableIdPreferenceApplied(header: string | null): boolean {
+  if (!header) return false;
+  return header.split(",").some((part) => {
+    const [name, ...rest] = part.split("=");
+    const value = rest.join("=").trim().replace(/^"|"$/g, "");
+    return name?.trim().toLowerCase() === "idtype" && value.toLowerCase() === "immutableid";
+  });
+}
+
 function validateReference(reference: QuoteEmailPreparedReference): string {
   const id = requiredText(reference.providerRequestId, 1_024, "outlook-message-id-invalid");
   if (reference.providerCorrelationId !== id) fail("outlook-message-reference-invalid");
@@ -203,6 +216,7 @@ export class MicrosoftGraphQuoteEmailProvider {
     return {
       providerRequestId: record.id,
       providerCorrelationId: record.id,
+      immutableIdApplied: immutableIdPreferenceApplied(response.headers.get("preference-applied")),
     };
   }
 
