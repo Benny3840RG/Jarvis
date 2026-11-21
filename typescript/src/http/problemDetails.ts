@@ -1,5 +1,5 @@
 import type { ArgumentsHost, ExceptionFilter } from "@nestjs/common";
-import { Catch, HttpException, HttpStatus, Inject } from "@nestjs/common";
+import { Catch, HttpException, HttpStatus, Inject, Logger } from "@nestjs/common";
 import type { FastifyReply, FastifyRequest } from "fastify";
 
 import type { HttpAppConfig } from "./config.js";
@@ -174,6 +174,40 @@ function redact(
  * the service tokens protected the lower-value credential and not the higher-value
  * one. Anything added to `HttpAppConfig` that is a secret belongs here too.
  */
+const MAX_LOGGED_CAUSE = 2_000;
+
+/**
+ * One log line for a response the service did not expect to send (5xx), so an
+ * internal failure is diagnosable from the journal. The response body stays the
+ * generic problem; only the log names the cause. Configured credentials are
+ * redacted, and so is any `...token/secret/key: "..."` field, because a Convex
+ * argument-validation error dumps its arguments verbatim. Returns null for a
+ * non-5xx status.
+ */
+export function unexpectedErrorLogLine(
+  exception: unknown,
+  status: number,
+  method: string,
+  path: string,
+  requestId: string,
+  config: HttpAppConfig,
+): string | null {
+  if (status < 500) return null;
+  const raw =
+    exception instanceof Error
+      ? `${exception.name}: ${exception.message}`
+      : `non-error exception: ${typeof exception}`;
+  const fieldsMasked = raw
+    .slice(0, MAX_LOGGED_CAUSE * 4)
+    .replace(
+      /([A-Za-z0-9_]*(?:token|secret|key|password)[A-Za-z0-9_]*"?\s*[:=]\s*)("[^"]*"|'[^']*'|[^\s,}]+)/giu,
+      "$1[REDACTED]",
+    );
+  const secrets = configuredSecrets(config);
+  const cause = redact(fieldsMasked, secrets).replace(/\s+/gu, " ").slice(0, MAX_LOGGED_CAUSE);
+  return `Unexpected ${status} ${method} ${redact(path, secrets)} requestId=${requestId}: ${cause}`;
+}
+
 export function configuredSecrets(config: HttpAppConfig): string[] {
   return [
     config.currentToken,
@@ -185,6 +219,8 @@ export function configuredSecrets(config: HttpAppConfig): string[] {
 
 @Catch()
 export class ProblemDetailsFilter implements ExceptionFilter {
+  private readonly logger = new Logger("ProblemDetails");
+
   constructor(@Inject(HTTP_APP_CONFIG) private readonly config: HttpAppConfig) {}
 
   catch(exception: unknown, host: ArgumentsHost): void {
@@ -202,6 +238,16 @@ export class ProblemDetailsFilter implements ExceptionFilter {
       instance: redactedRequestPath(request.url, this.config),
       requestId,
     };
+
+    const logLine = unexpectedErrorLogLine(
+      exception,
+      status,
+      request.method,
+      details.instance,
+      requestId,
+      this.config,
+    );
+    if (logLine) this.logger.error(logLine);
 
     response.header("X-Request-Id", requestId);
     response.header("Cache-Control", "no-store");
