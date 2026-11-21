@@ -143,5 +143,47 @@ The JSON also has a `trace` object that records what the owner decision card
 - `resolvedWorkerRuns`: how many worker runs resolved a record. More than one
   would be a duplicate terminal effect.
 
+## End-to-end Beez Treez workflow proof
+
+`npm run commission:beez-treez-workflow` runs the same kit with `--workflow`.
+It has the same guards, approval and single send. It proves the Local V1
+business path from the release plan through the HTTP API:
+
+`enquiry → client → property → project/job → quote draft/edit/finalise/PDF → governed Outlook send → reconciliation → invoice draft → daily brief/HUD`
+
+An enquiry needs a client, so the kit runs the steps in this order:
+
+1. Read the brief counts.
+2. Create the disposable client, a property for it, and an enquiry on that
+   property.
+3. Convert the enquiry to a project.
+4. Create the quote on that project, then draft, edit, finalise and send it,
+   and reconcile it as above.
+5. Create an invoice draft from the quote, with the same line items and
+   project.
+6. Read back the enquiry, the daily brief and the HUD snapshot.
+
+The evidence JSON gains a `workflow` object with the record ids, the brief
+counts before and after, the HUD observation, and these `checks`:
+
+- `enquiryConverted` and `enquiryLinkedToProject`: the enquiry is `converted`
+  and points at the new project.
+- `quoteOnProject`: the quote carries the project id.
+- `sendReconciledSucceeded`: the sent delivery reconciled as `succeeded`.
+- `invoiceDraftFromQuote` and `invoiceOnProject`: the invoice is a draft that
+  references the quote and the project.
+- `briefCountsDraftInvoice` and `briefCountsSentQuote`: the brief's draft
+  invoice count and sent quote count both rose during the run.
+- `briefShowsQuoteAwaitingResponse`: the brief lists this quote as awaiting a
+  response.
+- `hudShowsQuoteOnProject`: the HUD snapshot's quote register is ready and
+  lists this quote on the project.
+
+`workflow.proven` is true only when every check holds. Each check is read from
+what the API returned. An unavailable brief count or HUD fails its check; it is
+never assumed. In workflow mode the kit writes the evidence either way, then
+exits nonzero unless `workflow.proven` is true and names each broken check. A
+failed send or reconcile still fails the run as before.
+
 No Graph message is sent by installing this command. The host run is still
 required, and it must not target a customer mailbox.

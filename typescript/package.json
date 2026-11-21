@@ -54,6 +54,7 @@
     "home:discover": "node --import tsx src/tools/runGoogleHomeDiscovery.ts",
     "home:kit": "node --import tsx src/tools/runGoogleHomeCommissioningKit.ts",
     "commission:outlook-quote": "node --import tsx src/tools/runOutlookQuoteCommissioning.ts",
+    "commission:beez-treez-workflow": "node --import tsx src/tools/runOutlookQuoteCommissioning.ts --workflow",
     "commission:voice-project": "node --import tsx src/tools/runVoiceProjectCommissioning.ts"
   },
   "dependencies": {

@@ -19,6 +19,15 @@ import {
 } from "../reconciliation/runtimeReconciliationHost.js";
 import { ReconciliationWorker } from "../reconciliation/reconciliationWorker.js";
 import {
+  assessBeezTreezWorkflow,
+  finishBeezTreezWorkflow,
+  startBeezTreezWorkflow,
+  type WorkflowCall,
+  type WorkflowChecks,
+  type WorkflowFinish,
+  type WorkflowStart,
+} from "./beezTreezWorkflow.js";
+import {
   assertOutlookCommissioningProof,
   beginOutlookQuoteCommissioning,
   normaliseCommissioningEnvironment,
@@ -92,6 +101,7 @@ function readSnapshot(body: Json): {
   revisionVersion: number;
   status: string;
   fingerprint?: string;
+  projectId?: string;
 } {
   if (!isRecord(body) || !isRecord(body.data)) {
     throw new Error("Quote response did not include data.");
@@ -116,6 +126,7 @@ function readSnapshot(body: Json): {
     throw new Error("Quote response was missing revision coordinates.");
   }
   const fingerprint = revision.fingerprint;
+  const projectId = aggregate.projectId;
   return {
     quoteId,
     aggregateVersion,
@@ -123,6 +134,7 @@ function readSnapshot(body: Json): {
     revisionVersion,
     status,
     ...(typeof fingerprint === "string" ? { fingerprint } : {}),
+    ...(typeof projectId === "string" ? { projectId } : {}),
   };
 }
 
@@ -230,6 +242,22 @@ export type CommissioningRunEvidence = OutlookCommissioningEvidence & {
   revision: number;
   recipient: string;
   trace: CommissioningTrace;
+  /** Present only in workflow mode: the end-to-end Beez Treez chain around the send. */
+  workflow?: BeezTreezWorkflowEvidence;
+};
+
+export type BeezTreezWorkflowEvidence = {
+  clientId: string;
+  propertyId: string;
+  enquiryId: string;
+  projectId: string;
+  quoteId: string;
+  invoiceId: string;
+  briefBefore: WorkflowStart["briefBefore"];
+  briefAfter: WorkflowFinish["briefAfter"];
+  hud: WorkflowFinish["hud"];
+  checks: WorkflowChecks;
+  proven: boolean;
 };
 
 /** Collects the facts the owner decision card asks for from responses the kit already has. */
@@ -589,6 +617,7 @@ async function runCommissioning(input: {
   outlook: MicrosoftOutlookRuntime;
   reconciliation: EnabledRuntimeReconciliationConfig;
   projectRevision: number;
+  workflow?: boolean;
 }): Promise<CommissioningRunEvidence> {
   const { request, environment, plan, outlook, reconciliation } = input;
   const projectRevisionNumber = input.projectRevision;
@@ -614,6 +643,22 @@ async function runCommissioning(input: {
     throw new Error("Disposable client response did not include an id.");
   }
   const clientId = createdClient.data.id;
+  const call: WorkflowCall = async (method, path, body, expected = 200) =>
+    expectStatus(
+      await request({
+        baseUrl: plan.apiBaseUrl,
+        token,
+        method,
+        path,
+        ...(body === undefined ? {} : { body }),
+      }),
+      expected,
+      `${method} ${path}`,
+    );
+  const workflowStart = input.workflow
+    ? await startBeezTreezWorkflow({ call, clientId, marker })
+    : null;
+  const lineItems = [{ description: "Disposable commissioning line", quantity: 1, unitPrice: 1 }];
   let snapshot = readSnapshot(
     expectStatus(
       await request({
@@ -623,8 +668,9 @@ async function runCommissioning(input: {
         path: "/api/v1/quotes",
         body: {
           clientId,
+          ...(workflowStart ? { projectId: workflowStart.projectId } : {}),
           number: `Q-${marker}`.slice(0, 100),
-          lineItems: [{ description: "Disposable commissioning line", quantity: 1, unitPrice: 1 }],
+          lineItems,
           termsIncluded: true,
         },
       }),
@@ -632,6 +678,7 @@ async function runCommissioning(input: {
       "Create quote draft",
     ),
   );
+  const quoteProjectId = snapshot.projectId ?? null;
   snapshot = readSnapshot(
     expectStatus(
       await request({
@@ -744,17 +791,58 @@ async function runCommissioning(input: {
     200,
     "Get reconciliation",
   );
+  const trace = commissioningTrace({
+    repeatReceipt: repeated.body,
+    deliveries,
+    reconciliationDetail,
+    workers: workerRuns,
+  });
+  let workflow: BeezTreezWorkflowEvidence | undefined;
+  if (workflowStart) {
+    const finished = await finishBeezTreezWorkflow({
+      call,
+      clientId,
+      marker,
+      enquiryId: workflowStart.enquiryId,
+      projectId: workflowStart.projectId,
+      quoteId: snapshot.quoteId,
+      lineItems,
+    });
+    const sent = trace.deliveries.find(
+      (entry) => entry.providerRequestId === trace.reconciliation?.providerRequestId,
+    );
+    const assessed = assessBeezTreezWorkflow({
+      projectId: workflowStart.projectId,
+      quoteId: snapshot.quoteId,
+      enquiry: finished.enquiry,
+      quoteProjectId,
+      reconciledOutcome:
+        typeof sent?.reconciledOutcome === "string" ? sent.reconciledOutcome : null,
+      invoice: finished.invoice,
+      briefBefore: workflowStart.briefBefore,
+      briefAfter: finished.briefAfter,
+      hud: finished.hud,
+    });
+    workflow = {
+      clientId,
+      propertyId: workflowStart.propertyId,
+      enquiryId: workflowStart.enquiryId,
+      projectId: workflowStart.projectId,
+      quoteId: snapshot.quoteId,
+      invoiceId: finished.invoiceId,
+      briefBefore: workflowStart.briefBefore,
+      briefAfter: finished.briefAfter,
+      hud: finished.hud,
+      ...assessed,
+    };
+  }
   return {
     ...proof,
     quoteId: snapshot.quoteId,
     revision: snapshot.revision,
     recipient: plan.recipient,
-    trace: commissioningTrace({
-      repeatReceipt: repeated.body,
-      deliveries,
-      reconciliationDetail,
-      workers: workerRuns,
-    }),
+    trace,
+    ...(workflow ? { workflow } : {}),
   };
 }
 
@@ -764,6 +852,8 @@ export async function executeOutlookQuoteCommissioning(
     request?: CommissioningRequest;
     loadProjectRevision?: (plan: CommissioningPlan, serviceToken: string) => Promise<number | null>;
     createOutlookRuntime?: typeof createMicrosoftOutlookRuntimeFromEnv;
+    /** Run the end-to-end Beez Treez workflow around the send (one send, same guards). */
+    workflow?: boolean;
   } = {},
 ): Promise<CommissioningRunEvidence> {
   const normalised = normaliseCommissioningEnvironment(environment);
@@ -798,6 +888,7 @@ export async function executeOutlookQuoteCommissioning(
     outlook,
     reconciliation,
     projectRevision: revision,
+    ...(overrides.workflow ? { workflow: true } : {}),
   });
 }
 
@@ -814,9 +905,19 @@ export function describeCommissioningFailure(error: unknown): string {
   return `${fallback}: non-Error value thrown (nothing was sent unless evidence was written).`;
 }
 
+/** `--workflow` runs the end-to-end Beez Treez workflow proof around the same single send. */
+export function commissioningModeFromArgs(args: readonly string[]): { workflow: boolean } {
+  const unknown = args.filter((arg) => arg !== "--workflow");
+  if (unknown.length > 0) {
+    throw new Error(`Unknown commissioning argument: ${unknown[0]}`);
+  }
+  return { workflow: args.includes("--workflow") };
+}
+
 async function main(): Promise<void> {
   loadLocalEnvironment();
-  const evidence = await executeOutlookQuoteCommissioning(process.env);
+  const mode = commissioningModeFromArgs(process.argv.slice(2));
+  const evidence = await executeOutlookQuoteCommissioning(process.env, mode);
   const json = `${JSON.stringify(evidence, null, 2)}\n`;
   const evidencePath = process.env.JARVIS_OUTLOOK_COMMISSIONING_EVIDENCE?.trim();
   if (evidencePath) {
@@ -826,6 +927,25 @@ async function main(): Promise<void> {
     await writeFile(evidencePath, json, { mode: 0o600 });
   }
   process.stdout.write(json);
+  const failed = workflowFailure(mode, evidence);
+  if (failed) {
+    console.error(failed);
+    process.exitCode = 1;
+  }
+}
+
+/** In workflow mode the run passes only when the whole chain was proven. */
+export function workflowFailure(
+  mode: { workflow: boolean },
+  evidence: Pick<CommissioningRunEvidence, "workflow">,
+): string | null {
+  if (!mode.workflow) return null;
+  if (!evidence.workflow) return "Workflow proof failed: no workflow evidence was recorded.";
+  if (evidence.workflow.proven) return null;
+  const broken = Object.entries(evidence.workflow.checks)
+    .filter(([, ok]) => !ok)
+    .map(([name]) => name);
+  return `Workflow proof failed: ${broken.join(", ")}. The send itself is reported separately in the evidence.`;
 }
 
 const entryPoint = process.argv[1];
