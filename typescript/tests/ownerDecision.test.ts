@@ -156,6 +156,17 @@ test("the shipped manifest keeps its structural promises", () => {
     ),
   );
 
+  // The Outlook gates are decidable only on the recorded traced run and the
+  // merged ledger tracing (#873) that made each gap observable.
+  const outlook = byId.get("outlook-evidence-acceptance");
+  assert.ok(outlook);
+  assert.deepEqual(outlook.missingPrerequisites, []);
+  const outlookPins = outlook.evidence.map((item) => item.pin);
+  assert.ok(
+    outlookPins.some((pin) => pin.kind === "comment" && pin.id === 7065797361 && pin.on === 869),
+  );
+  assert.ok(outlookPins.some((pin) => pin.kind === "pull-request" && pin.number === 873));
+
   // No dependency cycle: every chain of dependsOn ends.
   const visiting = new Set<string>();
   const done = new Set<string>();
