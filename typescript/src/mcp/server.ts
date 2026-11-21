@@ -1,5 +1,3 @@
-import { readFileSync } from "node:fs";
-
 import {
   registerAppResource,
   registerAppTool,
@@ -22,6 +20,7 @@ import { parseProjectScheduledDate, type Project } from "../projects/project.js"
 import type { QuoteSnapshot } from "../quotes/quoteLifecycle.js";
 import type { ToolAction } from "../actions/toolActions.js";
 import type { Reminder, Task } from "../persistence/persistence.js";
+import { situationSnapshotSchema } from "../situation/situationSnapshot.js";
 import {
   JarvisApiClient,
   JarvisApiError,
@@ -31,10 +30,11 @@ import {
 import { enquirySchema, invoiceSchema, registerBusinessTools } from "./businessTools.js";
 import { registerPersistenceSettingsTools } from "./persistenceSettingsTools.js";
 import { JARVIS_INSTRUCTIONS, JARVIS_PERSONA_MARKDOWN, JARVIS_PERSONA_URI } from "./persona.js";
+import { bundleHud } from "./hud/bundle.mjs";
 
 export const JARVIS_DASHBOARD_URI = "ui://jarvis/dashboard-v1.html";
 
-const dashboardHtml = readFileSync(new URL("./dashboard-v1.html", import.meta.url), "utf8");
+const dashboardHtml = bundleHud();
 
 const taskSchema = z.object({
   id: z.string(),
@@ -572,10 +572,29 @@ const statusSchema = z.object({
   // resolveTotalityReasoningStatus in totalityFactory.ts.
   reasoning: z.object({
     status: z.enum(["not-configured", "configured"]),
-    provider: z.enum(["openai", "gemini"]).nullable(),
+    provider: z.enum(["openai", "gemini", "anthropic"]).nullable(),
     model: z.string().nullable(),
     reason: z.string(),
   }),
+  voiceConversation: z.object({
+    status: z.enum(["not-configured", "configured"]),
+    provider: z.literal("anthropic").nullable(),
+    model: z.string().nullable(),
+    reason: z.string(),
+  }),
+  // `nolan sec halt` (#839). Optional so an MCP server still reads an HTTP
+  // service that predates the field during a staggered restart.
+  securityHalt: z
+    .object({
+      state: z.enum(["running", "requested", "acknowledged", "verified-stopped", "unverifiable"]),
+      dispatch: z.enum(["allowed", "refused"]),
+      failClosed: z.boolean(),
+      requestedAt: z.string().nullable(),
+      acknowledgedAt: z.string().nullable(),
+      verifiedStoppedAt: z.string().nullable(),
+      unsettledExecutions: z.number().int().nonnegative().nullable(),
+    })
+    .optional(),
   timezone: z.string(),
   layers: z.object({
     runtime: layerSchema,
@@ -685,8 +704,8 @@ const dashboardMeta = {
     visibility: ["model", "app"] as const,
   },
   "openai/outputTemplate": JARVIS_DASHBOARD_URI,
-  "openai/toolInvocation/invoking": "Checking Jarvis…",
-  "openai/toolInvocation/invoked": "Jarvis dashboard ready.",
+  "openai/toolInvocation/invoking": "Checking NOLAN…",
+  "openai/toolInvocation/invoked": "NOLAN dashboard ready.",
 };
 
 const readAnnotations = {
@@ -798,7 +817,7 @@ function safeError(error: unknown) {
   const message =
     error instanceof JarvisApiError
       ? `${error.message}${error.requestId ? ` Request ID: ${error.requestId}.` : ""}`
-      : "Jarvis preview could not complete the request.";
+      : "NOLAN preview could not complete the request.";
   return {
     isError: true,
     content: [{ type: "text" as const, text: message }],
@@ -836,8 +855,8 @@ export function createJarvisMcpServer(
     "jarvis-persona",
     JARVIS_PERSONA_URI,
     {
-      title: "Jarvis persona (Beez Treez)",
-      description: "The voice, priorities, and honesty guardrails Jarvis operates by for Benny.",
+      title: "NOLAN persona (Beez Treez)",
+      description: "The voice, priorities, and honesty guardrails NOLAN operates by for Benny.",
       mimeType: "text/markdown",
     },
     async () => ({
@@ -862,7 +881,7 @@ export function createJarvisMcpServer(
             },
           },
           "openai/widgetDescription":
-            "Private Jarvis operator console showing live development status, tasks and reminders.",
+            "Private NOLAN operator console showing live development status, tasks and reminders.",
         },
       },
     ],
@@ -872,9 +891,9 @@ export function createJarvisMcpServer(
     server,
     "show_jarvis_dashboard",
     {
-      title: "Show Jarvis dashboard",
+      title: "Show NOLAN dashboard",
       description:
-        "Use this when Benny wants to open the Jarvis operator console or see status, tasks and reminders together.",
+        "Use this when Benny wants to open the NOLAN operator console or see status, tasks and reminders together.",
       inputSchema: {},
       outputSchema: dashboardOutputSchema,
       annotations: readAnnotations,
@@ -882,7 +901,7 @@ export function createJarvisMcpServer(
     },
     async () => {
       try {
-        return dashboardResult(await client.dashboard(), "Jarvis operator console is ready.");
+        return dashboardResult(await client.dashboard(), "NOLAN operator console is ready.");
       } catch (error: unknown) {
         return safeError(error);
       }
@@ -893,9 +912,9 @@ export function createJarvisMcpServer(
     server,
     "get_jarvis_status",
     {
-      title: "Check Jarvis status",
+      title: "Check NOLAN status",
       description:
-        "Use this when the user asks whether Jarvis, Convex, Z-State or the safety layers are healthy.",
+        "Use this when the user asks whether NOLAN, Convex, Z-State or the safety layers are healthy.",
       inputSchema: {},
       outputSchema: { status: statusSchema },
       annotations: readAnnotations,
@@ -908,8 +927,33 @@ export function createJarvisMcpServer(
       try {
         const status = await client.getStatus();
         return {
-          content: [{ type: "text" as const, text: `Jarvis status is ${status.status}.` }],
+          content: [{ type: "text" as const, text: `NOLAN status is ${status.status}.` }],
           structuredContent: { status },
+        };
+      } catch (error: unknown) {
+        return safeError(error);
+      }
+    },
+  );
+
+  registerAppTool(
+    server,
+    "get_situation_snapshot",
+    {
+      title: "Read NOLAN situation snapshot",
+      description:
+        "Read the current sourced, freshness-labelled situation snapshot. Missing sources remain unavailable or unknown; this tool takes no action.",
+      inputSchema: {},
+      outputSchema: situationSnapshotSchema.shape,
+      annotations: readAnnotations,
+      _meta: { ui: { visibility: ["model"] } },
+    },
+    async () => {
+      try {
+        const snapshot = situationSnapshotSchema.parse(await client.getSituationSnapshot());
+        return {
+          content: [{ type: "text" as const, text: "NOLAN situation snapshot ready." }],
+          structuredContent: snapshot,
         };
       } catch (error: unknown) {
         return safeError(error);
@@ -954,8 +998,8 @@ export function createJarvisMcpServer(
     server,
     "list_tasks",
     {
-      title: "List Jarvis tasks",
-      description: "Use this when the user asks to see current or completed Jarvis tasks.",
+      title: "List NOLAN tasks",
+      description: "Use this when the user asks to see current or completed NOLAN tasks.",
       inputSchema: {},
       outputSchema: { tasks: z.array(taskSchema), count: z.number().int().nonnegative() },
       annotations: readAnnotations,
@@ -968,7 +1012,7 @@ export function createJarvisMcpServer(
       try {
         const tasks = await client.listTasks();
         return {
-          content: [{ type: "text" as const, text: `Found ${tasks.length} Jarvis tasks.` }],
+          content: [{ type: "text" as const, text: `Found ${tasks.length} NOLAN tasks.` }],
           structuredContent: { tasks, count: tasks.length },
         };
       } catch (error: unknown) {
@@ -981,8 +1025,8 @@ export function createJarvisMcpServer(
     server,
     "get_task",
     {
-      title: "Get Jarvis task",
-      description: "Use this when the user asks for the details of one Jarvis task by ID.",
+      title: "Get NOLAN task",
+      description: "Use this when the user asks for the details of one NOLAN task by ID.",
       inputSchema: { taskId: z.string().min(1) },
       outputSchema: { task: taskSchema },
       annotations: readAnnotations,
@@ -1002,8 +1046,8 @@ export function createJarvisMcpServer(
     server,
     "create_task",
     {
-      title: "Create Jarvis task",
-      description: "Use this when the user explicitly asks to add a durable Jarvis task.",
+      title: "Create NOLAN task",
+      description: "Use this when the user explicitly asks to add a durable NOLAN task.",
       inputSchema: {
         title: z.string().trim().min(1).max(100),
         category: z.string().trim().min(1).max(100).optional(),
@@ -1026,9 +1070,9 @@ export function createJarvisMcpServer(
     server,
     "update_task",
     {
-      title: "Update Jarvis task",
+      title: "Update NOLAN task",
       description:
-        "Use this when the user explicitly asks to change the title or category of an existing Jarvis task.",
+        "Use this when the user explicitly asks to change the title or category of an existing NOLAN task.",
       inputSchema: {
         taskId: z.string().min(1),
         title: z.string().trim().min(1).max(100).optional(),
@@ -1061,8 +1105,8 @@ export function createJarvisMcpServer(
     server,
     "complete_task",
     {
-      title: "Complete Jarvis task",
-      description: "Use this when the user explicitly asks to mark one Jarvis task complete.",
+      title: "Complete NOLAN task",
+      description: "Use this when the user explicitly asks to mark one NOLAN task complete.",
       inputSchema: { taskId: z.string().min(1) },
       outputSchema: dashboardOutputSchema,
       annotations: writeAnnotations,
@@ -1082,9 +1126,9 @@ export function createJarvisMcpServer(
     server,
     "delete_task",
     {
-      title: "Delete Jarvis task",
+      title: "Delete NOLAN task",
       description:
-        "Use this only when the user explicitly asks to permanently remove a specific Jarvis task by ID.",
+        "Use this only when the user explicitly asks to permanently remove a specific NOLAN task by ID.",
       inputSchema: { taskId: z.string().min(1) },
       outputSchema: dashboardOutputSchema,
       annotations: destructiveAnnotations,
@@ -1104,8 +1148,8 @@ export function createJarvisMcpServer(
     server,
     "list_reminders",
     {
-      title: "List Jarvis reminders",
-      description: "Use this when the user asks to see durable Jarvis reminders.",
+      title: "List NOLAN reminders",
+      description: "Use this when the user asks to see durable NOLAN reminders.",
       inputSchema: {},
       outputSchema: {
         reminders: z.array(reminderSchema),
@@ -1121,7 +1165,7 @@ export function createJarvisMcpServer(
       try {
         const reminders = await client.listReminders();
         return {
-          content: [{ type: "text" as const, text: `Found ${reminders.length} Jarvis reminders.` }],
+          content: [{ type: "text" as const, text: `Found ${reminders.length} NOLAN reminders.` }],
           structuredContent: { reminders, count: reminders.length },
         };
       } catch (error: unknown) {
@@ -1134,8 +1178,8 @@ export function createJarvisMcpServer(
     server,
     "get_reminder",
     {
-      title: "Get Jarvis reminder",
-      description: "Use this when the user asks for one Jarvis reminder by ID.",
+      title: "Get NOLAN reminder",
+      description: "Use this when the user asks for one NOLAN reminder by ID.",
       inputSchema: { reminderId: z.string().min(1) },
       outputSchema: { reminder: reminderSchema },
       annotations: readAnnotations,
@@ -1160,8 +1204,8 @@ export function createJarvisMcpServer(
     server,
     "create_reminder",
     {
-      title: "Create Jarvis reminder",
-      description: "Use this when the user explicitly asks to add a durable Jarvis reminder.",
+      title: "Create NOLAN reminder",
+      description: "Use this when the user explicitly asks to add a durable NOLAN reminder.",
       inputSchema: {
         title: z.string().trim().min(1).max(500),
         due: dueSchema.optional(),
@@ -1184,7 +1228,7 @@ export function createJarvisMcpServer(
     server,
     "update_reminder",
     {
-      title: "Update Jarvis reminder",
+      title: "Update NOLAN reminder",
       description:
         "Use this when the user explicitly asks to change a reminder title, due value, or clear its due value.",
       inputSchema: {
@@ -1225,9 +1269,9 @@ export function createJarvisMcpServer(
     server,
     "delete_reminder",
     {
-      title: "Delete Jarvis reminder",
+      title: "Delete NOLAN reminder",
       description:
-        "Use this only when the user explicitly asks to permanently remove a specific Jarvis reminder by ID.",
+        "Use this only when the user explicitly asks to permanently remove a specific NOLAN reminder by ID.",
       inputSchema: { reminderId: z.string().min(1) },
       outputSchema: dashboardOutputSchema,
       annotations: destructiveAnnotations,
@@ -1577,7 +1621,7 @@ export function createJarvisMcpServer(
     {
       title: "Inspect a quote",
       description:
-        "Use this when the user or Jarvis dashboard asks to inspect one known quote by identifier. This tool is read-only and cannot finalise, send, edit or record an outcome.",
+        "Use this when the user or NOLAN dashboard asks to inspect one known quote by identifier. This tool is read-only and cannot finalise, send, edit or record an outcome.",
       inputSchema: { quoteId: z.string().min(1) },
       outputSchema: { quote: quoteSnapshotSchema },
       annotations: readAnnotations,
@@ -1610,7 +1654,7 @@ export function createJarvisMcpServer(
     {
       title: "Draft a quote",
       description:
-        "Use this when Benny asks to prepare a quote for a client. Creates revision 1 as a DRAFT only; Jarvis computes the totals. Reviewing, finalising, sending and recording an outcome are not available here and stay owner-driven. Requires the Convex quote provider.",
+        "Use this when Benny asks to prepare a quote for a client. Creates revision 1 as a DRAFT only; NOLAN computes the totals. Reviewing, finalising, sending and recording an outcome are not available here and stay owner-driven. Requires the Convex quote provider.",
       inputSchema: {
         clientId: z.string().trim().min(1).max(200),
         number: z.string().trim().min(1).max(100),
@@ -1883,7 +1927,7 @@ export function createJarvisMcpServer(
     {
       title: "Get the live-work pipeline",
       description:
-        'Use this when Benny asks what Jarvis is building right now, which mission is in flight, or whether it\'s stuck on review, CI, merge, or ΩΣ completion. Read-only projection of the single in-flight development mission projected onto the canonical Development lifecycle rail with evidence detail cards. Individual nodes with no durable data report status "unavailable", never a fabricated value. When nothing is running the result is {status: "available", pipeline: null}; a provider/endpoint fault is {status: "unavailable", reason}.',
+        'Use this when Benny asks what NOLAN is building right now, which mission is in flight, or whether it\'s stuck on review, CI, merge, or ΩΣ completion. Read-only projection of the single in-flight development mission projected onto the canonical Development lifecycle rail with evidence detail cards. Individual nodes with no durable data report status "unavailable", never a fabricated value. When nothing is running the result is {status: "available", pipeline: null}; a provider/endpoint fault is {status: "unavailable", reason}.',
       inputSchema: {},
       outputSchema: { liveWork: liveWorkResultSchema },
       annotations: readAnnotations,
@@ -2631,7 +2675,7 @@ export function createJarvisMcpServer(
     {
       title: "Create an asset",
       description:
-        "Use this when Benny wants to track a tool or machine for servicing. An optional service interval (in days) and last-serviced date let Jarvis work out when the next service is due.",
+        "Use this when Benny wants to track a tool or machine for servicing. An optional service interval (in days) and last-serviced date let NOLAN work out when the next service is due.",
       inputSchema: {
         name: z.string().trim().min(1).max(200),
         kind: z.string().trim().min(1).max(100),

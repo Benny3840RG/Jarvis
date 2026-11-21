@@ -1,6 +1,8 @@
 import { Body, Controller, HttpCode, Inject, Post, Req, Res } from "@nestjs/common";
 import type { FastifyReply, FastifyRequest } from "fastify";
 
+import { categorizeAnthropicRequestError } from "../integrations/anthropic/errorCategory.js";
+import { AnthropicRequestError } from "../integrations/anthropic/totalityReasoner.js";
 import { categorizeGeminiRequestError } from "../integrations/gemini/errorCategory.js";
 import { GeminiRequestError } from "../integrations/gemini/totalityReasoner.js";
 import { categorizeOpenAIRequestError } from "../integrations/openai/errorCategory.js";
@@ -57,7 +59,9 @@ export function mapTotalityRouteError(error: unknown): never {
       ? categorizeOpenAIRequestError(error)
       : error instanceof GeminiRequestError
         ? categorizeGeminiRequestError(error)
-        : null;
+        : error instanceof AnthropicRequestError
+          ? categorizeAnthropicRequestError(error)
+          : null;
   if (reasonerErrorCategory !== null) {
     if (reasonerErrorCategory === "quota_exhausted") {
       throw new JarvisProblem(

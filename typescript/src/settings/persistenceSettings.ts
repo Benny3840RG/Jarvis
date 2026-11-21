@@ -21,13 +21,13 @@ export const V4_CONVEX_EXPORT_COPY =
   "Provider must be JSON. Active provider is Convex — export refused. Switch to JSON only if you intend a JSON-sourced archive.";
 
 export const PROVIDER_MISCONFIGURED_BANNER =
-  "Provider misconfigured. Jarvis will not start durable commands until this is fixed.";
+  "Provider misconfigured. NOLAN will not start durable commands until this is fixed.";
 
 export const NO_SILENT_FALLBACK =
-  "Provider selection is explicit. Jarvis will not silently fall back from Convex to JSON.";
+  "Provider selection is explicit. NOLAN will not silently fall back from Convex to JSON.";
 
 export const ARCHIVE_SECRET_WARNING =
-  "Archives must not contain service, approval, or delivery tokens. Jarvis does not write those secrets into the backup file.";
+  "Archives must not contain service, approval, or delivery tokens. NOLAN does not write those secrets into the backup file.";
 
 export const PROVIDER_HELPER = "Change PERSISTENCE_PROVIDER in `.env.local`, then restart.";
 
@@ -198,7 +198,7 @@ export function redactPersistenceText(message: string, secrets: Array<string | u
 export function presentFailureDetail(message: string, secrets: Array<string | undefined>): string {
   const redacted = redactPersistenceText(message, secrets);
   if (FALLBACK_CTA.test(redacted)) {
-    return "The configured persistence provider could not be reached or validated. Jarvis will not silently fall back to another provider.";
+    return "The configured persistence provider could not be reached or validated. NOLAN will not silently fall back to another provider.";
   }
   return redacted;
 }
@@ -240,7 +240,7 @@ export function reconcileProvider(
   if (selected !== running) {
     return {
       kind: "misconfigured",
-      detail: `${PROVIDER_MISCONFIGURED_BANNER} PERSISTENCE_PROVIDER selects "${selected}" but this process is running "${running}". Jarvis will not switch providers.`,
+      detail: `${PROVIDER_MISCONFIGURED_BANNER} PERSISTENCE_PROVIDER selects "${selected}" but this process is running "${running}". NOLAN will not switch providers.`,
     };
   }
   return { kind: "active", provider: selected };
@@ -289,7 +289,8 @@ export function classifyBackupFailure(message: string): string {
   if (/interrupted restore of this archive/i.test(message)) return "destination-interrupted-same";
   if (/not written by a restore/i.test(message)) return "destination-not-restore";
   if (/symbolic link/i.test(message)) return "destination-symlink";
-  if (/overlaps the live Jarvis data directory/i.test(message)) return "destination-overlaps-live";
+  if (/overlaps the live (?:Jarvis|NOLAN) data directory/i.test(message))
+    return "destination-overlaps-live";
   if (/--allow-partial/i.test(message)) return "allow-partial-required";
   if (/selects "convex"/i.test(message)) return "v4-export-refused";
   return "backup-failed";
@@ -297,7 +298,7 @@ export function classifyBackupFailure(message: string): string {
 
 export function explainBackupFailure(message: string): string {
   if (/not empty/i.test(message)) {
-    return `${message} Export first or use an empty target. Jarvis will not merge.`;
+    return `${message} Export first or use an empty target. NOLAN will not merge.`;
   }
   return message;
 }
@@ -338,7 +339,7 @@ export function gatePersistenceAction(
         ok: false,
         code: "provider-unavailable",
         detail:
-          "Classic export needs the configured provider. Jarvis will not silently fall back to another provider.",
+          "Classic export needs the configured provider. NOLAN will not silently fall back to another provider.",
       };
     }
     return { ok: true };
@@ -360,7 +361,7 @@ export function gatePersistenceAction(
         ok: false,
         code: "empty-target-required",
         detail:
-          "Restore classic is empty-target only and requires --confirm-empty-target. Confirm that IDs and timestamps are recreated, and type restore. Jarvis will not merge.",
+          "Restore classic is empty-target only and requires --confirm-empty-target. Confirm that IDs and timestamps are recreated, and type restore. NOLAN will not merge.",
       };
     }
     if (blocked) {
@@ -368,7 +369,7 @@ export function gatePersistenceAction(
         ok: false,
         code: "provider-unavailable",
         detail:
-          "Classic restore needs the configured provider. Jarvis will not silently fall back to another provider.",
+          "Classic restore needs the configured provider. NOLAN will not silently fall back to another provider.",
       };
     }
     return { ok: true };
@@ -388,7 +389,7 @@ export function gatePersistenceAction(
         ok: false,
         code: "provider-unavailable",
         detail:
-          "Archive v4 export needs the JSON provider files. Jarvis will not silently fall back to another provider.",
+          "Archive v4 export needs the JSON provider files. NOLAN will not silently fall back to another provider.",
       };
     }
     return { ok: true };

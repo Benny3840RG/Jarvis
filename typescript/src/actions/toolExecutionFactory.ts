@@ -25,6 +25,9 @@ import type { QuoteRepository } from "../quotes/quoteRepository.js";
 import type { ControlledReminderStore } from "../reminders/controlledReminder.js";
 import type { ControlledTaskStore } from "../tasks/controlledTask.js";
 import { createNoteToolDefinition } from "./createNoteTool.js";
+import { createErrandToolDefinitions } from "./errandTools.js";
+import type { ErrandStore } from "../errands/errand.js";
+import { JsonErrandStore } from "../errands/jsonErrandStore.js";
 import {
   createGitHubDevelopmentClientFromEnv,
   createGitHubMergeToolDefinition,
@@ -36,9 +39,19 @@ import {
   createGoogleHomeAnnouncementProviderFromEnv,
   type GoogleHomeAnnouncementProvider,
 } from "../integrations/googleHome/googleHomeAnnouncementProvider.js";
+import { createDeviceToolDefinitionsFromEnv } from "../devices/googleCastDeviceAdapter.js";
 import { createQuoteSendToolDefinition } from "./quoteSendTool.js";
-import { createTaskReminderToolDefinitions } from "./taskReminderTools.js";
-import { ToolExecutionService, type ToolExecutionDefinition } from "./toolExecution.js";
+import {
+  createTaskReminderToolDefinitions,
+  reminderRescheduleEnabledFromEnv,
+} from "./taskReminderTools.js";
+import {
+  EXECUTION_LEASE_RENEW_MS,
+  ToolExecutionService,
+  type ToolExecutionDefinition,
+} from "./toolExecution.js";
+import { jarvisDataFile } from "../persistence/jarvisDataPaths.js";
+import { FileHaltStore, HALT_FILE_BASENAME, haltGateFromStore } from "../security/haltControl.js";
 
 export function createToolExecutionDefinitions(
   noteStore: NoteStore,
@@ -50,6 +63,12 @@ export function createToolExecutionDefinitions(
   quotePdfArtifactRepository?: QuotePdfArtifactRepository,
   githubDevelopmentClient?: GitHubDevelopmentClient,
   googleHomeAnnouncementProvider?: GoogleHomeAnnouncementProvider,
+  errandStore?: ErrandStore,
+  options: {
+    reminderReschedule?: boolean;
+    /** Governed device-registry tools (#836); empty unless bindings are configured. */
+    deviceTools?: readonly ToolExecutionDefinition[];
+  } = {},
 ): ToolExecutionDefinition[] {
   if ((taskStore === undefined) !== (reminderStore === undefined)) {
     throw new Error("Task and reminder tool stores must be registered together.");
@@ -60,7 +79,7 @@ export function createToolExecutionDefinitions(
     ...createSecurityEducationTools(),
     ...(taskStore === undefined || reminderStore === undefined
       ? []
-      : createTaskReminderToolDefinitions(taskStore, reminderStore)),
+      : createTaskReminderToolDefinitions(taskStore, reminderStore, options)),
     ...(quoteRepository === undefined ? [] : [createQuoteFinalizeToolDefinition(quoteRepository)]),
     ...(quoteRepository === undefined ||
     quoteEmailProvider === undefined ||
@@ -81,6 +100,8 @@ export function createToolExecutionDefinitions(
     ...(googleHomeAnnouncementProvider === undefined
       ? []
       : [createHomeAnnouncementToolDefinition(googleHomeAnnouncementProvider)]),
+    ...(errandStore === undefined ? [] : createErrandToolDefinitions(errandStore)),
+    ...(options.deviceTools ?? []),
   ];
 }
 
@@ -90,7 +111,12 @@ export function createToolExecutionDefinitions(
  * when Convex persistence and all four quote-delivery dependencies are
  * available. Maintained process entrypoints inject the provider from the same
  * Outlook runtime bundle used by reconciliation so token state is not
- * duplicated.
+ * duplicated. `reminders:reschedule` (AM-017, planned) is registered only when
+ * JARVIS_REMINDER_RESCHEDULE_ENABLED is "true". `errands:create` writes the same local JSON errand file the HTTP
+ * errand routes use (its file lock is cross-process). `device:announce` (#836) is
+ * registered only when JARVIS_DEVICE_BINDINGS_JSON is set; invalid bindings refuse startup.
+ * Every execution first checks the `npm run sec -- halt` record (#839); an unreadable
+ * record counts as halted.
  */
 export function createToolExecutionServiceFromEnv(
   quoteEmailProvider: QuoteEmailProvider | null = createQuoteEmailProviderFromEnv(),
@@ -109,10 +135,19 @@ export function createToolExecutionServiceFromEnv(
       createQuotePdfArtifactRepositoryFromEnv() ?? undefined,
       githubDevelopmentClient ?? undefined,
       googleHomeAnnouncementProvider ?? undefined,
+      new JsonErrandStore(),
+      {
+        reminderReschedule: reminderRescheduleEnabledFromEnv(),
+        deviceTools: createDeviceToolDefinitionsFromEnv(
+          googleHomeAnnouncementProvider ?? undefined,
+        ),
+      },
     ),
     new ConvexToolExecutionReceiptStore(),
     new ConvexExternalReconciliationStore(),
     new ConvexSingleUseConsumptionClaimStore(),
     new ConvexExecutionEligibilityStore(),
+    EXECUTION_LEASE_RENEW_MS,
+    haltGateFromStore(new FileHaltStore(jarvisDataFile(HALT_FILE_BASENAME))),
   );
 }

@@ -570,6 +570,46 @@
         }
       }
     },
+    "/api/v1/situation": {
+      "get": {
+        "operationId": "getSituationSnapshot",
+        "summary": "Read NOLAN's situation snapshot",
+        "description": "Read-only snapshot of what is going on now, composed from existing read models: local time, system health, NOLAN brain configuration, background reconciliation, open tasks, reminders due or coming up, today's jobs and pending approval counts. Every field carries source, observedAt and freshness (live, cached, stale or unknown). Unobserved fields carry no value and a reason; calendar, presence and devices are unknown until a source is commissioned and are never inferred. Cached data is never reported as live. It stages, approves and executes nothing and actuates no device.",
+        "tags": ["System"],
+        "x-mcp-tool": {
+          "exposed": true,
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The current situation snapshot.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SituationSnapshot"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
     "/api/v1/settings/general": {
       "get": {
         "operationId": "getOperatorGeneralSettings",
@@ -700,6 +740,39 @@
         "responses": {
           "200": {
             "description": "Loopback Limits settings HTML. Provider-quota cards are UNKNOWN. Nothing is written or enforced.",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/settings/persistence": {
+      "get": {
+        "operationId": "getPersistenceSettingsPage",
+        "summary": "Open the loopback persistence settings page",
+        "description": "Serves the local operator Persistence page on a loopback bind only. This route is public (no Bearer token) so the Danger zone link to Persistence Backup (/settings/persistence#backup) resolves. It is a read-only projection of the backup CLI: the active provider and the exact npm run backup commands. The page has no script, runs nothing, does not store a Bearer token, and does not switch providers or offer a JSON fallback. Archive v4 stays labeled Partial / JSON-only. Running an action stays on POST /api/v1/settings/persistence/actions. Non-loopback binds do not serve the page.",
+        "tags": ["System"],
+        "security": [],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Loopback Persistence settings HTML. Read only; nothing is run.",
             "content": {
               "text/html": {
                 "schema": {
@@ -1300,6 +1373,9 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
           "422": {
             "$ref": "#/components/responses/UnprocessableEntity"
           },
@@ -1348,6 +1424,9 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
@@ -1401,6 +1480,9 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
@@ -1636,6 +1718,9 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
           "422": {
             "$ref": "#/components/responses/UnprocessableEntity"
           },
@@ -1684,6 +1769,9 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
@@ -7495,6 +7583,39 @@
         }
       }
     },
+    "/settings/approvals": {
+      "get": {
+        "operationId": "getApprovalsPage",
+        "summary": "Open the loopback approvals page",
+        "description": "Serves the Approvals page on a loopback bind only. The page is public (no Bearer token) and contains no token and no action data. It lists staged ToolActions through GET /api/v1/projects/{projectId}/tool-actions and acts only through the existing approve, reject and execute routes, sending the service token and, to approve, the approval token, which the operator types into fields that are never written to browser storage. It adds no authority. Non-loopback binds do not serve the page.",
+        "tags": ["System"],
+        "security": [],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Loopback approvals HTML shell.",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/settings/owner-decisions": {
       "get": {
         "operationId": "getOwnerDecisionsPage",
@@ -8196,7 +8317,7 @@
             "minLength": 1,
             "maxLength": 256,
             "pattern": "^[^\\s]+$",
-            "description": "Project a safe write would be staged against on the existing ToolAction path. Required together with expectedRevision. When both are absent the target is uncommissioned and nothing is staged."
+            "description": "Project a safe write would be staged against on the existing ToolAction path. Required together with expectedRevision. When both are absent the server stages against the owner's dedicated voice project (JARVIS_VOICE_PROJECT_KEY, default nolan-voice) at its current revision; if that project is not commissioned, nothing is staged."
           },
           "expectedRevision": {
             "type": "integer",
@@ -8205,7 +8326,7 @@
           },
           "capture": {
             "type": "object",
-            "description": "Bounded fields for a safe write. Whole-utterance matching stays exact; these fields are not parsed out of the transcript.",
+            "description": "Bounded fields for a safe write supplied by the client (for example the HUD capture form). Exact whole-utterance commands never parse fields from speech; the separate dictation grammar may (see VoiceWriteCapture), and a dictated capture the owner confirmed always takes precedence over this field.",
             "additionalProperties": false,
             "properties": {
               "title": {
@@ -8235,9 +8356,54 @@
           }
         }
       },
+      "VoiceWriteCapture": {
+        "type": "object",
+        "description": "Safe-write fields captured from speech by the dictation grammar, for example “Nolan, add a work task: order bar oil”. A dictated errand (“Nolan, add an errand: silicone for the deck”) carries only its title. They are read back to the owner and staged only after an explicit spoken confirmation. Staging never approves or executes.",
+        "required": ["title"],
+        "additionalProperties": false,
+        "dependentRequired": {
+          "dueAt": ["dueRaw", "dueTimezone"],
+          "dueTimezone": ["dueAt"]
+        },
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "Dictated title for tasks/create, reminders/create or errands/create; for a spoken completion, the resolved item's full title."
+          },
+          "category": {
+            "type": "string",
+            "enum": ["personal", "work", "builds", "money", "life"],
+            "description": "Task category. Present for a dictated task; personal when no category was spoken."
+          },
+          "dueRaw": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500,
+            "description": "Dictated reminders and spoken reminder reschedules only: the spoken due phrase exactly as heard, for example “tomorrow at 7 am”. Present without dueAt when the phrase names no time or an hour without am/pm; no time is guessed."
+          },
+          "dueAt": {
+            "type": "number",
+            "description": "Dictated reminders and spoken reminder reschedules only: the resolved due instant in milliseconds since the Unix epoch, read back to the owner before confirmation. Always paired with dueTimezone and dueRaw."
+          },
+          "dueTimezone": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "description": "Dictated reminders and spoken reminder reschedules only: the owner timezone dueAt was resolved in (JARVIS_TIMEZONE)."
+          },
+          "targetId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "Spoken completions and reminder cancellations only (client.complete-task, client.complete-errand, client.cancel-reminder, client.remove-errand, client.reschedule-reminder): the id of the one open task, errand or reminder the server resolved from the spoken reference. title is then that item's full stored title. Never accepted in a request body."
+          }
+        }
+      },
       "VoicePendingConfirmation": {
         "type": "object",
-        "description": "A critical command awaiting a spoken confirmation.",
+        "description": "A command awaiting a spoken confirmation: a critical command, an inferred command, or a dictated safe write whose captured fields are read back first.",
         "required": ["command", "issuedAt", "expiresAt"],
         "additionalProperties": false,
         "properties": {
@@ -8251,8 +8417,427 @@
           "expiresAt": {
             "type": "integer",
             "description": "Epoch milliseconds the confirmation lapses."
+          },
+          "capture": {
+            "$ref": "#/components/schemas/VoiceWriteCapture"
           }
-        }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "command": {
+                  "properties": {
+                    "id": {
+                      "enum": [
+                        "client.capture-task",
+                        "client.follow-up-reminder",
+                        "client.capture-errand"
+                      ]
+                    }
+                  },
+                  "required": ["id"]
+                },
+                "capture": {}
+              },
+              "required": ["command", "capture"]
+            },
+            "then": {
+              "properties": {
+                "capture": {
+                  "properties": { "targetId": {} },
+                  "not": { "properties": { "targetId": {} }, "required": ["targetId"] }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "command": {
+                  "properties": { "id": { "const": "client.complete-task" } },
+                  "required": ["id"]
+                },
+                "capture": {}
+              },
+              "required": ["command", "capture"]
+            },
+            "then": {
+              "required": ["command"],
+              "properties": {
+                "command": {
+                  "properties": {
+                    "kind": { "const": "propose" },
+                    "proposes": {
+                      "properties": {
+                        "tool": { "const": "tasks" },
+                        "operation": { "const": "complete" }
+                      },
+                      "required": ["tool", "operation"]
+                    }
+                  },
+                  "required": ["kind", "proposes"]
+                },
+                "capture": {
+                  "properties": {
+                    "title": {},
+                    "targetId": {},
+                    "category": {},
+                    "dueRaw": {},
+                    "dueAt": {},
+                    "dueTimezone": {}
+                  },
+                  "required": ["title", "targetId"],
+                  "not": {
+                    "anyOf": [
+                      { "properties": { "category": {} }, "required": ["category"] },
+                      { "properties": { "dueRaw": {} }, "required": ["dueRaw"] },
+                      { "properties": { "dueAt": {} }, "required": ["dueAt"] },
+                      { "properties": { "dueTimezone": {} }, "required": ["dueTimezone"] }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "command": {
+                  "properties": { "id": { "const": "client.complete-errand" } },
+                  "required": ["id"]
+                },
+                "capture": {}
+              },
+              "required": ["command", "capture"]
+            },
+            "then": {
+              "required": ["command"],
+              "properties": {
+                "command": {
+                  "properties": {
+                    "kind": { "const": "propose" },
+                    "proposes": {
+                      "properties": {
+                        "tool": { "const": "errands" },
+                        "operation": { "const": "complete" }
+                      },
+                      "required": ["tool", "operation"]
+                    }
+                  },
+                  "required": ["kind", "proposes"]
+                },
+                "capture": {
+                  "properties": {
+                    "title": {},
+                    "targetId": {},
+                    "category": {},
+                    "dueRaw": {},
+                    "dueAt": {},
+                    "dueTimezone": {}
+                  },
+                  "required": ["title", "targetId"],
+                  "not": {
+                    "anyOf": [
+                      { "properties": { "category": {} }, "required": ["category"] },
+                      { "properties": { "dueRaw": {} }, "required": ["dueRaw"] },
+                      { "properties": { "dueAt": {} }, "required": ["dueAt"] },
+                      { "properties": { "dueTimezone": {} }, "required": ["dueTimezone"] }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "command": {
+                  "properties": { "id": { "const": "client.reschedule-reminder" } },
+                  "required": ["id"]
+                },
+                "capture": {}
+              },
+              "required": ["command", "capture"]
+            },
+            "then": {
+              "required": ["command"],
+              "properties": {
+                "command": {
+                  "properties": {
+                    "kind": { "const": "propose" },
+                    "proposes": {
+                      "properties": {
+                        "tool": { "const": "reminders" },
+                        "operation": { "const": "reschedule" }
+                      },
+                      "required": ["tool", "operation"]
+                    }
+                  },
+                  "required": ["kind", "proposes"]
+                },
+                "capture": {
+                  "properties": {
+                    "title": {},
+                    "targetId": {},
+                    "category": {},
+                    "dueRaw": {},
+                    "dueAt": {},
+                    "dueTimezone": {}
+                  },
+                  "required": ["title", "targetId", "dueRaw"],
+                  "not": { "properties": { "category": {} }, "required": ["category"] }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "command": {
+                  "properties": { "id": { "const": "client.remove-errand" } },
+                  "required": ["id"]
+                },
+                "capture": {}
+              },
+              "required": ["command", "capture"]
+            },
+            "then": {
+              "required": ["command"],
+              "properties": {
+                "command": {
+                  "properties": {
+                    "kind": { "const": "propose" },
+                    "proposes": {
+                      "properties": {
+                        "tool": { "const": "errands" },
+                        "operation": { "const": "remove" }
+                      },
+                      "required": ["tool", "operation"]
+                    }
+                  },
+                  "required": ["kind", "proposes"]
+                },
+                "capture": {
+                  "properties": {
+                    "title": {},
+                    "targetId": {},
+                    "category": {},
+                    "dueRaw": {},
+                    "dueAt": {},
+                    "dueTimezone": {}
+                  },
+                  "required": ["title", "targetId"],
+                  "not": {
+                    "anyOf": [
+                      { "properties": { "category": {} }, "required": ["category"] },
+                      { "properties": { "dueRaw": {} }, "required": ["dueRaw"] },
+                      { "properties": { "dueAt": {} }, "required": ["dueAt"] },
+                      { "properties": { "dueTimezone": {} }, "required": ["dueTimezone"] }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "command": {
+                  "properties": { "id": { "const": "client.cancel-reminder" } },
+                  "required": ["id"]
+                },
+                "capture": {}
+              },
+              "required": ["command", "capture"]
+            },
+            "then": {
+              "required": ["command"],
+              "properties": {
+                "command": {
+                  "properties": {
+                    "kind": { "const": "propose" },
+                    "proposes": {
+                      "properties": {
+                        "tool": { "const": "reminders" },
+                        "operation": { "const": "cancel" }
+                      },
+                      "required": ["tool", "operation"]
+                    }
+                  },
+                  "required": ["kind", "proposes"]
+                },
+                "capture": {
+                  "properties": {
+                    "title": {},
+                    "targetId": {},
+                    "category": {},
+                    "dueRaw": {},
+                    "dueAt": {},
+                    "dueTimezone": {}
+                  },
+                  "required": ["title", "targetId"],
+                  "not": {
+                    "anyOf": [
+                      { "properties": { "category": {} }, "required": ["category"] },
+                      { "properties": { "dueRaw": {} }, "required": ["dueRaw"] },
+                      { "properties": { "dueAt": {} }, "required": ["dueAt"] },
+                      { "properties": { "dueTimezone": {} }, "required": ["dueTimezone"] }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": { "properties": { "capture": {} }, "required": ["capture"] },
+            "then": {
+              "required": ["command"],
+              "properties": {
+                "command": {
+                  "properties": {
+                    "id": {
+                      "enum": [
+                        "client.capture-task",
+                        "client.follow-up-reminder",
+                        "client.capture-errand",
+                        "client.complete-task",
+                        "client.complete-errand",
+                        "client.cancel-reminder",
+                        "client.remove-errand",
+                        "client.reschedule-reminder"
+                      ]
+                    },
+                    "profile": { "const": "client" }
+                  },
+                  "required": ["id", "profile"]
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "command": {
+                  "properties": { "id": { "const": "client.capture-task" } },
+                  "required": ["id"]
+                },
+                "capture": {}
+              },
+              "required": ["command", "capture"]
+            },
+            "then": {
+              "required": ["command"],
+              "properties": {
+                "command": {
+                  "properties": {
+                    "kind": { "const": "propose" },
+                    "proposes": {
+                      "properties": {
+                        "tool": { "const": "tasks" },
+                        "operation": { "const": "create" }
+                      },
+                      "required": ["tool", "operation"]
+                    }
+                  },
+                  "required": ["kind", "proposes"]
+                },
+                "capture": {
+                  "properties": { "title": {}, "category": {} },
+                  "required": ["title", "category"],
+                  "not": {
+                    "anyOf": [
+                      { "properties": { "dueRaw": {} }, "required": ["dueRaw"] },
+                      { "properties": { "dueAt": {} }, "required": ["dueAt"] },
+                      { "properties": { "dueTimezone": {} }, "required": ["dueTimezone"] }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "command": {
+                  "properties": { "id": { "const": "client.follow-up-reminder" } },
+                  "required": ["id"]
+                },
+                "capture": {}
+              },
+              "required": ["command", "capture"]
+            },
+            "then": {
+              "required": ["command"],
+              "properties": {
+                "command": {
+                  "properties": {
+                    "kind": { "const": "propose" },
+                    "proposes": {
+                      "properties": {
+                        "tool": { "const": "reminders" },
+                        "operation": { "const": "create" }
+                      },
+                      "required": ["tool", "operation"]
+                    }
+                  },
+                  "required": ["kind", "proposes"]
+                },
+                "capture": {
+                  "properties": { "title": {}, "category": {} },
+                  "not": { "properties": { "category": {} }, "required": ["category"] }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "command": {
+                  "properties": { "id": { "const": "client.capture-errand" } },
+                  "required": ["id"]
+                },
+                "capture": {}
+              },
+              "required": ["command", "capture"]
+            },
+            "then": {
+              "required": ["command"],
+              "properties": {
+                "command": {
+                  "properties": {
+                    "kind": { "const": "propose" },
+                    "proposes": {
+                      "properties": {
+                        "tool": { "const": "errands" },
+                        "operation": { "const": "create" }
+                      },
+                      "required": ["tool", "operation"]
+                    }
+                  },
+                  "required": ["kind", "proposes"]
+                },
+                "capture": {
+                  "properties": {
+                    "title": {},
+                    "category": {},
+                    "dueRaw": {},
+                    "dueAt": {},
+                    "dueTimezone": {}
+                  },
+                  "not": {
+                    "anyOf": [
+                      { "properties": { "category": {} }, "required": ["category"] },
+                      { "properties": { "dueRaw": {} }, "required": ["dueRaw"] },
+                      { "properties": { "dueAt": {} }, "required": ["dueAt"] },
+                      { "properties": { "dueTimezone": {} }, "required": ["dueTimezone"] }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        ]
       },
       "VoiceDispatch": {
         "type": "object",
@@ -8267,6 +8852,8 @@
               "ignored-interim",
               "empty",
               "unrecognized",
+              "conversation",
+              "conversation-unavailable",
               "ambiguous",
               "answered",
               "query-unavailable",
@@ -8275,6 +8862,7 @@
               "confirmation-expired",
               "cancelled",
               "proposed",
+              "completion-unresolved",
               "actuation-unavailable",
               "actuated",
               "actuation-failed"
@@ -8300,7 +8888,7 @@
           },
           "reason": {
             "type": "string",
-            "description": "Why a query or actuation was unavailable, an actuation failed, or a recognised safe write was not staged. For a query this names the unavailable source and is never a guessed count. A safe-write reason means nothing was staged."
+            "description": "Why a query or actuation was unavailable, an actuation failed, a spoken completion or reminder cancellation did not name exactly one open item voice may act on (completion-unresolved; nothing was armed), or a recognised safe write was not staged. For a query this names the unavailable source and is never a guessed count. A safe-write reason means nothing was staged."
           },
           "toolActionId": {
             "type": "string",
@@ -8311,6 +8899,27 @@
             "type": "string",
             "minLength": 1,
             "description": "Spoken read-only answer derived from an existing Jarvis read model. Present only when decision is answered. Empty healthy data is stated as none or zero. This field is never a guess for a missing or failed source."
+          },
+          "reply": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000,
+            "description": "Spoken conversational reply. Present only for conversation. Bounded by JARVIS_VOICE_CONVERSATION_MAX_REPLY_CHARS (default 600, at most 2000)."
+          },
+          "conversationReason": {
+            "type": "string",
+            "enum": [
+              "provider-error",
+              "refused",
+              "rate-limited",
+              "too-long",
+              "reply-too-long",
+              "unavailable",
+              "timeout",
+              "tool-limit",
+              "ungrounded"
+            ],
+            "description": "Fixed public failure code for conversation-unavailable; never provider text."
           },
           "expiresAt": {
             "type": "integer",
@@ -8326,9 +8935,332 @@
             "minimum": 0,
             "maximum": 1,
             "description": "Interpreter confidence (0..1) for an inferred awaiting-confirmation decision. Advisory only; it never substitutes for the spoken confirmation."
+          },
+          "capture": {
+            "$ref": "#/components/schemas/VoiceWriteCapture",
+            "description": "Dictated safe-write fields. Present on awaiting-confirmation for a dictation (the read-back) and on the proposed decision that follows its confirmation. A request-body capture never replaces it."
           }
         },
         "allOf": [
+          {
+            "if": {
+              "properties": { "decision": { "const": "completion-unresolved" } },
+              "required": ["decision"]
+            },
+            "then": {
+              "required": ["command", "reason"],
+              "properties": {
+                "command": {
+                  "properties": {
+                    "id": {
+                      "enum": [
+                        "client.complete-task",
+                        "client.complete-errand",
+                        "client.cancel-reminder",
+                        "client.remove-errand",
+                        "client.reschedule-reminder",
+                        "client.complete-item"
+                      ]
+                    },
+                    "profile": { "const": "client" }
+                  },
+                  "required": ["id", "profile"]
+                },
+                "reason": {}
+              },
+              "not": { "properties": { "capture": {} }, "required": ["capture"] }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "command": {
+                  "properties": {
+                    "id": {
+                      "enum": [
+                        "client.capture-task",
+                        "client.follow-up-reminder",
+                        "client.capture-errand"
+                      ]
+                    }
+                  },
+                  "required": ["id"]
+                },
+                "capture": {}
+              },
+              "required": ["command", "capture"]
+            },
+            "then": {
+              "properties": {
+                "capture": {
+                  "properties": { "targetId": {} },
+                  "not": { "properties": { "targetId": {} }, "required": ["targetId"] }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "command": {
+                  "properties": { "id": { "const": "client.complete-task" } },
+                  "required": ["id"]
+                },
+                "capture": {}
+              },
+              "required": ["command", "capture"]
+            },
+            "then": {
+              "required": ["command"],
+              "properties": {
+                "command": {
+                  "properties": {
+                    "kind": { "const": "propose" },
+                    "proposes": {
+                      "properties": {
+                        "tool": { "const": "tasks" },
+                        "operation": { "const": "complete" }
+                      },
+                      "required": ["tool", "operation"]
+                    }
+                  },
+                  "required": ["kind", "proposes"]
+                },
+                "capture": {
+                  "properties": {
+                    "title": {},
+                    "targetId": {},
+                    "category": {},
+                    "dueRaw": {},
+                    "dueAt": {},
+                    "dueTimezone": {}
+                  },
+                  "required": ["title", "targetId"],
+                  "not": {
+                    "anyOf": [
+                      { "properties": { "category": {} }, "required": ["category"] },
+                      { "properties": { "dueRaw": {} }, "required": ["dueRaw"] },
+                      { "properties": { "dueAt": {} }, "required": ["dueAt"] },
+                      { "properties": { "dueTimezone": {} }, "required": ["dueTimezone"] }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "command": {
+                  "properties": { "id": { "const": "client.complete-errand" } },
+                  "required": ["id"]
+                },
+                "capture": {}
+              },
+              "required": ["command", "capture"]
+            },
+            "then": {
+              "required": ["command"],
+              "properties": {
+                "command": {
+                  "properties": {
+                    "kind": { "const": "propose" },
+                    "proposes": {
+                      "properties": {
+                        "tool": { "const": "errands" },
+                        "operation": { "const": "complete" }
+                      },
+                      "required": ["tool", "operation"]
+                    }
+                  },
+                  "required": ["kind", "proposes"]
+                },
+                "capture": {
+                  "properties": {
+                    "title": {},
+                    "targetId": {},
+                    "category": {},
+                    "dueRaw": {},
+                    "dueAt": {},
+                    "dueTimezone": {}
+                  },
+                  "required": ["title", "targetId"],
+                  "not": {
+                    "anyOf": [
+                      { "properties": { "category": {} }, "required": ["category"] },
+                      { "properties": { "dueRaw": {} }, "required": ["dueRaw"] },
+                      { "properties": { "dueAt": {} }, "required": ["dueAt"] },
+                      { "properties": { "dueTimezone": {} }, "required": ["dueTimezone"] }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "command": {
+                  "properties": { "id": { "const": "client.reschedule-reminder" } },
+                  "required": ["id"]
+                },
+                "capture": {}
+              },
+              "required": ["command", "capture"]
+            },
+            "then": {
+              "required": ["command"],
+              "properties": {
+                "command": {
+                  "properties": {
+                    "kind": { "const": "propose" },
+                    "proposes": {
+                      "properties": {
+                        "tool": { "const": "reminders" },
+                        "operation": { "const": "reschedule" }
+                      },
+                      "required": ["tool", "operation"]
+                    }
+                  },
+                  "required": ["kind", "proposes"]
+                },
+                "capture": {
+                  "properties": {
+                    "title": {},
+                    "targetId": {},
+                    "category": {},
+                    "dueRaw": {},
+                    "dueAt": {},
+                    "dueTimezone": {}
+                  },
+                  "required": ["title", "targetId", "dueRaw"],
+                  "not": { "properties": { "category": {} }, "required": ["category"] }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "command": {
+                  "properties": { "id": { "const": "client.remove-errand" } },
+                  "required": ["id"]
+                },
+                "capture": {}
+              },
+              "required": ["command", "capture"]
+            },
+            "then": {
+              "required": ["command"],
+              "properties": {
+                "command": {
+                  "properties": {
+                    "kind": { "const": "propose" },
+                    "proposes": {
+                      "properties": {
+                        "tool": { "const": "errands" },
+                        "operation": { "const": "remove" }
+                      },
+                      "required": ["tool", "operation"]
+                    }
+                  },
+                  "required": ["kind", "proposes"]
+                },
+                "capture": {
+                  "properties": {
+                    "title": {},
+                    "targetId": {},
+                    "category": {},
+                    "dueRaw": {},
+                    "dueAt": {},
+                    "dueTimezone": {}
+                  },
+                  "required": ["title", "targetId"],
+                  "not": {
+                    "anyOf": [
+                      { "properties": { "category": {} }, "required": ["category"] },
+                      { "properties": { "dueRaw": {} }, "required": ["dueRaw"] },
+                      { "properties": { "dueAt": {} }, "required": ["dueAt"] },
+                      { "properties": { "dueTimezone": {} }, "required": ["dueTimezone"] }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "command": {
+                  "properties": { "id": { "const": "client.cancel-reminder" } },
+                  "required": ["id"]
+                },
+                "capture": {}
+              },
+              "required": ["command", "capture"]
+            },
+            "then": {
+              "required": ["command"],
+              "properties": {
+                "command": {
+                  "properties": {
+                    "kind": { "const": "propose" },
+                    "proposes": {
+                      "properties": {
+                        "tool": { "const": "reminders" },
+                        "operation": { "const": "cancel" }
+                      },
+                      "required": ["tool", "operation"]
+                    }
+                  },
+                  "required": ["kind", "proposes"]
+                },
+                "capture": {
+                  "properties": {
+                    "title": {},
+                    "targetId": {},
+                    "category": {},
+                    "dueRaw": {},
+                    "dueAt": {},
+                    "dueTimezone": {}
+                  },
+                  "required": ["title", "targetId"],
+                  "not": {
+                    "anyOf": [
+                      { "properties": { "category": {} }, "required": ["category"] },
+                      { "properties": { "dueRaw": {} }, "required": ["dueRaw"] },
+                      { "properties": { "dueAt": {} }, "required": ["dueAt"] },
+                      { "properties": { "dueTimezone": {} }, "required": ["dueTimezone"] }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": { "decision": { "const": "conversation" } },
+              "required": ["decision"]
+            },
+            "then": { "required": ["reply"], "properties": { "reply": {} } },
+            "else": { "not": { "required": ["reply"], "properties": { "reply": {} } } }
+          },
+          {
+            "if": {
+              "properties": { "decision": { "const": "conversation-unavailable" } },
+              "required": ["decision"]
+            },
+            "then": {
+              "required": ["conversationReason"],
+              "properties": { "conversationReason": {} }
+            },
+            "else": {
+              "not": {
+                "required": ["conversationReason"],
+                "properties": { "conversationReason": {} }
+              }
+            }
+          },
           {
             "if": { "properties": { "inferred": {} }, "required": ["inferred"] },
             "then": {
@@ -8336,6 +9268,161 @@
               "properties": { "decision": { "const": "awaiting-confirmation" }, "confidence": {} }
             },
             "else": { "not": { "properties": { "confidence": {} }, "required": ["confidence"] } }
+          },
+          {
+            "if": { "properties": { "capture": {} }, "required": ["capture"] },
+            "then": {
+              "required": ["command"],
+              "properties": {
+                "command": {
+                  "properties": {
+                    "id": {
+                      "enum": [
+                        "client.capture-task",
+                        "client.follow-up-reminder",
+                        "client.capture-errand",
+                        "client.complete-task",
+                        "client.complete-errand",
+                        "client.cancel-reminder",
+                        "client.remove-errand",
+                        "client.reschedule-reminder"
+                      ]
+                    },
+                    "profile": { "const": "client" }
+                  },
+                  "required": ["id", "profile"]
+                },
+                "decision": { "enum": ["awaiting-confirmation", "proposed"] }
+              },
+              "not": {
+                "anyOf": [
+                  { "properties": { "inferred": {} }, "required": ["inferred"] },
+                  { "properties": { "confidence": {} }, "required": ["confidence"] }
+                ]
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "command": {
+                  "properties": { "id": { "const": "client.capture-task" } },
+                  "required": ["id"]
+                },
+                "capture": {}
+              },
+              "required": ["command", "capture"]
+            },
+            "then": {
+              "required": ["command"],
+              "properties": {
+                "command": {
+                  "properties": {
+                    "kind": { "const": "propose" },
+                    "proposes": {
+                      "properties": {
+                        "tool": { "const": "tasks" },
+                        "operation": { "const": "create" }
+                      },
+                      "required": ["tool", "operation"]
+                    }
+                  },
+                  "required": ["kind", "proposes"]
+                },
+                "capture": {
+                  "properties": { "title": {}, "category": {} },
+                  "required": ["title", "category"],
+                  "not": {
+                    "anyOf": [
+                      { "properties": { "dueRaw": {} }, "required": ["dueRaw"] },
+                      { "properties": { "dueAt": {} }, "required": ["dueAt"] },
+                      { "properties": { "dueTimezone": {} }, "required": ["dueTimezone"] }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "command": {
+                  "properties": { "id": { "const": "client.follow-up-reminder" } },
+                  "required": ["id"]
+                },
+                "capture": {}
+              },
+              "required": ["command", "capture"]
+            },
+            "then": {
+              "required": ["command"],
+              "properties": {
+                "command": {
+                  "properties": {
+                    "kind": { "const": "propose" },
+                    "proposes": {
+                      "properties": {
+                        "tool": { "const": "reminders" },
+                        "operation": { "const": "create" }
+                      },
+                      "required": ["tool", "operation"]
+                    }
+                  },
+                  "required": ["kind", "proposes"]
+                },
+                "capture": {
+                  "properties": { "title": {}, "category": {} },
+                  "not": { "properties": { "category": {} }, "required": ["category"] }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "command": {
+                  "properties": { "id": { "const": "client.capture-errand" } },
+                  "required": ["id"]
+                },
+                "capture": {}
+              },
+              "required": ["command", "capture"]
+            },
+            "then": {
+              "required": ["command"],
+              "properties": {
+                "command": {
+                  "properties": {
+                    "kind": { "const": "propose" },
+                    "proposes": {
+                      "properties": {
+                        "tool": { "const": "errands" },
+                        "operation": { "const": "create" }
+                      },
+                      "required": ["tool", "operation"]
+                    }
+                  },
+                  "required": ["kind", "proposes"]
+                },
+                "capture": {
+                  "properties": {
+                    "title": {},
+                    "category": {},
+                    "dueRaw": {},
+                    "dueAt": {},
+                    "dueTimezone": {}
+                  },
+                  "not": {
+                    "anyOf": [
+                      { "properties": { "category": {} }, "required": ["category"] },
+                      { "properties": { "dueRaw": {} }, "required": ["dueRaw"] },
+                      { "properties": { "dueAt": {} }, "required": ["dueAt"] },
+                      { "properties": { "dueTimezone": {} }, "required": ["dueTimezone"] }
+                    ]
+                  }
+                }
+              }
+            }
           }
         ]
       },
@@ -8671,6 +9758,394 @@
           "equalsServiceToken": { "type": "boolean" }
         }
       },
+      "SituationField": {
+        "type": "object",
+        "description": "One observed fact. An available field always has a value, an observation time and a known freshness. An unavailable (source failed or not connected) or unknown (nothing observes it) field has no value, freshness unknown, observedAt null and a reason.",
+        "required": ["status", "freshness", "source", "observedAt"],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": ["available", "unavailable", "unknown"]
+          },
+          "freshness": {
+            "type": "string",
+            "enum": ["live", "cached", "stale", "unknown"],
+            "description": "live: read while composing; cached: an earlier observation within its age limit; stale: past it; unknown: not observed."
+          },
+          "source": {
+            "type": "string",
+            "minLength": 1
+          },
+          "observedAt": {
+            "type": ["string", "null"],
+            "format": "date-time"
+          },
+          "value": {},
+          "reason": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "additionalProperties": false,
+        "if": {
+          "properties": {
+            "status": {
+              "const": "available"
+            }
+          },
+          "required": ["status"]
+        },
+        "then": {
+          "required": ["value"],
+          "properties": {
+            "value": {},
+            "observedAt": {
+              "type": "string"
+            },
+            "freshness": {
+              "enum": ["live", "cached", "stale"]
+            }
+          }
+        },
+        "else": {
+          "required": ["reason"],
+          "properties": {
+            "reason": {},
+            "freshness": {
+              "const": "unknown"
+            },
+            "observedAt": {
+              "type": "null"
+            }
+          },
+          "not": {
+            "properties": {
+              "value": {}
+            },
+            "required": ["value"]
+          }
+        }
+      },
+      "SituationSnapshot": {
+        "type": "object",
+        "description": "NOLAN situation snapshot (#837). Read-only; composed from existing read models.",
+        "additionalProperties": false,
+        "required": ["schemaVersion", "generatedAt", "timezone", "fields"],
+        "properties": {
+          "schemaVersion": {
+            "const": 1
+          },
+          "generatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "timezone": {
+            "type": ["string", "null"],
+            "description": "The operator timezone, or null when JARVIS_TIMEZONE is invalid (time-dependent fields are then unknown)."
+          },
+          "fields": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "localTime",
+              "systemHealth",
+              "nolanBrain",
+              "reconciliation",
+              "openTasks",
+              "reminders",
+              "jobsToday",
+              "pendingApprovals",
+              "calendar",
+              "presence",
+              "devices"
+            ],
+            "properties": {
+              "localTime": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/SituationField"
+                  },
+                  {
+                    "properties": {
+                      "value": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": ["localDate", "localTime", "weekday"],
+                        "properties": {
+                          "localDate": {
+                            "type": "string"
+                          },
+                          "localTime": {
+                            "type": "string"
+                          },
+                          "weekday": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                ]
+              },
+              "systemHealth": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/SituationField"
+                  },
+                  {
+                    "properties": {
+                      "value": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": ["overall", "persistence", "provider", "version"],
+                        "properties": {
+                          "overall": {
+                            "type": "string",
+                            "enum": ["ok", "degraded", "unavailable"]
+                          },
+                          "persistence": {
+                            "type": "string"
+                          },
+                          "provider": {
+                            "type": "string"
+                          },
+                          "version": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                ]
+              },
+              "nolanBrain": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/SituationField"
+                  },
+                  {
+                    "properties": {
+                      "value": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": ["configured", "provider", "model", "liveProbe"],
+                        "properties": {
+                          "configured": {
+                            "type": "boolean"
+                          },
+                          "provider": {
+                            "type": ["string", "null"]
+                          },
+                          "model": {
+                            "type": ["string", "null"]
+                          },
+                          "liveProbe": {
+                            "const": false
+                          }
+                        }
+                      }
+                    }
+                  }
+                ]
+              },
+              "reconciliation": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/SituationField"
+                  },
+                  {
+                    "properties": {
+                      "value": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": ["state", "lastCycleOutcome", "consecutiveFailureCount"],
+                        "properties": {
+                          "state": {
+                            "type": "string"
+                          },
+                          "lastCycleOutcome": {
+                            "type": ["string", "null"],
+                            "enum": ["success", "degraded", "failed", null]
+                          },
+                          "consecutiveFailureCount": {
+                            "type": "integer",
+                            "minimum": 0
+                          }
+                        }
+                      }
+                    }
+                  }
+                ]
+              },
+              "openTasks": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/SituationField"
+                  },
+                  {
+                    "properties": {
+                      "value": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": ["count", "titles"],
+                        "properties": {
+                          "count": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "titles": {
+                            "type": "array",
+                            "maxItems": 5,
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                ]
+              },
+              "reminders": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/SituationField"
+                  },
+                  {
+                    "properties": {
+                      "value": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": ["dueCount", "due", "upcomingCount", "upcoming"],
+                        "properties": {
+                          "dueCount": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "due": {
+                            "type": "array",
+                            "maxItems": 5,
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "upcomingCount": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "upcoming": {
+                            "type": "array",
+                            "maxItems": 5,
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                ]
+              },
+              "jobsToday": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/SituationField"
+                  },
+                  {
+                    "properties": {
+                      "value": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": ["count", "titles"],
+                        "properties": {
+                          "count": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "titles": {
+                            "type": "array",
+                            "maxItems": 5,
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                ]
+              },
+              "pendingApprovals": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/SituationField"
+                  },
+                  {
+                    "properties": {
+                      "value": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": ["count", "capped"],
+                        "properties": {
+                          "count": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "capped": {
+                            "type": "boolean"
+                          }
+                        }
+                      }
+                    }
+                  }
+                ]
+              },
+              "calendar": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/SituationField"
+                  },
+                  {
+                    "properties": {
+                      "value": {
+                        "not": {}
+                      }
+                    }
+                  }
+                ]
+              },
+              "presence": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/SituationField"
+                  },
+                  {
+                    "properties": {
+                      "value": {
+                        "not": {}
+                      }
+                    }
+                  }
+                ]
+              },
+              "devices": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/SituationField"
+                  },
+                  {
+                    "properties": {
+                      "value": {
+                        "not": {}
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        }
+      },
       "SystemStatus": {
         "type": "object",
         "additionalProperties": false,
@@ -8682,6 +10157,8 @@
           "reconciliation",
           "integrations",
           "reasoning",
+          "voiceConversation",
+          "securityHalt",
           "timezone",
           "layers",
           "zState",
@@ -8718,6 +10195,12 @@
           "reasoning": {
             "$ref": "#/components/schemas/ReasoningStatus"
           },
+          "voiceConversation": {
+            "$ref": "#/components/schemas/VoiceConversationStatus"
+          },
+          "securityHalt": {
+            "$ref": "#/components/schemas/SecurityHaltStatus"
+          },
           "timezone": {
             "type": "string",
             "minLength": 1,
@@ -8734,6 +10217,50 @@
           "checkedAt": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "SecurityHaltStatus": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Owner security halt (`npm run sec`, #839). requested: the owner halted dispatch; acknowledged: the service cancelled its running governed executions but at least one effect has not settled; verified-stopped: nothing the service started is still running; unverifiable: halted, but the record cannot be identified so no acknowledgement can be matched. The owner's reason text is never included.",
+        "required": [
+          "state",
+          "dispatch",
+          "failClosed",
+          "requestedAt",
+          "acknowledgedAt",
+          "verifiedStoppedAt",
+          "unsettledExecutions"
+        ],
+        "properties": {
+          "state": {
+            "type": "string",
+            "enum": ["running", "requested", "acknowledged", "verified-stopped", "unverifiable"]
+          },
+          "dispatch": {
+            "type": "string",
+            "enum": ["allowed", "refused"]
+          },
+          "failClosed": {
+            "type": "boolean",
+            "description": "True when the halt is in force because the halt record could not be read or validated."
+          },
+          "requestedAt": {
+            "type": ["string", "null"],
+            "format": "date-time"
+          },
+          "acknowledgedAt": {
+            "type": ["string", "null"],
+            "format": "date-time"
+          },
+          "verifiedStoppedAt": {
+            "type": ["string", "null"],
+            "format": "date-time"
+          },
+          "unsettledExecutions": {
+            "type": ["integer", "null"],
+            "minimum": 0
           }
         }
       },
@@ -11604,6 +13131,40 @@
           },
           "updatedAt": {
             "$ref": "#/components/schemas/TimestampMs"
+          },
+          "transitions": {
+            "type": "array",
+            "description": "Lifecycle steps in the order they were recorded. Absent on attempts recorded before history existed.",
+            "maxItems": 8,
+            "items": {
+              "$ref": "#/components/schemas/QuoteDeliveryTransition"
+            }
+          }
+        }
+      },
+      "QuoteDeliveryTransition": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["event", "at"],
+        "properties": {
+          "event": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "executing",
+              "provider-reference",
+              "indeterminate",
+              "succeeded",
+              "failed",
+              "reconciled"
+            ]
+          },
+          "at": {
+            "$ref": "#/components/schemas/TimestampMs"
+          },
+          "immutableIdApplied": {
+            "type": "boolean",
+            "description": "Only on provider-reference: whether the provider confirmed it applied the immutable-id preference when it created the draft."
           }
         }
       },
@@ -13787,6 +15348,21 @@
           }
         ]
       },
+      "VoiceConversationStatus": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["status", "provider", "model", "reason"],
+        "properties": {
+          "status": { "type": "string", "enum": ["configured", "not-configured"] },
+          "provider": {
+            "oneOf": [{ "type": "string", "enum": ["anthropic"] }, { "type": "null" }]
+          },
+          "model": {
+            "oneOf": [{ "type": "string", "minLength": 1, "maxLength": 128 }, { "type": "null" }]
+          },
+          "reason": { "type": "string", "minLength": 1, "maxLength": 500 }
+        }
+      },
       "ReasoningStatus": {
         "type": "object",
         "additionalProperties": false,
@@ -13801,7 +15377,7 @@
             "oneOf": [
               {
                 "type": "string",
-                "enum": ["openai", "gemini"]
+                "enum": ["openai", "gemini", "anthropic"]
               },
               {
                 "type": "null"

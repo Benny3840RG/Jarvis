@@ -8,7 +8,7 @@
       "issues": [294, 297],
       "proposedAction": "Close the quote delivery gate (#294) and the Outlook reconciliation gate (#297) on the development commissioning evidence.",
       "consequence": "Both gates close and the Local V1 checklist item for Outlook delivery is met.",
-      "scope": "Development only. One non-customer quote, already sent and reconciled once. No new send, no customer recipient, no production.",
+      "scope": "Development only. The traced commissioning run on main 56280fa9: one non-customer quote, sent from the owner's Outlook to the owner's own Gmail and reconciled once. No new send, no customer recipient, no production.",
       "environment": "development",
       "risk": "standard",
       "subjects": [
@@ -26,7 +26,24 @@
       "dependsOn": [],
       "evidence": [
         {
-          "label": "Commissioning evidence and gaps (ledger comment on #697)",
+          "label": "Traced commissioning run on main 56280fa9: immutable-id confirmed, full transition history, parallel race, recorded repeat block",
+          "pin": {
+            "kind": "comment",
+            "id": 7065797361,
+            "on": 869,
+            "revision": "2026-11-21T16:38:30Z"
+          }
+        },
+        {
+          "label": "Ledger transition history and Graph immutable-id confirmation, merged in #873",
+          "pin": {
+            "kind": "pull-request",
+            "number": 873,
+            "revision": "5192dbb07d3ee7f251ff201ef389c221c744d0c2"
+          }
+        },
+        {
+          "label": "Earlier commissioning evidence and its gaps (ledger comment on #697)",
           "pin": {
             "kind": "comment",
             "id": 6243177909,
@@ -51,12 +68,7 @@
           }
         }
       ],
-      "missingPrerequisites": [
-        "No direct trace shows the immutable-ID header on draft creation (required by #294).",
-        "No recorded pending, executing, provider-reference and indeterminate transition history exists for the delivery (required by #294).",
-        "No live run shows that parallel workers cannot produce duplicate terminal records (required by #297).",
-        "The blocked repeat send is evidenced only by the tool's own assertion, not by the repeat action's recorded status."
-      ],
+      "missingPrerequisites": [],
       "rollback": "Reopen #294 and #297. Nothing was changed on the runtime by accepting the evidence.",
       "expiresAt": "2026-12-12T00:00:00.000Z"
     },
@@ -73,7 +85,7 @@
         {
           "kind": "issue",
           "number": 697,
-          "revision": "2026-11-10T12:37:40Z"
+          "revision": "2026-11-20T01:26:12Z"
         }
       ],
       "dependsOn": [],
@@ -83,7 +95,7 @@
           "pin": {
             "kind": "issue",
             "number": 697,
-            "revision": "2026-11-10T12:37:40Z"
+            "revision": "2026-11-20T01:26:12Z"
           }
         },
         {
@@ -112,26 +124,35 @@
       "id": "voice-model-provider-key",
       "title": "Authorise a model-provider key for Totality reasoning",
       "issues": [567, 697],
-      "proposedAction": "Configure a model-provider API key on the Lenovo development runtime through the approved secret onboarding path.",
-      "consequence": "The HUD and API reasoning service stops reporting not-configured and can produce proposal-only reasoning. This starts paid usage on the provider account. It does not change voice: the voice path does not call the model.",
-      "scope": "Development runtime only. One secret, stored where the runtime reads its other secrets. Not committed.",
+      "proposedAction": "Point Totality reasoning on the Lenovo development runtime at the Anthropic key it already holds: set TOTALITY_REASONER_PROVIDER=anthropic and restart jarvis.service.",
+      "consequence": "The HUD and API reasoning service stops reporting not-configured and can produce proposal-only reasoning. This adds Totality usage to the same Anthropic account that voice conversation already uses. Voice behaviour does not change.",
+      "scope": "Development runtime only. One non-secret setting in the runtime's existing environment file. No new secret, nothing committed.",
       "environment": "development",
       "risk": "standard",
       "subjects": [
         {
           "kind": "issue",
           "number": 567,
-          "revision": "2026-11-12T22:14:16Z"
+          "revision": "2026-11-21T13:08:17Z"
         }
       ],
       "dependsOn": [],
       "evidence": [
         {
-          "label": "Issue #567",
+          "label": "Issue #567, closed as commissioned",
           "pin": {
             "kind": "issue",
             "number": 567,
-            "revision": "2026-11-12T22:14:16Z"
+            "revision": "2026-11-21T13:08:17Z"
+          }
+        },
+        {
+          "label": "Voice acceptance recorded on #567",
+          "pin": {
+            "kind": "comment",
+            "id": 7063052190,
+            "on": 567,
+            "revision": "2026-11-21T13:08:15Z"
           }
         },
         {
@@ -148,12 +169,20 @@
           "pin": {
             "kind": "issue",
             "number": 697,
-            "revision": "2026-11-10T12:37:40Z"
+            "revision": "2026-11-20T01:26:12Z"
+          }
+        },
+        {
+          "label": "Anthropic Totality provider, merged in #870",
+          "pin": {
+            "kind": "pull-request",
+            "number": 870,
+            "revision": "e7009743340da69a402e2bc9044b1de300181556"
           }
         }
       ],
       "missingPrerequisites": [],
-      "rollback": "Remove the key from the runtime and revoke it at the provider.",
+      "rollback": "Remove TOTALITY_REASONER_PROVIDER from the runtime environment and restart; reasoning reports not-configured again.",
       "expiresAt": "2026-12-12T00:00:00.000Z"
     },
     {
@@ -169,7 +198,7 @@
         {
           "kind": "issue",
           "number": 567,
-          "revision": "2026-11-12T22:14:16Z"
+          "revision": "2026-11-13T21:54:25Z"
         }
       ],
       "dependsOn": [],
@@ -179,7 +208,7 @@
           "pin": {
             "kind": "issue",
             "number": 567,
-            "revision": "2026-11-12T22:14:16Z"
+            "revision": "2026-11-13T21:54:25Z"
           }
         },
         {
@@ -190,13 +219,26 @@
             "on": 567,
             "revision": "2026-11-12T22:14:15Z"
           }
+        },
+        {
+          "label": "Spoken run on the Lenovo, 13 Nov: microphone, audibility and 12 latency samples (includes #804)",
+          "pin": {
+            "kind": "comment",
+            "id": 6851388839,
+            "on": 567,
+            "revision": "2026-11-13T11:23:21Z"
+          }
+        },
+        {
+          "label": "Fix for that run's findings: accept \"confirmed\" and keep the microphone listening (merged, running on the host)",
+          "pin": {
+            "kind": "pull-request",
+            "number": 809,
+            "revision": "7934acb3a8e425550b447c667f229482d0275f35"
+          }
         }
       ],
-      "missingPrerequisites": [
-        "Pull request #804 (the HUD shows and speaks the clarification question) is not merged and running on the host.",
-        "No microphone and audibility acceptance run has been recorded on the real host.",
-        "Ten dispatch round-trip samples from the owner's own HUD session have not been recorded."
-      ],
+      "missingPrerequisites": [],
       "rollback": "Reopen #567. Voice can be disabled by leaving the microphone off; no hardware adapter ships.",
       "expiresAt": "2026-12-12T00:00:00.000Z"
     },
@@ -204,9 +246,9 @@
       "id": "google-home-announcement",
       "title": "Authorise one governed Google Home announcement",
       "issues": [697],
-      "proposedAction": "Pin one named speaker and play one governed test announcement through the existing ToolAction path.",
+      "proposedAction": "Pin the speaker \"Tayah’s bedside\" (Google Nest Hub), as recorded in the owner's choice on #869, and play one governed test announcement on it through the existing ToolAction path.",
       "consequence": "A speaker in the house plays audio once. This commissions the home announcement path for Local V1.",
-      "scope": "One pinned Cast device, one announcement, development runtime. The ToolAction approval for the announcement itself is still required separately.",
+      "scope": "One Cast device, pinned by that exact name in the host's private address map (mode 0600, never committed); any other name fails closed. One announcement, development runtime. The ToolAction approval for the announcement itself is still required separately.",
       "environment": "development",
       "risk": "high",
       "highRiskKind": "hardware-actuation",
@@ -214,7 +256,7 @@
         {
           "kind": "issue",
           "number": 697,
-          "revision": "2026-11-10T12:37:40Z"
+          "revision": "2026-11-20T01:26:12Z"
         }
       ],
       "dependsOn": [],
@@ -224,13 +266,20 @@
           "pin": {
             "kind": "issue",
             "number": 697,
-            "revision": "2026-11-10T12:37:40Z"
+            "revision": "2026-11-20T01:26:12Z"
+          }
+        },
+        {
+          "label": "Owner's speaker choice: \"Tayah’s bedside\"",
+          "pin": {
+            "kind": "comment",
+            "id": 7063313389,
+            "on": 869,
+            "revision": "2026-11-21T13:29:14Z"
           }
         }
       ],
-      "missingPrerequisites": [
-        "No pinned speaker target has been named; the pinned-target map is absent."
-      ],
+      "missingPrerequisites": [],
       "rollback": "Remove the pinned-target map; the announcement path then fails closed again.",
       "expiresAt": "2026-12-12T00:00:00.000Z"
     },
@@ -861,7 +910,7 @@
         {
           "kind": "issue",
           "number": 697,
-          "revision": "2026-11-10T12:37:40Z"
+          "revision": "2026-11-20T01:26:12Z"
         }
       ],
       "dependsOn": [
@@ -876,13 +925,29 @@
           "pin": {
             "kind": "issue",
             "number": 697,
-            "revision": "2026-11-10T12:37:40Z"
+            "revision": "2026-11-20T01:26:12Z"
+          }
+        },
+        {
+          "label": "Beez Treez end-to-end workflow proven on merged main b11f1a4f: all 14 checks",
+          "pin": {
+            "kind": "comment",
+            "id": 7066902191,
+            "on": 869,
+            "revision": "2026-11-21T17:58:09Z"
+          }
+        },
+        {
+          "label": "End-to-end workflow proof kit, merged in #875",
+          "pin": {
+            "kind": "pull-request",
+            "number": 875,
+            "revision": "b37afa39ba379fbda6ac32a20829c30e742fcf9d"
           }
         }
       ],
       "missingPrerequisites": [
         "No release candidate commit has been frozen.",
-        "The complete Beez Treez workflow has not been proven end to end.",
         "No integrated dogfood pass has been recorded.",
         "No independent review of a release candidate exists.",
         "The operator runbook and release evidence are not recorded."

@@ -5,6 +5,7 @@ import {
   evaluateCandidateChecks,
   maintenanceDisposition,
   collectReviewContext,
+  collectSegmentedReviewContext,
 } from "./pr-maintenance.mjs";
 
 const head = "a".repeat(40);
@@ -214,6 +215,34 @@ test("review context uses complete exact-revision file contents and fails closed
     data: { type: "symlink", target: "secret" },
   });
   await assert.rejects(() => collectReviewContext(input));
+});
+
+test("segmented review context accepts files up to 1 MB and refuses larger ones", async () => {
+  // The HUD (typescript/src/mcp/dashboard-v1.html) passed 512 KB; segmented review splits it.
+  const contentOf = (size) => ({
+    data: {
+      type: "file",
+      encoding: "base64",
+      size,
+      content: Buffer.alloc(size, "a").toString("base64"),
+    },
+  });
+  let size = 540 * 1024;
+  const input = {
+    github: { rest: { repos: { getContent: async () => contentOf(size) } } },
+    owner: "owner",
+    repo: "repo",
+    headSha: head,
+    baseSha: base,
+    files: [
+      { filename: "typescript/src/mcp/dashboard-v1.html", status: "modified" },
+    ],
+    changedFiles: 1,
+  };
+  const context = await collectSegmentedReviewContext(input);
+  assert.equal(context[0].after.length, 540 * 1024);
+  size = 1024 * 1024 + 1;
+  await assert.rejects(() => collectSegmentedReviewContext(input), /oversized/);
 });
 
 test("real GitHub dynamic scanning checks bind the PR ref and ignore separate code-quality analyses", () => {

@@ -26,6 +26,7 @@ import {
 import type {
   QuoteDeliveryAttempt,
   QuoteDeliveryRepository,
+  QuoteDeliveryTransition,
 } from "../quotes/quoteDeliveryRepository.js";
 import {
   QuotePdfArtifactReadError,
@@ -167,6 +168,7 @@ type QuoteDeliveryAttemptResponse = {
   completedAt?: number;
   reconciledAt?: number;
   updatedAt: number;
+  transitions?: QuoteDeliveryTransition[];
 };
 
 /**
@@ -208,6 +210,17 @@ function deliveryResponse(attempt: QuoteDeliveryAttempt): QuoteDeliveryAttemptRe
     ...(attempt.completedAt === undefined ? {} : { completedAt: attempt.completedAt }),
     ...(attempt.reconciledAt === undefined ? {} : { reconciledAt: attempt.reconciledAt }),
     updatedAt: attempt.updatedAt,
+    ...(attempt.transitions === undefined
+      ? {}
+      : {
+          transitions: attempt.transitions.map((entry) => ({
+            event: entry.event,
+            at: entry.at,
+            ...(entry.immutableIdApplied === undefined
+              ? {}
+              : { immutableIdApplied: entry.immutableIdApplied }),
+          })),
+        }),
   };
 }
 

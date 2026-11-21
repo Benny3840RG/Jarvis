@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
+import { bundleHud } from "../src/mcp/hud/bundle.mjs";
 
-const widget = readFileSync(new URL("../src/mcp/dashboard-v1.html", import.meta.url), "utf8");
+const widget = bundleHud();
 
 type Element = {
   id?: string;
@@ -382,7 +382,7 @@ describe("Integration commissioning HUD wiring", () => {
     assert.equal(h.registry.get("telemetry-deployment")?.textContent, "dev-one");
     assert.equal(h.registry.get("telemetry-z-state")?.textContent, "DISABLED");
     assert.equal(h.registry.get("source-pill")?.textContent, "SOURCE · source-one");
-    assert.equal(h.registry.get("footer-status")?.textContent, "Jarvis ok · convex persistence");
+    assert.equal(h.registry.get("footer-status")?.textContent, "NOLAN ok · convex persistence");
 
     runRenderSystems({ status: null }, h);
     assert.equal(h.registry.get("status-label")?.textContent, "CONNECTING");
@@ -410,7 +410,7 @@ describe("Integration commissioning HUD wiring", () => {
     assert.equal(h.registry.get("source-pill")?.textContent, "SOURCE · CONNECTING");
     assert.equal(
       h.registry.get("footer-status")?.textContent,
-      "Jarvis reconnecting · status unavailable",
+      "NOLAN reconnecting · status unavailable",
     );
 
     const restored = {
@@ -456,7 +456,7 @@ describe("Integration commissioning HUD wiring", () => {
     assert.equal(h.registry.get("source-pill")?.textContent, "SOURCE · source-two");
     assert.equal(
       h.registry.get("footer-status")?.textContent,
-      "Jarvis degraded · convex persistence",
+      "NOLAN degraded · convex persistence",
     );
   });
 

@@ -4,10 +4,15 @@ import type { ToolExecutionService } from "../actions/toolExecution.js";
 import type { PersistenceProvider } from "../persistence/persistence.js";
 import type { PersistenceProviderName } from "../persistence/providerSelection.js";
 import type { RuntimeReconciliationHealth } from "../reconciliation/runtimeReconciliationHost.js";
+import {
+  UNREADABLE_SECURITY_HALT_STATUS,
+  type SecurityHaltStatus,
+} from "../security/haltSupervisor.js";
 import { resolveReminderTimezone } from "../reminders/due.js";
 import { ReliabilityController } from "../reliability/reliabilityController.js";
 import { assessReconciliationHealth } from "../reliability/reliabilityHealth.js";
 import { resolveTotalityReasoningStatus } from "../totality/totalityFactory.js";
+import type { VoiceConversationStatus } from "../voice/voiceConversationFactory.js";
 import type { HttpAppConfig } from "./config.js";
 import type { IntegrationStatus, LayersStatus, SystemStatus } from "./contracts.js";
 import { integrationStatusFromStage } from "./contracts.js";
@@ -18,6 +23,8 @@ import {
   HTTP_PROVIDER_NAME,
   HTTP_RECONCILIATION_HEALTH,
   HTTP_TOOL_EXECUTION,
+  HTTP_SECURITY_HALT_STATUS,
+  HTTP_VOICE_CONVERSATION_STATUS,
 } from "./tokens.js";
 
 const LAYERS: LayersStatus = {
@@ -83,7 +90,20 @@ export class SystemStatusService {
     private readonly reconciliationHealth: () => RuntimeReconciliationHealth,
     @Inject(HTTP_TOOL_EXECUTION)
     private readonly toolExecutionService: ToolExecutionService | null,
+    @Inject(HTTP_VOICE_CONVERSATION_STATUS)
+    private readonly voiceConversationStatus: VoiceConversationStatus,
+    @Inject(HTTP_SECURITY_HALT_STATUS)
+    private readonly securityHaltStatus: () => Promise<SecurityHaltStatus>,
   ) {}
+
+  /** A reader that throws is reported as refused and unverifiable (fail closed). */
+  private async readSecurityHalt(): Promise<SecurityHaltStatus> {
+    try {
+      return await this.securityHaltStatus();
+    } catch {
+      return { ...UNREADABLE_SECURITY_HALT_STATUS };
+    }
+  }
 
   /**
    * Evidence-backed, not inferred from env-var presence: reports whether the
@@ -161,8 +181,12 @@ export class SystemStatusService {
 
     const reconciliation = { ...this.reconciliationHealth() };
     const reconciliationAssessment = assessReconciliationHealth(reconciliation);
+    const securityHalt = await this.readSecurityHalt();
+    // A halt is deliberate, but governed dispatch is refused while it holds,
+    // so the service is not fully "ok".
+    const healthy = reconciliationAssessment.healthy && securityHalt.dispatch === "allowed";
     return {
-      status: reconciliationAssessment.healthy ? "ok" : "degraded",
+      status: healthy ? "ok" : "degraded",
       version: this.config.version,
       sourceVersion: this.config.sourceVersion,
       provider: {
@@ -175,6 +199,8 @@ export class SystemStatusService {
       reconciliation,
       integrations: [this.quoteDeliveryIntegrationStatus()],
       reasoning: resolveTotalityReasoningStatus(this.providerName),
+      voiceConversation: this.voiceConversationStatus,
+      securityHalt,
       timezone,
       layers: { ...LAYERS, reliability: this.reliability.layerStatus() },
       zState: "disabled",

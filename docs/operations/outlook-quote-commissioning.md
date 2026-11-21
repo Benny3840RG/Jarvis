@@ -115,5 +115,88 @@ absolute path outside the repository to also write that JSON with mode `0600`.
 Do not commit the package. A nonzero exit means the proof failed; it is not a
 successful send.
 
+The JSON also has a `trace` object that records what the owner decision card
+`outlook-evidence-acceptance` asks for (#866):
+
+- `repeatSend`: the repeat send's own receipt (id, status, error code and times),
+  not just the kit's assertion.
+- `deliveries`: each delivery attempt's status and timestamps (created,
+  execution started, reconciled), plus its ledger `transitions` in recorded
+  order: `pending`, `executing`, `provider-reference`, `indeterminate`, then the
+  terminal step. The recipient is not repeated here. Attempts recorded before
+  the ledger kept history have no `transitions`.
+- `reconciliation`: its attempt count and last error code. For example, a first
+  attempt that saw `outlook-message-still-draft` before resolving.
+- `sameMessageIdDraftToSent`: true when the reconciliation saw the message first
+  as a draft, then resolved it as sent under the delivery's Graph id. This is
+  behavioural evidence that the id stayed stable from Drafts to Sent Items. It is
+  not a trace of the `Prefer: IdType="ImmutableId"` request header.
+- `draftImmutableIdApplied`: true only when this delivery's `provider-reference`
+  transition records that Graph answered draft creation with
+  `Preference-Applied: IdType="ImmutableId"`. This is Graph's own confirmation
+  of the request header. `false` means Graph did not confirm it, not that the
+  header was missing.
+- `workers`: every worker result, in order. The two parallel workers run first,
+  while the delivery is still unresolved, then three sequential runs.
+- `parallelRaceBeforeResolution`: true when the parallel pair ran first and at
+  least one of them claimed the work. Two idle runs do not count as a race.
+- `resolvedWorkerRuns`: how many worker runs resolved a record. More than one
+  would be a duplicate terminal effect.
+
+## End-to-end Beez Treez workflow proof
+
+`npm run commission:beez-treez-workflow` runs the same kit with `--workflow`.
+It has the same guards, approval and single send. It proves the Local V1
+business path from the release plan through the HTTP API:
+
+`enquiry → client → property → project/job → quote draft/edit/finalise/PDF → governed Outlook send → reconciliation → invoice draft → daily brief/HUD`
+
+An enquiry needs a client, so the kit runs the steps in this order:
+
+1. Read the brief counts.
+2. Create the disposable client, a property for it, and an enquiry on that
+   property.
+3. Convert the enquiry to a project.
+4. Create the quote on that project, then draft, edit, finalise and send it,
+   and reconcile it as above.
+5. Create an invoice draft from the quote, with the same line items and
+   project.
+6. Read back the enquiry, the daily brief and the HUD snapshot.
+
+The evidence JSON gains a `workflow` object with the record ids, the brief
+counts before and after, the HUD observation, and these `checks`:
+
+- `recordsOwnedByClient`: the property, enquiry, quote and invoice all report the
+  run's disposable client as their `clientId`, as each API returned it.
+- `enquiryOnProperty`: the enquiry is on the property the run created.
+- `enquiryConverted` and `enquiryLinkedToProject`: the enquiry is `converted`
+  and its `convertedProjectId` is the new project.
+- `quoteOnProject`: the quote carries the project id.
+- `sendReconciledSucceeded`: the sent delivery reconciled as `succeeded`.
+- `invoiceDraftFromQuote` and `invoiceOnProject`: the invoice is a draft that
+  references the quote and the project.
+- `invoiceCarriesQuoteLines`: the line items the invoice API returned match the
+  finalised quote revision's line items, as that API returned them, field by
+  field. A list with any malformed entry is unreadable and fails; empty lists on
+  both sides do not count.
+- `invoiceListedAsClientDraft`: listing draft invoices for the disposable client
+  returns exactly this invoice. That list comes from the same store the brief
+  is built from.
+- `briefCountsDraftInvoice` and `briefCountsSentQuote`: the brief's draft
+  invoice count and sent quote count each rose by exactly one, the number this
+  run created. Unrelated activity in the same window makes these fail rather
+  than pass. The brief only counts drafts, so `invoiceListedAsClientDraft` is
+  the per-record link.
+- `briefShowsQuoteAwaitingResponse`: the brief lists this quote as awaiting a
+  response.
+- `hudShowsQuoteOnProject`: the HUD snapshot's quote register is ready and
+  lists this quote on the project.
+
+`workflow.proven` is true only when every check holds. Each check is read from
+what the API returned. An unavailable brief count or HUD fails its check; it is
+never assumed. In workflow mode the kit writes the evidence either way, then
+exits nonzero unless `workflow.proven` is true and names each broken check. A
+failed send or reconcile still fails the run as before.
+
 No Graph message is sent by installing this command. The host run is still
 required, and it must not target a customer mailbox.

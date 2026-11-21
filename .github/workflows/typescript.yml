@@ -110,7 +110,8 @@ jobs:
             console.log('No dependency install scripts found.');
           "
       - name: Audit dependencies
-        run: npm audit --audit-level=moderate
+        # Moderate+ advisories block, except dated dev-only entries in scripts/check-audit.mjs.
+        run: npm run audit:ci
       - name: Type-check
         run: npm run type-check
       - name: Lint TypeScript and Convex

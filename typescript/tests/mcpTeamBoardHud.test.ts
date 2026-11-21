@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
+import { bundleHud } from "../src/mcp/hud/bundle.mjs";
 
-const widget = readFileSync(new URL("../src/mcp/dashboard-v1.html", import.meta.url), "utf8");
+const widget = bundleHud();
 
 function extract(marker: string): string {
   const match = widget.match(new RegExp(`// BEGIN ${marker}([\\s\\S]*?)// END ${marker}`));
@@ -25,7 +25,7 @@ describe("Team Board HUD", () => {
     assert.match(widget, /Next 3/);
     assert.match(widget, /active\.slice\(1, 4\)/);
     assert.match(widget, /registerHudPanel/);
-    assert.match(widget, /JARVIS TOTALITY/);
+    assert.match(widget, /NOLAN TOTALITY/);
     assert.match(widget, /CONSOLE 02/);
     assert.match(widget, /OPTIMIZED TOTALITY STATE/);
     assert.match(widget, /PREDICTOR CORE/);
@@ -36,7 +36,7 @@ describe("Team Board HUD", () => {
     assert.match(widget, /SYSTEM LOAD/);
     assert.match(widget, /SYSTEM EFFICIENCY/);
     assert.match(widget, /TACTICAL OVERLAY/);
-    assert.match(widget, /HEXTRICK NAMS/);
+    assert.match(widget, /AUX TELEMETRY/);
     assert.match(widget, /class="tac-chart"/);
     assert.match(widget, /class="chart-grid"/);
     assert.match(widget, /No waveform signal/);
@@ -128,6 +128,43 @@ describe("Team Board HUD", () => {
       }),
       "WARN",
     );
+  });
+
+  it("shows a security halt as stopped and blocked, with words for each stage (#839)", () => {
+    const source = extract("hud-team-board");
+    const backdrop = new Function(`${source}; return deriveBackdropSeverity;`)() as (
+      snapshot: unknown,
+    ) => string;
+    const presence = new Function(`${source}; return deriveHudPresence;`)() as (
+      input: unknown,
+    ) => string;
+    const halted = (state: string, unsettled: number | null = null) => ({
+      status: "degraded",
+      zState: "active",
+      reconciliation: { state: "disabled" },
+      layers: { runtime: { status: "ready" } },
+      securityHalt: { state, dispatch: "refused", unsettledExecutions: unsettled },
+    });
+    assert.equal(backdrop({ status: halted("verified-stopped") }), "STOPPED");
+    assert.equal(presence({ status: halted("requested"), proposedApprovalCount: 2 }), "blocked");
+    assert.equal(
+      backdrop({
+        status: { status: "ok", zState: "active", securityHalt: { dispatch: "allowed" } },
+      }),
+      "OK",
+    );
+
+    const words = widget.match(/function securityHaltWords\(status\) \{[\s\S]*?\n {8}\}/);
+    assert.ok(words, "missing securityHaltWords");
+    const describe = new Function(`${words[0]}; return securityHaltWords;`)() as (
+      status: unknown,
+    ) => string | null;
+    assert.equal(describe({ status: "ok" }), null, "a service without the field shows no halt");
+    assert.equal(describe({ securityHalt: { dispatch: "allowed", state: "running" } }), null);
+    assert.equal(describe(halted("verified-stopped")), "verified stopped");
+    assert.equal(describe(halted("acknowledged", 2)), "stopping · 2 still running");
+    assert.equal(describe(halted("requested")), "not acknowledged by the service");
+    assert.equal(describe(halted("unverifiable")), "cannot be verified");
   });
 
   it("derives presence from status and does not invent listening or processing", () => {

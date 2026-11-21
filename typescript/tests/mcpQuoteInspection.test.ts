@@ -43,6 +43,12 @@ const STATUS: SystemStatus = {
     model: null,
     reason: "Totality reasoning requires Convex persistence, which is not the active provider.",
   },
+  voiceConversation: {
+    status: "not-configured",
+    provider: null,
+    model: null,
+    reason: "Voice conversation is disabled.",
+  },
   timezone: "Australia/Melbourne",
   layers: {
     runtime: { status: "ready" },
@@ -53,6 +59,15 @@ const STATUS: SystemStatus = {
     adaptive: { status: "ready" },
     autonomy: { status: "ready" },
     reliability: { status: "ready" },
+  },
+  securityHalt: {
+    state: "running",
+    dispatch: "allowed",
+    failClosed: false,
+    requestedAt: null,
+    acknowledgedAt: null,
+    verifiedStoppedAt: null,
+    unsettledExecutions: null,
   },
   zState: "active",
   checkedAt: "2026-07-30T00:00:00.000Z",

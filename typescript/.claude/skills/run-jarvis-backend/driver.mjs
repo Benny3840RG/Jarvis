@@ -54,7 +54,19 @@ async function mcpCall(url, method, params = {}, id = 1) {
     headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
     body: JSON.stringify({ jsonrpc: "2.0", id, method, params }),
   });
-  return { status: response.status, body: await response.json() };
+  // Streamable HTTP may answer with SSE even for simple request/response RPCs.
+  const raw = await response.text();
+  const contentType = response.headers.get("content-type") ?? "";
+  let body;
+  if (contentType.includes("text/event-stream")) {
+    const dataLines = raw.split(/\r?\n/).filter((line) => line.startsWith("data:"));
+    const message = dataLines.map((line) => line.slice(5).trim()).find((line) => line && line !== "[DONE]");
+    if (!message) throw new Error(`No JSON-RPC event returned for ${method}`);
+    body = JSON.parse(message);
+  } else {
+    body = JSON.parse(raw);
+  }
+  return { status: response.status, body };
 }
 
 async function smoke() {
@@ -116,6 +128,11 @@ async function smoke() {
       "MCP initialize",
       init.status === 200 && init.body?.result?.serverInfo?.name === "jarvis-private-preview",
       `status ${init.status}`,
+    );
+    check(
+      "MCP NOLAN identity",
+      typeof init.body?.result?.instructions === "string" &&
+        init.body.result.instructions.includes("You are NOLAN"),
     );
 
     const list = await mcpCall(mcp.url, "tools/list", {}, 2);

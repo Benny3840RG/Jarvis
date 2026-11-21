@@ -41,12 +41,16 @@ const PUBLIC_OPERATIONS = new Set([
   "GET /settings/credentials",
   "GET /settings/danger",
   "GET /settings/limits",
+  "GET /settings/persistence",
   "GET /hud",
   "GET /api/v1/hud/snapshot",
   // Owner decision queue (#801): the page shell and the read-only queue are
   // loopback-public like the HUD snapshot. Recording a decision is not.
   "GET /settings/owner-decisions",
   "GET /api/v1/owner-decisions",
+  // The Approvals page shell is loopback-public; the tool-action calls it
+  // makes still need the service token, and approval the approval token.
+  "GET /settings/approvals",
   // Voice routes (#567) are loopback-public on a local-serve bind — the same
   // posture as the HUD snapshot, so the tokenless local HUD can drive them.
   // On a non-local bind they require the service token (covered in

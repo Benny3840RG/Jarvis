@@ -9,12 +9,21 @@ import {
   Optional,
   Param,
   Post,
+  Req,
+  Res,
+  type OnModuleDestroy,
 } from "@nestjs/common";
+import type { FastifyReply, FastifyRequest } from "fastify";
 
 import type { ToolActionService } from "../actions/toolActions.js";
 import { VOICE_COMMANDS, VOICE_PROFILES } from "../voice/voiceCommands.js";
 import { stageVoiceSafeWrite, voiceUtteranceForSession } from "../voice/voiceSafeWrite.js";
 import type { VoiceSessionRegistry } from "../voice/voiceSessionRegistry.js";
+import {
+  dispatchConversationProposal,
+  type VoiceConversationService,
+} from "../voice/voiceConversation.js";
+import type { VoiceWriteTarget } from "../voice/voiceWriteTarget.js";
 import { LocalLoopbackRoute } from "./localLoopbackRoute.js";
 import { JarvisProblem } from "./problemDetails.js";
 import {
@@ -22,7 +31,12 @@ import {
   parseSwitchVoiceProfile,
   parseVoiceUtterance,
 } from "./voiceRequest.js";
-import { HTTP_TOOL_ACTIONS, HTTP_VOICE_REGISTRY } from "./tokens.js";
+import {
+  HTTP_TOOL_ACTIONS,
+  HTTP_VOICE_CONVERSATION,
+  HTTP_VOICE_REGISTRY,
+  HTTP_VOICE_WRITE_TARGET,
+} from "./tokens.js";
 
 function invalid(detail: string): JarvisProblem {
   return new JarvisProblem(
@@ -54,13 +68,26 @@ function sessionNotFound(): JarvisProblem {
  */
 @Controller("api/v1/voice")
 @LocalLoopbackRoute()
-export class VoiceController {
+export class VoiceController implements OnModuleDestroy {
   constructor(
     @Inject(HTTP_VOICE_REGISTRY) private readonly registry: VoiceSessionRegistry,
     @Optional()
     @Inject(HTTP_TOOL_ACTIONS)
     private readonly toolActions?: ToolActionService | null,
-  ) {}
+    @Optional()
+    @Inject(HTTP_VOICE_CONVERSATION)
+    private readonly conversation?: VoiceConversationService | null,
+    @Optional()
+    @Inject(HTTP_VOICE_WRITE_TARGET)
+    private readonly voiceTarget?: VoiceWriteTarget | null,
+  ) {
+    if (this.conversation) this.registry.onRemove((session) => this.conversation?.clear(session));
+  }
+
+  /** App close releases the sweep timer and drops live sessions (and their history). */
+  onModuleDestroy(): void {
+    this.registry.dispose();
+  }
 
   @Get("catalog")
   catalog() {
@@ -88,7 +115,12 @@ export class VoiceController {
 
   @Post("sessions/:sessionId/utterances")
   @HttpCode(HttpStatus.OK)
-  async dispatch(@Param("sessionId") sessionId: string, @Body() body: unknown) {
+  async dispatch(
+    @Param("sessionId") sessionId: string,
+    @Body() body: unknown,
+    @Req() request: FastifyRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ) {
     let parsed;
     try {
       parsed = parseVoiceUtterance(body);
@@ -97,6 +129,9 @@ export class VoiceController {
     }
     const session = this.registry.get(sessionId);
     if (!session) throw sessionNotFound();
+    // A later final utterance supersedes any conversation still in flight on this session.
+    if (parsed.isFinal) this.conversation?.interrupt(session);
+    const hadPending = session.pending() !== undefined || session.hasPendingClarification();
     const prepared = voiceUtteranceForSession(parsed);
     const dispatch = await session.handle({
       transcript: prepared.transcript,
@@ -104,6 +139,67 @@ export class VoiceController {
       wakeAuthorized: prepared.wakeAuthorized,
       ...(prepared.alternatives ? { alternatives: prepared.alternatives } : {}),
     });
+    if (
+      this.conversation &&
+      dispatch.decision === "unrecognized" &&
+      // A refused dictation ("add a task: nolan send the quote") stays a plain
+      // refusal; it is never handed to the conversational responder.
+      !session.lastTurnRejectedDictation() &&
+      parsed.isFinal &&
+      prepared.wakeAuthorized &&
+      !hadPending &&
+      !session.pending() &&
+      !session.hasPendingClarification()
+    ) {
+      const abort = new AbortController();
+      const onClose = () => abort.abort();
+      reply.raw.once("close", onClose);
+      request.raw.once("aborted", onClose);
+      try {
+        const outcome = await this.conversation.respond({
+          session,
+          transcript: prepared.transcript,
+          signal: abort.signal,
+          // Re-checked before every query, extra model call and the reply: a confirmation or
+          // clarification armed by a concurrent utterance ends this conversation turn.
+          live: () =>
+            this.registry.get(sessionId) === session &&
+            session.pending() === undefined &&
+            !session.hasPendingClarification(),
+        });
+        if (outcome.status === "proposed") {
+          // NOLAN understood a free-form request as one change. Its canonical
+          // sentence goes through the ordinary dictation path, so every guard,
+          // record lookup and the full read-back apply and nothing is staged
+          // until "Nolan confirm". A sentence the grammar refuses is reported
+          // as not understood, never guessed.
+          const proposed = await dispatchConversationProposal(session, outcome.utterance);
+          if (!proposed) {
+            return {
+              dispatch: {
+                decision: "conversation-unavailable" as const,
+                conversationReason: "ungrounded" as const,
+              },
+              pending: session.pending() ?? null,
+            };
+          }
+          return { dispatch: proposed, pending: session.pending() ?? null };
+        }
+        return {
+          dispatch:
+            outcome.status === "answered"
+              ? { decision: "conversation" as const, reply: outcome.reply }
+              : {
+                  decision: "conversation-unavailable" as const,
+                  conversationReason: outcome.reason,
+                },
+          pending: session.pending() ?? null,
+        };
+      } finally {
+        reply.raw.off("close", onClose);
+        request.raw.off("aborted", onClose);
+      }
+    }
     if (dispatch.decision !== "proposed") {
       return { dispatch, pending: session.pending() ?? null };
     }
@@ -112,11 +208,18 @@ export class VoiceController {
       sessionId,
       command: dispatch.command,
       wakeAuthorized: prepared.wakeAuthorized,
+      target: this.voiceTarget ?? null,
       ...(parsed.projectId === undefined ? {} : { projectId: parsed.projectId }),
       ...(parsed.expectedRevision === undefined
         ? {}
         : { expectedRevision: parsed.expectedRevision }),
-      ...(parsed.capture === undefined ? {} : { capture: parsed.capture }),
+      // A dictated capture is exactly what the owner heard read back and
+      // confirmed; a request-body capture can never replace it.
+      ...(dispatch.capture !== undefined
+        ? { capture: dispatch.capture }
+        : parsed.capture === undefined
+          ? {}
+          : { capture: parsed.capture }),
     });
     if (!staged) return { dispatch, pending: session.pending() ?? null };
     if ("toolActionId" in staged) {
@@ -142,6 +245,7 @@ export class VoiceController {
     }
     const session = this.registry.get(sessionId);
     if (!session) throw sessionNotFound();
+    this.conversation?.clear(session);
     session.setProfile(parsed.profile);
     // get() just resolved this session, so its expiry is defined.
     const expiresAt = this.registry.expiresAt(sessionId) ?? 0;

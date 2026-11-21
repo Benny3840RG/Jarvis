@@ -14,6 +14,10 @@ import {
   type PersistedDocument,
 } from "./document.js";
 import { assertAssistantState } from "./assistantState.js";
+import {
+  requireDirectlyMutableReminder,
+  requireDirectlyMutableTask,
+} from "./directMutationPolicy.js";
 import { writePrivateJsonFile } from "./atomicJsonFile.js";
 import { jarvisDataFile } from "./jarvisDataPaths.js";
 import { JsonFileLock } from "./jsonFileLock.js";
@@ -248,6 +252,7 @@ export class JSONPersistence implements PersistenceProvider {
         const current = await this.readDocument(true);
         const index = current.tasks.findIndex((task) => task.id === id);
         if (index < 0) return null;
+        requireDirectlyMutableTask(current.tasks[index]);
         const task: Task = { ...current.tasks[index], ...validated };
         const tasks = current.tasks.map((entry, taskIndex) => (taskIndex === index ? task : entry));
         await this.writeDocument({ ...current, tasks });
@@ -262,6 +267,7 @@ export class JSONPersistence implements PersistenceProvider {
         const current = await this.readDocument(true);
         const index = current.tasks.findIndex((task) => task.id === id);
         if (index < 0) return null;
+        requireDirectlyMutableTask(current.tasks[index]);
         if (current.tasks[index].completed) return cloneTask(current.tasks[index]);
         const task = { ...current.tasks[index], completed: true };
         const tasks = current.tasks.map((entry, taskIndex) => (taskIndex === index ? task : entry));
@@ -277,6 +283,7 @@ export class JSONPersistence implements PersistenceProvider {
         const current = await this.readDocument(true);
         const task = current.tasks.find((entry) => entry.id === id);
         if (!task) return null;
+        requireDirectlyMutableTask(task);
         await this.writeDocument({
           ...current,
           tasks: current.tasks.filter((entry) => entry.id !== id),
@@ -312,6 +319,7 @@ export class JSONPersistence implements PersistenceProvider {
         const index = current.reminders.findIndex((reminder) => reminder.id === id);
         if (index < 0) return null;
         const existing = current.reminders[index];
+        requireDirectlyMutableReminder(existing);
         const title = validated.title ?? existing.title;
         let reminder: Reminder;
         if (validated.due === undefined) {
@@ -336,6 +344,7 @@ export class JSONPersistence implements PersistenceProvider {
         const current = await this.readDocument(true);
         const reminder = current.reminders.find((entry) => entry.id === id);
         if (!reminder) return null;
+        requireDirectlyMutableReminder(reminder);
         await this.writeDocument({
           ...current,
           reminders: current.reminders.filter((entry) => entry.id !== id),

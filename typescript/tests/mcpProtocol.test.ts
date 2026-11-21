@@ -29,6 +29,12 @@ const STATUS: SystemStatus = {
     model: null,
     reason: "OPENAI_API_KEY is not set.",
   },
+  voiceConversation: {
+    status: "not-configured",
+    provider: null,
+    model: null,
+    reason: "Voice conversation is disabled.",
+  },
   timezone: "Australia/Melbourne",
   layers: {
     runtime: { status: "ready" },
@@ -39,6 +45,15 @@ const STATUS: SystemStatus = {
     adaptive: { status: "ready" },
     autonomy: { status: "ready" },
     reliability: { status: "ready" },
+  },
+  securityHalt: {
+    state: "running",
+    dispatch: "allowed",
+    failClosed: false,
+    requestedAt: null,
+    acknowledgedAt: null,
+    verifiedStoppedAt: null,
+    unsettledExecutions: null,
   },
   zState: "active",
   checkedAt: "2026-07-18T12:00:00.000Z",
@@ -197,6 +212,9 @@ describe("Jarvis MCP preview protocol", () => {
       assert.ok(names.includes("delete_task"));
       assert.ok(names.includes("list_quotes"));
       assert.ok(names.includes("get_quote"));
+      const statusTool = tools.tools.find((tool) => tool.name === "get_jarvis_status");
+      assert.ok(statusTool?.outputSchema);
+      assert.ok(JSON.stringify(statusTool.outputSchema).includes("voiceConversation"));
 
       const result = await client.callTool({
         name: "show_jarvis_dashboard",
@@ -322,7 +340,7 @@ describe("Jarvis MCP preview protocol", () => {
       if (isCancelledToolResult(outcome)) {
         assert.equal(outcome.isError, true);
         const text = outcome.content.find((item) => item.type === "text");
-        assert.equal(text?.text, "Jarvis API request was cancelled.");
+        assert.equal(text?.text, "NOLAN API request was cancelled.");
       }
     } finally {
       await client.close();

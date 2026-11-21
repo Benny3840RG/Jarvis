@@ -308,7 +308,7 @@ describe("reset local JSON", () => {
       (error: unknown) => {
         assert.ok(error instanceof DangerZoneRefusal);
         assert.equal(error.code, "path");
-        assert.match(error.message, /outside the Jarvis data directory/);
+        assert.match(error.message, /outside the NOLAN data directory/);
         return true;
       },
     );
@@ -602,7 +602,7 @@ describe("danger zone page", () => {
     });
     const html = renderDangerZonePage(await zone.inspect());
     assert.match(html, /<h1>Danger zone<\/h1>/);
-    assert.match(html, /These actions can interrupt Jarvis or destroy local state/);
+    assert.match(html, /These actions can interrupt NOLAN or destroy local state/);
     assert.match(html, /JARVIS_SERVICE_TOKEN_PREVIOUS/);
     assert.match(html, /No previous token accepted\./);
     assert.match(html, /Delivery token is not configured\./);

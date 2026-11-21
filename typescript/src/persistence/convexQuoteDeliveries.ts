@@ -54,6 +54,17 @@ function attemptFromDoc(doc: AttemptDoc): QuoteDeliveryAttempt {
     ...(doc.completedAt === undefined ? {} : { completedAt: doc.completedAt }),
     ...(doc.reconciledAt === undefined ? {} : { reconciledAt: doc.reconciledAt }),
     updatedAt: doc.updatedAt,
+    ...(doc.transitions === undefined
+      ? {}
+      : {
+          transitions: doc.transitions.map((entry) => ({
+            event: entry.event,
+            at: entry.at,
+            ...(entry.immutableIdApplied === undefined
+              ? {}
+              : { immutableIdApplied: entry.immutableIdApplied }),
+          })),
+        }),
   };
 }
 
@@ -184,6 +195,9 @@ export class ConvexQuoteDeliveryRepository implements QuoteDeliveryRepository {
         ? {}
         : { providerCorrelationId: input.providerCorrelationId }),
       ...(input.reconciliationId === undefined ? {} : { reconciliationId: input.reconciliationId }),
+      ...(input.immutableIdApplied === undefined
+        ? {}
+        : { immutableIdApplied: input.immutableIdApplied }),
     });
     return attemptFromDoc(doc);
   }

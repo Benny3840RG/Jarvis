@@ -88,7 +88,7 @@ export function integrationStatusFromStage(stage: LifecycleStage): IntegrationSt
 // of truth this mirrors.
 export type ReasoningStatus = {
   status: "not-configured" | "configured";
-  provider: "openai" | "gemini" | null;
+  provider: "openai" | "gemini" | "anthropic" | null;
   model: string | null;
   reason: string;
 };
@@ -101,6 +101,8 @@ export type SystemStatus = {
   reconciliation: RuntimeReconciliationHealth;
   integrations: IntegrationStatus[];
   reasoning: ReasoningStatus;
+  voiceConversation: import("../voice/voiceConversationFactory.js").VoiceConversationStatus;
+  securityHalt: import("../security/haltSupervisor.js").SecurityHaltStatus;
   timezone: string;
   layers: LayersStatus;
   zState: "disabled" | "stabilising" | "active" | "suspended";

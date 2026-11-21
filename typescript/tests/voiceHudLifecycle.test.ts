@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 
 import { VOICE_COMMANDS, type VoiceProfile } from "../src/voice/voiceCommands.js";
 import { voiceUtteranceForSession } from "../src/voice/voiceSafeWrite.js";
 import { VoiceSessionRegistry } from "../src/voice/voiceSessionRegistry.js";
+import type { VoiceSession } from "../src/voice/voiceSession.js";
+import { bundleHud } from "../src/mcp/hud/bundle.mjs";
 
-const html = readFileSync(new URL("../src/mcp/dashboard-v1.html", import.meta.url), "utf8");
+const html = bundleHud();
 const block = html.match(/\/\/ BEGIN voice-console[\s\S]*?\/\/ END voice-console/)?.[0];
 assert.ok(block, "voice-console block must exist");
 
@@ -68,6 +69,11 @@ function harness(
     synthesis?: boolean;
     noVoices?: boolean;
     speechThrows?: boolean;
+    /** Treat every recognition session as long-lived (no rapid-end guard). */
+    longSessions?: boolean;
+    conversationDispatch?:
+      | { decision: "conversation"; reply: string }
+      | { decision: "conversation-unavailable"; conversationReason: string };
   } = {},
 ) {
   const elements = new Map<string, Element>();
@@ -114,6 +120,7 @@ function harness(
   class Recognition {
     onresult?: (event: unknown) => void;
     onend?: () => void;
+    onerror?: (event: { error: string }) => void;
     stopCalls = 0;
     abortCalls = 0;
     constructor() {
@@ -195,13 +202,21 @@ function harness(
               : { heardTranscript: body.heardTranscript }),
             ...(body.alternatives ? { alternatives: body.alternatives } : {}),
           });
-          const dispatch = await session.handle({
+          let dispatch:
+            | Awaited<ReturnType<VoiceSession["handle"]>>
+            | NonNullable<typeof options.conversationDispatch> = await session.handle({
             transcript: prepared.transcript,
             isFinal: body.isFinal === true,
             wakeAuthorized: prepared.wakeAuthorized,
             ...(prepared.alternatives ? { alternatives: prepared.alternatives } : {}),
             now,
           });
+          if (
+            dispatch.decision === "unrecognized" &&
+            prepared.wakeAuthorized &&
+            options.conversationDispatch
+          )
+            dispatch = options.conversationDispatch;
           reply = response({ dispatch, pending: session.pending() ?? null });
         }
       }
@@ -247,14 +262,16 @@ function harness(
     "document",
     "fetch",
     "SpeechSynthesisUtterance",
-    `${
-      options.switchWaitMs === undefined
-        ? block
-        : block!.replace(
-            "var PROFILE_SWITCH_WAIT_MS = 10000;",
-            `var PROFILE_SWITCH_WAIT_MS = ${options.switchWaitMs};`,
-          )
-    }\nsetupVoiceConsole();`,
+    `${(options.switchWaitMs === undefined
+      ? block!
+      : block!.replace(
+          "var PROFILE_SWITCH_WAIT_MS = 10000;",
+          `var PROFILE_SWITCH_WAIT_MS = ${options.switchWaitMs};`,
+        )
+    ).replace(
+      "var RECOGNITION_SHORT_END_MS = 2000;",
+      `var RECOGNITION_SHORT_END_MS = ${options.longSessions ? 0 : 2000};`,
+    )}\nsetupVoiceConsole();`,
   )(
     window,
     { getElementById: get, createElement: () => new Element() },
@@ -319,7 +336,7 @@ async function armCrawler(h: ReturnType<typeof harness>) {
 const AMBIGUOUS_REQUEST = "Jarvis crawler forward and turn crawler lights on";
 const CLARIFICATION_PROMPT =
   "Ambiguous — nothing was done. Did you mean: 1. Drive the crawler forward; " +
-  "2. Turn the crawler inspection lights on? Reply once with “Jarvis” and your choice, " +
+  "2. Turn the crawler inspection lights on? Reply once with “Nolan” and your choice, " +
   "or repeat the full command.";
 const GENERIC_AMBIGUOUS = "Ambiguous — ignored for safety.";
 
@@ -344,6 +361,69 @@ const describeVoiceDispatch = new Function(
 )() as Describe;
 
 describe("voice HUD clarification prompt (#567)", () => {
+  it("shows and speaks a conversation reply", async () => {
+    const h = harness({
+      conversationDispatch: { decision: "conversation", reply: "Hello, Benny." },
+    });
+    h.type("Nolan tell me a joke");
+    await flush();
+    assert.equal(h.get("voice-result").textContent, "Hello, Benny.");
+    assert.equal(h.spoken.at(-1), "Hello, Benny.");
+  });
+
+  it("shows an unavailable conversation notice without speaking it", async () => {
+    const h = harness({
+      conversationDispatch: {
+        decision: "conversation-unavailable",
+        conversationReason: "rate-limited",
+      },
+    });
+    h.type("Nolan tell me a joke");
+    await flush();
+    assert.match(h.get("voice-result").textContent, /limit/i);
+    assert.equal(h.spoken.length, 0);
+  });
+
+  it("shows a reply-too-long notice without speaking any part of the answer", async () => {
+    const h = harness({
+      conversationDispatch: {
+        decision: "conversation-unavailable",
+        conversationReason: "reply-too-long",
+      },
+    });
+    h.type("Nolan tell me a joke");
+    await flush();
+    assert.match(h.get("voice-result").textContent, /too long to speak in full/i);
+    assert.equal(h.spoken.length, 0);
+  });
+
+  it("ignores a conversational reply arriving after Stop", async () => {
+    const h = harness({ conversationDispatch: { decision: "conversation", reply: "Too late." } });
+    const release = h.pause("/sessions/s1/utterances", "response");
+    h.type("Nolan tell me a joke");
+    await flush();
+    h.stop();
+    const before = h.get("voice-result").textContent;
+    release();
+    await flush();
+    assert.equal(h.get("voice-result").textContent, before);
+    assert.ok(!h.spoken.includes("Too late."));
+  });
+
+  it("ignores a conversational reply arriving after a profile switch", async () => {
+    const h = harness({
+      conversationDispatch: { decision: "conversation", reply: "Wrong profile." },
+    });
+    const release = h.pause("/sessions/s1/utterances", "response");
+    h.type("Nolan tell me a joke");
+    await flush();
+    h.profile("workshop");
+    release();
+    await flush();
+    await flush();
+    assert.ok(!h.spoken.includes("Wrong profile."));
+    assert.notEqual(h.get("voice-result").textContent, "Wrong profile.");
+  });
   it("displays and speaks only the returned candidates and keeps the session for one reply", async () => {
     const h = harness();
     await offerClarification(h);
@@ -405,7 +485,7 @@ describe("voice HUD clarification prompt (#567)", () => {
     recognition.emit("Jarvis the second one");
     await flush();
     assert.equal(h.utterances().at(-1)?.body.transcript, "the second one");
-    assert.equal(h.utterances().at(-1)?.body.heardTranscript, "jarvis the second one");
+    assert.equal(h.utterances().at(-1)?.body.heardTranscript, "Jarvis the second one");
     assert.equal(h.get("voice-result").textContent, "Awaiting spoken “confirm”.");
     assert.match(h.get("voice-pending").textContent, /Turn the crawler inspection lights on/);
     assert.deepEqual(h.actuations, []);
@@ -571,7 +651,7 @@ describe("voice HUD clarification prompt (#567)", () => {
     assert.equal(
       single.label,
       "Ambiguous — nothing was done. Did you mean: Drive the crawler forward? " +
-        "Reply once with “Jarvis” and your choice, or repeat the full command.",
+        "Reply once with “Nolan” and your choice, or repeat the full command.",
     );
     const ids = VOICE_COMMANDS.filter((command) => command.profile === "crawler").map(
       (command) => command.id,
@@ -1145,5 +1225,211 @@ describe("voice HUD lifecycle (actual setupVoiceConsole and real session registr
     await flush();
     assert.equal(h.utterances().length, 2);
     assert.equal(new Set(h.utterances().map((request) => request.path)).size, 1);
+  });
+
+  it("keeps listening when the browser ends a recognition session on its own", async () => {
+    const h = harness({ longSessions: true });
+    let recognition = h.enable();
+    for (let round = 0; round < 6; round += 1) {
+      recognition.onerror?.({ error: round % 2 ? "no-speech" : "network" });
+      recognition.onend?.();
+      assert.equal(h.recognitions.length, round + 2, "a fresh session replaces the ended one");
+      assert.equal(h.get("voice-enable").disabled, true, "the microphone still counts as on");
+      recognition = h.recognitions.at(-1)!;
+    }
+    recognition.emit("Jarvis any unpaid invoices");
+    await flush();
+    assert.equal(h.utterances().length, 1, "the resumed session dispatches normally");
+    h.recognitions[0].emit("Jarvis any unpaid invoices");
+    await flush();
+    assert.equal(h.utterances().length, 1, "an ended session can no longer dispatch");
+  });
+
+  it("confirms with 'confirmed' on a resumed session under the NOLAN prompt", async () => {
+    const h = harness({ longSessions: true });
+    await armCrawler(h);
+    const first = h.enable();
+    first.onerror?.({ error: "no-speech" });
+    first.onend?.();
+    const resumed = h.recognitions.at(-1)!;
+    assert.notEqual(resumed, first);
+    assert.match(h.get("voice-pending").textContent, /say “Nolan confirm” or “Nolan cancel”/);
+
+    resumed.emit("Jarvis concern");
+    await flush();
+    assert.equal(h.get("voice-pending").hidden, false, "a sound-alike leaves it pending");
+    assert.deepEqual(h.actuations, []);
+
+    const before = h.utterances().length;
+    first.emit("Jarvis confirmed");
+    await flush();
+    assert.equal(h.utterances().length, before, "the ended session cannot confirm");
+
+    resumed.emit("Jarvis confirmed");
+    await flush();
+    assert.equal(h.utterances().at(-1)?.body.transcript, "confirmed");
+    assert.equal(h.utterances().at(-1)?.body.heardTranscript, "Jarvis confirmed");
+    assert.equal(h.get("voice-pending").hidden, true, "the confirmation was consumed");
+    assert.deepEqual(h.actuations, ["crawler.stop"], "the test provider saw one confirmed halt");
+    resumed.emit("Jarvis confirmed");
+    await flush();
+    assert.deepEqual(h.actuations, ["crawler.stop"], "a repeated confirmation does nothing");
+  });
+
+  it("accepts a spoken NOLAN wake on the initial and the resumed recogniser", async () => {
+    const h = harness({ longSessions: true });
+    const first = h.enable();
+    first.emit("Nolan, any unpaid invoices");
+    await flush();
+    assert.equal(h.utterances().length, 1, "NOLAN reaches the server on the first session");
+    assert.equal(h.utterances().at(-1)?.body.transcript, "any unpaid invoices");
+    assert.equal(h.utterances().at(-1)?.body.heardTranscript, "Nolan, any unpaid invoices");
+    first.emit("Nolan any unpaid invoices", false);
+    first.emit("Nolanx any unpaid invoices");
+    first.emit("any unpaid invoices");
+    await flush();
+    assert.equal(h.utterances().length, 1, "interim, glued and wake-less speech stay dropped");
+
+    first.onerror?.({ error: "no-speech" });
+    first.onend?.();
+    const resumed = h.recognitions.at(-1)!;
+    assert.notEqual(resumed, first);
+    resumed.emit("Nolan, what is on today");
+    await flush();
+    assert.equal(h.utterances().length, 2, "NOLAN reaches the server on the resumed session");
+    assert.equal(h.utterances().at(-1)?.body.transcript, "what is on today");
+    resumed.emit("Jarvis any unpaid invoices");
+    await flush();
+    assert.equal(h.utterances().length, 3, "the legacy wake word still works");
+  });
+
+  it("confirms with a spoken NOLAN wake on a resumed session", async () => {
+    const h = harness({ longSessions: true });
+    await armCrawler(h);
+    const first = h.enable();
+    first.onerror?.({ error: "network" });
+    first.onend?.();
+    h.recognitions.at(-1)!.emit("Nolan, confirmed");
+    await flush();
+    assert.equal(h.utterances().at(-1)?.body.transcript, "confirmed");
+    assert.deepEqual(h.actuations, ["crawler.stop"]);
+  });
+
+  it("stops after a long session ends with an unclassified or unknown error code", () => {
+    for (const error of ["bad-grammar", "some-new-code", "unknown"]) {
+      const h = harness({ longSessions: true });
+      const recognition = h.enable();
+      recognition.onerror?.({ error });
+      recognition.onend?.();
+      assert.equal(h.recognitions.length, 1, `${error} must not restart`);
+      assert.equal(h.get("voice-enable").disabled, false, error);
+      assert.match(
+        h.get("voice-result").textContent,
+        new RegExp(`Microphone stopped.*\\(${error}\\)`),
+        error,
+      );
+    }
+    const h = harness({ longSessions: true });
+    const recognition = h.enable();
+    recognition.onerror?.({} as { error: string });
+    recognition.onend?.();
+    assert.equal(h.recognitions.length, 1, "an error event without a code is not recoverable");
+    assert.match(h.get("voice-result").textContent, /Microphone stopped/);
+  });
+
+  it("does not resume listening after Stop", () => {
+    const h = harness({ longSessions: true });
+    const recognition = h.enable();
+    h.stop();
+    recognition.onend?.();
+    assert.equal(h.recognitions.length, 1);
+    assert.equal(h.get("voice-enable").disabled, false);
+  });
+
+  it("does not resume listening after a browser error that must not be retried", () => {
+    const notices: Record<string, RegExp> = {
+      "not-allowed": /refused microphone access.*\(not-allowed\)/,
+      "service-not-allowed": /refused the speech recognition service.*\(service-not-allowed\)/,
+      "audio-capture": /no microphone audio could be captured.*\(audio-capture\)/,
+      "language-not-supported": /does not support speech recognition.*\(language-not-supported\)/,
+      // The operator cancelling input in browser UI must not be overridden, however
+      // long the session had been running.
+      aborted: /speech input was cancelled in the browser \(aborted\)/,
+    };
+    for (const [error, notice] of Object.entries(notices)) {
+      const h = harness({ longSessions: true });
+      const recognition = h.enable();
+      recognition.onerror?.({ error });
+      recognition.onend?.();
+      assert.equal(h.recognitions.length, 1, error);
+      assert.equal(h.get("voice-enable").disabled, false, error);
+      assert.match(h.get("voice-result").textContent, notice, error);
+    }
+  });
+
+  it("a later recoverable error cannot downgrade an earlier terminal one before onend", () => {
+    const cases: Array<{ first: string | undefined; later: string; notice: RegExp }> = [
+      {
+        first: "not-allowed",
+        later: "network",
+        notice: /refused microphone access.*\(not-allowed\)/,
+      },
+      {
+        first: "audio-capture",
+        later: "no-speech",
+        notice: /no microphone audio could be captured.*\(audio-capture\)/,
+      },
+      {
+        first: "not-allowed",
+        later: "audio-capture",
+        notice: /refused microphone access.*\(not-allowed\)/,
+      },
+      { first: "some-new-code", later: "network", notice: /unexpected error \(some-new-code\)/ },
+      { first: undefined, later: "network", notice: /unexpected error \(unknown\)/ },
+    ];
+    for (const { first, later, notice } of cases) {
+      const h = harness({ longSessions: true });
+      const recognition = h.enable();
+      recognition.onerror?.(first === undefined ? ({} as { error: string }) : { error: first });
+      recognition.onerror?.({ error: later });
+      recognition.onend?.();
+      const label = `${first ?? "missing"} -> ${later}`;
+      assert.equal(h.recognitions.length, 1, `${label} must not restart`);
+      assert.equal(h.get("voice-enable").disabled, false, label);
+      assert.match(h.get("voice-result").textContent, notice, label);
+    }
+  });
+
+  it("gives up without inventing a reason when sessions end with no error code", () => {
+    const h = harness();
+    h.enable();
+    for (let round = 0; round < 3; round += 1) h.recognitions.at(-1)!.onend?.();
+    assert.equal(h.recognitions.length, 3);
+    assert.equal(h.get("voice-enable").disabled, false);
+    assert.equal(
+      h.get("voice-result").textContent,
+      "Microphone stopped: speech recognition keeps ending. Check the connection, then enable the microphone again.",
+    );
+  });
+
+  it("gives up with a notice when recognition keeps ending straight away", () => {
+    const h = harness();
+    h.enable();
+    for (let round = 0; round < 2; round += 1) {
+      const current = h.recognitions.at(-1)!;
+      current.onerror?.({ error: "network" });
+      current.onend?.();
+    }
+    assert.equal(h.recognitions.length, 3, "two immediate endings are retried");
+    const last = h.recognitions.at(-1)!;
+    last.onerror?.({ error: "network" });
+    last.onend?.();
+    assert.equal(h.recognitions.length, 3, "the third immediate ending is not retried");
+    assert.equal(h.get("voice-enable").disabled, false);
+    assert.match(h.get("voice-result").textContent, /keeps ending \(network\)/);
+    h.enable();
+    assert.equal(h.recognitions.length, 4, "the operator can enable the microphone again");
+    h.recognitions.at(-1)!.onend?.();
+    assert.equal(h.recognitions.length, 5, "an explicit enable starts a fresh retry allowance");
   });
 });

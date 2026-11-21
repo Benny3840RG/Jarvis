@@ -26,6 +26,7 @@ import type { Project, ProjectStore } from "../projects/project.js";
 import type { Quote, QuoteStore } from "../quotes/quote.js";
 import { resolveReminderTimezone } from "../reminders/due.js";
 import type { VoiceQueryAnswer, VoiceQueryProvider, VoiceQueryRequest } from "./voiceQuery.js";
+import { DAILY_RUNDOWN_COMMAND_ID } from "./voiceRundown.js";
 
 export type AuthoritativeVoiceQuerySources = {
   /** Same optional IANA zone the daily brief resolves. Invalid values fail closed. */
@@ -320,6 +321,8 @@ async function dispatchQuery(
       return fromReminders(sources, input.now);
     case "client.open-errands":
       return fromErrands(sources, input.now);
+    case DAILY_RUNDOWN_COMMAND_ID:
+      return fromRundown(sources, input.now);
     case "client.todays-schedule":
       return fromSchedule(sources, input.now, "today");
     case "client.jobs-this-week":
@@ -400,6 +403,69 @@ async function fromErrands(
   const errands = await readList("Errand records", () => sources.errands.list());
   if (isUnavailable(errands)) return errands;
   return answered(errandsAnswer(composeSlice(now, timezone, { errands }).errands));
+}
+
+function rundownRemindersAnswer(reminders: BriefReminders): string {
+  if (reminders.dueCount === 0 && reminders.upcomingCount === 0) {
+    return "No reminders due or coming up in the next 24 hours.";
+  }
+  const parts: string[] = [];
+  if (reminders.dueCount > 0) {
+    parts.push(
+      `${countNoun(reminders.dueCount, "reminder")} due:${nameList(
+        reminders.dueCount,
+        reminders.due.map((reminder) => reminder.title),
+      )}`,
+    );
+  }
+  if (reminders.upcomingCount > 0) {
+    parts.push(
+      `${reminders.upcomingCount} coming up in the next 24 hours:${nameList(
+        reminders.upcomingCount,
+        reminders.upcoming.map((reminder) => reminder.title),
+      )}`,
+    );
+  }
+  return parts.join(" ");
+}
+
+/**
+ * The spoken daily rundown: today's jobs, reminders due or coming up, open
+ * tasks and open errands, each from the same read model as its own query.
+ * A source that cannot be read is named in its place, never guessed; if no
+ * source can be read the whole rundown is unavailable.
+ */
+async function fromRundown(
+  sources: AuthoritativeVoiceQuerySources,
+  now: number,
+): Promise<VoiceQueryAnswer> {
+  const timezone = resolveZone(sources);
+  if (isUnavailable(timezone)) return timezone;
+  const [projects, reminders, tasks, errands] = await Promise.all([
+    readList("Project records", () => sources.projects.list()),
+    readList("Reminder records", () => sources.reminders.listReminders()),
+    readList("Task records", () => sources.tasks.listTasks()),
+    readList("Errand records", () => sources.errands.list()),
+  ]);
+  const parts = [
+    isUnavailable(projects)
+      ? projects
+      : todayAnswer(composeSlice(now, timezone, { projects }).scheduled),
+    isUnavailable(reminders)
+      ? reminders
+      : rundownRemindersAnswer(composeSlice(now, timezone, { reminders }).reminders),
+    isUnavailable(tasks) ? tasks : tasksAnswer(composeSlice(now, timezone, { tasks }).tasks),
+    isUnavailable(errands)
+      ? errands
+      : errandsAnswer(composeSlice(now, timezone, { errands }).errands),
+  ];
+  if (parts.every(isUnavailable)) {
+    return unavailable("The daily rundown is unavailable: no source could be read.");
+  }
+  const text = parts
+    .map((part) => (typeof part === "string" ? part : (part as { reason: string }).reason))
+    .join(" ");
+  return answered(`Here's your day. ${text}`);
 }
 
 async function fromSchedule(

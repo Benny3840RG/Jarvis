@@ -30,9 +30,29 @@ import {
 } from "./voiceCommands.js";
 import type { VoiceActuationProvider } from "./voiceHardware.js";
 import { resolveClarification } from "./voiceDialogueResolver.js";
+import {
+  RESCHEDULE_REMINDER_COMMAND_ID,
+  COMPLETE_ERRAND_COMMAND,
+  COMPLETE_TASK_COMMAND,
+  classifyVoiceDictation,
+  voiceCompletionKind,
+  voiceDictationKey,
+  type VoiceDictation,
+} from "./voiceDictation.js";
+import {
+  VOICE_COMPLETION_UNAVAILABLE_REASON,
+  VOICE_REMINDER_CANCEL_UNAVAILABLE_REASON,
+  VOICE_RESCHEDULE_DISABLED_REASON,
+  type VoiceCompletionResolver,
+} from "./voiceCompletion.js";
+import { matchVoiceRundown } from "./voiceRundown.js";
 import { interpretIntent } from "./voiceIntentInterpreter.js";
 import { parseUtterance } from "./voiceParser.js";
 import type { VoiceQueryProvider } from "./voiceQuery.js";
+import type { VoiceQueryAnswer } from "./voiceQuery.js";
+import type { VoiceWriteCapture } from "./voiceSafeWrite.js";
+import type { SpokenDueContext } from "./voiceReminderDue.js";
+import { resolveReminderTimezone } from "../reminders/due.js";
 
 const DEFAULT_HISTORY_LIMIT = 20;
 const DEFAULT_CONFIRMATION_TTL_MS = 30_000;
@@ -107,7 +127,7 @@ function controlCandidates(
   profile: VoiceProfile,
   topIntent: VoiceControlIntent,
   alternatives: readonly string[] | undefined,
-): readonly string[] {
+): string[] {
   const candidates = new Set<string>([`control.${topIntent}`]);
   for (const alternative of alternatives ?? []) {
     const normalized = normalizeUtterance(alternative);
@@ -119,7 +139,7 @@ function controlCandidates(
     const command = findVoiceCommand(profile, normalized);
     if (command) candidates.add(command.id);
   }
-  return Object.freeze([...candidates].sort());
+  return [...candidates].sort();
 }
 
 function controlAlternativeCandidates(
@@ -129,6 +149,30 @@ function controlAlternativeCandidates(
   for (const alternative of alternatives ?? []) {
     const intent = controlIntent(normalizeUtterance(alternative));
     if (intent) candidates.add(`control.${intent}`);
+  }
+  return Object.freeze([...candidates].sort());
+}
+
+/**
+ * Candidates raised by alternative hypotheses that dictate (or try to dictate) a
+ * safe write. A rejected/unsafe dictation counts: it is a competing hypothesis
+ * the session must not silently drop.
+ */
+function dictationAlternativeCandidates(
+  profile: VoiceProfile,
+  alternatives: readonly string[] | undefined,
+  topKey?: string,
+  due?: SpokenDueContext,
+): readonly string[] {
+  const candidates = new Set<string>();
+  for (const alternative of alternatives ?? []) {
+    const result = classifyVoiceDictation(alternative, profile, due);
+    if (result.status === "rejected") candidates.add("dictation.rejected");
+    else if (result.status === "captured") {
+      if (topKey === undefined || voiceDictationKey(result.dictation) !== topKey) {
+        candidates.add(result.dictation.command.id);
+      }
+    }
   }
   return Object.freeze([...candidates].sort());
 }
@@ -144,6 +188,11 @@ export type PendingConfirmation = Readonly<{
   command: VoiceCommand;
   issuedAt: number;
   expiresAt: number;
+  /**
+   * Spoken capture (title, task category) parsed by the dictation grammar. It is
+   * read back to the owner and only travels with this single-use confirmation.
+   */
+  capture?: VoiceWriteCapture;
 }>;
 
 type PendingClarification = Readonly<{
@@ -172,11 +221,18 @@ export type VoiceDispatch =
       inferred?: true;
       /** Interpreter confidence (0..1) for an inferred command. */
       confidence?: number;
+      /** Dictated safe-write fields awaiting the spoken read-back confirmation. */
+      capture?: VoiceWriteCapture;
     }>
   | Readonly<{ decision: "confirmation-not-pending" }>
   | Readonly<{ decision: "confirmation-expired"; command: VoiceCommand }>
   | Readonly<{ decision: "cancelled"; command: VoiceCommand }>
-  | Readonly<{ decision: "proposed"; command: VoiceCommand }>
+  | Readonly<{ decision: "proposed"; command: VoiceCommand; capture?: VoiceWriteCapture }>
+  /**
+   * A spoken completion ("tick off bar oil") that did not name exactly one
+   * open, completable item. Nothing is armed; `reason` says why.
+   */
+  | Readonly<{ decision: "completion-unresolved"; command: VoiceCommand; reason: string }>
   | Readonly<{
       decision: "actuation-unavailable";
       command: VoiceCommand;
@@ -209,6 +265,22 @@ export type VoiceSessionOptions = Readonly<{
    * Defaults to false: with it off the session behaves exactly as before.
    */
   interpretNaturalLanguage?: boolean;
+  /**
+   * Owner timezone for spoken reminder due times ("remind me to … tomorrow at
+   * 7 am"). Defaults to the configured reminder timezone (JARVIS_TIMEZONE or
+   * the machine zone). If neither resolves, due phrases stay in the title.
+   */
+  timezone?: string;
+  /**
+   * Resolves a spoken completion to exactly one open task or errand. Absent
+   * means spoken completions are refused as unavailable.
+   */
+  completions?: VoiceCompletionResolver;
+  /**
+   * AM-017 (Reschedule reminder) is planned. Spoken reschedules are refused
+   * with a reason unless the owner has enabled it.
+   */
+  rescheduleReminders?: boolean;
 }>;
 
 export type VoiceSessionInput = Readonly<{
@@ -234,9 +306,13 @@ export class VoiceSession {
   readonly #confirmationTtlMs: number;
   readonly #clock: () => number;
   readonly #interpret: boolean;
+  readonly #timezone: string | undefined;
+  readonly #completions: VoiceCompletionResolver | undefined;
+  readonly #rescheduleReminders: boolean;
   readonly #history: VoiceHistoryEntry[] = [];
   #pending: PendingConfirmation | undefined;
   #clarification: PendingClarification | undefined;
+  #lastTurnRejectedDictation = false;
 
   constructor(options: VoiceSessionOptions) {
     this.#profile = options.profile;
@@ -246,6 +322,22 @@ export class VoiceSession {
     this.#confirmationTtlMs = options.confirmationTtlMs ?? DEFAULT_CONFIRMATION_TTL_MS;
     this.#clock = options.clock ?? Date.now;
     this.#interpret = options.interpretNaturalLanguage ?? false;
+    this.#timezone = options.timezone;
+    this.#completions = options.completions;
+    this.#rescheduleReminders = options.rescheduleReminders === true;
+  }
+
+  /** The owner clock and timezone spoken due times resolve in, or undefined when unset. */
+  spokenDueContext(now = this.#clock()): SpokenDueContext | undefined {
+    return this.#dueContext(now);
+  }
+
+  #dueContext(now: number): SpokenDueContext | undefined {
+    try {
+      return { now, timezone: resolveReminderTimezone(this.#timezone) };
+    } catch {
+      return undefined;
+    }
   }
 
   get profile(): VoiceProfile {
@@ -254,6 +346,23 @@ export class VoiceSession {
 
   pending(): PendingConfirmation | undefined {
     return this.#pending;
+  }
+
+  /** Read-only observation for the HTTP conversation gate. */
+  hasPendingClarification(now = this.#clock()): boolean {
+    return this.#clarification !== undefined && now < this.#clarification.expiresAt;
+  }
+
+  /** Uses the same authoritative query path and spoken result as catalogue dispatch. */
+  async readOnlyQuery(commandId: string): Promise<VoiceQueryAnswer> {
+    const command = COMMAND_BY_ID.get(commandId);
+    if (!command || command.profile !== this.#profile || command.kind !== "query") {
+      return { status: "unavailable", reason: "Voice query unavailable." };
+    }
+    const result = await this.#query(command, this.#clock());
+    return result.decision === "answered"
+      ? { status: "answered", answer: result.answer }
+      : { status: "unavailable", reason: result.reason };
   }
 
   history(): readonly VoiceHistoryEntry[] {
@@ -280,7 +389,18 @@ export class VoiceSession {
     void now;
   }
 
+  /**
+   * True when the most recent `handle` call matched a dictation prefix but
+   * refused its text as unsafe or malformed. Callers must not hand such a turn
+   * to any other responder (for example conversational replies): a refusal
+   * stays a plain "not understood".
+   */
+  lastTurnRejectedDictation(): boolean {
+    return this.#lastTurnRejectedDictation;
+  }
+
   async handle(input: VoiceSessionInput): Promise<VoiceDispatch> {
+    this.#lastTurnRejectedDictation = false;
     const now = input.now ?? this.#clock();
     const normalized = normalizeUtterance(input.transcript);
 
@@ -292,6 +412,14 @@ export class VoiceSession {
     const intent = controlIntent(normalized);
     if (intent) {
       const candidates = controlCandidates(this.#profile, intent, input.alternatives);
+      // A confirm must be unanimous: any alternative that dictates a write (even
+      // the pending one) is a conflicting intent and voids the pending capture.
+      if (intent === "confirm") {
+        for (const id of dictationAlternativeCandidates(this.#profile, input.alternatives)) {
+          if (!candidates.includes(id)) candidates.push(id);
+        }
+        candidates.sort();
+      }
       if (candidates.length > 1) {
         this.#record(now, normalized, "ambiguous");
         this.#invalidatePending();
@@ -299,7 +427,10 @@ export class VoiceSession {
       }
     } else {
       const topCommand = findVoiceCommand(this.#profile, normalized);
-      const controlAlternatives = controlAlternativeCandidates(input.alternatives);
+      const controlAlternatives = [
+        ...controlAlternativeCandidates(input.alternatives),
+        ...dictationAlternativeCandidates(this.#profile, input.alternatives),
+      ];
       if (topCommand && controlAlternatives.length > 0) {
         const candidates = Object.freeze([topCommand.id, ...controlAlternatives].sort());
         this.#record(now, normalized, "ambiguous");
@@ -355,7 +486,7 @@ export class VoiceSession {
     now: number,
     normalizedTranscript: string,
     input: VoiceSessionInput,
-  ): VoiceDispatch {
+  ): VoiceDispatch | Promise<VoiceDispatch> {
     const clarification = this.#clarification;
     if (clarification && now < clarification.expiresAt) {
       // A clarification gets exactly one final follow-up. Consume it before
@@ -436,6 +567,13 @@ export class VoiceSession {
     // An expired offer has no authority over this turn. Clear it, then parse
     // the current request through the ordinary guarded interpreter below.
     if (clarification) this.#clarification = undefined;
+    if (input.wakeAuthorized === true) {
+      // The daily rundown is a read-only query outside the pinned catalog.
+      const rundown = matchVoiceRundown(input.transcript, this.#profile);
+      if (rundown) return this.#handleRecognized(now, normalizedTranscript, rundown);
+      const dictated = this.#handleDictation(now, normalizedTranscript, input);
+      if (dictated) return dictated;
+    }
     if (this.#interpret && input.wakeAuthorized === true) {
       const intent = interpretIntent({
         transcript: input.transcript,
@@ -493,6 +631,128 @@ export class VoiceSession {
     return { decision: "unrecognized", normalizedTranscript };
   }
 
+  /**
+   * Spoken capture for a safe write ("add a task: order bar oil"). Only runs on
+   * wake-authorised final speech. A dictation never dispatches: it always arms
+   * the single-use confirmation so the owner hears the captured text first.
+   * Any recogniser alternative that is a control phrase or dictates a different
+   * command makes the turn ambiguous instead (fail closed).
+   */
+  #handleDictation(
+    now: number,
+    normalizedTranscript: string,
+    input: VoiceSessionInput,
+  ): VoiceDispatch | Promise<VoiceDispatch> | undefined {
+    const due = this.#dueContext(now);
+    const top = classifyVoiceDictation(input.transcript, this.#profile, due);
+    if (top.status === "none") return undefined;
+    if (top.status === "rejected") {
+      // Unsafe or malformed dictation: fail closed here. It must not arm a
+      // pending confirmation and must not fall through to inference.
+      this.#invalidatePending();
+      this.#lastTurnRejectedDictation = true;
+      this.#record(now, normalizedTranscript, "dictation-rejected");
+      return { decision: "unrecognized", normalizedTranscript };
+    }
+    const dictation = top.dictation;
+    const topKey = voiceDictationKey(dictation);
+    const conflicting = new Set<string>([
+      ...controlAlternativeCandidates(input.alternatives),
+      ...dictationAlternativeCandidates(this.#profile, input.alternatives, topKey, due),
+    ]);
+    for (const alternative of input.alternatives ?? []) {
+      const normalizedAlternative = normalizeUtterance(alternative);
+      if (classifyVoiceDictation(alternative, this.#profile, due).status !== "none") continue;
+      const other = findVoiceCommand(this.#profile, normalizedAlternative);
+      if (other) conflicting.add(other.id);
+    }
+    if (conflicting.size > 0) {
+      const candidates = Object.freeze([...new Set([dictation.command.id, ...conflicting])].sort());
+      this.#invalidatePending();
+      this.#record(now, normalizedTranscript, "ambiguous");
+      return { decision: "ambiguous", candidates };
+    }
+    this.#invalidatePending();
+    if (voiceCompletionKind(dictation.command) !== undefined) {
+      return this.#handleCompletion(now, normalizedTranscript, dictation);
+    }
+    return this.#arm(now, normalizedTranscript, dictation);
+  }
+
+  #arm(now: number, normalizedTranscript: string, dictation: VoiceDictation): VoiceDispatch {
+    this.#record(now, normalizedTranscript, "dictated", dictation.command.id);
+    const expiresAt = now + this.#confirmationTtlMs;
+    this.#pending = {
+      command: dictation.command,
+      issuedAt: now,
+      expiresAt,
+      capture: dictation.capture,
+    };
+    return {
+      decision: "awaiting-confirmation",
+      command: dictation.command,
+      expiresAt,
+      capture: dictation.capture,
+    };
+  }
+
+  /**
+   * A spoken completion arms only after the reference resolves to exactly one
+   * open, completable item. The read-back then names that item's full title,
+   * and the capture carries its id from the authoritative record, never from
+   * the request.
+   */
+  async #handleCompletion(
+    now: number,
+    normalizedTranscript: string,
+    dictation: VoiceDictation,
+  ): Promise<VoiceDispatch> {
+    const kind = voiceCompletionKind(dictation.command) ?? "any";
+    const unresolved = (reason: string): VoiceDispatch => {
+      this.#record(now, normalizedTranscript, "completion-unresolved", dictation.command.id);
+      return { decision: "completion-unresolved", command: dictation.command, reason };
+    };
+    const unavailable =
+      kind === "reminder"
+        ? VOICE_REMINDER_CANCEL_UNAVAILABLE_REASON
+        : VOICE_COMPLETION_UNAVAILABLE_REASON;
+    if (dictation.command.id === RESCHEDULE_REMINDER_COMMAND_ID && !this.#rescheduleReminders) {
+      return unresolved(VOICE_RESCHEDULE_DISABLED_REASON);
+    }
+    if (!this.#completions) return unresolved(unavailable);
+    let resolution;
+    try {
+      resolution = await this.#completions.resolve({ kind, reference: dictation.capture.title });
+    } catch {
+      return unresolved(unavailable);
+    }
+    if (resolution.status !== "found") return unresolved(resolution.reason);
+    // Anything armed while the records were read is void: this turn replaces it.
+    this.#invalidatePending();
+    const { target } = resolution;
+    // A command that names its operation is armed as dictated; only a
+    // kind-less "tick off X" takes its operation from the resolved item.
+    const command =
+      dictation.command.proposes !== undefined
+        ? dictation.command
+        : target.kind === "task"
+          ? COMPLETE_TASK_COMMAND
+          : COMPLETE_ERRAND_COMMAND;
+    // A reschedule keeps the new due value exactly as it was heard and read back.
+    const { dueRaw, dueAt, dueTimezone } = dictation.capture;
+    const due =
+      command.id === RESCHEDULE_REMINDER_COMMAND_ID && dueRaw !== undefined
+        ? {
+            dueRaw,
+            ...(dueAt === undefined || dueTimezone === undefined ? {} : { dueAt, dueTimezone }),
+          }
+        : {};
+    return this.#arm(now, normalizedTranscript, {
+      command,
+      capture: Object.freeze({ title: target.title, targetId: target.id, ...due }),
+    });
+  }
+
   #handleRecognized(
     now: number,
     normalizedTranscript: string,
@@ -519,6 +779,10 @@ export class VoiceSession {
     if (now >= pending.expiresAt) {
       return { decision: "confirmation-expired", command: pending.command };
     }
+    if (pending.capture && pending.command.kind === "propose") {
+      // A dictated capture is the exact text the owner just heard read back.
+      return { decision: "proposed", command: pending.command, capture: pending.capture };
+    }
     return this.#dispatch(pending.command, now);
   }
 
@@ -541,7 +805,10 @@ export class VoiceSession {
     }
   }
 
-  async #query(command: VoiceCommand, now: number): Promise<VoiceDispatch> {
+  async #query(
+    command: VoiceCommand,
+    now: number,
+  ): Promise<Extract<VoiceDispatch, { decision: "answered" | "query-unavailable" }>> {
     if (!this.#queries) {
       return {
         decision: "query-unavailable",

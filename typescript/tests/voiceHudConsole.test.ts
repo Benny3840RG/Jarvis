@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
+import { bundleHud } from "../src/mcp/hud/bundle.mjs";
 
-const html = readFileSync(new URL("../src/mcp/dashboard-v1.html", import.meta.url), "utf8");
+const html = bundleHud();
 
 /** Extract the voice-console inline block and expose its pure functions. */
 function loadVoiceLogic(): {
@@ -21,7 +21,7 @@ function loadVoiceLogic(): {
   ) => { transcript: string; isFinal: boolean; alternatives: string[] } | null;
   finalVoiceRecognition: (event: unknown) => { transcript: string; alternatives: string[] } | null;
   describeVoiceDispatch: (
-    dispatch: { decision: string; answer?: string; reason?: string } | null,
+    dispatch: { decision: string; answer?: string; reason?: string; reply?: string } | null,
   ) => { label: string; tone: string };
   voiceLatencyMs: (startedAt: unknown, endedAt: unknown) => number | null;
 } {
@@ -95,6 +95,26 @@ describe("voice HUD console logic (extracted from dashboard-v1.html)", () => {
       }
     });
 
+    it("wakes on the spoken NOLAN wake word from the microphone, keeping legacy Jarvis", () => {
+      for (const raw of ["Nolan, add a task: order bar oil", "nolan add a task: order bar oil"]) {
+        const gate = logic.voiceWakeGate(raw, true);
+        assert.equal(gate.status, "command", raw);
+        assert.equal(gate.transcript, "add a task: order bar oil", raw);
+      }
+      const cased = logic.voiceWakeGate("Nolan, add a task: call Dave about the BMW.", true);
+      assert.equal(cased.status, "command");
+      assert.equal(cased.transcript, "add a task: call Dave about the BMW");
+      assert.equal(logic.voiceWakeGate("Nolan", true).status, "awake");
+      assert.equal(logic.voiceWakeGate("Jarvis winch up", true).status, "command");
+      assert.equal(logic.voiceWakeGate("Nolanx add a task", true).status, "idle");
+      assert.equal(logic.voiceWakeGate("nolanland tour", true).status, "idle");
+      const prepared = logic.prepareVoiceDispatch("Nolan, any unpaid invoices?", true, [
+        "Nolan any unpaid invoices",
+      ]);
+      assert.equal(prepared?.transcript, "any unpaid invoices");
+      assert.deepEqual(prepared?.alternatives, ["any unpaid invoices"]);
+    });
+
     it("never prepares a bare confirm or cancel for microphone dispatch", () => {
       assert.equal(logic.prepareVoiceDispatch("confirm", true), null);
       assert.equal(logic.prepareVoiceDispatch("cancel", true), null);
@@ -110,7 +130,7 @@ describe("voice HUD console logic (extracted from dashboard-v1.html)", () => {
           transcript: "confirm",
           isFinal: true,
           alternatives: ["confirm command", "cancel"],
-          heardTranscript: "jarvis confirm",
+          heardTranscript: "Jarvis confirm",
         },
       );
     });
@@ -184,6 +204,17 @@ describe("voice HUD console logic (extracted from dashboard-v1.html)", () => {
       assert.doesNotMatch(info.label, /approved|executed/i);
     });
 
+    it("preserves authoritative reply bytes, including a trailing space", () => {
+      const reply = `${"x".repeat(599)} `;
+      const info = logic.describeVoiceDispatch({ decision: "conversation", reply });
+      assert.equal(info.label, reply);
+      assert.equal(info.label.length, 600);
+      assert.equal(
+        logic.describeVoiceDispatch({ decision: "conversation", reply: "  " }).tone,
+        "warn",
+      );
+    });
+
     it("falls back safely for an unknown decision", () => {
       assert.equal(logic.describeVoiceDispatch({ decision: "nonsense" }).tone, "muted");
     });
@@ -214,5 +245,227 @@ describe("voice HUD console logic (extracted from dashboard-v1.html)", () => {
     assert.ok(start >= 0 && end > start, "inline script not found");
     const script = html.slice(start + openingTag.length, end);
     assert.doesNotThrow(() => new Function(script), "inline dashboard script must parse");
+  });
+});
+
+describe("voice HUD dictation read-back", () => {
+  const logic = loadVoiceLogic();
+  const taskCommand = {
+    id: "client.capture-task",
+    proposes: { tool: "tasks", operation: "create" },
+  };
+  const reminderCommand = {
+    id: "client.follow-up-reminder",
+    proposes: { tool: "reminders", operation: "create" },
+  };
+
+  it("reads the captured task back before anything is staged", () => {
+    const info = logic.describeVoiceDispatch({
+      decision: "awaiting-confirmation",
+      command: taskCommand,
+      capture: { title: "Order bar oil", category: "work" },
+    } as never);
+    assert.equal(info.tone, "pending");
+    assert.match(info.label, /^Add task “Order bar oil” \(work\)\?/);
+    assert.match(info.label, /Nolan confirm/);
+  });
+
+  it("reads a dictated errand back as an errand, not a reminder", () => {
+    const errandCommand = {
+      id: "client.capture-errand",
+      proposes: { tool: "errands", operation: "create" },
+    };
+    const pending = logic.describeVoiceDispatch({
+      decision: "awaiting-confirmation",
+      command: errandCommand,
+      capture: { title: "Silicone for the deck" },
+    } as never);
+    assert.equal(pending.tone, "pending");
+    assert.match(pending.label, /^Add errand “Silicone for the deck”\? Say “Nolan confirm”/);
+    const staged = logic.describeVoiceDispatch({
+      decision: "proposed",
+      command: errandCommand,
+      capture: { title: "Silicone for the deck" },
+      toolActionId: "voice-safe-write:v1:abc",
+    } as never);
+    assert.match(staged.label, /^Staged errand “Silicone for the deck” for your approval/);
+  });
+
+  it("reads a spoken completion back and says when nothing was marked done", () => {
+    const completeTask = {
+      id: "client.complete-task",
+      proposes: { tool: "tasks", operation: "complete" },
+    };
+    const ask = logic.describeVoiceDispatch({
+      decision: "awaiting-confirmation",
+      command: completeTask,
+      capture: { title: "Order bar oil", targetId: "t1" },
+    } as never);
+    assert.equal(ask.tone, "pending");
+    assert.match(ask.label, /^Mark task “Order bar oil” done\? Say “Nolan confirm”/);
+    const staged = logic.describeVoiceDispatch({
+      decision: "proposed",
+      command: {
+        id: "client.complete-errand",
+        proposes: { tool: "errands", operation: "complete" },
+      },
+      capture: { title: "Milk", targetId: "e1" },
+      toolActionId: "voice-safe-write:v1:abc",
+    } as never);
+    assert.match(
+      staged.label,
+      /^Staged completing errand “Milk” for your approval\. Nothing changes/,
+    );
+    const unresolved = logic.describeVoiceDispatch({
+      decision: "completion-unresolved",
+      reason: "2 open items match “Oil”. Say more of the title.",
+    } as never);
+    assert.equal(unresolved.tone, "warn");
+    assert.equal(
+      unresolved.label,
+      "Nothing marked done. 2 open items match “Oil”. Say more of the title.",
+    );
+  });
+
+  it("reads a spoken reminder cancellation back and says when nothing was cancelled", () => {
+    const cancelReminder = {
+      id: "client.cancel-reminder",
+      proposes: { tool: "reminders", operation: "cancel" },
+    };
+    const ask = logic.describeVoiceDispatch({
+      decision: "awaiting-confirmation",
+      command: cancelReminder,
+      capture: { title: "Order bar oil", targetId: "r1" },
+    } as never);
+    assert.equal(ask.tone, "pending");
+    assert.match(ask.label, /^Cancel reminder “Order bar oil”\? Say “Nolan confirm”/);
+    const staged = logic.describeVoiceDispatch({
+      decision: "proposed",
+      command: cancelReminder,
+      capture: { title: "Order bar oil", targetId: "r1" },
+      toolActionId: "voice-safe-write:v1:abc",
+    } as never);
+    assert.match(
+      staged.label,
+      /^Staged cancelling reminder “Order bar oil” for your approval\. Nothing changes/,
+    );
+    const unresolved = logic.describeVoiceDispatch({
+      decision: "completion-unresolved",
+      command: cancelReminder,
+      reason: "No reminder matches “Sprocket”.",
+    } as never);
+    assert.equal(unresolved.tone, "warn");
+    assert.equal(unresolved.label, "Nothing cancelled. No reminder matches “Sprocket”.");
+  });
+
+  it("reads a spoken errand removal back and says when nothing was removed", () => {
+    const removeErrand = {
+      id: "client.remove-errand",
+      proposes: { tool: "errands", operation: "remove" },
+    };
+    const ask = logic.describeVoiceDispatch({
+      decision: "awaiting-confirmation",
+      command: removeErrand,
+      capture: { title: "Milk", targetId: "e1" },
+    } as never);
+    assert.match(ask.label, /^Remove errand “Milk” from the list\? Say “Nolan confirm”/);
+    const staged = logic.describeVoiceDispatch({
+      decision: "proposed",
+      command: removeErrand,
+      capture: { title: "Milk", targetId: "e1" },
+      toolActionId: "voice-safe-write:v1:abc",
+    } as never);
+    assert.match(
+      staged.label,
+      /^Staged removing errand “Milk” for your approval\. Nothing changes/,
+    );
+    const unresolved = logic.describeVoiceDispatch({
+      decision: "completion-unresolved",
+      command: removeErrand,
+      reason: "No open errand matches “Sprocket”.",
+    } as never);
+    assert.equal(unresolved.label, "Nothing removed. No open errand matches “Sprocket”.");
+  });
+
+  it("reads a spoken reschedule back with the new time and says when nothing was rescheduled", () => {
+    const rescheduleReminder = {
+      id: "client.reschedule-reminder",
+      proposes: { tool: "reminders", operation: "reschedule" },
+    };
+    const capture = {
+      title: "Order bar oil",
+      targetId: "r1",
+      dueRaw: "friday at 9 am",
+      dueAt: Date.UTC(2026, 10, 19, 22, 0),
+      dueTimezone: "Australia/Sydney",
+    };
+    const ask = logic.describeVoiceDispatch({
+      decision: "awaiting-confirmation",
+      command: rescheduleReminder,
+      capture,
+    } as never);
+    assert.match(
+      ask.label,
+      /^Reschedule reminder “Order bar oil” due Fri, 20 Nov, 9:00 am\? Say “Nolan confirm”/,
+    );
+    const staged = logic.describeVoiceDispatch({
+      decision: "proposed",
+      command: rescheduleReminder,
+      capture,
+      toolActionId: "voice-safe-write:v1:abc",
+    } as never);
+    assert.match(
+      staged.label,
+      /^Staged rescheduling reminder “Order bar oil” due Fri, 20 Nov, 9:00 am for your approval\. Nothing changes/,
+    );
+    const unresolved = logic.describeVoiceDispatch({
+      decision: "completion-unresolved",
+      command: rescheduleReminder,
+      reason: "Rescheduling reminders by voice is not enabled yet (AM-017 is planned).",
+    } as never);
+    assert.match(unresolved.label, /^Nothing rescheduled\. Rescheduling reminders by voice/);
+  });
+
+  it("says a confirmed dictation is staged for approval, not done", () => {
+    const info = logic.describeVoiceDispatch({
+      decision: "proposed",
+      command: reminderCommand,
+      capture: { title: "Call dave" },
+      toolActionId: "voice-safe-write:v1:abc",
+    } as never);
+    assert.equal(info.tone, "ok");
+    assert.match(info.label, /Staged reminder “Call dave” for your approval/);
+    assert.match(info.label, /Nothing is created until you approve it/);
+  });
+
+  it("reads a reminder's resolved due time back, or says no time is set", () => {
+    const dated = logic.describeVoiceDispatch({
+      decision: "awaiting-confirmation",
+      command: reminderCommand,
+      capture: {
+        title: "Call dave",
+        dueRaw: "tomorrow at 7 am",
+        dueAt: Date.parse("2026-11-15T20:00:00.000Z"),
+        dueTimezone: "Australia/Melbourne",
+      },
+    } as never);
+    assert.match(dated.label, /^Add reminder “Call dave” due Mon,? 16 Nov,? 7:00\s?am\?/i);
+    const undated = logic.describeVoiceDispatch({
+      decision: "awaiting-confirmation",
+      command: reminderCommand,
+      capture: { title: "Check the oven", dueRaw: "at 7" },
+    } as never);
+    assert.match(undated.label, /due “at 7” \(no time set — say am or pm\)/);
+  });
+
+  it("still surfaces the not-staged reason for a confirmed dictation", () => {
+    const info = logic.describeVoiceDispatch({
+      decision: "proposed",
+      command: taskCommand,
+      capture: { title: "Order bar oil", category: "personal" },
+      reason: "Safe write was not staged: the tool-action target is not commissioned.",
+    } as never);
+    assert.equal(info.tone, "warn");
+    assert.match(info.label, /not commissioned/);
   });
 });

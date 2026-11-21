@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { AbsentHardwareProvider, type VoiceActuationProvider } from "../src/voice/voiceHardware.js";
+import { voiceUtteranceForSession } from "../src/voice/voiceSafeWrite.js";
 import { VoiceSession } from "../src/voice/voiceSession.js";
 
 function session(provider: VoiceActuationProvider = new AbsentHardwareProvider()): VoiceSession {
@@ -170,6 +171,53 @@ describe("voice session — dispatch and confirmation lifecycle", () => {
 
     assert.equal(confirmed.decision, "actuation-unavailable");
     assert.equal(s.pending(), undefined);
+  });
+
+  it("accepts 'confirmed' as a confirmation but not a sound-alike", async () => {
+    const s = session();
+    await handle(s, "winch up", { now: 0 });
+    const soundAlike = await handle(s, "concern", { now: 500 });
+    assert.notEqual(soundAlike.decision, "actuation-unavailable");
+    assert.ok(s.pending(), "a sound-alike must leave the pending confirmation untouched");
+
+    const confirmed = await handle(s, "confirmed", { now: 1_000, alternatives: ["concern"] });
+    assert.equal(confirmed.decision, "actuation-unavailable");
+    assert.equal(s.pending(), undefined);
+
+    const stale = await handle(s, "confirmed", { now: 1_500 });
+    assert.equal(stale.decision, "confirmation-not-pending");
+  });
+
+  it("accepts 'confirmed' behind the Nolan and legacy Jarvis wake words alike", async () => {
+    for (const wake of ["Nolan", "Jarvis"]) {
+      const s = session();
+      const say = (heard: string, now: number) => {
+        const prepared = voiceUtteranceForSession({ transcript: heard });
+        return s.handle({
+          transcript: prepared.transcript,
+          isFinal: true,
+          wakeAuthorized: prepared.wakeAuthorized,
+          now,
+        });
+      };
+      await say(`${wake} winch up`, 0);
+      assert.ok(s.pending(), `${wake}: the critical command awaits confirmation`);
+
+      const soundAlike = await say(`${wake} concern`, 500);
+      assert.notEqual(soundAlike.decision, "actuation-unavailable");
+      assert.ok(s.pending(), `${wake}: a sound-alike leaves the confirmation pending`);
+
+      const prefixed = await say(`${wake}x confirmed`, 700);
+      assert.notEqual(prefixed.decision, "actuation-unavailable");
+      assert.ok(s.pending(), `${wake}: a longer word is not the wake word`);
+
+      const confirmed = await say(`${wake}, confirmed`, 1_000);
+      assert.equal(confirmed.decision, "actuation-unavailable", `${wake}: fails closed`);
+      assert.equal(s.pending(), undefined);
+
+      const replay = await say(`${wake} confirmed`, 1_500);
+      assert.equal(replay.decision, "confirmation-not-pending");
+    }
   });
 
   it("protects against replay: a second confirm after consumption does nothing", async () => {

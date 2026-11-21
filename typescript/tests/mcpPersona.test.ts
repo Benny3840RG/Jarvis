@@ -37,7 +37,7 @@ describe("Jarvis persona", () => {
       const instructions = client.getInstructions();
       assert.equal(instructions, JARVIS_INSTRUCTIONS);
       // The always-on brief must carry the identity and the honesty anchors.
-      assert.match(instructions ?? "", /Jarvis/);
+      assert.match(instructions ?? "", /NOLAN/);
       assert.match(instructions ?? "", /Beez Treez/);
       assert.match(instructions ?? "", /no phone GPS|geofencing/i);
       // ...the advisory remit that makes Jarvis a shed engineer...

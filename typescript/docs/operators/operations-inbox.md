@@ -136,7 +136,7 @@ MCP-exposed and now carries `integrations` directly, so a second tool would just
 
 ## HUD
 
-`src/mcp/dashboard-v1.html`'s Operations view gained two new full-width panels — "Operations inbox" and
+The HUD's Operations view (then `src/mcp/dashboard-v1.html`, now split under `src/mcp/hud/`) gained two new full-width panels — "Operations inbox" and
 "Activity timeline" (tagged `DURABLE`, to disambiguate it from the pre-existing session-only "Live operator
 feed" panel, tagged `SESSION`) — and the Systems view's Runtime Health panel gained an "Integration
 commissioning" sub-section. All three are additive: none of the pre-existing panels' IDs, markup, or
