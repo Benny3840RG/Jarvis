@@ -79,8 +79,8 @@ release_tracks:
         note: >-
           Guarded non-customer commissioning kit (#712) and preflight (#723)
           merged. Traced run on 56280fa9 covers all four card gaps (#867, #873,
-          #874); card outlook-evidence-acceptance awaits the owner (evidence
-          ledger item 7).
+          #874); card outlook-evidence-acceptance approved and executed
+          (evidence ledger item 7).
       - id: lv1-voice-query-bridge
         priority: 94
         status: commissioning_required
@@ -127,8 +127,10 @@ release_tracks:
           Prove tasks, reminders, errands, restart persistence and the existing
           governed Google Home announcement path against pinned local devices.
         note: >-
-          Off-host flows proven and merged (#710). Needs host restart proof
-          and pinned Google Home devices (runbook stage 6).
+          Off-host flows proven and merged (#710); host records and restart
+          readback proven 10 Nov. Speaker pinned 22 Nov, but the first governed
+          announcement was indeterminate and did not play (evidence ledger
+          item 9, blocker B2).
       - id: lv1-workshop-daily-driver
         priority: 84
         status: commissioning_required
