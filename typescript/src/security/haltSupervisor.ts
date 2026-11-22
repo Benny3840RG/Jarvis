@@ -198,6 +198,7 @@ export class HaltSupervisor {
   private written: string | undefined;
   private timer: NodeJS.Timeout | undefined;
   private ticking: Promise<void> | undefined;
+  private managedRuntimesInitialized = false;
   private managedRuntimesStopped = false;
 
   constructor(
@@ -211,26 +212,30 @@ export class HaltSupervisor {
   async tick(): Promise<void> {
     const reading = await this.halts.read();
     if (!reading.halted) {
-      if (this.managedRuntimesStopped) {
-        // Restart only after the owner resumes. A failure keeps the flag set,
-        // so the next tick retries and the service never silently forgets a
-        // stopped runtime.
+      if (!this.managedRuntimesInitialized || this.managedRuntimesStopped) {
+        // The supervisor owns initial start as well as resume. This closes the
+        // startup race where a runtime could skip start for a halt that was
+        // resumed before the supervisor observed it. A failed start leaves the
+        // state unchanged, so the caller or the next tick can retry.
         for (const runtime of this.options.managedRuntimes ?? []) await runtime.start();
+        this.managedRuntimesInitialized = true;
         this.managedRuntimesStopped = false;
       }
       this.current = undefined;
       return;
     }
-    // Stop service-controlled background runtimes before acknowledging this
-    // halt. stop() is required to be idempotent and is called on every tick,
-    // matching the execution cancellation race protection below.
+
+    // Cancellation is synchronous and must not wait behind a runtime that is
+    // slow to honour its abort. Acknowledgement still waits for every runtime
+    // stop to succeed and for every governed effect to settle.
+    const cancelled = this.running.cancelAll();
+
+    // stop() is required to be idempotent and is called on every halted tick,
+    // matching the execution cancellation race protection above.
     for (const runtime of this.options.managedRuntimes ?? []) await runtime.stop();
+    this.managedRuntimesInitialized = true;
     this.managedRuntimesStopped = true;
 
-    // Every tick while halted, not only the first: an execution that started
-    // in a process-local race, or in a service built without the halt gate,
-    // is still cancelled.
-    const cancelled = this.running.cancelAll();
     const unsettled = this.running.unsettled();
     const haltRef = haltRefFor(reading);
     if (haltRef === undefined) {

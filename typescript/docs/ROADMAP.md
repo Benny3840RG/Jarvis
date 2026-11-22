@@ -2,15 +2,17 @@
 
 ## Security halt stops runtime reconciliation (#839, 2026-11-22)
 
-The service halt now stops the runtime reconciliation host before it can report
-verified stopped. A resume restarts reconciliation only after the halt record
-reads as running. Halt acknowledgements use contract version 2 and cover
+The service halt now cancels governed executions immediately, then stops the
+runtime reconciliation host before it can report verified stopped. The halt
+supervisor owns initial reconciliation start and restarts it only after the halt
+record reads as running. Halt acknowledgements use contract version 2 and cover
 service-controlled work: governed tool executions plus every registered
 background runtime. A pre-upgrade version 1 acknowledgement is deliberately
 unreadable, so it cannot falsely satisfy the broader stop claim.
 
-Focused tests cover stop-before-acknowledgement, restart-on-resume and a failed
-runtime stop producing no acknowledgement. Other processes and unregistered
+Focused tests cover immediate execution cancellation during a slow runtime stop,
+initial start, restart-on-resume, restart retry and a failed runtime stop
+producing no acknowledgement. Other processes and unregistered
 loops remain outside the claim. No deployment or live halt was performed.
 
 ## PR #806 post-merge owner-decision ledger recovery repair (2026-11-13)

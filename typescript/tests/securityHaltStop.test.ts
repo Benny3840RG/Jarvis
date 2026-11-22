@@ -332,8 +332,8 @@ describe("halt supervisor", () => {
     assert.equal(second.kind === "ack" && second.ack.cancelledExecutions, 1);
   });
 
-  it("stops managed runtime loops before verified stopped and restarts them on resume", async () => {
-    let running = true;
+  it("owns initial runtime start, stops before verified stopped and restarts on resume", async () => {
+    let running = false;
     let starts = 0;
     let stops = 0;
     const managed = {
@@ -352,6 +352,10 @@ describe("halt supervisor", () => {
       now: () => NOW,
     });
 
+    await supervisor.tick();
+    assert.equal(running, true);
+    assert.equal(starts, 1);
+
     await halts.halt("owner stop", NOW);
     await supervisor.tick();
     assert.equal(running, false);
@@ -365,7 +369,66 @@ describe("halt supervisor", () => {
     await halts.resume("continue", new Date(NOW.getTime() + 1_000));
     await supervisor.tick();
     assert.equal(running, true);
-    assert.equal(starts, 1);
+    assert.equal(starts, 2);
+  });
+
+  it("cancels governed executions without waiting for a slow runtime stop", async () => {
+    const registry = new RunningExecutionRegistry();
+    const run = registry.begin();
+    const stop = deferred();
+    let tickSettled = false;
+    const supervisor = new HaltSupervisor(halts, acks, registry, {
+      managedRuntimes: [
+        {
+          async start() {},
+          async stop() {
+            await stop.promise;
+          },
+        },
+      ],
+    });
+
+    await halts.halt("owner stop", NOW);
+    const tick = supervisor.tick().finally(() => {
+      tickSettled = true;
+    });
+    await waitFor(() => run.signal.aborted);
+    assert.equal(tickSettled, false);
+    assert.deepEqual(await acks.read(), { kind: "none" });
+
+    stop.resolve();
+    await tick;
+    assert.equal((await acks.read()).kind, "ack");
+  });
+
+  it("retries a managed runtime restart after a failed resume tick", async () => {
+    let running = false;
+    let starts = 0;
+    const supervisor = new HaltSupervisor(halts, acks, new RunningExecutionRegistry(), {
+      managedRuntimes: [
+        {
+          async start() {
+            starts += 1;
+            if (starts === 2) throw new Error("start failed");
+            running = true;
+          },
+          async stop() {
+            running = false;
+          },
+        },
+      ],
+    });
+
+    await supervisor.tick();
+    await halts.halt("owner stop", NOW);
+    await supervisor.tick();
+    await halts.resume("continue", new Date(NOW.getTime() + 1_000));
+    await assert.rejects(supervisor.tick(), /start failed/u);
+    assert.equal(running, false);
+
+    await supervisor.tick();
+    assert.equal(running, true);
+    assert.equal(starts, 3);
   });
 
   it("never acknowledges when a managed runtime cannot be stopped", async () => {
