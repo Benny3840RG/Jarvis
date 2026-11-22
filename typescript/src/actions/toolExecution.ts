@@ -407,6 +407,36 @@ type ExecutionMetadata = {
   source?: string;
 };
 
+const PROVIDER_FAILURE_CODE = /^[a-z0-9][a-z0-9:-]{0,159}$/u;
+
+/**
+ * A diagnostic code that a provider attached to its own error as
+ * `providerFailureCode` (the error or one of its causes). Only a bounded
+ * lowercase code is accepted, so a message text, address or token can never
+ * reach a receipt this way. Errors without one return undefined, which leaves
+ * their receipts exactly as before.
+ */
+export function providerFailureCodeOf(error: unknown): string | undefined {
+  let current: unknown = error;
+  for (let depth = 0; depth < 6 && current instanceof Error; depth += 1) {
+    const code: unknown = (current as { providerFailureCode?: unknown }).providerFailureCode;
+    if (typeof code === "string" && PROVIDER_FAILURE_CODE.test(code)) return code;
+    current = current.cause;
+  }
+  return undefined;
+}
+
+function logProviderFailure(
+  action: ToolAction,
+  status: ToolExecutionStatus,
+  providerErrorCode: string | undefined,
+): void {
+  if (providerErrorCode === undefined) return;
+  console.warn(
+    `Tool action ${action.tool}:${action.operation} ${action.actionId} ended ${status}; provider failure code ${providerErrorCode}`,
+  );
+}
+
 type ReceiptMetadata = ExecutionMetadata & {
   actionFingerprint?: string;
   effectFingerprint?: string;
@@ -1238,8 +1268,10 @@ export class ToolExecutionService {
           ),
         );
       }
+      const providerErrorCode = providerFailureCodeOf(error);
       if (scope && externalProvider && externalReconciliationId && this.reconciliations) {
         if (timedOut || registeredReference) {
+          logProviderFailure(input.action, "indeterminate", providerErrorCode);
           const unresolved = receipt(
             input.action,
             input.idempotencyKey,
@@ -1258,6 +1290,7 @@ export class ToolExecutionService {
                     providerCorrelationId: registeredReference.providerCorrelationId,
                   }),
               reconciliationId: externalReconciliationId,
+              ...(providerErrorCode === undefined ? {} : { providerErrorCode }),
             },
           );
           const envelope = await this.reconciliations.markIndeterminate({
@@ -1285,13 +1318,15 @@ export class ToolExecutionService {
         }
       }
 
+      const status = timedOut ? "indeterminate" : "failed";
+      logProviderFailure(input.action, status, providerErrorCode);
       const result = receipt(
         input.action,
         input.idempotencyKey,
-        timedOut ? "indeterminate" : "failed",
-        timedOut ? "indeterminate" : "failed",
+        status,
+        status,
         startedAt,
-        input,
+        providerErrorCode === undefined ? input : { ...input, providerErrorCode },
       );
       await this.receipts.save(key, result);
       return result;

@@ -57,9 +57,65 @@ type CastClient = {
   ): void;
 };
 export class LocalCastTransportError extends Error {
-  constructor(message: string, options?: ErrorOptions) {
+  /**
+   * A bounded diagnostic code for a failed announcement, for example
+   * `playback:cast-playback-error:audio-fetched`. It is built only from fixed
+   * stage names, this module's own error codes, the receiver's idle reason and
+   * the audio fetch state, so it never carries an address, a message text or a
+   * library error string. The executor copies it onto the receipt.
+   */
+  readonly providerFailureCode?: string;
+
+  constructor(message: string, options?: ErrorOptions & { providerFailureCode?: string }) {
     super(message, options);
     this.name = "LocalCastTransportError";
+    if (options?.providerFailureCode !== undefined) {
+      this.providerFailureCode = options.providerFailureCode;
+    }
+  }
+}
+
+/** Where an announcement had got to when it failed. */
+export type CastAnnouncementStage =
+  "tts" | "host-audio" | "connect" | "volume" | "launch" | "load" | "playback";
+
+/** Whether the receiver asked the host for the announcement audio. */
+export type CastAudioFetchState =
+  "audio-fetched" | "audio-requested" | "audio-requested-by-other-address" | "audio-not-requested";
+
+const OWN_ERROR_CODE = /^(?:cast|local-tts|announcement)-[a-z0-9-]{1,60}$/u;
+
+/** This module's own error code from an error or its causes, else a fixed fallback. */
+export function castErrorCode(error: unknown): string {
+  let current: unknown = error;
+  for (let depth = 0; depth < 6 && current instanceof Error; depth += 1) {
+    if (!(current instanceof LocalCastTransportError) && OWN_ERROR_CODE.test(current.message)) {
+      return current.message;
+    }
+    current = current.cause;
+  }
+  return "cast-unclassified-error";
+}
+
+export function castFailureCode(
+  stage: CastAnnouncementStage,
+  error: unknown,
+  fetchState: CastAudioFetchState,
+): string {
+  return `${stage}:${castErrorCode(error)}:${fetchState}`;
+}
+
+/** Maps the receiver's IDLE reason to a fixed code; unknown reasons are not echoed. */
+export function castIdleReasonCode(idleReason: string | undefined): string {
+  switch (idleReason) {
+    case "ERROR":
+      return "cast-playback-error";
+    case "INTERRUPTED":
+      return "cast-playback-interrupted";
+    case "CANCELLED":
+      return "cast-playback-cancelled";
+    default:
+      return "cast-playback-not-finished";
   }
 }
 
@@ -122,6 +178,7 @@ async function routeLocalAddress(remoteAddress: string, signal: AbortSignal): Pr
 type HostedAudio = Readonly<{
   url: string;
   served: Promise<void>;
+  fetchState(): CastAudioFetchState;
   close(): Promise<void>;
 }>;
 
@@ -133,11 +190,19 @@ async function hostAudioForCast(
   const token = randomUUID();
   const path = `/nolan-announcement-${token}.wav`;
   let resolveServed!: () => void;
+  let fetched = false;
+  let requestedByTarget = false;
+  let requestedByOther = false;
   const served = new Promise<void>((resolve) => {
-    resolveServed = resolve;
+    resolveServed = () => {
+      fetched = true;
+      resolve();
+    };
   });
 
   const server = createServer((request, response) => {
+    if (request.socket.remoteAddress === remoteAddress) requestedByTarget = true;
+    else requestedByOther = true;
     if (
       request.socket.remoteAddress !== remoteAddress ||
       request.url !== path ||
@@ -167,6 +232,12 @@ async function hostAudioForCast(
     return {
       url: `http://${localAddress}:${port}${path}`,
       served,
+      fetchState() {
+        if (fetched) return "audio-fetched";
+        if (requestedByTarget) return "audio-requested";
+        if (requestedByOther) return "audio-requested-by-other-address";
+        return "audio-not-requested";
+      },
       async close() {
         serving.abort();
         await closeServer(server);
@@ -272,8 +343,9 @@ function observePlayback(player: CastPlayer, signal: AbortSignal, contentUrl: st
         if (status.playerState === "PLAYING") started = true;
         if (status.playerState !== "IDLE") return;
         if (!started && status.idleReason === undefined) return;
-        if (status.idleReason !== "FINISHED") finish(new Error("cast-playback-not-finished"));
-        else if (started) finish(null);
+        if (status.idleReason !== "FINISHED") {
+          finish(new Error(castIdleReasonCode(status.idleReason)));
+        } else if (started) finish(null);
       };
       player.on("status", observe);
     },
@@ -378,15 +450,21 @@ export async function castAnnouncement(
   let originalVolume: CastVolume | undefined;
   let succeeded = false;
   let restorationFailed = false;
+  let stage: CastAnnouncementStage = "tts";
   try {
     const audio = await synthesizeAnnouncement(message, voice, activeSignal);
     activeSignal.throwIfAborted();
+    stage = "host-audio";
     hosted = await hostAudioForCast(audio, address, activeSignal);
     activeSignal.throwIfAborted();
+    stage = "connect";
     const current = new castv2.Client();
     client = current;
-    current.on("error", (error) => lifetime.abort(error));
+    current.on("error", (error) =>
+      lifetime.abort(new Error("cast-client-error", { cause: error })),
+    );
     await callbackPromise<void>((done) => current.connect(address, () => done(null)), activeSignal);
+    stage = "volume";
     originalVolume = await callbackPromise<CastVolume>(
       (done) => current.getVolume(done),
       activeSignal,
@@ -403,6 +481,7 @@ export async function castAnnouncement(
       (done) => current.setVolume({ level: volume, muted: false }, done),
       activeSignal,
     );
+    stage = "launch";
     player = await callbackPromise<CastPlayer>(
       (done) => current.launch(castv2.DefaultMediaReceiver, done),
       activeSignal,
@@ -411,6 +490,7 @@ export async function castAnnouncement(
     const currentPlayer = player;
     const mediaUrl = hosted.url;
     playback = observePlayback(currentPlayer, activeSignal, mediaUrl);
+    stage = "load";
     const status = await callbackPromise<CastStatus>(
       (done) =>
         currentPlayer.load(
@@ -426,6 +506,7 @@ export async function castAnnouncement(
       activeSignal,
     );
     playback.bind(status);
+    stage = "playback";
     const audioServed = hosted.served;
     await Promise.all([
       callbackPromise<void>(
@@ -440,7 +521,14 @@ export async function castAnnouncement(
     activeSignal.throwIfAborted();
     succeeded = true;
   } catch (error) {
-    throw new LocalCastTransportError("cast-announcement-failed", { cause: error });
+    throw new LocalCastTransportError("cast-announcement-failed", {
+      cause: error,
+      providerFailureCode: castFailureCode(
+        stage,
+        error,
+        hosted?.fetchState() ?? "audio-not-requested",
+      ),
+    });
   } finally {
     lifetime.abort(new Error("cast-announcement-ended"));
     clearTimeout(deadline);

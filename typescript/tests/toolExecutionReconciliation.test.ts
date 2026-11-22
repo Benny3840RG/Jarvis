@@ -378,3 +378,113 @@ describe("ToolExecutionService external reconciliation", () => {
     assert.equal(reconciliations.envelope?.reconciliation.state, "resolved");
   });
 });
+
+describe("ToolExecutionService provider failure codes", () => {
+  function failingAfterRegistration(error: Error): ToolExecutionDefinition {
+    return externalDefinition(async (_arguments, _signal, context) => {
+      await context.registerProviderAttempt({
+        provider: "demo-provider",
+        providerRequestId: "provider-request-failure",
+        providerCorrelationId: "provider-correlation-failure",
+      });
+      throw error;
+    });
+  }
+
+  it("records a provider-supplied failure code on an indeterminate receipt", async (t) => {
+    const warn = t.mock.method(console, "warn", () => undefined);
+    const reconciliations = new FakeReconciliationStore();
+    const providerError = Object.assign(new Error("cast-announcement-failed"), {
+      providerFailureCode: "playback:cast-playback-error:audio-not-requested",
+    });
+    const service = new ToolExecutionService(
+      [failingAfterRegistration(new Error("wrapped", { cause: providerError }))],
+      new InMemoryToolExecutionReceiptStore(),
+      reconciliations,
+    );
+
+    const result = await service.execute({
+      action: action(),
+      authority: "T2",
+      idempotencyKey: "failure-code",
+    });
+
+    assert.equal(result.status, "indeterminate");
+    assert.equal(result.errorCode, "indeterminate");
+    assert.equal(result.providerErrorCode, "playback:cast-playback-error:audio-not-requested");
+    assert.equal(
+      reconciliations.markCalls[0]?.receipt.providerErrorCode,
+      "playback:cast-playback-error:audio-not-requested",
+    );
+    assert.equal(warn.mock.callCount(), 1);
+    assert.match(
+      String(warn.mock.calls[0]?.arguments[0]),
+      /ended indeterminate; provider failure code playback:cast-playback-error:audio-not-requested$/u,
+    );
+  });
+
+  it("leaves receipts unchanged when the provider supplies no code", async (t) => {
+    const warn = t.mock.method(console, "warn", () => undefined);
+    const service = new ToolExecutionService(
+      [failingAfterRegistration(new Error("boom"))],
+      new InMemoryToolExecutionReceiptStore(),
+      new FakeReconciliationStore(),
+    );
+
+    const result = await service.execute({
+      action: action(),
+      authority: "T2",
+      idempotencyKey: "no-failure-code",
+    });
+
+    assert.equal(result.status, "indeterminate");
+    assert.equal("providerErrorCode" in result, false);
+    assert.equal(warn.mock.callCount(), 0);
+  });
+
+  it("refuses a provider code that is not a bounded lowercase code", async (t) => {
+    t.mock.method(console, "warn", () => undefined);
+    const service = new ToolExecutionService(
+      [
+        failingAfterRegistration(
+          Object.assign(new Error("x"), { providerFailureCode: "connect to 192.168.4.228 FAILED" }),
+        ),
+      ],
+      new InMemoryToolExecutionReceiptStore(),
+      new FakeReconciliationStore(),
+    );
+
+    const result = await service.execute({
+      action: action(),
+      authority: "T2",
+      idempotencyKey: "bad-failure-code",
+    });
+
+    assert.equal("providerErrorCode" in result, false);
+  });
+
+  it("records the code on a failed receipt for a non-external tool", async (t) => {
+    t.mock.method(console, "warn", () => undefined);
+    const service = new ToolExecutionService([
+      {
+        tool: "quotes",
+        operation: "send",
+        schema: z.object({ body: z.string().min(1) }),
+        async execute() {
+          throw Object.assign(new Error("local-failure"), {
+            providerFailureCode: "tts:local-tts-worker-failed:audio-not-requested",
+          });
+        },
+      },
+    ]);
+
+    const result = await service.execute({
+      action: action(),
+      authority: "T2",
+      idempotencyKey: "local-failure-code",
+    });
+
+    assert.equal(result.status, "failed");
+    assert.equal(result.providerErrorCode, "tts:local-tts-worker-failed:audio-not-requested");
+  });
+});
