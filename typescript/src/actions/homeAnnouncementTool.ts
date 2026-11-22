@@ -1,10 +1,17 @@
 import { z } from "zod";
 
 import type { GoogleHomeAnnouncementProvider } from "../integrations/googleHome/googleHomeAnnouncementProvider.js";
-import type { ToolExecutionDefinition } from "./toolExecution.js";
+import { MAX_TOOL_EXECUTION_TIMEOUT_MS, type ToolExecutionDefinition } from "./toolExecution.js";
 
 export const HOME_ANNOUNCEMENT_TOOL = "home";
 export const HOME_ANNOUNCEMENT_OPERATION = "announce";
+
+/**
+ * Speech synthesis, connecting, launching the media receiver, loading and
+ * playing take well over the executor's 5 s default; at 5 s the receiver had
+ * already been launched (interrupting any media) and the speech never played.
+ */
+export const ANNOUNCEMENT_EXECUTION_TIMEOUT_MS = MAX_TOOL_EXECUTION_TIMEOUT_MS;
 
 export const homeAnnouncementArgumentsSchema = z
   .object({
@@ -22,6 +29,7 @@ export function createHomeAnnouncementToolDefinition(
     operation: HOME_ANNOUNCEMENT_OPERATION,
     externalProvider: provider.name,
     minimumAuthority: "T1",
+    defaultTimeoutMs: ANNOUNCEMENT_EXECUTION_TIMEOUT_MS,
     schema: homeAnnouncementArgumentsSchema,
     async preflight(argumentsValue): Promise<void> {
       const parsed = homeAnnouncementArgumentsSchema.parse(argumentsValue);

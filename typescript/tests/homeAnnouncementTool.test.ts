@@ -70,6 +70,8 @@ describe("home announcement tool", () => {
     const registrations: Array<Record<string, string>> = [];
     const definition = createHomeAnnouncementToolDefinition(provider);
     const ctx = context(registrations);
+    // An announcement needs longer than the executor's 5 s default (#697 B2).
+    assert.equal(definition.defaultTimeoutMs, 30_000);
 
     await definition.execute(
       { target: "Kitchen display", message: "NOLAN reporting for duty." },

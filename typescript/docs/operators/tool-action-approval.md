@@ -285,7 +285,10 @@ that were previously listed as required before this stage could be built:
    one-and-only claim was already spent — permanently consuming it for an error that never reached the
    provider, and blocking every legitimate retry as `"approval-consumed"` from then on. Timeout validation
    was moved ahead of the claim so a rejected request can never consume anything.
-5. **Bounded timeouts and redacted failures** — `timeoutMs` is clamped to 1–30000ms (default 5000ms).
+5. **Bounded timeouts and redacted failures** — `timeoutMs` is clamped to 1–30000ms. Without one, the
+   tool definition's `defaultTimeoutMs` applies, otherwise 5000ms. `home:announce` and
+   `device:announce` use 30000ms, because speech synthesis, launching the media receiver and playback
+   take longer than 5 s. Reaching the limit leaves the outcome `indeterminate` and logs one line.
    Failure receipts carry a fixed `errorCode` enum, never a raw error message or the tool's output.
 6. **Durable execution receipts** — receipts are stored in the `toolExecutionReceipts` Convex table,
    scoped by owner, and are the authoritative record of every execution attempt. They are not currently
