@@ -1,7 +1,10 @@
 import { z } from "zod";
 
 import { canonicalJson } from "../actions/canonicalJson.js";
-import { homeAnnouncementArgumentsSchema } from "../actions/homeAnnouncementTool.js";
+import {
+  ANNOUNCEMENT_EXECUTION_TIMEOUT_MS,
+  homeAnnouncementArgumentsSchema,
+} from "../actions/homeAnnouncementTool.js";
 import {
   ToolExecutionPreconditionError,
   type ToolExecutionContext,
@@ -418,6 +421,8 @@ export function createDeviceEffectToolDefinition(input: {
     operation: capability,
     externalProvider: DEVICE_EXTERNAL_PROVIDER,
     minimumAuthority: "T1",
+    // A spoken announcement needs longer than the executor's 5 s default.
+    ...(capability === "announce" ? { defaultTimeoutMs: ANNOUNCEMENT_EXECUTION_TIMEOUT_MS } : {}),
     schema: deviceEffectArgumentsSchema,
     // Runs before the single-use claim, so a refusal here spends no approval.
     async preflight(argumentsValue): Promise<void> {

@@ -92,6 +92,14 @@ export type ToolExecutionDefinition = {
    * not exercise a single-use approval.
    */
   preflight?: (argumentsValue: Record<string, unknown>, signal: AbortSignal) => Promise<void>;
+  /**
+   * Execution time limit used when a request does not pass `timeoutMs`
+   * (otherwise 5 000 ms). For effects that are inherently slower than that,
+   * such as a spoken announcement, so every caller (HTTP, the approvals page,
+   * voice) gets a limit the effect can finish within. Bounded by the same
+   * maximum as `timeoutMs`.
+   */
+  defaultTimeoutMs?: number;
   execute: (
     argumentsValue: Record<string, unknown>,
     signal: AbortSignal,
@@ -262,7 +270,10 @@ const AUTHORITY_LEVEL: Record<ToolAuthority, number> = {
   T2: 2,
   T3: 3,
 };
-const MAX_TIMEOUT_MS = 30_000;
+/** Upper bound for `timeoutMs` and a definition's `defaultTimeoutMs`. */
+export const MAX_TOOL_EXECUTION_TIMEOUT_MS = 30_000;
+const MAX_TIMEOUT_MS = MAX_TOOL_EXECUTION_TIMEOUT_MS;
+const DEFAULT_TIMEOUT_MS = 5_000;
 const ACTION_FINGERPRINT_VERSION = "jarvis-action-fingerprint:v1";
 const EFFECT_FINGERPRINT_VERSION = "jarvis-effect-fingerprint:v1";
 /** Default metadata on a decision receipt when execute() supplies no override. */
@@ -535,6 +546,16 @@ export class ToolExecutionService {
     for (const definition of definitions) {
       const key = `${definition.tool}:${definition.operation}`;
       if (this.definitions.has(key)) throw new Error(`Duplicate tool definition: ${key}`);
+      if (
+        definition.defaultTimeoutMs !== undefined &&
+        (!Number.isInteger(definition.defaultTimeoutMs) ||
+          definition.defaultTimeoutMs < 1 ||
+          definition.defaultTimeoutMs > MAX_TIMEOUT_MS)
+      ) {
+        throw new Error(
+          `Tool definition ${key} defaultTimeoutMs must be an integer between 1 and ${MAX_TIMEOUT_MS}.`,
+        );
+      }
       if (definition.externalProvider !== undefined && reconciliations === undefined) {
         throw new Error(`External tool definition ${key} requires an ExternalReconciliationStore.`);
       }
@@ -959,7 +980,7 @@ export class ToolExecutionService {
     // blocked as `"approval-consumed"` for an action that never actually
     // reached the provider. (Independent review finding: this check
     // previously ran after the claim.)
-    const timeoutMs = input.timeoutMs ?? 5_000;
+    const timeoutMs = input.timeoutMs ?? definition.defaultTimeoutMs ?? DEFAULT_TIMEOUT_MS;
     if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > MAX_TIMEOUT_MS) {
       throw new Error(`timeoutMs must be an integer between 1 and ${MAX_TIMEOUT_MS}.`);
     }
@@ -1255,6 +1276,11 @@ export class ToolExecutionService {
       // first with its own error, so it must never be recorded as "failed".
       const timedOut =
         controller.signal.aborted || (error instanceof Error && error.message === "timeout");
+      if (timedOut && !run.signal.aborted) {
+        console.warn(
+          `Tool action ${input.action.tool}:${input.action.operation} ${input.action.actionId} reached its ${timeoutMs} ms execution limit; outcome is indeterminate`,
+        );
+      }
       if (isAttemptAlreadyInProgress(error)) {
         return this.persistDecision(
           key,

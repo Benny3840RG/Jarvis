@@ -260,6 +260,8 @@ describe("governed effect path", () => {
     assert.equal(tool.operation, "announce");
     assert.equal(tool.minimumAuthority, "T1");
     assert.equal(typeof tool.externalProvider, "string");
+    // An announcement needs longer than the executor's 5 s default (#697 B2).
+    assert.equal(tool.defaultTimeoutMs, 30_000);
     assert.equal(tool.schema.safeParse({ ...args, shell: "rm -rf /" }).success, false);
   });
 
