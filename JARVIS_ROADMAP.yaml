@@ -60,8 +60,10 @@ release_tracks:
           feedback and measured dispatch round trips.
         non_goal: Physical equipment actuation.
         note: >-
-          Software merged (#696). Remaining work is host microphone, HUD and
-          measured round-trip commissioning (runbook stage 3).
+          Software merged (#696). Host spoken run 13 Nov and its fix (#809);
+          owner card voice-host-commissioning approved and executed, #567 closed
+          as commissioned on 22 Nov 2026. Evidence ledger:
+          docs/operations/local-v1-release-evidence.md (item 4).
       - id: lv1-outlook-commissioning
         priority: 97
         status: commissioning_required
@@ -76,8 +78,9 @@ release_tracks:
           send prevention.
         note: >-
           Guarded non-customer commissioning kit (#712) and preflight (#723)
-          merged. Needs a dev Graph OAuth secret and one host session (runbook
-          stage 4).
+          merged. Traced run on 56280fa9 covers all four card gaps (#867, #873,
+          #874); card outlook-evidence-acceptance awaits the owner (evidence
+          ledger item 7).
       - id: lv1-voice-query-bridge
         priority: 94
         status: commissioning_required
@@ -110,9 +113,10 @@ release_tracks:
           delivery/reconciliation to invoice draft and daily operational views.
         note: >-
           Off-host rehearsal recorded (docs/operations/lv1-06-offhost-rehearsal.md).
-          Quote send stays not-commissioned until lv1-outlook-commissioning, and
-          the operator must supply an existing totality project key for quote
-          tool actions; no business-job-to-project mapping exists by design
+          End-to-end workflow proven on the host on b11f1a4f, all 14 checks
+          (#875, #876; evidence ledger item 8). The operator must supply an
+          existing totality project key for quote tool actions; no
+          business-job-to-project mapping exists by design
           (docs/operations/lv1-06-business-project-tool-actions.md).
       - id: lv1-home-daily-driver
         priority: 86
@@ -149,9 +153,9 @@ release_tracks:
         note: >-
           Capture, isolated restore, reread and proof gate merged (#706, #707,
           #709, #717, #718, #721, #722). Archive completeness stays partial by
-          design. The host restart re-proof against an isolated
-          convex-local-backend is NOT YET MET
-          (docs/operations/local-v1-recovery-gap-analysis.md, runbook stage 8).
+          design. Host recovery PASS on 28d35737 (capture, restore, restart;
+          #697 comment 7027465234) and host proof on ca7f256f (#865); card
+          recovery-isolated-proof executed (evidence ledger item 11).
       - id: lv1-dogfood
         priority: 82
         status: planned
@@ -172,6 +176,10 @@ release_tracks:
         objective: >-
           Freeze one exact candidate, run maintained verification and
           independent review, record evidence and publish the Local V1 runbook.
+        note: >-
+          Evidence ledger and freeze record:
+          docs/operations/local-v1-release-evidence.md. Blocker B1: redeploy
+          Convex dev from the candidate first.
     existing_issue_classification:
       direct_local_v1:
         - issue: 567
