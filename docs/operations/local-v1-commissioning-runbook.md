@@ -2,6 +2,8 @@
 
 **Audience:** Benny (owner/operator), running on the J-arvis host.
 **Tracker:** #697. **Release plan:** `docs/operations/local-v1-release-plan.md`.
+**Release evidence:** `docs/operations/local-v1-release-evidence.md`, which maps each
+definition-of-done item to its evidence and records the freeze.
 **What this is:** the host-side sequence that turns the green code baseline into
 the evidence #697's definition of done requires. Every stage names the
 environment it needs and an explicit pass / stop line. The stages that are
@@ -419,7 +421,8 @@ On one frozen candidate SHA, assemble:
 - an independent correctness/security/authority review with no unresolved blocker.
 
 Then record: exact release SHA, check/evidence references, known limitations, and
-this runbook as the Local V1 operator runbook. Only then designate the candidate
+this runbook as the Local V1 operator runbook. Record them in the freeze record of
+`docs/operations/local-v1-release-evidence.md`. Only then designate the candidate
 **JARVIS LOCAL V1**.
 
 **This designation is the owner's decision.** No agent, check, or machine review
@@ -429,17 +432,19 @@ makes it.
 
 ## Quick status map to #697 definition of done
 
+For the full per-item evidence, see `docs/operations/local-v1-release-evidence.md`.
+
 | DoD item                                       | Stage | Owner-only / host-side?                                                                                                                                        |
 | ---------------------------------------------- | ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | maintained checks + OpenAPI lint               | 1     | provable off-host (✅ green on `ee3340e`)                                                                                                                      |
 | known-good runtime locked                      | 0 + 2 | host                                                                                                                                                           |
 | HUD + MCP usable on dev persistence            | 2     | host                                                                                                                                                           |
-| #567 voice commissioning                       | 3     | host (real mic)                                                                                                                                                |
+| #567 voice commissioning                       | 3     | ✅ commissioned: owner card `voice-host-commissioning` executed, #567 closed                                                                                   |
 | voice read queries authoritative               | —     | ✅ merged tests                                                                                                                                                |
 | safe voice writes reuse paths                  | —     | ✅ merged tests                                                                                                                                                |
-| #294 + #297 Outlook                            | 4     | host (live mailbox)                                                                                                                                            |
-| golden workflow end to end                     | 5     | host                                                                                                                                                           |
-| home + Google Home commissioned                | 6     | host (pinned devices)                                                                                                                                          |
+| #294 + #297 Outlook                            | 4     | evidence complete on `56280fa9`; card `outlook-evidence-acceptance` awaits the owner                                                                           |
+| golden workflow end to end                     | 5     | ✅ proven on `b11f1a4f` (#875, #876)                                                                                                                           |
+| home + Google Home commissioned                | 6     | host; records proven 10 Nov; card `google-home-announcement` awaits the owner                                                                                  |
 | workshop daily-driver                          | 7     | host                                                                                                                                                           |
 | dataset recoverable (isolated restore)         | 8     | host (isolated backend); **host proof PASSED at `ca7f256f` on synthetic data (owner-approved, executed); capture and restore still use an out-of-repo driver** |
 | restart preserves state, hardware fails closed | 8 + 3 | host                                                                                                                                                           |
