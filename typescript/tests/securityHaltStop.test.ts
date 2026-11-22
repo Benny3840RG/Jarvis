@@ -389,10 +389,13 @@ describe("halt supervisor", () => {
     });
 
     await halts.halt("owner stop", NOW);
+    const cancelled = new Promise<void>((resolve) => {
+      run.signal.addEventListener("abort", () => resolve(), { once: true });
+    });
     const tick = supervisor.tick().finally(() => {
       tickSettled = true;
     });
-    await waitFor(() => run.signal.aborted);
+    await cancelled;
     assert.equal(tickSettled, false);
     assert.deepEqual(await acks.read(), { kind: "none" });
 
