@@ -181,7 +181,9 @@ export class FileHaltAckStore {
 }
 
 export type HaltManagedRuntime = {
+  /** May be retried after a partial multi-runtime start and must be idempotent. */
   start(): Promise<void>;
+  /** May be retried on every halted tick and must be idempotent. */
   stop(): Promise<void>;
 };
 
@@ -230,11 +232,18 @@ export class HaltSupervisor {
     // stop to succeed and for every governed effect to settle.
     const cancelled = this.running.cancelAll();
 
-    // stop() is required to be idempotent and is called on every halted tick,
-    // matching the execution cancellation race protection above.
-    for (const runtime of this.options.managedRuntimes ?? []) await runtime.stop();
+    // Record the conservative state before stopping. If one stop partially
+    // succeeds and then fails, a later resume retries every idempotent start
+    // instead of silently leaving that runtime down.
     this.managedRuntimesInitialized = true;
     this.managedRuntimesStopped = true;
+    const stopResults = await Promise.allSettled(
+      (this.options.managedRuntimes ?? []).map(async (runtime) => runtime.stop()),
+    );
+    const failedStop = stopResults.find(
+      (result): result is PromiseRejectedResult => result.status === "rejected",
+    );
+    if (failedStop) throw failedStop.reason;
 
     const unsettled = this.running.unsettled();
     const haltRef = haltRefFor(reading);

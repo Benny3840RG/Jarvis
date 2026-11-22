@@ -431,6 +431,36 @@ describe("halt supervisor", () => {
     assert.equal(starts, 3);
   });
 
+  it("restarts a runtime after its halt stop partially succeeds and fails", async () => {
+    let running = false;
+    let starts = 0;
+    const supervisor = new HaltSupervisor(halts, acks, new RunningExecutionRegistry(), {
+      managedRuntimes: [
+        {
+          async start() {
+            starts += 1;
+            running = true;
+          },
+          async stop() {
+            running = false;
+            throw new Error("partial stop failed");
+          },
+        },
+      ],
+    });
+
+    await supervisor.tick();
+    await halts.halt("owner stop", NOW);
+    await assert.rejects(supervisor.tick(), /partial stop failed/u);
+    assert.equal(running, false);
+    assert.deepEqual(await acks.read(), { kind: "none" });
+
+    await halts.resume("continue", new Date(NOW.getTime() + 1_000));
+    await supervisor.tick();
+    assert.equal(running, true);
+    assert.equal(starts, 2);
+  });
+
   it("never acknowledges when a managed runtime cannot be stopped", async () => {
     const supervisor = new HaltSupervisor(halts, acks, new RunningExecutionRegistry(), {
       managedRuntimes: [
