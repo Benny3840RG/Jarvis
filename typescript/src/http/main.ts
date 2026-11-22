@@ -50,18 +50,33 @@ async function main(): Promise<void> {
   });
 
   // `nolan sec halt` (#839): cancels this process's running governed tool
-  // executions while halted, and reports acknowledged / verified stopped.
+  // executions and stops the reconciliation loop before it reports a
+  // verified stop. Starting or resuming reconciliation re-checks the halt
+  // record, so a halt present during service startup fails closed.
+  const haltStore = new FileHaltStore(jarvisDataFile(HALT_FILE_BASENAME));
+  const haltAwareReconciliation = {
+    async start() {
+      if ((await haltStore.read()).halted) return;
+      await reconciliation.start();
+    },
+    async stop() {
+      await reconciliation.stop();
+    },
+  };
   const haltSupervisor = new HaltSupervisor(
-    new FileHaltStore(jarvisDataFile(HALT_FILE_BASENAME)),
+    haltStore,
     new FileHaltAckStore(jarvisDataFile(HALT_ACK_FILE_BASENAME)),
     processRunningExecutions,
-    { onError: () => console.error("Security halt acknowledgement could not be written.") },
+    {
+      managedRuntimes: [haltAwareReconciliation],
+      onError: () => console.error("Security halt acknowledgement could not be written."),
+    },
   );
   haltSupervisor.start();
 
   try {
     await app.listen(listen);
-    await reconciliation.start();
+    await haltAwareReconciliation.start();
   } catch (error: unknown) {
     await haltSupervisor.stop();
     await reconciliation.stop();

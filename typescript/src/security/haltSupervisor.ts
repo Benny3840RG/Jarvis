@@ -23,22 +23,27 @@ import {
  *   effect that may still be running. An effect that ignores its abort keeps
  *   this false until it settles.
  *
- * The acknowledgement covers governed tool executions in the one process that
- * runs the supervisor (the HTTP service). It says nothing about other
- * processes or about non-tool background loops.
+ * The acknowledgement covers governed tool executions and each registered
+ * service-controlled runtime in the one process that runs the supervisor (the
+ * HTTP service). It says nothing about other processes or unregistered loops.
  */
 
 export const HALT_ACK_FILE_BASENAME = "jarvis-security-halt-ack.json";
 export const HALT_SUPERVISOR_INTERVAL_MS = 1_000;
 const haltAckSchema = z
   .object({
-    version: z.literal(1),
-    scope: z.literal("governed-tool-executions"),
+    // Version 2 expands the acknowledgement from governed tool executions to
+    // every service-controlled runtime registered with the supervisor. A v1
+    // file is deliberately unreadable after upgrade, so it can never claim a
+    // verified stop before the newly managed runtime has stopped.
+    version: z.literal(2),
+    scope: z.literal("service-controlled-work"),
     haltRef: z.string().min(1).max(200),
     pid: z.number().int().positive(),
     acknowledgedAt: z.string().datetime(),
     cancelledExecutions: z.number().int().nonnegative(),
     unsettledExecutions: z.number().int().nonnegative(),
+    stoppedRuntimes: z.number().int().nonnegative(),
     verifiedStoppedAt: z.string().datetime().nullable(),
     updatedAt: z.string().datetime(),
   })
@@ -175,11 +180,17 @@ export class FileHaltAckStore {
   }
 }
 
+export type HaltManagedRuntime = {
+  start(): Promise<void>;
+  stop(): Promise<void>;
+};
+
 type HaltSupervisorOptions = {
   intervalMs?: number;
   now?: () => Date;
   pid?: number;
   onError?: (error: unknown) => void;
+  managedRuntimes?: readonly HaltManagedRuntime[];
 };
 
 export class HaltSupervisor {
@@ -187,6 +198,7 @@ export class HaltSupervisor {
   private written: string | undefined;
   private timer: NodeJS.Timeout | undefined;
   private ticking: Promise<void> | undefined;
+  private managedRuntimesStopped = false;
 
   constructor(
     private readonly halts: FileHaltStore,
@@ -199,9 +211,22 @@ export class HaltSupervisor {
   async tick(): Promise<void> {
     const reading = await this.halts.read();
     if (!reading.halted) {
+      if (this.managedRuntimesStopped) {
+        // Restart only after the owner resumes. A failure keeps the flag set,
+        // so the next tick retries and the service never silently forgets a
+        // stopped runtime.
+        for (const runtime of this.options.managedRuntimes ?? []) await runtime.start();
+        this.managedRuntimesStopped = false;
+      }
       this.current = undefined;
       return;
     }
+    // Stop service-controlled background runtimes before acknowledging this
+    // halt. stop() is required to be idempotent and is called on every tick,
+    // matching the execution cancellation race protection below.
+    for (const runtime of this.options.managedRuntimes ?? []) await runtime.stop();
+    this.managedRuntimesStopped = true;
+
     // Every tick while halted, not only the first: an execution that started
     // in a process-local race, or in a service built without the halt gate,
     // is still cancelled.
@@ -215,13 +240,14 @@ export class HaltSupervisor {
     const now = (this.options.now ?? (() => new Date()))().toISOString();
     const previous = this.current?.haltRef === haltRef ? this.current : undefined;
     const next: HaltAck = {
-      version: 1,
-      scope: "governed-tool-executions",
+      version: 2,
+      scope: "service-controlled-work",
       haltRef,
       pid: this.options.pid ?? process.pid,
       acknowledgedAt: previous?.acknowledgedAt ?? now,
       cancelledExecutions: (previous?.cancelledExecutions ?? 0) + cancelled,
       unsettledExecutions: unsettled,
+      stoppedRuntimes: (this.options.managedRuntimes ?? []).length,
       verifiedStoppedAt: unsettled === 0 ? (previous?.verifiedStoppedAt ?? now) : null,
       updatedAt: previous?.updatedAt ?? now,
     };

@@ -332,6 +332,58 @@ describe("halt supervisor", () => {
     assert.equal(second.kind === "ack" && second.ack.cancelledExecutions, 1);
   });
 
+  it("stops managed runtime loops before verified stopped and restarts them on resume", async () => {
+    let running = true;
+    let starts = 0;
+    let stops = 0;
+    const managed = {
+      async start() {
+        starts += 1;
+        running = true;
+      },
+      async stop() {
+        stops += 1;
+        running = false;
+      },
+    };
+    const supervisor = new HaltSupervisor(halts, acks, new RunningExecutionRegistry(), {
+      managedRuntimes: [managed],
+      pid: 4242,
+      now: () => NOW,
+    });
+
+    await halts.halt("owner stop", NOW);
+    await supervisor.tick();
+    assert.equal(running, false);
+    assert.equal(stops, 1);
+    const halted = await acks.read();
+    assert.equal(halted.kind === "ack" && halted.ack.version, 2);
+    assert.equal(halted.kind === "ack" && halted.ack.scope, "service-controlled-work");
+    assert.equal(halted.kind === "ack" && halted.ack.stoppedRuntimes, 1);
+    assert.equal(halted.kind === "ack" && halted.ack.verifiedStoppedAt, NOW.toISOString());
+
+    await halts.resume("continue", new Date(NOW.getTime() + 1_000));
+    await supervisor.tick();
+    assert.equal(running, true);
+    assert.equal(starts, 1);
+  });
+
+  it("never acknowledges when a managed runtime cannot be stopped", async () => {
+    const supervisor = new HaltSupervisor(halts, acks, new RunningExecutionRegistry(), {
+      managedRuntimes: [
+        {
+          async start() {},
+          async stop() {
+            throw new Error("stop failed");
+          },
+        },
+      ],
+    });
+    await halts.halt("owner stop", NOW);
+    await assert.rejects(supervisor.tick(), /stop failed/u);
+    assert.deepEqual(await acks.read(), { kind: "none" });
+  });
+
   it("binds a new acknowledgement to a new halt record and to a fail-closed halt", async () => {
     const supervisor = new HaltSupervisor(halts, acks, new RunningExecutionRegistry());
     await halts.halt("first", NOW);

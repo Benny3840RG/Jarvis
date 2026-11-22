@@ -8,13 +8,13 @@ npm run sec -- status
 npm run sec -- resume "why it is safe again"
 ```
 
-While halted, the running service refuses new governed tool executions and cancels the ones in flight. It doesn't need a restart. `halt` waits up to 5 seconds for the service, then prints one of three states:
+While halted, the running service refuses new governed tool executions, cancels the ones in flight, and stops its runtime reconciliation loop. It doesn't need a restart. On resume, reconciliation restarts only after the halt record reads as running. `halt` waits up to 5 seconds for the service, then prints one of three states:
 
 - **not acknowledged**: the service hasn't seen the halt. It may not be running.
-- **acknowledged**: the service saw this halt and cancelled its running executions, but at least one provider call hasn't finished yet.
-- **verified stopped**: nothing the service started is still running.
+- **acknowledged**: the service saw this halt, stopped its registered background runtimes and cancelled its running executions, but at least one provider call hasn't finished yet.
+- **verified stopped**: no governed effect is unsettled and every registered background runtime has stopped.
 
-Cancelling sends the provider an abort. A provider that ignores aborts can't be forced to stop, so it keeps the state at acknowledged until it finishes. A cancelled execution ends with an unknown outcome (`indeterminate`), so check what it did before retrying it. A single-use approval cancelled after it was claimed stays used up and needs approving again. The states only cover governed tool executions inside the HTTP service process.
+Cancelling sends the provider an abort. A provider that ignores aborts can't be forced to stop, so it keeps the state at acknowledged until it finishes. A cancelled execution ends with an unknown outcome (`indeterminate`), so check what it did before retrying it. A single-use approval cancelled after it was claimed stays used up and needs approving again. The states cover governed tool executions and the runtime reconciliation loop inside the HTTP service process; they do not claim that another process or an unregistered loop stopped.
 
 `GET /api/v1/status` reports the same state as `securityHalt`, without your reason text. The overall status is `degraded` while dispatch is refused.
 
