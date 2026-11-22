@@ -12026,6 +12026,11 @@
               "safety-blocked"
             ]
           },
+          "providerErrorCode": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9:-]{0,159}$",
+            "description": "Bounded diagnostic code supplied by the provider when an attempt fails or ends indeterminate, for example `playback:cast-playback-error:audio-not-requested`. Never contains message text, addresses or credentials."
+          },
           "startedAt": {
             "type": "string",
             "format": "date-time"

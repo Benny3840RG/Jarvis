@@ -297,6 +297,29 @@ that were previously listed as required before this stage could be built:
    `tests/notesSmoke.test.ts` and `tests/taskReminderActionsSmoke.test.ts`), matching every other
    domain's `smoke:convex` pattern.
 
+### Provider failure codes
+
+When a provider attaches a diagnostic code to its own error, a `failed` or `indeterminate`
+receipt carries it as `providerErrorCode`, and the HTTP process logs one warning line with the
+action id and the code. The executor accepts only a bounded lowercase code
+(`^[a-z0-9][a-z0-9:-]{0,159}$`), so message text, addresses and credentials never reach a receipt
+this way. Receipts from providers that supply no code are unchanged. The code is evidence for
+diagnosis; it never changes the receipt status, and an `indeterminate` action is still never
+retried blindly.
+
+The Google Cast announcement provider (`home:announce`) reports `<stage>:<reason>:<audio>`:
+
+- `stage`: how far the attempt got: `tts`, `host-audio`, `connect`, `volume`, `launch`, `load` or
+  `playback`;
+- `reason`: the transport's own code, such as `cast-playback-error` (the receiver went idle with
+  `ERROR`), `cast-request-timeout` or `cast-client-error`, or `cast-unclassified-error`;
+- `audio`: whether the speaker fetched the announcement audio from the host: `audio-fetched`,
+  `audio-requested`, `audio-requested-by-other-address` or `audio-not-requested`.
+
+For example, `playback:cast-playback-error:audio-not-requested` means the speaker accepted the
+media but never asked the host for the audio, which points at host reachability (a firewall or
+network path between the speaker and the host) rather than at the speaker.
+
 ## Audit evidence
 
 Convex appends project-scoped audit events for:
