@@ -128,9 +128,9 @@ release_tracks:
           governed Google Home announcement path against pinned local devices.
         note: >-
           Off-host flows proven and merged (#710); host records and restart
-          readback proven 10 Nov. Speaker pinned 22 Nov, but the first governed
-          announcement was indeterminate and did not play (evidence ledger
-          item 9, blocker B2).
+          readback proven 10 Nov. Speaker pinned 22 Nov; after the #880 timeout
+          fix the governed announcement played in full and the owner card is
+          executed (evidence ledger item 9). Re-prove on the release candidate.
       - id: lv1-workshop-daily-driver
         priority: 84
         status: commissioning_required
