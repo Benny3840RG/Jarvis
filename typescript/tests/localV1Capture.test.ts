@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash, randomBytes } from "node:crypto";
-import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, describe, it } from "node:test";
@@ -404,6 +404,409 @@ describe("Local V1 partial capture", () => {
     );
   });
 
+  it("resumes an interrupted ledger pair only after checking retained bytes", async () => {
+    const root = await scratch();
+    const live = path.join(root, "live");
+    const output = path.join(root, "capture");
+    const target = path.join(root, "restore");
+    const { mkdir, lstat } = await import("node:fs/promises");
+    await mkdir(live);
+    await writeBusiness(live);
+    await new JsonLinesOwnerDecisionLedger(path.join(live, LOCAL_V1_LEDGER_FILE)).start();
+    await captureLocalV1Archive({
+      outputDirectory: output,
+      ownerDecisionLedgerDirectory: live,
+      businessPaths: businessPaths(live),
+      client: scriptedClient().client,
+      serviceToken: SERVICE,
+      approvalToken: APPROVAL,
+      convexUrl: ENDPOINT,
+      capturedAt: AT,
+    });
+    const base = {
+      captureDirectory: output,
+      jsonDirectory: target,
+      client: { action: async () => ({ tasks: [], reminders: [], builds: [], pdfs: [] }) },
+      serviceToken: SERVICE,
+      approvalToken: APPROVAL,
+      convexUrl: ENDPOINT,
+      now: AT.getTime(),
+      liveDataDir: live,
+    };
+    await assert.rejects(
+      () => restoreLocalV1Archive({ ...base, injectAfterLedgerFile: "checkpoint" }),
+      /Injected failure/,
+    );
+    await lstat(path.join(target, ".jarvis-archive-v4-in-progress.json"));
+    await assert.rejects(
+      () => lstat(path.join(target, ".jarvis-archive-v4-complete.json")),
+      /ENOENT/,
+    );
+    await lstat(path.join(target, LOCAL_V1_CHECKPOINT_FILE));
+    await assert.rejects(() => lstat(path.join(target, LOCAL_V1_LEDGER_FILE)), /ENOENT/);
+    await assert.rejects(() => restoreLocalV1Archive(base), /already exists|interrupted/);
+    const checkpoint = path.join(target, LOCAL_V1_CHECKPOINT_FILE);
+    const originalCheckpoint = await readFile(checkpoint);
+    await writeFile(checkpoint, "altered\n");
+    await assert.rejects(
+      () => restoreLocalV1Archive({ ...base, resume: true }),
+      /does not match the archive/,
+    );
+    await writeFile(checkpoint, originalCheckpoint);
+    await symlink(path.join(output, LOCAL_V1_LEDGER_FILE), path.join(target, LOCAL_V1_LEDGER_FILE));
+    await assert.rejects(
+      () => restoreLocalV1Archive({ ...base, resume: true }),
+      /not a regular file/,
+    );
+    await rm(path.join(target, LOCAL_V1_LEDGER_FILE));
+    await assert.rejects(
+      () =>
+        restoreLocalV1Archive({
+          ...base,
+          resume: true,
+          client: {
+            action: async () => {
+              throw new Error("injected isolated database failure");
+            },
+          },
+        }),
+      /injected isolated database failure/,
+    );
+    await lstat(path.join(target, ".jarvis-archive-v4-in-progress.json"));
+    await assert.rejects(
+      () => lstat(path.join(target, ".jarvis-archive-v4-complete.json")),
+      /ENOENT/,
+    );
+    await lstat(path.join(target, LOCAL_V1_LEDGER_FILE));
+    await assert.rejects(
+      () => restoreLocalV1Archive({ ...base, resume: true }),
+      /ambiguous|reconciliation/,
+    );
+    await lstat(path.join(target, ".jarvis-archive-v4-in-progress.json"));
+    assert.deepEqual(
+      await readFile(path.join(target, LOCAL_V1_LEDGER_FILE)),
+      await readFile(path.join(output, LOCAL_V1_LEDGER_FILE)),
+    );
+    const changed = path.join(root, "changed-during-failed-action");
+    await assert.rejects(
+      () =>
+        restoreLocalV1Archive({
+          ...base,
+          jsonDirectory: changed,
+          client: {
+            action: async () => {
+              await writeFile(path.join(changed, "manifest.json"), "replacement\n");
+              throw new Error("injected isolated database failure");
+            },
+          },
+        }),
+      /injected isolated database failure/,
+    );
+    assert.equal(await readFile(path.join(changed, "manifest.json"), "utf8"), "replacement\n");
+  });
+
+  it("does not replay an isolated restore action after it succeeds but completion is interrupted", async () => {
+    const root = await scratch();
+    const live = path.join(root, "live");
+    const output = path.join(root, "capture");
+    const target = path.join(root, "restore");
+    const { mkdir, lstat } = await import("node:fs/promises");
+    await mkdir(live);
+    await writeBusiness(live);
+    await captureLocalV1Archive({
+      outputDirectory: output,
+      ownerDecisionLedgerDirectory: live,
+      businessPaths: businessPaths(live),
+      client: scriptedClient().client,
+      serviceToken: SERVICE,
+      approvalToken: APPROVAL,
+      convexUrl: ENDPOINT,
+      capturedAt: AT,
+    });
+    let actionCalls = 0;
+    const base = {
+      captureDirectory: output,
+      jsonDirectory: target,
+      client: {
+        action: async () => {
+          actionCalls += 1;
+          return { tasks: [], reminders: [], builds: [], pdfs: [] };
+        },
+      },
+      serviceToken: SERVICE,
+      approvalToken: APPROVAL,
+      convexUrl: ENDPOINT,
+      now: AT.getTime(),
+      liveDataDir: live,
+    };
+    await assert.rejects(
+      () => restoreLocalV1Archive({ ...base, injectAfterAction: true }),
+      /Injected failure after isolated action/,
+    );
+    assert.equal(actionCalls, 1);
+    await lstat(path.join(target, ".jarvis-archive-v4-in-progress.json"));
+    await assert.rejects(
+      () => lstat(path.join(target, ".jarvis-archive-v4-complete.json")),
+      /ENOENT/,
+    );
+    await assert.rejects(
+      () => restoreLocalV1Archive({ ...base, resume: true }),
+      /ambiguous|reconciliation/i,
+    );
+    assert.equal(actionCalls, 1);
+    await lstat(path.join(target, ".jarvis-archive-v4-in-progress.json"));
+    const actionMarker = path.join(target, ".jarvis-local-v1-action-started.json");
+    await writeFile(path.join(target, ".jarvis-archive-v4-complete.json"), "{}\n");
+    await assert.rejects(
+      () => restoreLocalV1Archive({ ...base, resume: true }),
+      /ambiguous|reconciliation/i,
+    );
+    await rm(path.join(target, ".jarvis-archive-v4-complete.json"));
+    await writeFile(actionMarker, "tampered\n");
+    await assert.rejects(
+      () => restoreLocalV1Archive({ ...base, resume: true }),
+      /ambiguous|reconciliation/i,
+    );
+    await rm(actionMarker);
+    await symlink(path.join(output, LOCAL_V1_RECEIPTS_FILE), actionMarker);
+    await assert.rejects(
+      () => restoreLocalV1Archive({ ...base, resume: true }),
+      /ambiguous|reconciliation/i,
+    );
+    assert.equal(actionCalls, 1);
+  });
+
+  it("resolves action-start evidence after a successful restore", async () => {
+    const root = await scratch();
+    const live = path.join(root, "live");
+    const output = path.join(root, "capture");
+    const target = path.join(root, "restore");
+    const { mkdir, lstat } = await import("node:fs/promises");
+    await mkdir(live);
+    await writeBusiness(live);
+    await captureLocalV1Archive({
+      outputDirectory: output,
+      ownerDecisionLedgerDirectory: live,
+      businessPaths: businessPaths(live),
+      client: scriptedClient().client,
+      serviceToken: SERVICE,
+      approvalToken: APPROVAL,
+      convexUrl: ENDPOINT,
+      capturedAt: AT,
+    });
+    let calls = 0;
+    const base = {
+      captureDirectory: output,
+      jsonDirectory: target,
+      client: {
+        action: async () => {
+          calls += 1;
+          return { tasks: [], reminders: [], builds: [], pdfs: [] };
+        },
+      },
+      serviceToken: SERVICE,
+      approvalToken: APPROVAL,
+      convexUrl: ENDPOINT,
+      now: AT.getTime(),
+      liveDataDir: live,
+    };
+    await restoreLocalV1Archive(base);
+    await lstat(path.join(target, ".jarvis-archive-v4-complete.json"));
+    await assert.rejects(
+      () => lstat(path.join(target, ".jarvis-local-v1-action-started.json")),
+      /ENOENT/,
+    );
+    await assert.rejects(
+      () => restoreLocalV1Archive({ ...base, resume: true }),
+      /already.*completed/i,
+    );
+    assert.equal(calls, 1);
+  });
+
+  it("treats a retained action marker after durable completion as historical, but refuses forged completion", async () => {
+    const root = await scratch();
+    const live = path.join(root, "live");
+    const output = path.join(root, "capture");
+    const target = path.join(root, "restore");
+    const { mkdir, chmod } = await import("node:fs/promises");
+    await mkdir(live);
+    await writeBusiness(live);
+    await captureLocalV1Archive({
+      outputDirectory: output,
+      ownerDecisionLedgerDirectory: live,
+      businessPaths: businessPaths(live),
+      client: scriptedClient().client,
+      serviceToken: SERVICE,
+      approvalToken: APPROVAL,
+      convexUrl: ENDPOINT,
+      capturedAt: AT,
+    });
+    let actionMarkerBytes: Buffer | undefined;
+    let calls = 0;
+    const base = {
+      captureDirectory: output,
+      jsonDirectory: target,
+      client: {
+        action: async () => {
+          calls += 1;
+          actionMarkerBytes = await readFile(
+            path.join(target, ".jarvis-local-v1-action-started.json"),
+          );
+          return { tasks: [], reminders: [], builds: [], pdfs: [] };
+        },
+      },
+      serviceToken: SERVICE,
+      approvalToken: APPROVAL,
+      convexUrl: ENDPOINT,
+      now: AT.getTime(),
+      liveDataDir: live,
+    };
+    await restoreLocalV1Archive(base);
+    const markerPath = path.join(target, ".jarvis-local-v1-action-started.json");
+    assert.ok(actionMarkerBytes);
+    await writeFile(markerPath, actionMarkerBytes);
+    await chmod(markerPath, 0o600);
+    await assert.rejects(
+      () => restoreLocalV1Archive({ ...base, resume: true }),
+      /already.*completed/i,
+    );
+    assert.equal(calls, 1);
+    const manifestPath = path.join(target, "manifest.json");
+    const manifestBytes = await readFile(manifestPath);
+    await writeFile(manifestPath, "{}\n");
+    await assert.rejects(
+      () => restoreLocalV1Archive({ ...base, resume: true }),
+      /ambiguous|reconciliation/i,
+    );
+    await writeFile(manifestPath, manifestBytes);
+    await writeFile(markerPath, "tampered\n");
+    await assert.rejects(
+      () => restoreLocalV1Archive({ ...base, resume: true }),
+      /ambiguous|reconciliation/i,
+    );
+    await rm(markerPath);
+    await symlink(path.join(output, LOCAL_V1_RECEIPTS_FILE), markerPath);
+    await assert.rejects(
+      () => restoreLocalV1Archive({ ...base, resume: true }),
+      /ambiguous|reconciliation/i,
+    );
+    await rm(markerPath);
+    await writeFile(markerPath, actionMarkerBytes);
+    await chmod(markerPath, 0o600);
+    const completePath = path.join(target, ".jarvis-archive-v4-complete.json");
+    await writeFile(completePath, "{}\n");
+    await assert.rejects(
+      () => restoreLocalV1Archive({ ...base, resume: true }),
+      /ambiguous|reconciliation/i,
+    );
+    assert.equal(calls, 1);
+  });
+
+  it("preserves a completed restore if action-marker cleanup fails", async () => {
+    const root = await scratch();
+    const live = path.join(root, "live");
+    const output = path.join(root, "capture");
+    const target = path.join(root, "restore");
+    const { mkdir, lstat } = await import("node:fs/promises");
+    await mkdir(live);
+    await writeBusiness(live);
+    await captureLocalV1Archive({
+      outputDirectory: output,
+      ownerDecisionLedgerDirectory: live,
+      businessPaths: businessPaths(live),
+      client: scriptedClient().client,
+      serviceToken: SERVICE,
+      approvalToken: APPROVAL,
+      convexUrl: ENDPOINT,
+      capturedAt: AT,
+    });
+    let calls = 0;
+    const base = {
+      captureDirectory: output,
+      jsonDirectory: target,
+      client: {
+        action: async () => {
+          calls += 1;
+          return { tasks: [], reminders: [], builds: [], pdfs: [] };
+        },
+      },
+      serviceToken: SERVICE,
+      approvalToken: APPROVAL,
+      convexUrl: ENDPOINT,
+      now: AT.getTime(),
+      liveDataDir: live,
+    };
+    await assert.rejects(
+      () => restoreLocalV1Archive({ ...base, injectAfterCompletion: true }),
+      /Injected failure after JSON completion/,
+    );
+    await lstat(path.join(target, ".jarvis-archive-v4-complete.json"));
+    await lstat(path.join(target, ".jarvis-local-v1-action-started.json"));
+    await assert.rejects(
+      () => restoreLocalV1Archive({ ...base, resume: true }),
+      /already.*completed/i,
+    );
+    assert.equal(calls, 1);
+  });
+
+  it("refuses resume when a sidecar differs despite unchanged archive groups", async () => {
+    const root = await scratch();
+    const live = path.join(root, "live");
+    const output = path.join(root, "capture");
+    const target = path.join(root, "restore");
+    const { mkdir } = await import("node:fs/promises");
+    await mkdir(live);
+    await writeBusiness(live);
+    await new JsonLinesOwnerDecisionLedger(path.join(live, LOCAL_V1_LEDGER_FILE)).start();
+    await captureLocalV1Archive({
+      outputDirectory: output,
+      ownerDecisionLedgerDirectory: live,
+      businessPaths: businessPaths(live),
+      client: scriptedClient().client,
+      serviceToken: SERVICE,
+      approvalToken: APPROVAL,
+      convexUrl: ENDPOINT,
+      capturedAt: AT,
+    });
+    let actionCalls = 0;
+    const base = {
+      captureDirectory: output,
+      jsonDirectory: target,
+      client: {
+        action: async () => {
+          actionCalls += 1;
+          return { tasks: [], reminders: [], builds: [], pdfs: [] };
+        },
+      },
+      serviceToken: SERVICE,
+      approvalToken: APPROVAL,
+      convexUrl: ENDPOINT,
+      now: AT.getTime(),
+      liveDataDir: live,
+    };
+    await assert.rejects(
+      () => restoreLocalV1Archive({ ...base, injectAfterLedgerFile: "checkpoint" }),
+      /Injected failure/,
+    );
+    const sidecarPath = path.join(output, LOCAL_V1_RECEIPTS_FILE);
+    const sidecar = JSON.parse(await readFile(sidecarPath, "utf8")) as {
+      payloadJson: string;
+      payloadSha256: string;
+    };
+    const payload = JSON.parse(sidecar.payloadJson) as {
+      tables: Array<{ documents: Array<{ _id: string }> }>;
+    };
+    payload.tables[0]!.documents[0]!._id = "changed-direct-receipt";
+    sidecar.payloadJson = JSON.stringify(payload);
+    sidecar.payloadSha256 = sha256HexBytes(new TextEncoder().encode(sidecar.payloadJson));
+    await writeFile(sidecarPath, `${JSON.stringify(sidecar)}\n`);
+    await assert.rejects(
+      () => restoreLocalV1Archive({ ...base, resume: true }),
+      /different archive|capture identity/i,
+    );
+    assert.equal(actionCalls, 0);
+  });
+
   it("captures every live store and leaves completeness partial", async () => {
     const root = await scratch();
     const live = path.join(root, "live");
@@ -505,12 +908,13 @@ describe("Local V1 partial capture", () => {
   it("proves captured owner decisions after a valid source append", async () => {
     const root = await scratch();
     const live = path.join(root, "live");
+    const ledgerDirectory = path.join(root, "ledger");
     const output = path.join(root, "capture");
     const target = path.join(root, "restored");
     const { mkdir } = await import("node:fs/promises");
-    await mkdir(live);
+    await Promise.all([mkdir(live), mkdir(ledgerDirectory)]);
     await writeBusiness(live);
-    const file = path.join(live, LOCAL_V1_LEDGER_FILE);
+    const file = path.join(ledgerDirectory, LOCAL_V1_LEDGER_FILE);
     const ledger = new JsonLinesOwnerDecisionLedger(file);
     await ledger.start();
     const manifest = loadOwnerDecisionManifest();
@@ -533,7 +937,7 @@ describe("Local V1 partial capture", () => {
     const checkpointBefore = await readFile(`${file}.checkpoint.json`);
     const captured = await captureLocalV1Archive({
       outputDirectory: output,
-      ownerDecisionLedgerDirectory: live,
+      ownerDecisionLedgerDirectory: ledgerDirectory,
       businessPaths: businessPaths(live),
       client: scriptedClient().client,
       serviceToken: SERVICE,
@@ -542,6 +946,15 @@ describe("Local V1 partial capture", () => {
       capturedAt: AT,
     });
     assert.equal(captured.archive.manifest.localV1OwnerDecisionLedger?.state, "present");
+    const strippedPresent = structuredClone(captured.archive);
+    delete strippedPresent.manifest.localV1OwnerDecisionLedger;
+    strippedPresent.manifest.contractVersion = "jarvis-archive-v4:1";
+    await writeFile(captured.archivePath, `${JSON.stringify(strippedPresent)}\n`);
+    await assert.rejects(
+      () => readArchiveV4File(captured.archivePath),
+      /localV1OwnerDecisionLedger/,
+    );
+    await writeFile(captured.archivePath, `${JSON.stringify(captured.archive)}\n`);
     assert.equal(captured.archive.manifest.completeness, "partial");
     assert.throws(() => assertRecoverable(captured.archive.manifest), /partial archive/);
     assert.equal(
@@ -585,6 +998,7 @@ describe("Local V1 partial capture", () => {
     const result = await proveLocalV1Recovery({
       restore,
       liveDirectory: live,
+      ownerDecisionLedgerDirectory: ledgerDirectory,
       readIsolated: async () => ({
         clientId: "client-1",
         taskId: "task-1",
@@ -675,6 +1089,7 @@ describe("Local V1 partial capture", () => {
           liveDataDir: live,
         },
         liveDirectory: live,
+        ownerDecisionLedgerDirectory: live,
         readIsolated: async () => ({
           clientId: "client-1",
           taskId: "task-1",
@@ -714,6 +1129,30 @@ describe("Local V1 partial capture", () => {
     });
     assert.deepEqual(captured.archive.manifest.localV1OwnerDecisionLedger, { state: "absent" });
     const client = { action: async () => ({ tasks: [], reminders: [], builds: [], pdfs: [] }) };
+    await assert.rejects(
+      () =>
+        proveLocalV1Recovery({
+          restore: {
+            captureDirectory: output,
+            jsonDirectory: path.join(root, "missing-source-proof"),
+            client,
+            serviceToken: SERVICE,
+            approvalToken: APPROVAL,
+            convexUrl: ENDPOINT,
+            now: AT.getTime(),
+            liveDataDir: live,
+          },
+          liveDirectory: live,
+          ownerDecisionLedgerDirectory: path.join(root, "missing-owner-decisions"),
+          readIsolated: async () => ({
+            clientId: "client-1",
+            taskId: "task-1",
+            buildId: "build-1",
+            quoteId: "cq-1",
+          }),
+        }),
+      /owner decision ledger source directory/,
+    );
     const absent = await proveLocalV1Recovery({
       restore: {
         captureDirectory: output,
@@ -726,6 +1165,7 @@ describe("Local V1 partial capture", () => {
         liveDataDir: live,
       },
       liveDirectory: live,
+      ownerDecisionLedgerDirectory: live,
       readIsolated: async () => ({
         clientId: "client-1",
         taskId: "task-1",
@@ -734,8 +1174,58 @@ describe("Local V1 partial capture", () => {
       }),
     });
     assert.equal(absent.ledger, "absent");
+    await new JsonLinesOwnerDecisionLedger(path.join(live, LOCAL_V1_LEDGER_FILE)).start();
+    await assert.rejects(
+      () =>
+        proveLocalV1Recovery({
+          restore: {
+            captureDirectory: output,
+            jsonDirectory: path.join(root, "source-now-present"),
+            client,
+            serviceToken: SERVICE,
+            approvalToken: APPROVAL,
+            convexUrl: ENDPOINT,
+            now: AT.getTime(),
+            liveDataDir: live,
+          },
+          liveDirectory: live,
+          ownerDecisionLedgerDirectory: live,
+          readIsolated: async () => ({
+            clientId: "client-1",
+            taskId: "task-1",
+            buildId: "build-1",
+            quoteId: "cq-1",
+          }),
+        }),
+      /absent owner decision ledger/,
+    );
+    const stripped = structuredClone(captured.archive);
+    delete stripped.manifest.localV1OwnerDecisionLedger;
+    await writeFile(captured.archivePath, `${JSON.stringify(stripped)}\n`);
+    await assert.rejects(
+      () =>
+        restoreLocalV1Archive({
+          captureDirectory: output,
+          jsonDirectory: path.join(root, "stripped"),
+          client,
+          serviceToken: SERVICE,
+          approvalToken: APPROVAL,
+          convexUrl: ENDPOINT,
+          now: AT.getTime(),
+          liveDataDir: live,
+        }),
+      /localV1OwnerDecisionLedger/,
+    );
     const oldArchive = structuredClone(captured.archive);
     delete oldArchive.manifest.localV1OwnerDecisionLedger;
+    oldArchive.manifest.contractVersion = "jarvis-archive-v4:1";
+    oldArchive.manifest.createdAt = "2026-11-13T00:06:00.000Z";
+    await writeFile(captured.archivePath, `${JSON.stringify(oldArchive)}\n`);
+    await assert.rejects(
+      () => readArchiveV4File(captured.archivePath),
+      /localV1OwnerDecisionLedger/,
+    );
+    oldArchive.manifest.createdAt = AT.toISOString();
     await writeFile(captured.archivePath, `${JSON.stringify(oldArchive)}\n`);
     const older = await restoreLocalV1Archive({
       captureDirectory: output,
@@ -758,6 +1248,22 @@ describe("Local V1 partial capture", () => {
     await writeBusiness(live);
     const before = await digestTree(live);
     const output = path.join(root, "out");
+    await assert.rejects(
+      () =>
+        captureLocalV1Archive({
+          outputDirectory: output,
+          ownerDecisionLedgerDirectory: path.join(root, "missing-ledger-source"),
+          businessPaths: businessPaths(live),
+          client: scriptedClient().client,
+          serviceToken: SERVICE,
+          approvalToken: APPROVAL,
+          convexUrl: ENDPOINT,
+          capturedAt: AT,
+        }),
+      /source directory/,
+    );
+    await assert.rejects(readdir(output), { code: "ENOENT" });
+    assert.deepEqual(await digestTree(live), before);
     const corrupt = scriptedClient();
     await writeFile(businessPaths(live).clients, "{");
     await assert.rejects(
