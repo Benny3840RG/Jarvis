@@ -45,8 +45,9 @@ release_tracks:
           Code gate green off-host (maintained checks and OpenAPI lint on
           ee3340e0). JSON-backed HUD, MCP, home, business and voice-read
           surface proven off-host 2026-10-12 (BACKLOG_RECONCILIATION_2026-10-12.md
-          section G). Host candidate lock and Convex dev runtime remain
-          (runbook stages 0-2).
+          section G). Candidate 1058a439 frozen and locked on the host 24 Nov,
+          Convex dev deployed from it; checks, OpenAPI lint and items 1, 3, 9
+          and 12 re-proven (evidence ledger freeze record).
       - id: lv1-voice-commissioning
         priority: 98
         status: commissioning_required
