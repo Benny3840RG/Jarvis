@@ -557,7 +557,45 @@
         async function runPersistence(action, fields, resultId) { try { const result = await request("tools/call", { name: "run_persistence_settings_action", arguments: Object.assign({ action }, fields) }, 10000); const data = structured(result); const outcome = data && data.result; if (!outcome) throw new Error("missing"); text(byId(resultId), outcome.detail); return outcome; } catch { text(byId(resultId), "Action failed."); return null; } }
         
 
-        function render() { renderCounts(); renderFocus(); renderBoard(); renderReminders(); renderSystems(); renderCategories(); renderPriorities(); renderRightReminders(); renderOperations(); renderActivity(); renderInbox(); renderActivityTimeline(); renderLiveWork(); renderGeneral(); renderCredentials();  renderTeamBoard(); hudPanelRegistry.forEach((panel) => { if (typeof panel.render !== "function") return; try { panel.render(state); } catch { /* an extension panel stays fail-closed */ } }); }
+        function todayItem(title, detail, extraClass) { const li = document.createElement("li"); if (extraClass) li.className = extraClass; const item = document.createElement("div"); item.className = "today-item"; const strong = document.createElement("b"); text(strong, title); item.appendChild(strong); if (detail) { const small = document.createElement("small"); text(small, detail); item.appendChild(small); } li.appendChild(item); return li; }
+        function todayEmpty(list, message) { const li = document.createElement("li"); li.className = "today-empty"; text(li, message); list.appendChild(li); }
+        function todayDue(reminder) { if (typeof reminder.dueAt === "number") { try { return new Intl.DateTimeFormat("en-AU", { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit", hour12: true }).format(new Date(reminder.dueAt)); } catch { /* fall through */ } } return reminder.dueRaw ? String(reminder.dueRaw) : "No time set"; }
+        function plural(count, one, many) { return count + " " + (count === 1 ? one : many); }
+        function renderToday() {
+          const tasksEl = byId("today-tasks"); if (!tasksEl) return;
+          const now = Date.now();
+          try { text(byId("today-date"), new Intl.DateTimeFormat("en-AU", { weekday: "long", day: "numeric", month: "long" }).format(new Date(now))); } catch { text(byId("today-date"), "Today"); }
+          const open = activeTasks();
+          tasksEl.replaceChildren();
+          if (!state.tasksLoaded) todayEmpty(tasksEl, "Loading…");
+          else if (!open.length) todayEmpty(tasksEl, "Nothing on your list. Nice.");
+          open.forEach((task) => { const li = todayItem(task.title, task.category && task.category !== "personal" ? task.category : ""); const done = document.createElement("button"); done.type = "button"; done.className = "today-done"; text(done, "Done"); done.setAttribute("aria-label", "Mark " + task.title + " done"); done.addEventListener("click", async () => { done.disabled = true; try { await callTool("complete_task", { taskId: task.id }); toast("Nice. " + task.title + " is done."); } catch { toast("Could not mark that done.", true); done.disabled = false; } }); li.appendChild(done); tasksEl.appendChild(li); });
+          text(byId("today-task-count"), state.tasksLoaded ? plural(open.length, "open", "open") : "");
+          const reminders = state.reminders.slice().sort((a, b) => (typeof a.dueAt === "number" ? a.dueAt : Infinity) - (typeof b.dueAt === "number" ? b.dueAt : Infinity));
+          const remindersEl = byId("today-reminders"); remindersEl.replaceChildren();
+          if (!state.remindersLoaded) todayEmpty(remindersEl, "Loading…");
+          else if (!reminders.length) todayEmpty(remindersEl, "No reminders.");
+          let overdue = 0;
+          reminders.forEach((reminder) => { const late = typeof reminder.dueAt === "number" && reminder.dueAt < now; if (late) overdue += 1; remindersEl.appendChild(todayItem(reminder.title, (late ? "Overdue · " : "") + todayDue(reminder), late ? "today-overdue" : "")); });
+          text(byId("today-reminder-count"), state.remindersLoaded ? plural(reminders.length, "reminder", "reminders") : "");
+          const errandsEl = byId("today-errands"); errandsEl.replaceChildren();
+          const errands = state.brief && state.brief.errands && Array.isArray(state.brief.errands.open) ? state.brief.errands.open : null;
+          if (!errands) todayEmpty(errandsEl, "Loading…");
+          else if (!errands.length) todayEmpty(errandsEl, "No errands to run.");
+          else errands.forEach((errand) => errandsEl.appendChild(todayItem(errand.title, errand.quantity ? "× " + errand.quantity : (errand.location && errand.location.label) || "")));
+          text(byId("today-errand-count"), errands ? plural(errands.length, "to run", "to run") : "");
+          const waiting = state.approvals && state.approvals.status === "ready" ? Number(state.approvals.proposedCount) || 0 : 0;
+          const approvals = byId("today-approvals");
+          approvals.hidden = waiting === 0;
+          text(approvals, waiting === 1 ? "1 thing is waiting for your approval" : waiting + " things are waiting for your approval");
+          const parts = [];
+          if (state.tasksLoaded) parts.push(plural(open.length, "task", "tasks"));
+          if (overdue) parts.push(plural(overdue, "overdue reminder", "overdue reminders"));
+          if (errands && errands.length) parts.push(plural(errands.length, "errand", "errands"));
+          text(byId("today-summary"), parts.length ? parts.join(" · ") : "Loading your day…");
+          const navCount = byId("nav-today-count"); if (navCount) text(navCount, open.length + overdue);
+        }
+        function render() { renderToday(); renderCounts(); renderFocus(); renderBoard(); renderReminders(); renderSystems(); renderCategories(); renderPriorities(); renderRightReminders(); renderOperations(); renderActivity(); renderInbox(); renderActivityTimeline(); renderLiveWork(); renderGeneral(); renderCredentials();  renderTeamBoard(); hudPanelRegistry.forEach((panel) => { if (typeof panel.render !== "function") return; try { panel.render(state); } catch { /* an extension panel stays fail-closed */ } }); }
 
         // BEGIN hud-team-board
         const BACKDROP_RANK = { STOPPED: 4, UNKNOWN: 3, WARN: 2, OK: 1, "NO LIMIT": 0 };
@@ -1690,6 +1728,28 @@
         document.querySelectorAll("[data-view]").forEach((button) => button.addEventListener("click",() => { document.querySelectorAll("[data-view]").forEach((candidate) => candidate.classList.toggle("active",candidate === button)); document.body.dataset.consoleView = button.dataset.view || "focus"; document.querySelectorAll(".view").forEach((view) => view.classList.toggle("active",view.id === `view-${button.dataset.view}`)); }));
         const settingsTabByHash = { "view-general": "general", "view-credentials": "credentials", "view-persistence": "persistence", "view-limits": "limits", "view-danger": "danger" };
         function showSettingsTab(tab) { document.querySelectorAll("[data-settings-tab]").forEach((candidate) => { const selected = candidate.dataset.settingsTab === tab; candidate.classList.toggle("active", selected); if (selected) candidate.setAttribute("aria-current", "page"); else candidate.removeAttribute("aria-current"); }); document.querySelectorAll("[data-settings-panel]").forEach((panel) => panel.classList.toggle("active", panel.dataset.settingsPanel === tab)); if (tab === "persistence") void loadPersistence(); }
+        (function wireToday() {
+          const more = byId("rail-more"); const toggle = byId("rail-more-toggle");
+          const setMore = (open) => { if (!more || !toggle) return; more.hidden = !open; toggle.setAttribute("aria-expanded", open ? "true" : "false"); };
+          if (toggle) toggle.addEventListener("click", () => setMore(more.hidden));
+          if (more && [...more.querySelectorAll("[data-view]")].some((button) => button.dataset.view === document.body.dataset.consoleView)) setMore(true);
+          const talk = byId("today-talk"); if (talk) talk.addEventListener("click", () => { const voice = document.querySelector("[data-view=voice]"); if (voice) voice.click(); });
+          const form = byId("today-add"); if (!form) return;
+          const submit = async (kind) => {
+            const titleEl = byId("today-add-title"); const whenEl = byId("today-add-when");
+            const title = titleEl.value.trim(); const when = whenEl.value.trim();
+            if (!title) { titleEl.focus(); return; }
+            const buttons = form.querySelectorAll("button"); buttons.forEach((button) => { button.disabled = true; });
+            try {
+              if (kind === "reminder") { await callTool("create_reminder", Object.assign({ title }, when ? { due: { text: when } } : {})); toast("Okay, I'll remind you: " + title + (when ? " " + when : "") + "."); }
+              else { await callTool("create_task", { title, category: "personal" }); toast("Done. " + title + " is on your list."); }
+              titleEl.value = ""; whenEl.value = "";
+            } catch { toast(kind === "reminder" ? "Could not add that reminder." : "Could not add that task.", true); }
+            finally { buttons.forEach((button) => { button.disabled = false; }); }
+          };
+          form.addEventListener("submit", (event) => { event.preventDefault(); void submit(byId("today-add-when").value.trim() ? "reminder" : "task"); });
+          form.querySelector('[data-today-add="reminder"]').addEventListener("click", () => { void submit("reminder"); });
+        })();
         function activateNamedView(name) { document.body.dataset.consoleView = name; document.querySelectorAll("[data-view]").forEach((candidate) => candidate.classList.toggle("active", candidate.dataset.view === name)); document.querySelectorAll(".view").forEach((view) => view.classList.toggle("active", view.id === `view-${name}`)); }
         function applySettingsHash() { const tab = settingsTabByHash[location.hash.slice(1)]; if (!tab) return; activateNamedView("settings"); showSettingsTab(tab); }
         window.addEventListener("hashchange", applySettingsHash);
