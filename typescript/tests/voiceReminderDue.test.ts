@@ -203,3 +203,32 @@ describe("voice session spoken due times", () => {
     assert.equal(s.pending(), undefined);
   });
 });
+
+describe("spoken relative reminder times", () => {
+  it("counts in minutes, hours and days from now, before or after the title", () => {
+    for (const [utterance, ms] of [
+      ["remind me in 2 hours to check the oven", 2 * 3_600_000],
+      ["remind me to check the oven in 2 hours", 2 * 3_600_000],
+      ["remind me in an hour to check the oven", 3_600_000],
+      ["remind me in half an hour to check the oven", 1_800_000],
+      ["remind me in ten minutes to check the oven", 600_000],
+      ["remind me to check the oven in 3 days", 3 * 86_400_000],
+      ["remind me in a couple of hours to check the oven", 2 * 3_600_000],
+    ] as const) {
+      const dictation = capture(utterance);
+      assert.equal(dictation.capture.title, "Check the oven", utterance);
+      assert.equal(dictation.capture.dueAt, NOW + ms, utterance);
+      assert.equal(dictation.capture.dueTimezone, TZ, utterance);
+      assert.match(dictation.capture.dueRaw ?? "", /^in /, utterance);
+    }
+  });
+
+  it("refuses nonsense counts rather than guessing", () => {
+    assert.deepEqual(splitSpokenReminderDue("check the oven in 0 hours", CTX), {
+      status: "rejected",
+    });
+    assert.deepEqual(splitSpokenReminderDue("check the oven in half an day", CTX), {
+      status: "rejected",
+    });
+  });
+});

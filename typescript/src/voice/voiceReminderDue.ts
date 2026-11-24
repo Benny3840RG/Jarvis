@@ -15,6 +15,8 @@
  *     preserved due text but no timestamp is guessed. After "tonight" a bare
  *     1-11 is pm; "tonight at 12" (noon or midnight?) is never guessed.
  *   - A time with no day means the next occurrence (today if still ahead).
+ *   - "in 2 hours", "in an hour", "in half an hour", "in ten minutes" and
+ *     "in 3 days" are counted from now.
  *   - A day with no time is preserved as due text only; no time is invented.
  *   - A resolved time in the past ("today at 7 am" at noon) or a contradiction
  *     ("tonight at 7 am") rejects the dictation rather than storing nonsense.
@@ -50,6 +52,57 @@ const PREFIX_DAY_FIRST = new RegExp(`^(${DAY})(?: ${CONNECTOR} (${TIME}))? to (.
 const PREFIX_TIME_FIRST = new RegExp(`^${CONNECTOR} (${TIME})(?: (${DAY}))? to (.+)$`);
 
 const NEXT_WEEKDAY = new RegExp(`\\bnext (?:${WEEKDAY}|week)\\b`);
+
+/** "in 2 hours", "in an hour", "in half an hour", "in ten minutes", "in 3 days". */
+const COUNT_WORDS: Readonly<Record<string, number>> = {
+  a: 1,
+  an: 1,
+  one: 1,
+  two: 2,
+  three: 3,
+  four: 4,
+  five: 5,
+  six: 6,
+  seven: 7,
+  eight: 8,
+  nine: 9,
+  ten: 10,
+  fifteen: 15,
+  twenty: 20,
+  thirty: 30,
+  "forty five": 45,
+  "a couple of": 2,
+  "a few": 3,
+};
+const UNIT_MS: Readonly<Record<string, number>> = {
+  minute: 60_000,
+  hour: 3_600_000,
+  day: 86_400_000,
+};
+const COUNT = `\\d{1,3}|half an|a couple of|a few|forty five|${Object.keys(COUNT_WORDS)
+  .filter((word) => !word.includes(" "))
+  .join("|")}`;
+const RELATIVE = `in (${COUNT}) (minute|hour|day)s?`;
+const RELATIVE_SUFFIX = new RegExp(`^(.+?) ${RELATIVE}$`);
+const RELATIVE_PREFIX = new RegExp(`^${RELATIVE} to (.+)$`);
+
+function relativeDue(
+  count: string,
+  unit: string,
+  context: SpokenDueContext,
+): SpokenReminderDue | undefined {
+  const unitMs = UNIT_MS[unit];
+  if (unitMs === undefined) return undefined;
+  const amount = count === "half an" ? 0.5 : /^\d/.test(count) ? Number(count) : COUNT_WORDS[count];
+  if (amount === undefined || !(amount > 0) || (count === "half an" && unit !== "hour"))
+    return undefined;
+  const plural = amount === 1 || count === "half an" ? unit : `${unit}s`;
+  return {
+    dueRaw: `in ${count} ${plural}`,
+    dueAt: context.now + Math.round(amount * unitMs),
+    dueTimezone: context.timezone,
+  };
+}
 
 type ClockTime = { hour: number; minute: number; ambiguous: boolean };
 
@@ -131,6 +184,21 @@ export function splitSpokenReminderDue(
   form: "suffix" | "prefix" = "suffix",
 ): SpokenReminderSplit {
   if (NEXT_WEEKDAY.test(body)) return { status: "none" };
+
+  const relative =
+    form === "prefix"
+      ? ((match) => (match ? { count: match[1]!, unit: match[2]!, title: match[3]! } : undefined))(
+          RELATIVE_PREFIX.exec(body),
+        )
+      : ((match) => (match ? { title: match[1]!, count: match[2]!, unit: match[3]! } : undefined))(
+          RELATIVE_SUFFIX.exec(body),
+        );
+  if (relative) {
+    if (relative.title.trim().length === 0) return { status: "rejected" };
+    const due = relativeDue(relative.count, relative.unit, context);
+    if (!due) return { status: "rejected" };
+    return { status: "due", title: relative.title, due };
+  }
 
   let title: string | undefined;
   let day: string | undefined;
