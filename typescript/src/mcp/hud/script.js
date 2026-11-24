@@ -1185,7 +1185,10 @@
           var speechInFlight = false;
           function speechStatus(message) {
             var el = document.getElementById("voice-output-status");
-            if (el) el.textContent = message;
+            if (!el) return;
+            el.textContent = message;
+            // On a phone only a problem with the spoken reply is worth the space.
+            if (el.dataset) el.dataset.tone = /fail|cannot|unavailable|not supported/i.test(message) ? "warn" : "info";
           }
           // Prefer a natural-sounding English voice (Australian first) over the browser default.
           function pickSpeechVoice(voices) {

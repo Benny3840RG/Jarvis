@@ -50,6 +50,20 @@
         body[data-console-view="today"] .top-actions .source-pill,
         body[data-console-view="today"] .top-actions .limits-now,
         body[data-console-view="today"] .left-rail { display: none !important; }
+        /* The everyday views keep the phone screen for the person, not the system. */
+        body[data-console-view="voice"] .telemetry,
+        body[data-console-view="voice"] .top-actions .team-chip,
+        body[data-console-view="voice"] .top-actions .source-pill,
+        body[data-console-view="voice"] .top-actions .limits-now,
+        body[data-console-view="board"] .telemetry,
+        body[data-console-view="board"] .top-actions .team-chip,
+        body[data-console-view="board"] .top-actions .source-pill,
+        body[data-console-view="board"] .top-actions .limits-now,
+        body[data-console-view="reminders"] .telemetry,
+        body[data-console-view="reminders"] .top-actions .team-chip,
+        body[data-console-view="reminders"] .top-actions .source-pill,
+        body[data-console-view="reminders"] .top-actions .limits-now { display: none !important; }
+        #voice-latency, #voice-output-status:not([data-tone="warn"]) { display: none; }
         .today-view { padding: 0 12px 20px; }
         .today-add-actions button { flex: 1 1 140px; }
       }
