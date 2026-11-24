@@ -8,6 +8,7 @@ import type { Asset, AssetStore } from "../assets/asset.js";
 import {
   composeDailyBrief,
   nextBookedJob,
+  operatorLocalDate,
   type BriefErrands,
   type BriefEnquiries,
   type BriefInvoices,
@@ -17,7 +18,7 @@ import {
   type BriefTasks,
   type DailyBrief,
 } from "../briefs/brief.js";
-import { spokenCount, spokenList, spokenWhen, withList } from "./spokenAnswer.js";
+import { spokenCount, spokenList, spokenTime, spokenWhen, withList } from "./spokenAnswer.js";
 import type { Build, BuildStore } from "../builds/build.js";
 import type { Enquiry, EnquiryStore } from "../enquiries/enquiry.js";
 import type { Errand, ErrandStore } from "../errands/errand.js";
@@ -27,7 +28,7 @@ import type { Project, ProjectStore } from "../projects/project.js";
 import type { Quote, QuoteStore } from "../quotes/quote.js";
 import { resolveReminderTimezone } from "../reminders/due.js";
 import type { VoiceQueryAnswer, VoiceQueryProvider, VoiceQueryRequest } from "./voiceQuery.js";
-import { DAILY_RUNDOWN_COMMAND_ID } from "./voiceRundown.js";
+import { DAILY_RUNDOWN_COMMAND_ID, TOMORROW_RUNDOWN_COMMAND_ID } from "./voiceRundown.js";
 
 export type AuthoritativeVoiceQuerySources = {
   /** Same optional IANA zone the daily brief resolves. Invalid values fail closed. */
@@ -389,6 +390,8 @@ async function dispatchQuery(
       return fromErrands(sources, input.now);
     case DAILY_RUNDOWN_COMMAND_ID:
       return fromRundown(sources, input.now);
+    case TOMORROW_RUNDOWN_COMMAND_ID:
+      return fromTomorrow(sources, input.now);
     case "client.todays-schedule":
       return fromSchedule(sources, input.now, "today");
     case "client.jobs-this-week":
@@ -636,4 +639,74 @@ async function fromAssets(
   const assets = await readList("Asset records", () => sources.assets.list());
   if (isUnavailable(assets)) return assets;
   return answered(assetsAnswer(assets));
+}
+
+/** The calendar day after an ISO `YYYY-MM-DD` date (calendar maths only, no zone). */
+function nextCalendarDay(isoDate: string): string {
+  const [year, month, day] = isoDate.split("-").map(Number);
+  return new Date(Date.UTC(year!, month! - 1, day! + 1)).toISOString().slice(0, 10);
+}
+
+/**
+ * "What have I got on tomorrow": jobs booked for tomorrow and reminders due
+ * tomorrow in the owner's timezone, each from the same records as the daily
+ * rundown. A source that cannot be read is named, never guessed.
+ */
+async function fromTomorrow(
+  sources: AuthoritativeVoiceQuerySources,
+  now: number,
+): Promise<VoiceQueryAnswer> {
+  const timezone = resolveZone(sources);
+  if (isUnavailable(timezone)) return timezone;
+  const [projects, reminders] = await Promise.all([
+    readList("Project records", () => sources.projects.list()),
+    readList("Reminder records", () => sources.reminders.listReminders()),
+  ]);
+  if (isUnavailable(projects) && isUnavailable(reminders)) {
+    return unavailable("Tomorrow's rundown is unavailable: no source could be read.");
+  }
+  const tomorrow = nextCalendarDay(operatorLocalDate(now, timezone));
+  const said: string[] = [];
+  const nothing: string[] = [];
+  if (isUnavailable(projects)) said.push((projects as { reason: string }).reason);
+  else {
+    const jobs = projects.filter(
+      (project) => project.status !== "done" && project.scheduledFor === tomorrow,
+    );
+    if (jobs.length === 0) nothing.push("jobs");
+    else
+      said.push(
+        withList(
+          `${capitalise(spokenCount(jobs.length, "job"))} booked`,
+          jobs.slice(0, HIGHLIGHT_LIMIT).map((job) => job.title),
+          jobs.length,
+        ),
+      );
+  }
+  if (isUnavailable(reminders)) said.push((reminders as { reason: string }).reason);
+  else {
+    const due = reminders
+      .filter(
+        (reminder): reminder is Reminder & { dueAt: number } =>
+          typeof reminder.dueAt === "number" &&
+          reminder.dueAt > now &&
+          operatorLocalDate(reminder.dueAt, timezone) === tomorrow,
+      )
+      .sort((a, b) => a.dueAt - b.dueAt);
+    if (due.length === 0) nothing.push("reminders");
+    else
+      said.push(
+        withList(
+          due.length === 1 ? "One reminder" : `${capitalise(spokenCount(due.length, "reminder"))}`,
+          due
+            .slice(0, HIGHLIGHT_LIMIT)
+            .map((reminder) => `${reminder.title} at ${spokenTime(reminder.dueAt, timezone)}`),
+          due.length,
+        ),
+      );
+  }
+  if (said.length === 0)
+    return answered("Nothing on for tomorrow yet. No jobs booked and no reminders.");
+  const none = nothing.length > 0 ? ` No ${spokenList(nothing, nothing.length, "or")}.` : "";
+  return answered(`Here's tomorrow. ${said.join(" ")}${none}`);
 }
