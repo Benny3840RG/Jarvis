@@ -34,6 +34,13 @@ function parseDue(value: unknown): ReminderDue {
   return resolveTypedDue(text, timezone);
 }
 
+/** Drops trailing ".", "!" and "?" with a linear scan (no backtracking regex). */
+function stripTrailingPunctuation(value: string): string {
+  let end = value.length;
+  while (end > 0 && ".!?".includes(value.charAt(end - 1))) end -= 1;
+  return value.slice(0, end);
+}
+
 const RELATIVE_UNITS: Readonly<Record<string, number>> = {
   minute: 60_000,
   min: 60_000,
@@ -66,11 +73,7 @@ function resolveTypedDue(
   } catch {
     return strict;
   }
-  const phrase = text
-    .toLowerCase()
-    .replace(/[.!?]+$/, "")
-    .replace(/\s+/g, " ")
-    .trim();
+  const phrase = stripTrailingPunctuation(text.toLowerCase()).replace(/\s+/g, " ").trim();
   const relative = /^in (\d{1,4}|an?|one) (minutes?|mins?|hours?|hrs?|days?)$/.exec(phrase);
   if (relative) {
     const count = /^\d/.test(relative[1]!) ? Number(relative[1]) : 1;
