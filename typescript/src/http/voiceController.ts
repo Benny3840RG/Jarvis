@@ -16,6 +16,7 @@ import {
 import type { FastifyReply, FastifyRequest } from "fastify";
 
 import type { ToolActionService } from "../actions/toolActions.js";
+import { resolveReminderTimezone } from "../reminders/due.js";
 import { VOICE_COMMANDS, VOICE_PROFILES, type VoiceCommand } from "../voice/voiceCommands.js";
 import { stageVoiceSafeWrite, voiceUtteranceForSession } from "../voice/voiceSafeWrite.js";
 import type { VoiceDispatch } from "../voice/voiceSession.js";
@@ -80,6 +81,15 @@ function sessionNotFound(): JarvisProblem {
  * project and can be reversed with "Nolan undo". Inferred (natural-language)
  * commands, explicit request targets and every other write still stage.
  */
+/** The server clock in the owner's timezone, or undefined when none is configured. */
+function ownerClock(): { now: number; timezone: string } | undefined {
+  try {
+    return { now: Date.now(), timezone: resolveReminderTimezone() };
+  } catch {
+    return undefined;
+  }
+}
+
 @Controller("api/v1/voice")
 @LocalLoopbackRoute()
 export class VoiceController implements OnModuleDestroy {
@@ -180,7 +190,7 @@ export class VoiceController implements OnModuleDestroy {
       !session.lastTurnRejectedDictation()
     ) {
       // "Thanks mate" gets a friendly fixed reply, not the model and not a refusal.
-      const smallTalk = smallTalkReply(prepared.transcript);
+      const smallTalk = smallTalkReply(prepared.transcript, ownerClock());
       if (smallTalk) {
         return {
           dispatch: { decision: "conversation" as const, reply: smallTalk },
