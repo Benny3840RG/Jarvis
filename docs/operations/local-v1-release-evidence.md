@@ -76,8 +76,10 @@ boxes in the issue body are older than this ledger.
   24 Nov it claimed the two indeterminate 22 Nov announcements
   (`ghome-commission-20261122-1` and `-2`), which have no Cast adapter in CI,
   and moved them to `escalated` (operator review) before attempt 3 passed.
-  Their receipts and the owner card are unchanged. Fix after the release, so
-  that any real pending record on dev cannot fail the smoke.
+  Their receipts and the owner card are unchanged. Fixed on `main` after the
+  freeze: the smoke now claims only its own record (`claimNext` takes an
+  optional `reconciliationId`). The fix is not part of candidate `1058a439`,
+  whose smoke still has this behaviour.
 - Archive `completeness` stays `partial` by design. Capture and restore are
   proven, but the host restart step is the only part with a single operator
   command (`commission:local-v1-recovery`).

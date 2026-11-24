@@ -148,10 +148,15 @@ export interface ExternalReconciliationStore {
   registerAttempt(input: RegisterExternalAttemptInput): Promise<ExternalReconciliationRecord>;
   markIndeterminate(input: MarkExternalIndeterminateInput): Promise<ExternalReconciliationEnvelope>;
   completeAttempt(input: CompleteExternalAttemptInput): Promise<ExternalReconciliationEnvelope>;
+  /**
+   * Claims the next due record. With `reconciliationId`, claims only that
+   * record and leaves every other queue entry untouched.
+   */
   claimNext(input: {
     workerId: string;
     leaseToken: string;
     leaseMs: number;
+    reconciliationId?: string;
   }): Promise<ExternalReconciliationClaim | null>;
   resolveClaim(input: {
     reconciliationId: string;

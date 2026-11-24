@@ -1013,3 +1013,134 @@ describe("releaseClaim retry-scheduling latency boundary", () => {
     expect(released.state).toBe("escalated");
   });
 });
+
+async function seedPendingReconciliation(
+  ctx: MutationCtx,
+  input: { reconciliationId: string; nextAttemptAt: number },
+) {
+  const receiptKey = `receipt-key-${input.reconciliationId}`;
+  await seedReceipt(ctx, receiptKey);
+  return ctx.db.insert("externalReconciliations", {
+    ownerId: OWNER_ID,
+    reconciliationId: input.reconciliationId,
+    executionKey: `execution-${input.reconciliationId}`,
+    actionId: `action-${input.reconciliationId}`,
+    requestId: `request-${input.reconciliationId}`,
+    projectId: "project-1",
+    idempotencyKey: `idempotency-${input.reconciliationId}`,
+    actionFingerprint: `fingerprint-${input.reconciliationId}`,
+    effectFingerprint: `effect-${input.reconciliationId}`,
+    tool: "quotes",
+    operation: "send",
+    provider: "test-provider",
+    providerRequestId: `provider-request-${input.reconciliationId}`,
+    providerCorrelationId: `provider-correlation-${input.reconciliationId}`,
+    receiptKey,
+    state: "pending",
+    attemptCount: 0,
+    nextAttemptAt: input.nextAttemptAt,
+    createdAt: input.nextAttemptAt,
+    updatedAt: input.nextAttemptAt,
+    safetyBinding,
+  });
+}
+
+function readRecord(t: ReturnType<typeof harness>, reconciliationId: string) {
+  return t.run((ctx) =>
+    ctx.db
+      .query("externalReconciliations")
+      .withIndex("by_owner_and_reconciliation_id", (q) =>
+        q.eq("ownerId", OWNER_ID).eq("reconciliationId", reconciliationId),
+      )
+      .unique(),
+  );
+}
+
+describe("claimNext scoped to one reconciliationId", () => {
+  it("claims only the named record and leaves an older pending record untouched", async () => {
+    const t = harness();
+    const now = Date.now();
+    vi.useFakeTimers({ now });
+    await t.run(async (ctx) => {
+      await seedPendingReconciliation(ctx, {
+        reconciliationId: "real-older",
+        nextAttemptAt: now - 86_400_000,
+      });
+      await seedPendingReconciliation(ctx, {
+        reconciliationId: "smoke-own",
+        nextAttemptAt: now - 1_000,
+      });
+    });
+
+    const claim = await t.mutation(api.externalReconciliations.claimNext, {
+      serviceToken: SERVICE_TOKEN,
+      workerId: "smoke-worker",
+      leaseToken: "smoke-lease",
+      leaseMs: 30_000,
+      reconciliationId: "smoke-own",
+    });
+
+    expect(claim?.reconciliation.reconciliationId).toBe("smoke-own");
+    expect(claim?.reconciliation.state).toBe("claimed");
+    const older = await readRecord(t, "real-older");
+    expect(older?.state).toBe("pending");
+    expect(older?.attemptCount).toBe(0);
+    expect(older?.leaseOwner).toBeUndefined();
+  });
+
+  it("does not sweep an abandoned observing record when scoped", async () => {
+    const t = harness();
+    const now = Date.now();
+    vi.useFakeTimers({ now });
+    await t.run(async (ctx) => {
+      await seedObservingReconciliation(ctx, {
+        reconciliationId: "real-stale-observing",
+        nextAttemptAt: now - 120_000,
+      });
+      await seedPendingReconciliation(ctx, {
+        reconciliationId: "smoke-own",
+        nextAttemptAt: now - 1_000,
+      });
+    });
+
+    const claim = await t.mutation(api.externalReconciliations.claimNext, {
+      serviceToken: SERVICE_TOKEN,
+      workerId: "smoke-worker",
+      leaseToken: "smoke-lease",
+      leaseMs: 30_000,
+      reconciliationId: "smoke-own",
+    });
+
+    expect(claim?.reconciliation.reconciliationId).toBe("smoke-own");
+    expect((await readRecord(t, "real-stale-observing"))?.state).toBe("observing");
+  });
+
+  it("returns null without touching anything when the named record is absent or not due", async () => {
+    const t = harness();
+    const now = Date.now();
+    vi.useFakeTimers({ now });
+    await t.run(async (ctx) => {
+      await seedPendingReconciliation(ctx, {
+        reconciliationId: "real-older",
+        nextAttemptAt: now - 86_400_000,
+      });
+      await seedPendingReconciliation(ctx, {
+        reconciliationId: "smoke-later",
+        nextAttemptAt: now + 60_000,
+      });
+    });
+
+    for (const reconciliationId of ["missing", "smoke-later"]) {
+      const claim = await t.mutation(api.externalReconciliations.claimNext, {
+        serviceToken: SERVICE_TOKEN,
+        workerId: "smoke-worker",
+        leaseToken: "smoke-lease",
+        leaseMs: 30_000,
+        reconciliationId,
+      });
+      expect(claim).toBeNull();
+    }
+    expect((await readRecord(t, "real-older"))?.state).toBe("pending");
+    expect((await readRecord(t, "smoke-later"))?.state).toBe("pending");
+  });
+});
