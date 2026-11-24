@@ -29,3 +29,12 @@ describe("HUD everyday views on a phone", () => {
     assert.doesNotMatch(html, /fails closed\.<\/p>/);
   });
 });
+
+describe("HUD glass overlay on a phone", () => {
+  it("drops the desktop CRT glass on a phone so cards do not sit in a second window", () => {
+    const phone = html.slice(
+      html.indexOf("@media (max-width: 760px)", html.indexOf(".rail-more {")),
+    );
+    assert.match(phone, /\.crt-glass \{ display: none; \}/);
+  });
+});
