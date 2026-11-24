@@ -13,6 +13,7 @@ import {
 
 import type { Errand, ErrandStore } from "../errands/errand.js";
 import { parseCreateErrand, parseUpdateErrand } from "./errandRequest.js";
+import { LocalLoopbackRoute } from "./localLoopbackRoute.js";
 import { JarvisProblem } from "./problemDetails.js";
 import { HTTP_ERRAND_STORE } from "./tokens.js";
 
@@ -107,6 +108,23 @@ export class ErrandController {
     } catch (error: unknown) {
       if (error instanceof Error && /empty|must be|requires/.test(error.message))
         throw invalid(error.message);
+      throw operationFailed();
+    }
+    if (!errand) throw notFound();
+    return errandResponse(errand);
+  }
+
+  // The HUD's Today screen ticks errands off through this route without a token,
+  // the same as tasks (owner decision, 24 Nov 2026). It can only mark an errand
+  // done; editing or removing one still needs the service token.
+  @LocalLoopbackRoute()
+  @Post(":errandId/complete")
+  @HttpCode(HttpStatus.OK)
+  async complete(@Param("errandId") errandId: string) {
+    let errand: Errand | null;
+    try {
+      errand = await this.errands.update(errandId, { status: "done" });
+    } catch {
       throw operationFailed();
     }
     if (!errand) throw notFound();

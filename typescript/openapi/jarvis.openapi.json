@@ -4662,6 +4662,62 @@
         }
       }
     },
+    "/api/v1/errands/{errandId}/complete": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ErrandId"
+        }
+      ],
+      "post": {
+        "operationId": "completeErrand",
+        "security": [{ "serviceToken": [] }, {}],
+        "x-jarvis-auth": {
+          "mode": "service-token-or-local-loopback",
+          "anonymousScope": "local-serve-loopback-only"
+        },
+        "summary": "Complete an errand",
+        "description": "Sets the errand status to done and stamps the completion time. Repeated calls leave the errand done. The browser HUD uses this route; MCP clients use updateErrand.",
+        "tags": ["Errands"],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Errand completed.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrandResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
     "/api/v1/errands/{errandId}": {
       "parameters": [
         {
