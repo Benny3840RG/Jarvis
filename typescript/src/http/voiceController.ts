@@ -20,6 +20,7 @@ import { VOICE_COMMANDS, VOICE_PROFILES, type VoiceCommand } from "../voice/voic
 import { stageVoiceSafeWrite, voiceUtteranceForSession } from "../voice/voiceSafeWrite.js";
 import type { VoiceDispatch } from "../voice/voiceSession.js";
 import type { VoiceSessionRegistry } from "../voice/voiceSessionRegistry.js";
+import { smallTalkReply } from "../voice/voiceSmallTalk.js";
 import {
   dispatchConversationProposal,
   type VoiceConversationService,
@@ -171,6 +172,22 @@ export class VoiceController implements OnModuleDestroy {
       wakeAuthorized: prepared.wakeAuthorized,
       ...(prepared.alternatives ? { alternatives: prepared.alternatives } : {}),
     });
+    if (
+      dispatch.decision === "unrecognized" &&
+      parsed.isFinal &&
+      prepared.wakeAuthorized &&
+      !hadPending &&
+      !session.lastTurnRejectedDictation()
+    ) {
+      // "Thanks mate" gets a friendly fixed reply, not the model and not a refusal.
+      const smallTalk = smallTalkReply(prepared.transcript);
+      if (smallTalk) {
+        return {
+          dispatch: { decision: "conversation" as const, reply: smallTalk },
+          pending: session.pending() ?? null,
+        };
+      }
+    }
     if (
       this.conversation &&
       dispatch.decision === "unrecognized" &&

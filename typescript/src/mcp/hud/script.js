@@ -931,7 +931,7 @@
         // the server's order. It holds no choice, sends nothing and grants nothing —
         // the reply is an ordinary utterance that the server session resolves.
         function describeVoiceClarification(candidates, catalog, profile) {
-          var generic = { label: "Ambiguous — ignored for safety.", tone: "warn" };
+          var generic = { label: "Sorry, I wasn't sure what you meant, so I didn't do anything.", tone: "warn" };
           var MAX_CANDIDATES = 64, MAX_CHOICES = 4, MAX_SUMMARY = 80;
           if (!Array.isArray(candidates) || !candidates.length || candidates.length > MAX_CANDIDATES) return generic;
           var commands = Array.isArray(catalog) ? catalog : [];
@@ -957,7 +957,7 @@
           var more = candidates.length > MAX_CHOICES ? "; and " + (candidates.length - MAX_CHOICES) + " more" : "";
           if (!allKnown) {
             return {
-              label: "Ambiguous — nothing was done. Conflicting: " + labels.join("; ") + more + ". Repeat the full command.",
+              label: "Sorry, I wasn't sure which you meant, so I didn't do anything. Can you say it again?",
               tone: "warn",
             };
           }
@@ -965,8 +965,8 @@
             ? labels[0]
             : labels.map(function (label, index) { return (index + 1) + ". " + label; }).join("; ");
           return {
-            label: "Ambiguous — nothing was done. Did you mean: " + choices + more +
-              "? Reply once with “Nolan” and your choice, or repeat the full command.",
+            label: "Did you mean " + choices + more +
+              "? Say “Nolan” and your choice. I haven't done anything yet.",
             tone: "warn",
           };
         }
@@ -1049,10 +1049,10 @@
           if (capture) {
             var what = voiceCaptureWhat(dispatch.command, capture);
             if (dispatch.decision === "awaiting-confirmation") {
-              return { label: what.ask + "? Say “Nolan confirm” to stage it for your approval, or “Nolan cancel”.", speech: what.ask + "? Say confirm, or cancel.", tone: "pending" };
+              return { label: what.ask + "? Say “Nolan confirm” or “Nolan cancel”.", speech: what.ask + "? Say confirm or cancel.", tone: "pending" };
             }
             if (dispatch.decision === "proposed" && typeof dispatch.toolActionId === "string" && dispatch.toolActionId) {
-              return { label: "Staged " + what.staged + " for your approval. Nothing " + what.effect + " until you approve it.", tone: "ok" };
+              return { label: "Okay. I've asked for your approval to " + what.pending + ". Nothing " + what.effect + " until you approve it.", speech: "Okay. That's waiting for your approval.", tone: "ok" };
             }
           }
           if (dispatch && dispatch.decision === "completion-unresolved") {
@@ -1065,41 +1065,41 @@
             var answer = typeof dispatch.answer === "string" ? dispatch.answer.trim() : "";
             return answer
               ? { label: answer, tone: "ok" }
-              : { label: "Query unavailable — no authoritative answer was returned.", tone: "warn" };
+              : { label: "Sorry, I couldn't get an answer for that just now.", tone: "warn" };
           }
           if (dispatch && dispatch.decision === "conversation") {
             var reply = typeof dispatch.reply === "string" ? dispatch.reply : "";
             return reply.trim()
               ? { label: reply, tone: "ok" }
-              : { label: "Conversation unavailable.", tone: "warn", notice: true };
+              : { label: "Sorry, I couldn't answer that just now.", tone: "warn", notice: true };
           }
           if (dispatch && dispatch.decision === "conversation-unavailable") {
             var notices = {
-              "provider-error": "Conversation unavailable. The provider did not return a usable reply.",
-              refused: "Conversation unavailable. The provider declined to answer.",
-              "rate-limited": "Conversation limit reached. Try again later.",
-              "too-long": "Conversation request is too long. Please shorten it.",
-              "reply-too-long": "Conversation unavailable. The answer is too long to speak in full.",
-              unavailable: "Conversation unavailable. Please try again.",
-              timeout: "Conversation timed out. Please try again.",
-              "tool-limit": "Conversation reached its query limit. Please ask a shorter question.",
-              ungrounded: "Conversation unavailable. The reply quoted figures no record supplied.",
+              "provider-error": "Sorry, I couldn't think that through just now. Try again?",
+              refused: "Sorry, I can't help with that one.",
+              "rate-limited": "I've hit my limit for a bit. Try again a little later.",
+              "too-long": "That's a bit long for me. Can you say it shorter?",
+              "reply-too-long": "That answer's too long to read out. Try asking for a bit less.",
+              unavailable: "Sorry, I can't check that right now.",
+              timeout: "Sorry, that took too long. Try again?",
+              "tool-limit": "That's a few questions at once. Try one at a time.",
+              ungrounded: "Sorry, I didn't quite get that. Can you say it another way?",
             };
-            return { label: notices[dispatch.conversationReason] || "Conversation unavailable.", tone: "warn", notice: true };
+            return { label: notices[dispatch.conversationReason] || "Sorry, I couldn't answer that just now.", tone: "warn", notice: true };
           }
           var map = {
             "ignored-interim": { label: "Listening…", tone: "muted" },
-            empty: { label: "No command heard.", tone: "muted" },
+            empty: { label: "I didn't hear anything.", tone: "muted" },
             unrecognized: { label: "Sorry, I didn't catch that.", tone: "warn" },
-            "query-unavailable": { label: "Query unavailable — no data provider connected.", tone: "warn" },
-            "awaiting-confirmation": { label: "Awaiting spoken “confirm”.", tone: "pending" },
+            "query-unavailable": { label: "Sorry, I can't check that right now.", tone: "warn" },
+            "awaiting-confirmation": { label: "Shall I go ahead? Say “Nolan confirm” or “Nolan cancel”.", speech: "Shall I go ahead? Say confirm or cancel.", tone: "pending" },
             "confirmation-not-pending": { label: "There's nothing waiting to confirm.", tone: "muted" },
             "confirmation-expired": { label: "That took too long, so I dropped it. Say it again?", tone: "warn" },
             cancelled: { label: "Okay, cancelled.", tone: "muted" },
-            proposed: { label: "Proposed for governed approval.", tone: "ok" },
+            proposed: { label: "Okay. That's waiting for your approval.", tone: "ok" },
             "actuation-unavailable": { label: "I can't reach that device right now, so I didn't do anything.", tone: "warn" },
-            actuated: { label: "Actuated.", tone: "ok" },
-            "actuation-failed": { label: "Actuation failed.", tone: "warn" },
+            actuated: { label: "Done.", tone: "ok" },
+            "actuation-failed": { label: "That didn't work, so nothing changed.", tone: "warn" },
           };
           if (dispatch && dispatch.decision === "query-unavailable") {
             var reason = typeof dispatch.reason === "string" ? dispatch.reason.trim() : "";
@@ -1111,7 +1111,12 @@
             var proposedReason = typeof dispatch.reason === "string" ? dispatch.reason.trim() : "";
             if (proposedReason) return { label: proposedReason, tone: "warn" };
           }
-          return map[dispatch && dispatch.decision] || { label: "Unknown result.", tone: "muted" };
+          if (dispatch && dispatch.decision === "awaiting-confirmation" && dispatch.command && typeof dispatch.command.summary === "string" && dispatch.command.summary.trim()) {
+            var askWhat = dispatch.command.summary.trim().replace(/[.!?]+$/, "");
+            askWhat = askWhat.charAt(0).toLowerCase() + askWhat.slice(1);
+            return { label: "Do you want me to " + askWhat + "? Say “Nolan confirm” or “Nolan cancel”.", speech: "Do you want me to " + askWhat + "? Say confirm or cancel.", tone: "pending" };
+          }
+          return map[dispatch && dispatch.decision] || { label: "Hmm, something odd happened there.", tone: "muted" };
         }
         function voiceLatencyMs(startedAt, endedAt) {
           var start = Number(startedAt);

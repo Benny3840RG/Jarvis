@@ -235,7 +235,7 @@ export class VoiceConversationService {
 
 /** Fixed reply when no authoritative query was made; the model's own text is never spoken. */
 export const NOT_DONE_REPLY =
-  "I haven't done anything. Ask a catalogue question or say a catalogue command.";
+  "Sorry, I can't help with that one yet, so I haven't done anything. You can ask what's on today, or tell me something to add.";
 
 /**
  * The whole speech boundary. Model text is never spoken; it only chooses read-only queries.

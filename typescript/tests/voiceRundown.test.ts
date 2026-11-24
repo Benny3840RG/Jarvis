@@ -132,9 +132,9 @@ describe("voice daily rundown answer", () => {
     assert.deepEqual(await rundown(sources(FULL_DAY)), {
       status: "answered",
       answer:
-        "Here's your day. 1 job booked for today. Smith fence. " +
-        "1 reminder due: Call Dave. 1 coming up in the next 24 hours: Order bar oil. " +
-        "1 open task. Quote the deck. 1 open errand. Milk.",
+        "Here's your day. One job booked: Smith fence. " +
+        "One reminder's overdue: Call Dave. Coming up: Order bar oil, today at 1:30 pm. " +
+        "One task on your list: Quote the deck. One errand to run: Milk.",
     });
   });
 
@@ -151,8 +151,7 @@ describe("voice daily rundown answer", () => {
       {
         status: "answered",
         answer:
-          "Here's your day. No jobs booked for today. " +
-          "No reminders due or coming up in the next 24 hours. No open tasks. No open errands.",
+          "You're all clear today. No jobs booked, nothing on your list, no errands and no reminders coming up.",
       },
     );
   });
@@ -164,9 +163,9 @@ describe("voice daily rundown answer", () => {
     assert.equal(result.status, "answered");
     assert.ok(result.status === "answered");
     assert.match(result.answer, /Reminder records are unavailable\./);
-    assert.doesNotMatch(result.answer, /No reminders|0 reminder/);
-    assert.match(result.answer, /1 job booked for today/);
-    assert.match(result.answer, /1 open errand/);
+    assert.doesNotMatch(result.answer, /No reminders|no reminders|0 reminder/);
+    assert.match(result.answer, /One job booked: Smith fence\./);
+    assert.match(result.answer, /One errand to run: Milk\./);
   });
 
   it("is unavailable when nothing can be read or the timezone is invalid", async () => {
@@ -230,5 +229,19 @@ describe("voice daily rundown in the session", () => {
       now: NOW + 2,
     });
     assert.equal(confirm.decision, "confirmation-not-pending");
+  });
+});
+
+describe("voice daily rundown, partly empty", () => {
+  it("names only what is on and rolls the rest into one sentence", async () => {
+    const result = await rundown(
+      sources({
+        ...FULL_DAY,
+        projects: { list: async () => [] },
+        errands: { list: async () => [] },
+      }),
+    );
+    assert.ok(result.status === "answered");
+    assert.match(result.answer, /One task on your list: Quote the deck\. No jobs or errands\.$/);
   });
 });
