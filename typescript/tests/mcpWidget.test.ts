@@ -34,8 +34,8 @@ describe("Jarvis preview widget", () => {
     assert.match(widget, /complete_task/);
     assert.match(widget, /create_reminder/);
     assert.match(widget, /status\.layers/);
-    assert.match(widget, /Task load by domain/);
-    assert.match(widget, /Reminder timing distribution/);
+    assert.match(widget, /Tasks by type/);
+    assert.match(widget, /When they’re due/);
   });
 
   it("wires the real daily operations projection into its own dashboard view", () => {
