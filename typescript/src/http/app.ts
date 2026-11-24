@@ -89,6 +89,10 @@ import { AbsentHardwareProvider } from "../voice/voiceHardware.js";
 import { AuthoritativeVoiceCompletionResolver } from "../voice/voiceCompletion.js";
 import { reminderRescheduleEnabledFromEnv } from "../actions/taskReminderTools.js";
 import { VoiceSessionRegistry } from "../voice/voiceSessionRegistry.js";
+import {
+  createVoiceDirectWriterFromEnv,
+  type VoiceDirectWriter,
+} from "../voice/voiceDirectWrite.js";
 import { createVoiceWriteTargetFromEnv, type VoiceWriteTarget } from "../voice/voiceWriteTarget.js";
 import {
   createDangerZoneFromEnv,
@@ -189,6 +193,7 @@ export type CreateJarvisHttpAppOptions = (
   securityHaltStatus?: () => Promise<SecurityHaltStatus>;
   /** Dedicated project voice safe writes stage against (owner decision on #815). */
   voiceWriteTarget?: VoiceWriteTarget | null;
+  voiceDirectWriter?: VoiceDirectWriter | null;
   telemetry?: PostHogTelemetry;
   /**
    * Overrides the process-wide HTTP rate limit. Tests use this so a low budget
@@ -311,6 +316,12 @@ export async function createJarvisHttpApp(
       ? options.voiceWriteTarget
       : usesEnvironment
         ? createVoiceWriteTargetFromEnv()
+        : null;
+  const voiceDirectWriter =
+    options.voiceDirectWriter !== undefined
+      ? options.voiceDirectWriter
+      : usesEnvironment
+        ? createVoiceDirectWriterFromEnv()
         : null;
   const toolExecutionService =
     options.toolExecutionService !== undefined
@@ -498,6 +509,7 @@ export async function createJarvisHttpApp(
       memoryChangeSetService,
       toolActionService,
       voiceWriteTarget,
+      voiceDirectWriter,
       toolExecutionService,
       businessSettingsStore,
       enquiryStore,

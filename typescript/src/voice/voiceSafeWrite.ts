@@ -155,7 +155,7 @@ export function isSafeVoiceWrite(command: VoiceCommand): boolean {
   return SAFE_EXECUTORS.has(`${command.proposes.tool}:${command.proposes.operation}`);
 }
 
-function safeWriteArguments(
+export function safeWriteArguments(
   command: VoiceCommand,
   capture: VoiceWriteCapture | undefined,
 ): Record<string, unknown> | undefined {

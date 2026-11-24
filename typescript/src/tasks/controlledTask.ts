@@ -33,4 +33,6 @@ export interface ControlledTaskStore {
   complete(input: CompleteControlledTaskInput): Promise<ControlledTaskRecord | null>;
   get(projectId: string, taskId: string): Promise<ControlledTaskRecord | null>;
   cleanup(projectId: string, taskId: string): Promise<boolean>;
+  /** Voice undo of a spoken completion. Optional so older stores and fakes stay valid. */
+  reopen?(projectId: string, taskId: string): Promise<ControlledTaskRecord | null>;
 }

@@ -397,6 +397,35 @@ export const completeControlled = mutation({
   },
 });
 
+/**
+ * Voice "undo" for a spoken completion: put one controlled task in its own
+ * project back to open. The completion receipt stays as the audit record; a
+ * later completion carries a new idempotency key. Returns null when the task
+ * is missing or belongs to another owner or project.
+ */
+export const reopenControlled = mutation({
+  args: { serviceToken: v.string(), projectId: v.string(), id: v.string() },
+  returns: v.union(taskActionResultValidator, v.null()),
+  handler: async (ctx, args) => {
+    const ownerId = requireOwner(args.serviceToken);
+    const projectId = cleanRequiredText(args.projectId, "Project ID");
+    const id = ctx.db.normalizeId("tasks", args.id);
+    if (!id) return null;
+    const task = await ctx.db.get("tasks", id);
+    if (!task || task.ownerId !== ownerId || task.projectId !== projectId) return null;
+    if (task.completed) {
+      await ctx.db.patch("tasks", id, {
+        completed: false,
+        updatedAt: Date.now(),
+        revision: (task.revision ?? 1) + 1,
+      });
+    }
+    const reopened = await ctx.db.get("tasks", id);
+    if (!reopened) throw new Error("Controlled task reopen failed.");
+    return controlledTaskResult(reopened);
+  },
+});
+
 export const remove = mutation({
   args: { serviceToken: v.string(), id: v.string() },
   returns: v.union(taskValidator, v.null()),

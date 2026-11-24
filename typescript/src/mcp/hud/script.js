@@ -941,15 +941,50 @@
           else what = "reminder “" + capture.title + "”" + voiceCaptureDue(capture);
           return { ask: "Add " + what, staged: what, pending: "add " + what, effect: "is created" };
         }
+        function voiceSpokenDue(capture) {
+          if (!capture || typeof capture.dueAt !== "number" || typeof capture.dueTimezone !== "string") return "";
+          try {
+            return " " + new Intl.DateTimeFormat("en-AU", { timeZone: capture.dueTimezone, weekday: "long", hour: "numeric", minute: "2-digit", hour12: true }).format(new Date(capture.dueAt)).replace(",", " at");
+          } catch (error) {
+            return "";
+          }
+        }
+        // Owner-approved direct writes (#voice-direct): short, human replies with no read-back.
+        function describeVoiceDirect(dispatch, capture) {
+          var proposes = dispatch.command && dispatch.command.proposes ? dispatch.command.proposes : {};
+          var key = proposes.tool + ":" + proposes.operation;
+          var title = capture.title;
+          if (dispatch.decision === "undone") {
+            var reopened = key === "tasks:complete" || key === "errands:complete";
+            var undone = reopened ? "Okay, " + title + " is back on the list." : "Okay, I've taken " + title + " off.";
+            return { label: undone, tone: "muted" };
+          }
+          var spoken;
+          if (key === "tasks:create") spoken = "Done. " + title + " is on your list.";
+          else if (key === "reminders:create") spoken = "Okay, I'll remind you: " + title + voiceSpokenDue(capture) + ".";
+          else if (key === "errands:create") spoken = "Got it. " + title + " is on your errands.";
+          else if (key === "tasks:complete") spoken = "Nice. " + title + " is done.";
+          else if (key === "errands:complete") spoken = "Ticked off " + title + ".";
+          else spoken = "Done.";
+          var undoHint = typeof dispatch.undoExpiresAt === "number" && dispatch.undoExpiresAt > 0 ? " Say “Nolan undo” to reverse it." : "";
+          return { label: spoken + undoHint, speech: spoken, tone: "ok" };
+        }
         function describeVoiceDispatch(dispatch, catalog, profile) {
+          if (dispatch && dispatch.decision === "undo-unavailable") {
+            var why = typeof dispatch.reason === "string" && dispatch.reason.trim() ? dispatch.reason.trim() : "There's nothing to undo.";
+            return { label: why, tone: "muted" };
+          }
           if (dispatch && dispatch.decision === "ambiguous") {
             return describeVoiceClarification(dispatch.candidates, catalog, profile);
           }
           var capture = dispatch && dispatch.capture && typeof dispatch.capture.title === "string" ? dispatch.capture : null;
+          if (capture && (dispatch.decision === "saved" || dispatch.decision === "undone")) {
+            return describeVoiceDirect(dispatch, capture);
+          }
           if (capture) {
             var what = voiceCaptureWhat(dispatch.command, capture);
             if (dispatch.decision === "awaiting-confirmation") {
-              return { label: what.ask + "? Say “Nolan confirm” to stage it for your approval, or “Nolan cancel”.", tone: "pending" };
+              return { label: what.ask + "? Say “Nolan confirm” to stage it for your approval, or “Nolan cancel”.", speech: what.ask + "? Say confirm, or cancel.", tone: "pending" };
             }
             if (dispatch.decision === "proposed" && typeof dispatch.toolActionId === "string" && dispatch.toolActionId) {
               return { label: "Staged " + what.staged + " for your approval. Nothing " + what.effect + " until you approve it.", tone: "ok" };
@@ -990,14 +1025,14 @@
           var map = {
             "ignored-interim": { label: "Listening…", tone: "muted" },
             empty: { label: "No command heard.", tone: "muted" },
-            unrecognized: { label: "Command not recognised.", tone: "warn" },
+            unrecognized: { label: "Sorry, I didn't catch that.", tone: "warn" },
             "query-unavailable": { label: "Query unavailable — no data provider connected.", tone: "warn" },
             "awaiting-confirmation": { label: "Awaiting spoken “confirm”.", tone: "pending" },
-            "confirmation-not-pending": { label: "Nothing to confirm.", tone: "muted" },
-            "confirmation-expired": { label: "Confirmation expired.", tone: "warn" },
-            cancelled: { label: "Cancelled.", tone: "muted" },
+            "confirmation-not-pending": { label: "There's nothing waiting to confirm.", tone: "muted" },
+            "confirmation-expired": { label: "That took too long, so I dropped it. Say it again?", tone: "warn" },
+            cancelled: { label: "Okay, cancelled.", tone: "muted" },
             proposed: { label: "Proposed for governed approval.", tone: "ok" },
-            "actuation-unavailable": { label: "Hardware unavailable — failed closed.", tone: "warn" },
+            "actuation-unavailable": { label: "I can't reach that device right now, so I didn't do anything.", tone: "warn" },
             actuated: { label: "Actuated.", tone: "ok" },
             "actuation-failed": { label: "Actuation failed.", tone: "warn" },
           };
@@ -1074,6 +1109,25 @@
             var el = document.getElementById("voice-output-status");
             if (el) el.textContent = message;
           }
+          // Prefer a natural-sounding English voice (Australian first) over the browser default.
+          function pickSpeechVoice(voices) {
+            if (!voices || !voices.length) return null;
+            var best = null;
+            var bestScore = -1;
+            for (var i = 0; i < voices.length; i++) {
+              var voice = voices[i];
+              var lang = String(voice.lang || "").toLowerCase();
+              if (lang.indexOf("en") !== 0) continue;
+              var name = String(voice.name || "");
+              var score = 0;
+              if (lang === "en-au") score += 4; else if (lang === "en-gb") score += 3; else if (lang === "en-us") score += 2; else score += 1;
+              if (/(natural|neural|premium|enhanced|siri)/i.test(name)) score += 6;
+              else if (/google/i.test(name)) score += 3;
+              if (voice.localService === false) score += 1;
+              if (score > bestScore) { best = voice; bestScore = score; }
+            }
+            return best;
+          }
           function speak(label) {
             var generation = ++speechGeneration;
             speechInFlight = false;
@@ -1084,6 +1138,9 @@
             try {
               window.speechSynthesis.cancel();
               var utterance = new window.SpeechSynthesisUtterance(label);
+              var preferred = pickSpeechVoice(typeof window.speechSynthesis.getVoices === "function" ? window.speechSynthesis.getVoices() : null);
+              if (preferred) { utterance.voice = preferred; utterance.lang = preferred.lang; }
+              utterance.rate = 1.05;
               utterance.onstart = function () {
                 if (generation === speechGeneration) speechStatus("Browser speech started; audibility cannot be confirmed.");
               };
@@ -1127,7 +1184,7 @@
               el.textContent = info.label;
               el.setAttribute("data-tone", info.tone);
             }
-            if (!info.notice) speak(info.label);
+            if (!info.notice) speak(info.speech || info.label);
           }
           function renderLatency(startedAt, endedAt, failed) {
             var elapsed = voiceLatencyMs(startedAt, endedAt);
@@ -1215,6 +1272,8 @@
                   renderLatency(startedAt, voiceClock(), false);
                   renderResult(payload.dispatch);
                   renderPending(payload.pending);
+                  var written = payload.dispatch && (payload.dispatch.decision === "saved" || payload.dispatch.decision === "undone");
+                  if (written && typeof callTool === "function") callTool("show_jarvis_dashboard").catch(function () { /* the next poll catches up */ });
                 })
                 .catch(function (error) {
                   if (generation !== state.generation) return;

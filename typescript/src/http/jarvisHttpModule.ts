@@ -81,6 +81,7 @@ import { VoiceController } from "./voiceController.js";
 import type { VoiceSessionRegistry } from "../voice/voiceSessionRegistry.js";
 import type { VoiceConversationService } from "../voice/voiceConversation.js";
 import type { VoiceConversationStatus } from "../voice/voiceConversationFactory.js";
+import type { VoiceDirectWriter } from "../voice/voiceDirectWrite.js";
 import type { VoiceWriteTarget } from "../voice/voiceWriteTarget.js";
 import type { SecurityHaltStatus } from "../security/haltSupervisor.js";
 import {
@@ -120,6 +121,7 @@ import {
   HTTP_VOICE_CONVERSATION,
   HTTP_VOICE_CONVERSATION_STATUS,
   HTTP_VOICE_WRITE_TARGET,
+  HTTP_VOICE_DIRECT_WRITER,
   HTTP_SECURITY_HALT_STATUS,
 } from "./tokens.js";
 
@@ -162,6 +164,8 @@ export type JarvisHttpModuleOptions = {
   /** `nolan sec halt` read model for `GET /api/v1/status` (#839). */
   securityHaltStatus: () => Promise<SecurityHaltStatus>;
   voiceWriteTarget?: VoiceWriteTarget | null;
+  /** Owner-approved direct voice writes with spoken undo; null keeps every write staged. */
+  voiceDirectWriter?: VoiceDirectWriter | null;
 };
 
 @Module({})
@@ -285,6 +289,7 @@ export class JarvisHttpModule {
         { provide: HTTP_VOICE_CONVERSATION_STATUS, useValue: options.voiceConversationStatus },
         { provide: HTTP_SECURITY_HALT_STATUS, useValue: options.securityHaltStatus },
         { provide: HTTP_VOICE_WRITE_TARGET, useValue: options.voiceWriteTarget ?? null },
+        { provide: HTTP_VOICE_DIRECT_WRITER, useValue: options.voiceDirectWriter ?? null },
         SystemStatusService,
         { provide: APP_GUARD, useClass: ServiceTokenGuard },
         { provide: APP_INTERCEPTOR, useClass: RequestIdInterceptor },

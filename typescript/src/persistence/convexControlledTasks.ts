@@ -94,6 +94,15 @@ export class ConvexControlledTaskStore implements ControlledTaskStore {
     return row === null ? null : taskFromConvex(row as ControlledTaskRow);
   }
 
+  async reopen(projectId: string, taskId: string): Promise<ControlledTaskRecord | null> {
+    const row = await this.client.mutation(controlledTaskFunctions.reopenControlled, {
+      serviceToken: this.serviceToken,
+      projectId,
+      id: taskId,
+    });
+    return row === null ? null : taskFromConvex(row as ControlledTaskRow);
+  }
+
   async cleanup(projectId: string, taskId: string): Promise<boolean> {
     return this.client.mutation(controlledTaskFunctions.cleanupControlled, {
       serviceToken: this.serviceToken,
