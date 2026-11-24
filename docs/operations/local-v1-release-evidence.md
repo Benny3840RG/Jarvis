@@ -117,6 +117,11 @@ Fill this in once, for the one candidate SHA.
 - **Items 1, 3, 9 and 12 re-proven:** yes, on the host, 24 Nov; results are in
   the table above. They are recorded here rather than on #697, because a #697
   comment would make the `local-v1-release` card's subject pin stale.
-- **Dogfood pass completed, with no open blocker:**
+- **Dogfood pass completed, with no open blocker:** not yet. Started and
+  then **paused on 24 Nov** by the owner before any entry was logged: NOLAN
+  needs more work first (most of the browser HUD did nothing, and the voice
+  read everything back). The host left the candidate the same day (main
+  `9729a8e5`, #889). Freeze a new candidate when the owner resumes, and
+  re-prove only what changed.
 - **Independent review (who, where, verdict):**
 - **Owner designation as JARVIS LOCAL V1 (date, card ledger entry):**

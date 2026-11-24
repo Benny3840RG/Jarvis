@@ -1151,6 +1151,11 @@
     "/api/v1/tasks": {
       "get": {
         "operationId": "listTasks",
+        "security": [{ "serviceToken": [] }, {}],
+        "x-jarvis-auth": {
+          "mode": "service-token-or-local-loopback",
+          "anonymousScope": "local-serve-loopback-only"
+        },
         "summary": "List durable tasks",
         "description": "Returns the authoritative task list from the configured persistence provider.",
         "tags": ["Tasks"],
@@ -1194,6 +1199,11 @@
       },
       "post": {
         "operationId": "createTask",
+        "security": [{ "serviceToken": [] }, {}],
+        "x-jarvis-auth": {
+          "mode": "service-token-or-local-loopback",
+          "anonymousScope": "local-serve-loopback-only"
+        },
         "summary": "Create a durable task",
         "description": "Creates one task after explicit user intent. Reusing an Idempotency-Key replays the original result while that task still exists. Replaying the key after the task was deleted is a 409 conflict, not a new task and not a retryable failure.",
         "tags": ["Tasks"],
@@ -1445,6 +1455,11 @@
       ],
       "post": {
         "operationId": "completeTask",
+        "security": [{ "serviceToken": [] }, {}],
+        "x-jarvis-auth": {
+          "mode": "service-token-or-local-loopback",
+          "anonymousScope": "local-serve-loopback-only"
+        },
         "summary": "Complete a durable task",
         "description": "Sets the task completed flag to true. Repeated calls leave the task completed.",
         "tags": ["Tasks"],
@@ -1496,6 +1511,11 @@
     "/api/v1/reminders": {
       "get": {
         "operationId": "listReminders",
+        "security": [{ "serviceToken": [] }, {}],
+        "x-jarvis-auth": {
+          "mode": "service-token-or-local-loopback",
+          "anonymousScope": "local-serve-loopback-only"
+        },
         "summary": "List durable reminders",
         "description": "Returns the authoritative reminder list from the configured persistence provider.",
         "tags": ["Reminders"],
@@ -1539,6 +1559,11 @@
       },
       "post": {
         "operationId": "createReminder",
+        "security": [{ "serviceToken": [] }, {}],
+        "x-jarvis-auth": {
+          "mode": "service-token-or-local-loopback",
+          "anonymousScope": "local-serve-loopback-only"
+        },
         "summary": "Create a durable reminder",
         "description": "Creates one reminder and preserves its exact due text. Jarvis only adds a timestamp when the due value is unambiguous in the supplied timezone. Reusing an Idempotency-Key replays the original result while that reminder still exists. Replaying the key after the reminder was deleted is a 409 conflict, not a new reminder and not a retryable failure.",
         "tags": ["Reminders"],

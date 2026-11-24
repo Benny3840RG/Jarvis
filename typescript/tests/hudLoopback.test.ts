@@ -282,3 +282,93 @@ describe("loopback Console 02 HUD", () => {
     assert.equal(snapshot.statusCode, 404);
   });
 });
+
+describe("browser HUD task and reminder buttons", () => {
+  const sameOrigin = { "sec-fetch-site": "same-origin", "content-type": "application/json" };
+
+  it("adds a task, clears a task and adds a reminder without a token from the HUD page", async () => {
+    const app = await open("127.0.0.1");
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/v1/tasks",
+      headers: { ...sameOrigin, "idempotency-key": "hud-test-1" },
+      payload: { title: "Order bar oil", category: "work" },
+    });
+    assert.equal(created.statusCode, 201, created.body);
+    const listed = await app.inject({
+      method: "GET",
+      url: "/api/v1/tasks",
+      headers: { "sec-fetch-site": "same-origin" },
+    });
+    assert.equal(listed.statusCode, 200);
+    const completed = await app.inject({
+      method: "POST",
+      url: "/api/v1/tasks/task-1/complete",
+      headers: sameOrigin,
+      payload: {},
+    });
+    assert.notEqual(completed.statusCode, 401);
+    const reminder = await app.inject({
+      method: "POST",
+      url: "/api/v1/reminders",
+      headers: { ...sameOrigin, "idempotency-key": "hud-test-2" },
+      payload: { title: "Call Dave" },
+    });
+    assert.equal(reminder.statusCode, 201, reminder.body);
+  });
+
+  it("refuses a tokenless write from another website open in the browser", async () => {
+    const app = await open("127.0.0.1");
+    for (const headers of [
+      { "sec-fetch-site": "cross-site" },
+      { "sec-fetch-site": "same-site" },
+      { origin: "https://evil.example" },
+    ]) {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/v1/tasks",
+        headers: {
+          ...headers,
+          "content-type": "application/json",
+          "idempotency-key": "hud-test-cross",
+        },
+        payload: { title: "Nope", category: "work" },
+      });
+      assert.equal(response.statusCode, 401, JSON.stringify(headers));
+    }
+    // The same request with the service token still works for any client.
+    const withToken = await app.inject({
+      method: "POST",
+      url: "/api/v1/tasks",
+      headers: {
+        "sec-fetch-site": "cross-site",
+        authorization: `Bearer ${SERVICE_TOKEN}`,
+        "content-type": "application/json",
+        "idempotency-key": "hud-test-token",
+      },
+      payload: { title: "Fine", category: "work" },
+    });
+    assert.equal(withToken.statusCode, 201);
+  });
+
+  it("keeps the token requirement off loopback", async () => {
+    const app = await open("10.1.1.1");
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/v1/tasks",
+      headers: { ...sameOrigin, "idempotency-key": "hud-test-remote" },
+      payload: { title: "Nope", category: "work" },
+    });
+    assert.equal(response.statusCode, 401);
+  });
+
+  it("still requires a token for other task routes", async () => {
+    const app = await open("127.0.0.1");
+    const removed = await app.inject({
+      method: "DELETE",
+      url: "/api/v1/tasks/task-1",
+      headers: { "sec-fetch-site": "same-origin" },
+    });
+    assert.equal(removed.statusCode, 401);
+  });
+});

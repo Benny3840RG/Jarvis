@@ -97,6 +97,25 @@ export class LifecycleQuoteRegisterError extends Error {
  * a row that moved mid-read, or an unreadable delivery ledger fails closed.
  * Callers must not merge this result with the flat quote store.
  */
+const LIFECYCLE_READ_CONCURRENCY = 8;
+
+async function mapInOrder<T, R>(
+  items: readonly T[],
+  limit: number,
+  fn: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const index = next++;
+      results[index] = await fn(items[index] as T);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
+}
+
 export async function readLifecycleQuoteRegister(
   repository: QuoteRepository,
   deliveries: QuoteDeliveryRepository | null,
@@ -112,8 +131,10 @@ export async function readLifecycleQuoteRegister(
       error instanceof Error ? error.message : "The quote lifecycle register could not be read.",
     );
   }
-  const quotes: Quote[] = [];
-  for (const summary of summaries) {
+  // Each row is two or three Convex round trips; reading them one after another
+  // made the HUD snapshot take ~8 s. Rows are read in parallel (bounded) and
+  // kept in register order; any failed or inconsistent row still fails the whole read.
+  const quotes = await mapInOrder(summaries, LIFECYCLE_READ_CONCURRENCY, async (summary) => {
     let snapshot: QuoteSnapshot | null;
     try {
       snapshot = await repository.getQuote(summary.quoteId);
@@ -134,12 +155,10 @@ export async function readLifecycleQuoteRegister(
         `Quote ${summary.quoteId} is not a consistent row of the lifecycle register.`,
       );
     }
-    quotes.push(
-      quoteFromLifecycleSnapshot(snapshot, {
-        hasSucceededDelivery: await succeededDeliveryForSnapshot(deliveries, snapshot),
-      }),
-    );
-  }
+    return quoteFromLifecycleSnapshot(snapshot, {
+      hasSucceededDelivery: await succeededDeliveryForSnapshot(deliveries, snapshot),
+    });
+  });
   return { summaries, quotes };
 }
 

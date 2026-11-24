@@ -61,6 +61,13 @@ const PUBLIC_OPERATIONS = new Set([
   "DELETE /api/v1/voice/sessions/{sessionId}",
   "POST /api/v1/voice/sessions/{sessionId}/utterances",
   "POST /api/v1/voice/sessions/{sessionId}/profile",
+  // The browser HUD's task and reminder buttons are loopback-public on the same
+  // terms, for same-origin requests only (tests/hudLoopback.test.ts).
+  "GET /api/v1/tasks",
+  "POST /api/v1/tasks",
+  "POST /api/v1/tasks/{taskId}/complete",
+  "GET /api/v1/reminders",
+  "POST /api/v1/reminders",
 ]);
 
 function unusedPersistence(): PersistenceProvider {
@@ -203,6 +210,12 @@ describe("HTTP route contract", () => {
       ["/api/v1/voice/sessions/{sessionId}", "delete"],
       ["/api/v1/voice/sessions/{sessionId}/utterances", "post"],
       ["/api/v1/voice/sessions/{sessionId}/profile", "post"],
+      // The browser HUD's task and reminder buttons (owner decision, 24 Nov 2026).
+      ["/api/v1/tasks", "get"],
+      ["/api/v1/tasks", "post"],
+      ["/api/v1/tasks/{taskId}/complete", "post"],
+      ["/api/v1/reminders", "get"],
+      ["/api/v1/reminders", "post"],
     ] as const) {
       const operation = document.paths[path]?.[method];
       assert.ok(operation, `${method.toUpperCase()} ${path} must exist`);

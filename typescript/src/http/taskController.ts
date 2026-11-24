@@ -19,6 +19,7 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 import type { PersistenceProvider, Task } from "../persistence/persistence.js";
 import { publicTask } from "../persistence/publicRecords.js";
 import type { TaskUpdate } from "../persistence/updates.js";
+import { LocalLoopbackRoute } from "./localLoopbackRoute.js";
 import { JarvisProblem } from "./problemDetails.js";
 import { parseCreateTask, parseIdempotencyKey, parseUpdateTask } from "./taskRequest.js";
 import { HTTP_PERSISTENCE } from "./tokens.js";
@@ -114,6 +115,8 @@ export class TaskController {
     return tasks.some((task) => task.id === taskId);
   }
 
+  // The HUD page writes through this route without a token (owner decision, 24 Nov 2026).
+  @LocalLoopbackRoute()
   @Get()
   async list() {
     try {
@@ -124,6 +127,8 @@ export class TaskController {
     }
   }
 
+  // The HUD page writes through this route without a token (owner decision, 24 Nov 2026).
+  @LocalLoopbackRoute()
   @Post()
   @HttpCode(HttpStatus.CREATED)
   async create(
@@ -255,6 +260,8 @@ export class TaskController {
     }
   }
 
+  // The HUD page writes through this route without a token (owner decision, 24 Nov 2026).
+  @LocalLoopbackRoute()
   @Post(":taskId/complete")
   async complete(@Param("taskId") taskId: string) {
     try {
