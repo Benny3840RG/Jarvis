@@ -143,6 +143,9 @@ export async function runExternalReconciliationSmoke(
       workerId: `${marker}-worker`,
       leaseMs: 30_000,
       signal: new AbortController().signal,
+      // Claim only the synthetic record; a real pending entry on the shared
+      // development queue must never be claimed or escalated by the smoke.
+      reconciliationId,
     });
     requireCondition(
       workerResult.status === "resolved" && workerResult.terminalStatus === "succeeded",
