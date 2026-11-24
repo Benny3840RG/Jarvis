@@ -156,7 +156,7 @@ describe("voice HUD console logic (extracted from dashboard-v1.html)", () => {
     it("marks disconnected query providers as unavailable, never a successful answer", () => {
       const info = logic.describeVoiceDispatch({ decision: "query-unavailable" });
       assert.equal(info.tone, "warn");
-      assert.match(info.label, /query unavailable.*no data provider/i);
+      assert.match(info.label, /can't check that right now/i);
     });
 
     it("speaks an authoritative answer and a named source failure as a warning", () => {
@@ -191,7 +191,7 @@ describe("voice HUD console logic (extracted from dashboard-v1.html)", () => {
 
     it("describes a governed propose as proposed, not approved", () => {
       const info = logic.describeVoiceDispatch({ decision: "proposed" });
-      assert.match(info.label, /propos/i);
+      assert.match(info.label, /waiting for your approval/i);
       assert.doesNotMatch(info.label, /approved|executed/i);
     });
 
@@ -288,7 +288,10 @@ describe("voice HUD dictation read-back", () => {
       capture: { title: "Silicone for the deck" },
       toolActionId: "voice-safe-write:v1:abc",
     } as never);
-    assert.match(staged.label, /^Staged errand “Silicone for the deck” for your approval/);
+    assert.match(
+      staged.label,
+      /^Okay\. I've asked for your approval to add errand “Silicone for the deck”\. Nothing is created until you approve it\.$/,
+    );
   });
 
   it("reads a spoken completion back and says when nothing was marked done", () => {
@@ -314,7 +317,7 @@ describe("voice HUD dictation read-back", () => {
     } as never);
     assert.match(
       staged.label,
-      /^Staged completing errand “Milk” for your approval\. Nothing changes/,
+      /^Okay\. I've asked for your approval to mark errand “Milk” done\. Nothing changes/,
     );
     const unresolved = logic.describeVoiceDispatch({
       decision: "completion-unresolved",
@@ -347,7 +350,7 @@ describe("voice HUD dictation read-back", () => {
     } as never);
     assert.match(
       staged.label,
-      /^Staged cancelling reminder “Order bar oil” for your approval\. Nothing changes/,
+      /^Okay\. I've asked for your approval to cancel reminder “Order bar oil”\. Nothing changes/,
     );
     const unresolved = logic.describeVoiceDispatch({
       decision: "completion-unresolved",
@@ -377,7 +380,7 @@ describe("voice HUD dictation read-back", () => {
     } as never);
     assert.match(
       staged.label,
-      /^Staged removing errand “Milk” for your approval\. Nothing changes/,
+      /^Okay\. I've asked for your approval to remove errand “Milk”\. Nothing changes/,
     );
     const unresolved = logic.describeVoiceDispatch({
       decision: "completion-unresolved",
@@ -416,7 +419,7 @@ describe("voice HUD dictation read-back", () => {
     } as never);
     assert.match(
       staged.label,
-      /^Staged rescheduling reminder “Order bar oil” due Fri, 20 Nov, 9:00 am for your approval\. Nothing changes/,
+      /^Okay\. I've asked for your approval to reschedule reminder “Order bar oil”\. Nothing changes/,
     );
     const unresolved = logic.describeVoiceDispatch({
       decision: "completion-unresolved",
@@ -434,7 +437,7 @@ describe("voice HUD dictation read-back", () => {
       toolActionId: "voice-safe-write:v1:abc",
     } as never);
     assert.equal(info.tone, "ok");
-    assert.match(info.label, /Staged reminder “Call dave” for your approval/);
+    assert.match(info.label, /I've asked for your approval to add reminder “Call dave”/);
     assert.match(info.label, /Nothing is created until you approve it/);
   });
 

@@ -138,7 +138,7 @@ describe("voice session — bounded clarification", () => {
     assert.equal((await say(s, "confirm", 3)).decision, "confirmation-not-pending");
   });
 
-  it("holds clarified query and proposal behind confirmation too", async () => {
+  it("answers a clarified read-only query at once, and holds a clarified proposal", async () => {
     let answers = 0;
     const queries: VoiceQueryProvider = {
       async answer() {
@@ -157,9 +157,10 @@ describe("voice session — bounded clarification", () => {
       "ambiguous",
     );
     const chosenQuery = await say(query, "first", 1);
-    assert.equal(chosenQuery.decision, "awaiting-confirmation");
-    assert.equal(answers, 0);
-    assert.equal((await say(query, "confirm", 2)).decision, "answered");
+    assert.equal(chosenQuery.decision, "answered");
+    assert.equal(answers, 1);
+    assert.equal(query.pending(), undefined, "a question arms nothing");
+    assert.equal((await say(query, "confirm", 2)).decision, "confirmation-not-pending");
     assert.equal(answers, 1);
 
     const proposal = new VoiceSession({

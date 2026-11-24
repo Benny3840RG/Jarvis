@@ -51,6 +51,18 @@ const RUNDOWN_PHRASES: ReadonlySet<string> = new Set([
   "how does my day look",
   "what have i got on today",
   "what have i got today",
+  "how is my day looking",
+  "how is my day",
+  "hows my day",
+  "how does today look",
+  "hows today looking",
+  "how is today looking",
+  "whats my day like",
+  "what is my day like",
+  "what does today look like",
+  "what have i got on",
+  "whats happening today",
+  "what is happening today",
 ]);
 
 /** Lower-case words only: apostrophes dropped, other punctuation a space, "please" trimmed. */

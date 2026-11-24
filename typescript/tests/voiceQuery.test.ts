@@ -173,7 +173,7 @@ describe("authoritative voice queries", () => {
     );
     assert.deepEqual(result, {
       status: "answered",
-      answer: "1 job booked for today. Hedge.",
+      answer: "You've got one job booked today: Hedge.",
     });
   });
 
@@ -182,7 +182,7 @@ describe("authoritative voice queries", () => {
       sources({ projects: { list: async () => [] } }),
       "client.todays-schedule",
     );
-    assert.deepEqual(result, { status: "answered", answer: "No jobs booked for today." });
+    assert.deepEqual(result, { status: "answered", answer: "Nothing's booked in for today." });
   });
 
   it("names project records when today's jobs cannot be read", async () => {
@@ -209,8 +209,7 @@ describe("authoritative voice queries", () => {
     );
     assert.deepEqual(result, {
       status: "answered",
-      answer:
-        "1 job booked for today. 1 job booked later this week. Today: Hedge. Later this week: Deck.",
+      answer: "Today, one job: Hedge. Later this week, one job: Deck.",
     });
   });
 
@@ -221,7 +220,7 @@ describe("authoritative voice queries", () => {
     );
     assert.deepEqual(result, {
       status: "answered",
-      answer: "No jobs booked today or later this week.",
+      answer: "Nothing's booked in for the rest of the week.",
     });
   });
 
@@ -245,7 +244,7 @@ describe("authoritative voice queries", () => {
     );
     assert.deepEqual(result, {
       status: "answered",
-      answer: "Next job is Later, booked for 2026-10-12.",
+      answer: "Your next job is Later, booked for Monday 12 October.",
     });
   });
 
@@ -254,7 +253,7 @@ describe("authoritative voice queries", () => {
       sources({ projects: { list: async () => [project("Overdue", "2026-10-01")] } }),
       "workshop.next-job",
     );
-    assert.deepEqual(result, { status: "answered", answer: "No upcoming job is booked." });
+    assert.deepEqual(result, { status: "answered", answer: "There's no job booked in yet." });
   });
 
   it("names project records when the next job cannot be read", async () => {
@@ -269,7 +268,8 @@ describe("authoritative voice queries", () => {
     );
     assert.deepEqual(result, {
       status: "answered",
-      answer: "Next appointment is Hedge, booked for 2026-10-07. No appointment time is recorded.",
+      answer:
+        "Your next appointment is Hedge, booked for Wednesday 7 October. I don't have a time for it.",
     });
   });
 
@@ -278,7 +278,10 @@ describe("authoritative voice queries", () => {
       sources({ projects: { list: async () => [] } }),
       "client.next-appointment",
     );
-    assert.deepEqual(result, { status: "answered", answer: "No upcoming appointment is booked." });
+    assert.deepEqual(result, {
+      status: "answered",
+      answer: "There's no appointment booked in yet.",
+    });
   });
 
   it("names timezone configuration when a schedule cannot be dated", async () => {
@@ -317,7 +320,7 @@ describe("authoritative voice queries", () => {
     );
     assert.deepEqual(result, {
       status: "answered",
-      answer: "2 unpaid invoices, balance due 50.50. INV-a; INV-b.",
+      answer: "Two unpaid invoices, $50.50 owing: INV-a and INV-b.",
     });
   });
 
@@ -326,7 +329,10 @@ describe("authoritative voice queries", () => {
       sources({ invoices: { list: async () => [] } }),
       "client.unpaid-invoices",
     );
-    assert.deepEqual(result, { status: "answered", answer: "No unpaid invoices." });
+    assert.deepEqual(result, {
+      status: "answered",
+      answer: "No unpaid invoices.",
+    });
   });
 
   it("names invoice records when unpaid invoices cannot be read", async () => {
@@ -354,7 +360,7 @@ describe("authoritative voice queries", () => {
     assert.deepEqual(filter, { status: "open" });
     assert.deepEqual(result, {
       status: "answered",
-      answer: "2 open enquiries. Burst pipe; Fence.",
+      answer: "Two enquiries waiting: Burst pipe and Fence.",
     });
   });
 
@@ -363,7 +369,7 @@ describe("authoritative voice queries", () => {
       sources({ enquiries: { list: async () => [] } }),
       "client.open-enquiries",
     );
-    assert.deepEqual(result, { status: "answered", answer: "No open enquiries." });
+    assert.deepEqual(result, { status: "answered", answer: "No new enquiries waiting." });
   });
 
   it("names enquiry records when open enquiries cannot be read", async () => {
@@ -424,7 +430,7 @@ describe("authoritative voice queries", () => {
       }),
       "client.open-tasks",
     );
-    assert.deepEqual(result, { status: "answered", answer: "1 open task. Mow." });
+    assert.deepEqual(result, { status: "answered", answer: "You've got one task: Mow." });
   });
 
   it("reports no open tasks when the register is healthy and empty", async () => {
@@ -432,7 +438,7 @@ describe("authoritative voice queries", () => {
       sources({ tasks: { listTasks: async () => [] } }),
       "client.open-tasks",
     );
-    assert.deepEqual(result, { status: "answered", answer: "No open tasks." });
+    assert.deepEqual(result, { status: "answered", answer: "Your task list is clear." });
   });
 
   it("names task records when tasks cannot be read", async () => {
@@ -455,7 +461,8 @@ describe("authoritative voice queries", () => {
     );
     assert.deepEqual(result, {
       status: "answered",
-      answer: "1 reminder due, 1 upcoming, 1 undated. Due: Due one. Upcoming: Soon.",
+      answer:
+        "You've got three reminders. One's overdue: Due one. Coming up: Soon, today at 11:30 am. And one with no time set: Undated.",
     });
   });
 
@@ -470,7 +477,7 @@ describe("authoritative voice queries", () => {
     );
     assert.deepEqual(result, {
       status: "answered",
-      answer: "0 reminders due, 0 upcoming, 0 undated. 1 reminder scheduled later.",
+      answer: "You've got one reminder. Next up: Later, Friday at 11:30 am.",
     });
   });
 
@@ -479,7 +486,7 @@ describe("authoritative voice queries", () => {
       sources({ reminders: { listReminders: async () => [] } }),
       "client.reminders",
     );
-    assert.deepEqual(result, { status: "answered", answer: "No reminders." });
+    assert.deepEqual(result, { status: "answered", answer: "You haven't got any reminders." });
   });
 
   it("names reminder records when reminders cannot be read", async () => {
@@ -501,13 +508,13 @@ describe("authoritative voice queries", () => {
     );
     assert.deepEqual(result, {
       status: "answered",
-      answer: "1 open errand. Silicone at Bunnings.",
+      answer: "You've got one errand to run: Silicone at Bunnings.",
     });
   });
 
   it("reports no open errands when the register is healthy and empty", async () => {
     const result = await ask(sources({ errands: { list: async () => [] } }), "client.open-errands");
-    assert.deepEqual(result, { status: "answered", answer: "No open errands." });
+    assert.deepEqual(result, { status: "answered", answer: "No errands to run." });
   });
 
   it("names errand records when errands cannot be read", async () => {
@@ -680,7 +687,10 @@ describe("voice session query dispatch", () => {
   it("returns the provider answer and does not consult hardware", async () => {
     let hardwareReads = 0;
     const queries: VoiceQueryProvider = {
-      answer: async () => ({ status: "answered", answer: "No unpaid invoices." }),
+      answer: async () => ({
+        status: "answered",
+        answer: "No unpaid invoices.",
+      }),
     };
     const session = new VoiceSession({
       profile: "client",

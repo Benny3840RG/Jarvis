@@ -335,10 +335,12 @@ async function armCrawler(h: ReturnType<typeof harness>) {
 
 const AMBIGUOUS_REQUEST = "Jarvis crawler forward and turn crawler lights on";
 const CLARIFICATION_PROMPT =
-  "Ambiguous — nothing was done. Did you mean: 1. Drive the crawler forward; " +
-  "2. Turn the crawler inspection lights on? Reply once with “Nolan” and your choice, " +
-  "or repeat the full command.";
-const GENERIC_AMBIGUOUS = "Ambiguous — ignored for safety.";
+  "Did you mean 1. Drive the crawler forward; " +
+  "2. Turn the crawler inspection lights on? Say “Nolan” and your choice. " +
+  "I haven't done anything yet.";
+const GENERIC_AMBIGUOUS = "Sorry, I wasn't sure what you meant, so I didn't do anything.";
+const UNSURE_WHICH =
+  "Sorry, I wasn't sure which you meant, so I didn't do anything. Can you say it again?";
 
 async function offerClarification(h: ReturnType<typeof harness>) {
   h.profile("crawler");
@@ -393,7 +395,7 @@ describe("voice HUD clarification prompt (#567)", () => {
     });
     h.type("Nolan tell me a joke");
     await flush();
-    assert.match(h.get("voice-result").textContent, /too long to speak in full/i);
+    assert.match(h.get("voice-result").textContent, /too long to read out/i);
     assert.equal(h.spoken.length, 0);
   });
 
@@ -439,7 +441,10 @@ describe("voice HUD clarification prompt (#567)", () => {
     assert.equal(sessionCreations(h), creations, "the reply reuses the same server session");
     assert.equal(h.utterances().length, sent + 1, "exactly one reply request, no local dispatch");
     assert.equal(h.utterances().at(-1)?.path, h.utterances().at(-2)?.path);
-    assert.equal(h.get("voice-result").textContent, "Awaiting spoken “confirm”.");
+    assert.equal(
+      h.get("voice-result").textContent,
+      "Do you want me to turn the crawler inspection lights on? Say “Nolan confirm” or “Nolan cancel”.",
+    );
     assert.match(h.get("voice-pending").textContent, /Turn the crawler inspection lights on/);
     assert.deepEqual(h.actuations, [], "a clarified choice still waits for server confirmation");
 
@@ -486,7 +491,10 @@ describe("voice HUD clarification prompt (#567)", () => {
     await flush();
     assert.equal(h.utterances().at(-1)?.body.transcript, "the second one");
     assert.equal(h.utterances().at(-1)?.body.heardTranscript, "Jarvis the second one");
-    assert.equal(h.get("voice-result").textContent, "Awaiting spoken “confirm”.");
+    assert.equal(
+      h.get("voice-result").textContent,
+      "Do you want me to turn the crawler inspection lights on? Say “Nolan confirm” or “Nolan cancel”.",
+    );
     assert.match(h.get("voice-pending").textContent, /Turn the crawler inspection lights on/);
     assert.deepEqual(h.actuations, []);
   });
@@ -607,10 +615,7 @@ describe("voice HUD clarification prompt (#567)", () => {
     await offerClarification(h);
     h.type("Jarvis crawler status");
     await flush();
-    assert.equal(
-      h.get("voice-result").textContent,
-      "Query unavailable — no data provider connected.",
-    );
+    assert.equal(h.get("voice-result").textContent, "Sorry, I can't check that right now.");
     assert.equal(h.get("voice-pending").hidden, true);
   });
 
@@ -621,12 +626,7 @@ describe("voice HUD clarification prompt (#567)", () => {
         VOICE_COMMANDS,
         "crawler",
       ),
-      {
-        label:
-          "Ambiguous — nothing was done. Conflicting: control.cancel; control.confirm. " +
-          "Repeat the full command.",
-        tone: "warn",
-      },
+      { label: UNSURE_WHICH, tone: "warn" },
     );
     // No catalog, or a catalog entry from another profile, never lends its summary.
     for (const catalog of [undefined, [], VOICE_COMMANDS]) {
@@ -636,8 +636,7 @@ describe("voice HUD clarification prompt (#567)", () => {
           catalog,
           "workshop",
         ).label,
-        "Ambiguous — nothing was done. Conflicting: crawler.forward; crawler.lights-on. " +
-          "Repeat the full command.",
+        UNSURE_WHICH,
       );
     }
   });
@@ -650,8 +649,8 @@ describe("voice HUD clarification prompt (#567)", () => {
     );
     assert.equal(
       single.label,
-      "Ambiguous — nothing was done. Did you mean: Drive the crawler forward? " +
-        "Reply once with “Nolan” and your choice, or repeat the full command.",
+      "Did you mean Drive the crawler forward? Say “Nolan” and your choice. " +
+        "I haven't done anything yet.",
     );
     const ids = VOICE_COMMANDS.filter((command) => command.profile === "crawler").map(
       (command) => command.id,
@@ -662,7 +661,7 @@ describe("voice HUD clarification prompt (#567)", () => {
       VOICE_COMMANDS,
       "crawler",
     ).label;
-    assert.match(many, /4\. [^;]+; and \d+ more\? Reply once/);
+    assert.match(many, /4\. [^;]+; and \d+ more\? Say “Nolan”/);
     assert.doesNotMatch(many, /5\. /);
     assert.equal(
       many,
@@ -831,10 +830,7 @@ describe("voice HUD lifecycle (actual setupVoiceConsole and real session registr
     assert.equal(h.get("voice-enable").disabled, true);
     h.type("any unpaid invoices");
     await flush();
-    assert.equal(
-      h.get("voice-result").textContent,
-      "Query unavailable — no data provider connected.",
-    );
+    assert.equal(h.get("voice-result").textContent, "Sorry, I can't check that right now.");
   });
 
   it("preserves wake-word, final-only and alternatives checks in the actual event wiring", async () => {
@@ -850,7 +846,7 @@ describe("voice HUD lifecycle (actual setupVoiceConsole and real session registr
     await flush();
     assert.deepEqual(h.utterances().at(-1)?.body.alternatives, ["cancel"]);
     assert.deepEqual(h.actuations, []);
-    assert.match(h.get("voice-result").textContent, /ambiguous/i);
+    assert.match(h.get("voice-result").textContent, /wasn't sure/i);
     assert.equal(h.get("voice-pending").hidden, true);
   });
 
@@ -888,10 +884,7 @@ describe("voice HUD lifecycle (actual setupVoiceConsole and real session registr
     assert.equal(h.get("voice-enable").disabled, true);
     currentRecognition.emit("Jarvis any unpaid invoices");
     await flush();
-    assert.equal(
-      h.get("voice-result").textContent,
-      "Query unavailable — no data provider connected.",
-    );
+    assert.equal(h.get("voice-result").textContent, "Sorry, I can't check that right now.");
   });
 
   it("drops Stop-invalidated session creation before sending the queued command", async () => {
@@ -920,10 +913,7 @@ describe("voice HUD lifecycle (actual setupVoiceConsole and real session registr
     assert.equal(h.spoken.length, 0);
     h.type("any unpaid invoices");
     await flush();
-    assert.equal(
-      h.get("voice-result").textContent,
-      "Query unavailable — no data provider connected.",
-    );
+    assert.equal(h.get("voice-result").textContent, "Sorry, I can't check that right now.");
   });
 
   it("suppresses a late actuation reply without claiming Stop undid a sent operation", async () => {
@@ -980,10 +970,7 @@ describe("voice HUD lifecycle (actual setupVoiceConsole and real session registr
     h.type("any unpaid invoices");
     await flush();
     assert.equal(h.get("voice-profile-label").textContent, "CLIENT");
-    assert.equal(
-      h.get("voice-result").textContent,
-      "Query unavailable — no data provider connected.",
-    );
+    assert.equal(h.get("voice-result").textContent, "Sorry, I can't check that right now.");
   });
 
   for (const status of [503, 404]) {
@@ -1008,10 +995,7 @@ describe("voice HUD lifecycle (actual setupVoiceConsole and real session registr
       assert.match(h.get("voice-result").textContent, /Voice profile ready: CLIENT/);
       h.type("any unpaid invoices");
       await flush();
-      assert.equal(
-        h.get("voice-result").textContent,
-        "Query unavailable — no data provider connected.",
-      );
+      assert.equal(h.get("voice-result").textContent, "Sorry, I can't check that right now.");
     });
   }
 
@@ -1040,10 +1024,7 @@ describe("voice HUD lifecycle (actual setupVoiceConsole and real session registr
     assert.equal(h.get("voice-profile-label").textContent, "CLIENT");
     h.type("any unpaid invoices");
     await flush();
-    assert.equal(
-      h.get("voice-result").textContent,
-      "Query unavailable — no data provider connected.",
-    );
+    assert.equal(h.get("voice-result").textContent, "Sorry, I can't check that right now.");
     assert.deepEqual(h.actuations, []);
   });
 
@@ -1059,10 +1040,7 @@ describe("voice HUD lifecycle (actual setupVoiceConsole and real session registr
     h.type("crawler status");
     await flush();
     assert.equal(h.get("voice-profile-label").textContent, "CRAWLER");
-    assert.equal(
-      h.get("voice-result").textContent,
-      "Query unavailable — no data provider connected.",
-    );
+    assert.equal(h.get("voice-result").textContent, "Sorry, I can't check that right now.");
     assert.equal(h.utterances().length, 1, "obsolete command must not reach either session");
     const id = h.utterances()[0].path.split("/")[2];
     assert.equal(h.registry.get(id)?.profile, "crawler");
@@ -1082,10 +1060,7 @@ describe("voice HUD lifecycle (actual setupVoiceConsole and real session registr
     assert.equal(h.get("voice-profile-label").textContent, "CLIENT");
     h.type("any unpaid invoices");
     await flush();
-    assert.equal(
-      h.get("voice-result").textContent,
-      "Query unavailable — no data provider connected.",
-    );
+    assert.equal(h.get("voice-result").textContent, "Sorry, I can't check that right now.");
     assert.equal(h.registry.size(), 1);
   });
 
@@ -1122,10 +1097,7 @@ describe("voice HUD lifecycle (actual setupVoiceConsole and real session registr
     h.type("crawler status");
     await flush();
     assert.equal(h.requests.filter((request) => request.path === "/sessions").length, 2);
-    assert.equal(
-      h.get("voice-result").textContent,
-      "Query unavailable — no data provider connected.",
-    );
+    assert.equal(h.get("voice-result").textContent, "Sorry, I can't check that right now.");
     assert.deepEqual(h.actuations, []);
   });
 
@@ -1138,10 +1110,7 @@ describe("voice HUD lifecycle (actual setupVoiceConsole and real session registr
     assert.match(h.get("voice-result").textContent, /unreachable|unavailable|failed/i);
     h.type("any unpaid invoices");
     await flush();
-    assert.equal(
-      h.get("voice-result").textContent,
-      "Query unavailable — no data provider connected.",
-    );
+    assert.equal(h.get("voice-result").textContent, "Sorry, I can't check that right now.");
   });
 
   it("serializes commands so delayed replies cannot overwrite newer pending state", async () => {
@@ -1171,7 +1140,7 @@ describe("voice HUD lifecycle (actual setupVoiceConsole and real session registr
       ["crawler status", "crawler halt"],
     );
     assert.equal(h.get("voice-pending").hidden, false);
-    assert.match(h.get("voice-result").textContent, /awaiting/i);
+    assert.match(h.get("voice-result").textContent, /Do you want me to .*Nolan confirm/);
   });
 
   it("waits for a sent utterance before reusing its session for another profile", async () => {
