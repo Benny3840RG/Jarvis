@@ -22,6 +22,10 @@ import type {
 } from "../src/tasks/controlledTask.js";
 import { VOICE_COMMANDS, type VoiceCommand } from "../src/voice/voiceCommands.js";
 import {
+  VoiceConversationService,
+  type VoiceConversationReasoner,
+} from "../src/voice/voiceConversation.js";
+import {
   VOICE_DIRECT_SOURCE,
   VOICE_UNDO_EXPIRED_REASON,
   VOICE_UNDO_NOTHING_REASON,
@@ -319,7 +323,11 @@ function persistence(): PersistenceProvider {
   };
 }
 
-async function open(options: { direct: boolean; commissioned?: boolean }) {
+async function open(options: {
+  direct: boolean;
+  commissioned?: boolean;
+  reasoner?: VoiceConversationReasoner;
+}) {
   const config: HttpAppConfig = {
     version: "0.1.0",
     sourceVersion: "voice-direct-test",
@@ -353,6 +361,9 @@ async function open(options: { direct: boolean; commissioned?: boolean }) {
       revision: async () => (options.commissioned === false ? null : 2),
     }),
     voiceDirectWriter: options.direct ? stores.direct : null,
+    ...(options.reasoner
+      ? { voiceConversation: new VoiceConversationService({ reasoner: options.reasoner }) }
+      : {}),
   });
   openApps.push(app);
   const headers = { authorization: "Bearer secret" };
@@ -427,5 +438,47 @@ describe("direct voice writes over HTTP", () => {
     const heard = await say("Nolan, add a work task: Order bar oil");
     assert.equal(heard.dispatch.decision, "awaiting-confirmation");
     assert.equal(tasks.rows.size, 0);
+  });
+});
+
+describe("direct voice writes from plain speech", () => {
+  it("saves what NOLAN understood from plain speech at once, and undoes it", async () => {
+    const { actions, errands, say } = await open({
+      direct: true,
+      reasoner: {
+        async reply() {
+          return { status: "proposed", proposal: { action: "add_errand", title: "Bar oil" } };
+        },
+      },
+    });
+    const heard = await say("Nolan, chuck some bar oil on the shopping list would ya");
+    assert.equal(heard.dispatch.decision, "saved");
+    assert.equal(heard.dispatch.command.id, "client.capture-errand");
+    assert.deepEqual(heard.dispatch.capture, { title: "Bar oil" });
+    assert.equal(heard.pending, null);
+    assert.equal(actions.rows.length, 0, "nothing goes to the approvals page");
+    assert.deepEqual(
+      (await errands.list()).map((errand) => errand.title),
+      ["Bar oil"],
+    );
+
+    assert.equal((await say("Nolan undo")).dispatch.decision, "undone");
+    assert.equal((await errands.list()).length, 0);
+  });
+
+  it("still reads back anything riskier than an add or a tick-off", async () => {
+    const { errands, say } = await open({
+      direct: true,
+      reasoner: {
+        async reply() {
+          return { status: "proposed", proposal: { action: "remove_errand", reference: "screws" } };
+        },
+      },
+    });
+    await errands.add({ title: "Screws" });
+    const heard = await say("Nolan, forget about the screws mate");
+    assert.equal(heard.dispatch.decision, "awaiting-confirmation");
+    assert.equal(heard.dispatch.command.proposes.operation, "remove");
+    assert.equal((await errands.list()).length, 1, "nothing is removed without a confirm");
   });
 });
