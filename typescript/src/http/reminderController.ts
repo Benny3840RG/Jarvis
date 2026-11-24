@@ -20,6 +20,7 @@ import type { PersistenceProvider, Reminder } from "../persistence/persistence.j
 import { publicReminder } from "../persistence/publicRecords.js";
 import type { ReminderDue } from "../reminders/due.js";
 import type { ReminderUpdate } from "../persistence/updates.js";
+import { LocalLoopbackRoute } from "./localLoopbackRoute.js";
 import { JarvisProblem } from "./problemDetails.js";
 import { parseCreateReminder, parseUpdateReminder } from "./reminderRequest.js";
 import { parseIdempotencyKey } from "./taskRequest.js";
@@ -116,6 +117,8 @@ export class ReminderController {
     return reminders.some((reminder) => reminder.id === reminderId);
   }
 
+  // The HUD page writes through this route without a token (owner decision, 24 Nov 2026).
+  @LocalLoopbackRoute()
   @Get()
   async list() {
     try {
@@ -126,6 +129,8 @@ export class ReminderController {
     }
   }
 
+  // The HUD page writes through this route without a token (owner decision, 24 Nov 2026).
+  @LocalLoopbackRoute()
   @Post()
   @HttpCode(HttpStatus.CREATED)
   async create(

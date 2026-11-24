@@ -92,6 +92,30 @@
         }
         const text = (el, value) => { el.textContent = value == null ? "" : String(value); };
         function notify(method, params) { window.parent.postMessage({ jsonrpc: "2.0", method, params }, "*"); }
+        // On the browser HUD (/hud) these buttons write through the same-origin REST routes.
+        const HUD_HTTP_WRITES = {
+          create_task: (args) => ({ path: "/api/v1/tasks", body: { title: args.title, category: args.category }, idempotent: true }),
+          create_reminder: (args) => ({ path: "/api/v1/reminders", body: Object.assign({ title: args.title }, args.due ? { due: args.due } : {}), idempotent: true }),
+          complete_task: (args) => ({ path: "/api/v1/tasks/" + encodeURIComponent(String(args.taskId || "")) + "/complete" }),
+        };
+        function hudJson(path, init) {
+          return fetch(path, Object.assign({ credentials: "same-origin" }, init)).then((response) => {
+            if (!response.ok) throw new Error("Request failed (" + response.status + ")");
+            return response.status === 204 ? null : response.json();
+          });
+        }
+        function hudIdempotencyKey() {
+          try { if (window.crypto && typeof window.crypto.randomUUID === "function") return "hud-" + window.crypto.randomUUID(); } catch { /* fall through */ }
+          return "hud-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2);
+        }
+        async function hudHttpWrite(name, args) {
+          const call = HUD_HTTP_WRITES[name](args);
+          const headers = { "content-type": "application/json", accept: "application/json" };
+          if (call.idempotent) headers["idempotency-key"] = hudIdempotencyKey();
+          await hudJson(call.path, { method: "POST", headers, body: JSON.stringify(call.body || {}) });
+          const lists = await Promise.all([hudJson("/api/v1/tasks", { headers: { accept: "application/json" } }), hudJson("/api/v1/reminders", { headers: { accept: "application/json" } })]);
+          return { structuredContent: { tasks: (lists[0] && lists[0].data) || [], reminders: (lists[1] && lists[1].data) || [] } };
+        }
         function request(method, params, timeoutMs = 0) {
           if (typeof location !== "undefined" && location.pathname === "/hud") {
             if (method === "tools/call" && params && params.name === "show_jarvis_dashboard") {
@@ -100,6 +124,7 @@
                 return response.json().then((data) => ({ structuredContent: data }));
               });
             }
+            if (method === "tools/call" && params && HUD_HTTP_WRITES[params.name]) return hudHttpWrite(params.name, params.arguments || {});
             if (method === "tools/call") return Promise.reject(new Error("This preview is read-only."));
             return Promise.resolve({});
           }
