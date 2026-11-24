@@ -564,6 +564,17 @@
         function todayEmpty(list, message) { const li = document.createElement("li"); li.className = "today-empty"; text(li, message); list.appendChild(li); }
         function todayDue(reminder) { if (typeof reminder.dueAt === "number") { try { return new Intl.DateTimeFormat("en-AU", { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit", hour12: true }).format(new Date(reminder.dueAt)); } catch { /* fall through */ } } return reminder.dueRaw ? String(reminder.dueRaw) : "No time set"; }
         function plural(count, one, many) { return count + " " + (count === 1 ? one : many); }
+        // BEGIN today-summary
+        function todaySummaryText(taskCount, overdueCount, errandCount, loaded) {
+          var parts = [];
+          var count = function (n, one, many) { return n + " " + (n === 1 ? one : many); };
+          if (taskCount > 0) parts.push(count(taskCount, "task", "tasks"));
+          if (overdueCount > 0) parts.push(count(overdueCount, "overdue reminder", "overdue reminders"));
+          if (errandCount > 0) parts.push(count(errandCount, "errand", "errands"));
+          if (parts.length) return parts.join(" · ");
+          return loaded ? "All clear. Nothing needs doing right now." : "Loading your day…";
+        }
+        // END today-summary
         function renderToday() {
           const tasksEl = byId("today-tasks"); if (!tasksEl) return;
           const now = Date.now();
@@ -591,11 +602,7 @@
           const approvals = byId("today-approvals");
           approvals.hidden = waiting === 0;
           text(approvals, waiting === 1 ? "1 thing is waiting for your approval" : waiting + " things are waiting for your approval");
-          const parts = [];
-          if (state.tasksLoaded) parts.push(plural(open.length, "task", "tasks"));
-          if (overdue) parts.push(plural(overdue, "overdue reminder", "overdue reminders"));
-          if (errands && errands.length) parts.push(plural(errands.length, "errand", "errands"));
-          text(byId("today-summary"), parts.length ? parts.join(" · ") : "Loading your day…");
+          text(byId("today-summary"), todaySummaryText(open.length, overdue, errands ? errands.length : 0, state.tasksLoaded && state.remindersLoaded));
           const navCount = byId("nav-today-count"); if (navCount) text(navCount, open.length + overdue);
         }
         function render() { renderToday(); renderCounts(); renderFocus(); renderBoard(); renderReminders(); renderSystems(); renderCategories(); renderPriorities(); renderRightReminders(); renderOperations(); renderActivity(); renderInbox(); renderActivityTimeline(); renderLiveWork(); renderGeneral(); renderCredentials();  renderTeamBoard(); hudPanelRegistry.forEach((panel) => { if (typeof panel.render !== "function") return; try { panel.render(state); } catch { /* an extension panel stays fail-closed */ } }); }
