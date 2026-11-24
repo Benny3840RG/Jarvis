@@ -133,7 +133,7 @@ describe("HUD reminder timing", () => {
       fullList.children.map((row) => row.children[0]!.children[0]!.textContent),
       ["Epoch", "Later", "Open"],
     );
-    assert.equal(fullList.children[0]!.children[1]!.textContent, "TIMED");
+    assert.equal(fullList.children[0]!.children[1]!.textContent, "OVERDUE");
     assert.equal(
       fullList.children[0]!.children[0]!.children[1]!.textContent,
       new Date(0).toLocaleString("en-AU"),
@@ -158,7 +158,7 @@ describe("HUD reminder timing", () => {
     h.renderReminders();
 
     const list = h.elements.get("reminder-list")!;
-    assert.equal(list.children[1]!.children[1]!.textContent, "OPEN");
+    assert.equal(list.children[1]!.children[1]!.textContent, "NO TIME");
     assert.equal(list.children[1]!.children[0]!.children[1]!.textContent, "No due time");
     assert.equal(list.children[0]!.children[0]!.children[0]!.textContent, "Epoch");
   });
@@ -206,7 +206,7 @@ describe("HUD reminder timing", () => {
       h.byId("right-reminder-list").children.map((row) => row.children[0]!.textContent),
       ["Epoch", "Later", "Far"],
     );
-    assert.equal(h.byId("reminder-list").children[4]!.children[1]!.textContent, "OPEN");
+    assert.equal(h.byId("reminder-list").children[4]!.children[1]!.textContent, "NO TIME");
     assert.equal(
       h.byId("reminder-list").children[4]!.children[0]!.children[1]!.textContent,
       "No due time",
