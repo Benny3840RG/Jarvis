@@ -97,6 +97,8 @@
           create_task: (args) => ({ path: "/api/v1/tasks", body: { title: args.title, category: args.category }, idempotent: true }),
           create_reminder: (args) => ({ path: "/api/v1/reminders", body: Object.assign({ title: args.title }, args.due ? { due: args.due } : {}), idempotent: true }),
           complete_task: (args) => ({ path: "/api/v1/tasks/" + encodeURIComponent(String(args.taskId || "")) + "/complete" }),
+          // The HUD only ever ticks errands off; the tokenless route can do nothing else.
+          update_errand: (args) => { if (args.status !== "done") throw new Error("Only ticking off an errand works here."); return { path: "/api/v1/errands/" + encodeURIComponent(String(args.errandId || "")) + "/complete" }; },
         };
         function hudJson(path, init) {
           return fetch(path, Object.assign({ credentials: "same-origin" }, init)).then((response) => {
@@ -582,7 +584,7 @@
           const errands = state.brief && state.brief.errands && Array.isArray(state.brief.errands.open) ? state.brief.errands.open : null;
           if (!errands) todayEmpty(errandsEl, "Loading…");
           else if (!errands.length) todayEmpty(errandsEl, "No errands to run.");
-          else errands.forEach((errand) => errandsEl.appendChild(todayItem(errand.title, errand.quantity ? "× " + errand.quantity : (errand.location && errand.location.label) || "")));
+          else errands.forEach((errand) => { const li = todayItem(errand.title, errand.quantity ? "× " + errand.quantity : (errand.location && errand.location.label) || ""); const done = document.createElement("button"); done.type = "button"; done.className = "today-done"; text(done, "Done"); done.setAttribute("aria-label", "Tick off " + errand.title); done.addEventListener("click", async () => { done.disabled = true; try { await callTool("update_errand", { errandId: errand.id, status: "done" }); const brief = state.brief && state.brief.errands; if (brief && Array.isArray(brief.open)) { brief.open = brief.open.filter((item) => item.id !== errand.id); brief.openCount = Math.max(0, (brief.openCount || 1) - 1); } render(); toast("Ticked off " + errand.title + "."); callTool("show_jarvis_dashboard").catch(() => { /* the next poll catches up */ }); } catch { toast("Could not tick that off.", true); done.disabled = false; } }); li.appendChild(done); errandsEl.appendChild(li); });
           text(byId("today-errand-count"), errands ? plural(errands.length, "to run", "to run") : "");
           const waiting = state.approvals && state.approvals.status === "ready" ? Number(state.approvals.proposedCount) || 0 : 0;
           const approvals = byId("today-approvals");

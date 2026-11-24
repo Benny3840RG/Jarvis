@@ -4,6 +4,7 @@ import { afterEach, describe, it } from "node:test";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 
 import type { ToolActionService } from "../src/actions/toolActions.js";
+import { InMemoryErrandStore } from "../src/errands/inMemoryErrandStore.js";
 import { createJarvisHttpApp } from "../src/http/app.js";
 import type { HttpAppConfig } from "../src/http/config.js";
 import type {
@@ -370,5 +371,58 @@ describe("browser HUD task and reminder buttons", () => {
       headers: { "sec-fetch-site": "same-origin" },
     });
     assert.equal(removed.statusCode, 401);
+  });
+});
+
+describe("browser HUD errand Done button", () => {
+  const sameOrigin = { "sec-fetch-site": "same-origin", "content-type": "application/json" };
+
+  it("ticks an errand off without a token from the HUD page, and only that", async () => {
+    const errands = new InMemoryErrandStore();
+    const errand = await errands.add({ title: "Bar oil" });
+    const app = await createJarvisHttpApp({
+      config: config(),
+      credentialsRuntime: credentials("127.0.0.1"),
+      persistence: persistence(),
+      providerName: "json",
+      logger: false,
+      errandStore: errands,
+    });
+    openApps.push(app);
+
+    const done = await app.inject({
+      method: "POST",
+      url: `/api/v1/errands/${errand.id}/complete`,
+      headers: sameOrigin,
+      payload: {},
+    });
+    assert.equal(done.statusCode, 200, done.body);
+    assert.equal((done.json() as { data: { status: string } }).data.status, "done");
+
+    const missing = await app.inject({
+      method: "POST",
+      url: "/api/v1/errands/nope/complete",
+      headers: sameOrigin,
+      payload: {},
+    });
+    assert.equal(missing.statusCode, 404);
+
+    const crossSite = await app.inject({
+      method: "POST",
+      url: `/api/v1/errands/${errand.id}/complete`,
+      headers: { "sec-fetch-site": "cross-site", "content-type": "application/json" },
+      payload: {},
+    });
+    assert.equal(crossSite.statusCode, 401);
+
+    for (const [method, url] of [
+      ["PATCH", `/api/v1/errands/${errand.id}`],
+      ["DELETE", `/api/v1/errands/${errand.id}`],
+      ["GET", "/api/v1/errands"],
+      ["POST", "/api/v1/errands"],
+    ] as const) {
+      const response = await app.inject({ method, url, headers: sameOrigin, payload: {} });
+      assert.equal(response.statusCode, 401, `${method} ${url}`);
+    }
   });
 });
