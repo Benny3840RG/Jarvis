@@ -207,13 +207,24 @@ function remindersAnswer(reminders: readonly Reminder[], now: number, timezone: 
       .map((reminder) => `${reminder.title}, ${spokenWhen(reminder.dueAt, now, timezone)}`);
     sentences.push(withList(overdue.length > 0 ? "Coming up" : "Next up", shown, ahead.length));
   }
+  // A reminder with no worked-out time still carries what the owner said ("Friday 9am").
+  const undatedNames = undated
+    .slice(0, HIGHLIGHT_LIMIT)
+    .map((reminder) =>
+      reminder.dueRaw?.trim() ? `${reminder.title}, for ${reminder.dueRaw.trim()}` : reminder.title,
+    );
+  if (sentences.length === 0) {
+    return withList(
+      `You've got ${spokenCount(reminders.length, "reminder")}`,
+      undatedNames,
+      undated.length,
+    );
+  }
   if (undated.length > 0) {
     sentences.push(
       withList(
-        undated.length === 1
-          ? "And one with no time set"
-          : `And ${spokenCount(undated.length, "with no time set", "with no time set")}`,
-        undated.slice(0, HIGHLIGHT_LIMIT).map((reminder) => reminder.title),
+        `And ${spokenCount(undated.length, "with no exact time", "with no exact time")}`,
+        undatedNames,
         undated.length,
       ),
     );

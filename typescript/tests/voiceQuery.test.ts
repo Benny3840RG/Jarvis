@@ -462,7 +462,7 @@ describe("authoritative voice queries", () => {
     assert.deepEqual(result, {
       status: "answered",
       answer:
-        "You've got three reminders. One's overdue: Due one. Coming up: Soon, today at 11:30 am. And one with no time set: Undated.",
+        "You've got three reminders. One's overdue: Due one. Coming up: Soon, today at 11:30 am. And one with no exact time: Undated.",
     });
   });
 
@@ -478,6 +478,21 @@ describe("authoritative voice queries", () => {
     assert.deepEqual(result, {
       status: "answered",
       answer: "You've got one reminder. Next up: Later, Friday at 11:30 am.",
+    });
+  });
+
+  it("reads back the time the owner said for a reminder with no exact time", async () => {
+    const result = await ask(
+      sources({
+        reminders: {
+          listReminders: async () => [{ ...reminder("Send quote"), dueRaw: "Friday 9am" }],
+        },
+      }),
+      "client.reminders",
+    );
+    assert.deepEqual(result, {
+      status: "answered",
+      answer: "You've got one reminder: Send quote, for Friday 9am.",
     });
   });
 
