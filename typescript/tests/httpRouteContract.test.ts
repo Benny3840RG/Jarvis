@@ -68,6 +68,7 @@ const PUBLIC_OPERATIONS = new Set([
   "POST /api/v1/tasks/{taskId}/complete",
   "GET /api/v1/reminders",
   "POST /api/v1/reminders",
+  "POST /api/v1/errands",
   "POST /api/v1/errands/{errandId}/complete",
 ]);
 

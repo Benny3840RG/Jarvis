@@ -4609,6 +4609,11 @@
       },
       "post": {
         "operationId": "createErrand",
+        "security": [{ "serviceToken": [] }, {}],
+        "x-jarvis-auth": {
+          "mode": "service-token-or-local-loopback",
+          "anonymousScope": "local-serve-loopback-only"
+        },
         "summary": "Create an errand",
         "description": "Creates one pick-up-on-the-way item, optionally tagged with a structured location resolved at the conversation layer. The server stores locations; it never geocodes.",
         "tags": ["Errands"],
