@@ -18,6 +18,7 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 import type { ToolActionService } from "../actions/toolActions.js";
 import { VOICE_COMMANDS, VOICE_PROFILES, type VoiceCommand } from "../voice/voiceCommands.js";
 import { stageVoiceSafeWrite, voiceUtteranceForSession } from "../voice/voiceSafeWrite.js";
+import type { VoiceDispatch } from "../voice/voiceSession.js";
 import type { VoiceSessionRegistry } from "../voice/voiceSessionRegistry.js";
 import {
   dispatchConversationProposal,
@@ -201,9 +202,10 @@ export class VoiceController implements OnModuleDestroy {
         if (outcome.status === "proposed") {
           // NOLAN understood a free-form request as one change. Its canonical
           // sentence goes through the ordinary dictation path, so every guard,
-          // record lookup and the full read-back apply and nothing is staged
-          // until "Nolan confirm". A sentence the grammar refuses is reported
-          // as not understood, never guessed.
+          // record lookup and the read-back apply. Low-risk adds and tick-offs
+          // then save at once (below); anything else is staged only on
+          // "Nolan confirm". A sentence the grammar refuses is reported as not
+          // understood, never guessed.
           const proposed = await dispatchConversationProposal(session, outcome.utterance);
           if (!proposed) {
             return {
@@ -214,6 +216,16 @@ export class VoiceController implements OnModuleDestroy {
               pending: session.pending() ?? null,
             };
           }
+          // A low-risk add or tick-off saves at once with "Nolan undo", exactly
+          // like dictating the same sentence (owner decision, 24 Nov 2026).
+          const direct = await this.trySaveDirect(
+            session,
+            sessionId,
+            proposed,
+            prepared.wakeAuthorized,
+            parsed.projectId,
+          );
+          if (direct) return direct;
           return { dispatch: proposed, pending: session.pending() ?? null };
         }
         return {
@@ -231,20 +243,14 @@ export class VoiceController implements OnModuleDestroy {
         request.raw.off("aborted", onClose);
       }
     }
-    if (
-      this.directWriter &&
-      this.voiceTarget &&
-      dispatch.decision === "awaiting-confirmation" &&
-      dispatch.capture !== undefined &&
-      dispatch.inferred !== true &&
-      prepared.wakeAuthorized &&
-      parsed.projectId === undefined &&
-      isDirectVoiceWrite(dispatch.command)
-    ) {
-      const direct = await this.saveDirect(session, sessionId, dispatch.command);
-      if (direct) return direct;
-      return { dispatch, pending: session.pending() ?? null };
-    }
+    const direct = await this.trySaveDirect(
+      session,
+      sessionId,
+      dispatch,
+      prepared.wakeAuthorized,
+      parsed.projectId,
+    );
+    if (direct) return direct;
     if (dispatch.decision !== "proposed") {
       return { dispatch, pending: session.pending() ?? null };
     }
@@ -277,6 +283,33 @@ export class VoiceController implements OnModuleDestroy {
       dispatch: { ...dispatch, reason: staged.reason },
       pending: session.pending() ?? null,
     };
+  }
+
+  /**
+   * Saves a read-back dictation at once when it is one of the low-risk personal
+   * writes, the wake word was heard and no explicit project was named. Returns
+   * null to leave the read-back armed for the confirm-and-approve path.
+   */
+  private async trySaveDirect(
+    session: NonNullable<ReturnType<VoiceSessionRegistry["get"]>>,
+    sessionId: string,
+    dispatch: VoiceDispatch,
+    wakeAuthorized: boolean,
+    projectId: string | undefined,
+  ) {
+    if (
+      !this.directWriter ||
+      !this.voiceTarget ||
+      dispatch.decision !== "awaiting-confirmation" ||
+      dispatch.capture === undefined ||
+      dispatch.inferred === true ||
+      !wakeAuthorized ||
+      projectId !== undefined ||
+      !isDirectVoiceWrite(dispatch.command)
+    ) {
+      return null;
+    }
+    return this.saveDirect(session, sessionId, dispatch.command);
   }
 
   private async saveDirect(

@@ -8928,7 +8928,7 @@
         "properties": {
           "decision": {
             "type": "string",
-            "description": "The outcome of handling the utterance. saved: an owner-approved direct voice write (add a task, reminder or errand; mark a task or errand done) was written at once on the voice project. undone: \"Nolan undo\" reversed the session's last direct write. undo-unavailable: nothing was reversed; reason says why.",
+            "description": "The outcome of handling the utterance. saved: an owner-approved direct voice write (add a task, reminder or errand; mark a task or errand done) was written at once on the voice project, whether dictated or understood from plain speech. undone: \"Nolan undo\" reversed the session's last direct write. undo-unavailable: nothing was reversed; reason says why.",
             "enum": [
               "ignored-interim",
               "empty",
