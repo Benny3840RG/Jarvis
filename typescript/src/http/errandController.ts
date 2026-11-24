@@ -62,6 +62,9 @@ export class ErrandController {
     }
   }
 
+  // The Today screen's "Add errand" button writes through this route without a
+  // token, the same as tasks and reminders (owner decision, 24 Nov 2026).
+  @LocalLoopbackRoute()
   @Post()
   @HttpCode(HttpStatus.CREATED)
   async create(@Body() body: unknown) {

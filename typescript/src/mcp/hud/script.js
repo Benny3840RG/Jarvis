@@ -96,6 +96,7 @@
         const HUD_HTTP_WRITES = {
           create_task: (args) => ({ path: "/api/v1/tasks", body: { title: args.title, category: args.category }, idempotent: true }),
           create_reminder: (args) => ({ path: "/api/v1/reminders", body: Object.assign({ title: args.title }, args.due ? { due: args.due } : {}), idempotent: true }),
+          create_errand: (args) => ({ path: "/api/v1/errands", body: { title: args.title } }),
           complete_task: (args) => ({ path: "/api/v1/tasks/" + encodeURIComponent(String(args.taskId || "")) + "/complete" }),
           // The HUD only ever ticks errands off; the tokenless route can do nothing else.
           update_errand: (args) => { if (args.status !== "done") throw new Error("Only ticking off an errand works here."); return { path: "/api/v1/errands/" + encodeURIComponent(String(args.errandId || "")) + "/complete" }; },
@@ -114,9 +115,9 @@
           const call = HUD_HTTP_WRITES[name](args);
           const headers = { "content-type": "application/json", accept: "application/json" };
           if (call.idempotent) headers["idempotency-key"] = hudIdempotencyKey();
-          await hudJson(call.path, { method: "POST", headers, body: JSON.stringify(call.body || {}) });
+          const written = await hudJson(call.path, { method: "POST", headers, body: JSON.stringify(call.body || {}) });
           const lists = await Promise.all([hudJson("/api/v1/tasks", { headers: { accept: "application/json" } }), hudJson("/api/v1/reminders", { headers: { accept: "application/json" } })]);
-          return { structuredContent: { tasks: (lists[0] && lists[0].data) || [], reminders: (lists[1] && lists[1].data) || [] } };
+          return { structuredContent: { tasks: (lists[0] && lists[0].data) || [], reminders: (lists[1] && lists[1].data) || [], created: (written && written.data) || null } };
         }
         function request(method, params, timeoutMs = 0) {
           if (typeof location !== "undefined" && location.pathname === "/hud") {
@@ -1748,14 +1749,22 @@
             if (!title) { titleEl.focus(); return; }
             const buttons = form.querySelectorAll("button"); buttons.forEach((button) => { button.disabled = true; });
             try {
-              if (kind === "reminder") { await callTool("create_reminder", Object.assign({ title }, when ? { due: { text: when } } : {})); toast("Okay, I'll remind you: " + title + (when ? " " + when : "") + "."); }
+              if (kind === "reminder") {
+                const result = await callTool("create_reminder", Object.assign({ title }, when ? { due: { text: when } } : {}));
+                const data = structured(result) || {};
+                const created = data.created || data.reminder || null;
+                if (when && created && typeof created.dueAt !== "number") toast("Saved " + title + ", but I couldn't work out when “" + when + "” is, so it won't go off. Try something like “tomorrow 3pm” or “in 2 hours”.", true);
+                else toast("Okay, I'll remind you: " + title + (created && typeof created.dueAt === "number" ? ", " + todayDue(created) : "") + ".");
+              }
+              else if (kind === "errand") { await callTool("create_errand", { title }); toast("Got it. " + title + " is on your errands."); callTool("show_jarvis_dashboard").catch(() => { /* the next poll catches up */ }); }
               else { await callTool("create_task", { title, category: "personal" }); toast("Done. " + title + " is on your list."); }
               titleEl.value = ""; whenEl.value = "";
-            } catch { toast(kind === "reminder" ? "Could not add that reminder." : "Could not add that task.", true); }
+            } catch { toast("Sorry, I couldn't add that " + kind + ".", true); }
             finally { buttons.forEach((button) => { button.disabled = false; }); }
           };
           form.addEventListener("submit", (event) => { event.preventDefault(); void submit(byId("today-add-when").value.trim() ? "reminder" : "task"); });
           form.querySelector('[data-today-add="reminder"]').addEventListener("click", () => { void submit("reminder"); });
+          form.querySelector('[data-today-add="errand"]').addEventListener("click", () => { void submit("errand"); });
         })();
         function activateNamedView(name) { document.body.dataset.consoleView = name; document.querySelectorAll("[data-view]").forEach((candidate) => candidate.classList.toggle("active", candidate.dataset.view === name)); document.querySelectorAll(".view").forEach((view) => view.classList.toggle("active", view.id === `view-${name}`)); }
         function applySettingsHash() { const tab = settingsTabByHash[location.hash.slice(1)]; if (!tab) return; activateNamedView("settings"); showSettingsTab(tab); }

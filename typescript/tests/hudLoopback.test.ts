@@ -399,6 +399,21 @@ describe("browser HUD errand Done button", () => {
     assert.equal(done.statusCode, 200, done.body);
     assert.equal((done.json() as { data: { status: string } }).data.status, "done");
 
+    const added = await app.inject({
+      method: "POST",
+      url: "/api/v1/errands",
+      headers: sameOrigin,
+      payload: { title: "Silicone" },
+    });
+    assert.equal(added.statusCode, 201, added.body);
+    const addedCrossSite = await app.inject({
+      method: "POST",
+      url: "/api/v1/errands",
+      headers: { "sec-fetch-site": "cross-site", "content-type": "application/json" },
+      payload: { title: "Nope" },
+    });
+    assert.equal(addedCrossSite.statusCode, 401);
+
     const missing = await app.inject({
       method: "POST",
       url: "/api/v1/errands/nope/complete",
@@ -419,7 +434,6 @@ describe("browser HUD errand Done button", () => {
       ["PATCH", `/api/v1/errands/${errand.id}`],
       ["DELETE", `/api/v1/errands/${errand.id}`],
       ["GET", "/api/v1/errands"],
-      ["POST", "/api/v1/errands"],
     ] as const) {
       const response = await app.inject({ method, url, headers: sameOrigin, payload: {} });
       assert.equal(response.statusCode, 401, `${method} ${url}`);
