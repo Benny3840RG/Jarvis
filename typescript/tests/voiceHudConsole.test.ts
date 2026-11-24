@@ -179,7 +179,7 @@ describe("voice HUD console logic (extracted from dashboard-v1.html)", () => {
     it("marks unavailable actuation as a warning, never success", () => {
       const info = logic.describeVoiceDispatch({ decision: "actuation-unavailable" });
       assert.equal(info.tone, "warn");
-      assert.match(info.label, /unavailable|failed closed/i);
+      assert.match(info.label, /unavailable|failed closed|can't reach|didn't do anything/i);
     });
 
     it("shows a pending tone while awaiting confirmation", () => {

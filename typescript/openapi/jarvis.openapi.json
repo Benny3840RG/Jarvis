@@ -8847,7 +8847,7 @@
         "properties": {
           "decision": {
             "type": "string",
-            "description": "The outcome of handling the utterance.",
+            "description": "The outcome of handling the utterance. saved: an owner-approved direct voice write (add a task, reminder or errand; mark a task or errand done) was written at once on the voice project. undone: \"Nolan undo\" reversed the session's last direct write. undo-unavailable: nothing was reversed; reason says why.",
             "enum": [
               "ignored-interim",
               "empty",
@@ -8865,7 +8865,10 @@
               "completion-unresolved",
               "actuation-unavailable",
               "actuated",
-              "actuation-failed"
+              "actuation-failed",
+              "saved",
+              "undone",
+              "undo-unavailable"
             ]
           },
           "command": {
@@ -8938,10 +8941,59 @@
           },
           "capture": {
             "$ref": "#/components/schemas/VoiceWriteCapture",
-            "description": "Dictated safe-write fields. Present on awaiting-confirmation for a dictation (the read-back) and on the proposed decision that follows its confirmation. A request-body capture never replaces it."
+            "description": "Dictated safe-write fields. Present on awaiting-confirmation for a dictation (the read-back), on the proposed decision that follows its confirmation, and on saved and undone. A request-body capture never replaces it."
+          },
+          "undoExpiresAt": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Present only on saved: when (ms since epoch) a spoken \"Nolan undo\" stops reversing this write."
           }
         },
         "allOf": [
+          {
+            "if": {
+              "properties": { "decision": { "enum": ["saved", "undone"] } },
+              "required": ["decision"]
+            },
+            "then": {
+              "required": ["command", "capture"],
+              "properties": {
+                "command": {
+                  "properties": {
+                    "id": {
+                      "enum": [
+                        "client.capture-task",
+                        "client.follow-up-reminder",
+                        "client.capture-errand",
+                        "client.complete-task",
+                        "client.complete-errand"
+                      ]
+                    }
+                  },
+                  "required": ["id"]
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": { "decision": { "const": "undo-unavailable" } },
+              "required": ["decision"]
+            },
+            "then": {
+              "required": ["reason"],
+              "not": { "anyOf": [{ "required": ["command"] }, { "required": ["capture"] }] }
+            }
+          },
+          {
+            "if": {
+              "not": {
+                "properties": { "decision": { "const": "saved" } },
+                "required": ["decision"]
+              }
+            },
+            "then": { "not": { "required": ["undoExpiresAt"] } }
+          },
           {
             "if": {
               "properties": { "decision": { "const": "completion-unresolved" } },

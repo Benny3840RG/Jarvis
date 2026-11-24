@@ -454,10 +454,10 @@ describe("voice HUD clarification prompt (#567)", () => {
     await offerClarification(h);
     h.type("Jarvis what");
     await flush();
-    assert.equal(h.get("voice-result").textContent, "Command not recognised.");
+    assert.equal(h.get("voice-result").textContent, "Sorry, I didn't catch that.");
     h.type("Jarvis the second one");
     await flush();
-    assert.equal(h.get("voice-result").textContent, "Command not recognised.");
+    assert.equal(h.get("voice-result").textContent, "Sorry, I didn't catch that.");
     assert.equal(h.get("voice-pending").hidden, true);
     assert.deepEqual(h.actuations, []);
   });
@@ -501,7 +501,7 @@ describe("voice HUD clarification prompt (#567)", () => {
     assert.equal(h.get("voice-pending").hidden, true);
     recognition.emit("Jarvis the second one");
     await flush();
-    assert.equal(h.get("voice-result").textContent, "Command not recognised.");
+    assert.equal(h.get("voice-result").textContent, "Sorry, I didn't catch that.");
     assert.equal(h.get("voice-pending").hidden, true);
     assert.deepEqual(h.actuations, []);
   });
@@ -515,7 +515,7 @@ describe("voice HUD clarification prompt (#567)", () => {
     h.type("Jarvis the second one");
     await flush();
     assert.equal(sessionCreations(h), creations + 1, "Stop retired the offering session");
-    assert.equal(h.get("voice-result").textContent, "Command not recognised.");
+    assert.equal(h.get("voice-result").textContent, "Sorry, I didn't catch that.");
     assert.equal(h.get("voice-pending").hidden, true);
     assert.deepEqual(h.actuations, []);
   });
@@ -531,7 +531,7 @@ describe("voice HUD clarification prompt (#567)", () => {
     assert.doesNotMatch(h.get("voice-result").textContent, /Did you mean/);
     h.type("Jarvis the second one");
     await flush();
-    assert.equal(h.get("voice-result").textContent, "Command not recognised.");
+    assert.equal(h.get("voice-result").textContent, "Sorry, I didn't catch that.");
     assert.equal(h.get("voice-pending").hidden, true);
     assert.deepEqual(h.actuations, []);
   });
@@ -551,7 +551,7 @@ describe("voice HUD clarification prompt (#567)", () => {
     );
     h.type("Jarvis the second one");
     await flush();
-    assert.equal(h.get("voice-result").textContent, "Command not recognised.");
+    assert.equal(h.get("voice-result").textContent, "Sorry, I didn't catch that.");
     assert.equal(h.get("voice-pending").hidden, true);
     assert.deepEqual(h.actuations, []);
   });
@@ -596,7 +596,7 @@ describe("voice HUD clarification prompt (#567)", () => {
       h.type("Jarvis the second one");
       await flush();
       assert.equal(sessionCreations(h), creations + 1);
-      assert.equal(h.get("voice-result").textContent, "Command not recognised.");
+      assert.equal(h.get("voice-result").textContent, "Sorry, I didn't catch that.");
       assert.equal(h.get("voice-pending").hidden, true);
       assert.deepEqual(h.actuations, []);
     });
@@ -821,7 +821,7 @@ describe("voice HUD lifecycle (actual setupVoiceConsole and real session registr
     await flush();
     h.speechUtterances[0].onerror?.();
     assert.match(h.get("voice-output-status").textContent, /failed/i);
-    assert.match(h.get("voice-result").textContent, /not recognised/i);
+    assert.match(h.get("voice-result").textContent, /didn't catch that/i);
   });
 
   it("requires explicit microphone enable and preserves typed fallback", async () => {

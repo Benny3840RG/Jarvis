@@ -399,6 +399,16 @@ export class VoiceSession {
     return this.#lastTurnRejectedDictation;
   }
 
+  /**
+   * Consume the armed dictation as if the owner had said "confirm". Used only
+   * for the owner-approved direct voice writes (see voiceDirectWrite.ts): the
+   * capture is still the exact read-back the session armed, still single-use
+   * and still TTL-bound.
+   */
+  confirmPending(now: number = this.#clock()): VoiceDispatch | Promise<VoiceDispatch> {
+    return this.#handleConfirm(now, "confirm");
+  }
+
   async handle(input: VoiceSessionInput): Promise<VoiceDispatch> {
     this.#lastTurnRejectedDictation = false;
     const now = input.now ?? this.#clock();
