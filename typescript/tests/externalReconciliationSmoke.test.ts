@@ -21,6 +21,7 @@ type Backend = {
   cleanupCalls: number;
   resolveCalls: number;
   failClaim: boolean;
+  claimScopes: (string | undefined)[];
 };
 
 function backend(): Backend {
@@ -30,6 +31,7 @@ function backend(): Backend {
     cleanupCalls: 0,
     resolveCalls: 0,
     failClaim: false,
+    claimScopes: [],
   };
 }
 
@@ -118,11 +120,14 @@ class SharedFakeReconciliationStore implements ExternalReconciliationStore {
     workerId: string;
     leaseToken: string;
     leaseMs: number;
+    reconciliationId?: string;
   }): Promise<ExternalReconciliationClaim | null> {
+    this.backend.claimScopes.push(input.reconciliationId);
     if (this.backend.failClaim) throw new Error("injected claim failure");
     const current = this.backend.reconciliation;
     const receipt = this.backend.receipt;
     if (!current || !receipt || current.state !== "pending") return null;
+    if (input.reconciliationId !== current.reconciliationId) return null;
     const now = Date.now();
     const claimed: ExternalReconciliationClaim["reconciliation"] = {
       ...current,
@@ -255,6 +260,12 @@ describe("runExternalReconciliationSmoke", () => {
     });
     assert.ok(constructions >= 5, "smoke must use fresh store instances across lifecycle steps");
     assert.equal(shared.resolveCalls, 1);
+    assert.equal(shared.claimScopes.length, 1);
+    assert.match(
+      shared.claimScopes[0] ?? "",
+      /^jarvis-external-reconciliation-smoke-.+-reconciliation$/,
+      "smoke must claim only its own synthetic record, never the next real queue entry",
+    );
     assert.equal(shared.cleanupCalls, 1);
     assert.equal(shared.reconciliation, null);
     assert.equal(shared.receipt, null);

@@ -369,10 +369,14 @@ export class ConvexExternalReconciliationStore
     workerId: string;
     leaseToken: string;
     leaseMs: number;
+    reconciliationId?: string;
   }): Promise<ExternalReconciliationClaim | null> {
     const row = await this.client.mutation(externalReconciliationFunctions.claimNext, {
       serviceToken: this.serviceToken,
-      ...input,
+      workerId: input.workerId,
+      leaseToken: input.leaseToken,
+      leaseMs: input.leaseMs,
+      ...(input.reconciliationId === undefined ? {} : { reconciliationId: input.reconciliationId }),
     });
     if (row === null) return null;
     const mapped = envelopeFromConvex(

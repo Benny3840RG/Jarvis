@@ -685,12 +685,56 @@ export const completeAttempt = mutation({
   },
 });
 
+async function claimCandidate(
+  ctx: MutationCtx,
+  ownerId: string,
+  candidate: Doc<"externalReconciliations">,
+  claim: { workerId: string; leaseToken: string; leaseMs: number; now: number },
+) {
+  if (!candidate.providerRequestId || !candidate.receiptKey) {
+    await ctx.db.patch("externalReconciliations", candidate._id, {
+      state: "escalated",
+      escalationReason: "provider-reference-or-receipt-missing",
+      updatedAt: claim.now,
+      escalatedAt: claim.now,
+    });
+    return null;
+  }
+  const receipt = await findReceipt(ctx, ownerId, candidate.receiptKey);
+  if (!receipt) {
+    await ctx.db.patch("externalReconciliations", candidate._id, {
+      state: "escalated",
+      escalationReason: "authoritative-receipt-missing",
+      updatedAt: claim.now,
+      escalatedAt: claim.now,
+    });
+    return null;
+  }
+
+  await ctx.db.patch("externalReconciliations", candidate._id, {
+    state: "claimed",
+    attemptCount: candidate.attemptCount + 1,
+    leaseOwner: claim.workerId,
+    leaseToken: claim.leaseToken,
+    leaseExpiresAt: claim.now + claim.leaseMs,
+    updatedAt: claim.now,
+  });
+  const claimed = await ctx.db.get("externalReconciliations", candidate._id);
+  if (!claimed) throw new Error("Reconciliation claim failed.");
+  return { reconciliation: claimed, receipt };
+}
+
 export const claimNext = mutation({
   args: {
     serviceToken: v.string(),
     workerId: v.string(),
     leaseToken: v.string(),
     leaseMs: v.number(),
+    /**
+     * Claim only this record. Used by commissioning smoke runs so a synthetic
+     * record never claims, sweeps or escalates a real queue entry.
+     */
+    reconciliationId: v.optional(v.string()),
   },
   returns: v.union(externalReconciliationClaimValidator, v.null()),
   handler: async (ctx, args) => {
@@ -701,6 +745,29 @@ export const claimNext = mutation({
       throw new Error("Lease duration must be an integer between 1 and 300000 milliseconds.");
     }
     const now = Date.now();
+
+    if (args.reconciliationId !== undefined) {
+      const reconciliationId = cleanRequiredText(args.reconciliationId, "Reconciliation ID");
+      const scoped = await ctx.db
+        .query("externalReconciliations")
+        .withIndex("by_owner_and_reconciliation_id", (q) =>
+          q.eq("ownerId", ownerId).eq("reconciliationId", reconciliationId),
+        )
+        .unique();
+      const claimable =
+        scoped !== null &&
+        ((scoped.state === "pending" && scoped.nextAttemptAt <= now) ||
+          (scoped.state === "claimed" &&
+            scoped.leaseExpiresAt !== undefined &&
+            scoped.leaseExpiresAt <= now));
+      if (!claimable) return null;
+      return claimCandidate(ctx, ownerId, scoped, {
+        workerId,
+        leaseToken,
+        leaseMs: args.leaseMs,
+        now,
+      });
+    }
 
     const abandonedObservation = await ctx.db
       .query("externalReconciliations")
@@ -736,38 +803,12 @@ export const claimNext = mutation({
         .first();
     }
     if (!candidate) return null;
-
-    if (!candidate.providerRequestId || !candidate.receiptKey) {
-      await ctx.db.patch("externalReconciliations", candidate._id, {
-        state: "escalated",
-        escalationReason: "provider-reference-or-receipt-missing",
-        updatedAt: now,
-        escalatedAt: now,
-      });
-      return null;
-    }
-    const receipt = await findReceipt(ctx, ownerId, candidate.receiptKey);
-    if (!receipt) {
-      await ctx.db.patch("externalReconciliations", candidate._id, {
-        state: "escalated",
-        escalationReason: "authoritative-receipt-missing",
-        updatedAt: now,
-        escalatedAt: now,
-      });
-      return null;
-    }
-
-    await ctx.db.patch("externalReconciliations", candidate._id, {
-      state: "claimed",
-      attemptCount: candidate.attemptCount + 1,
-      leaseOwner: workerId,
+    return claimCandidate(ctx, ownerId, candidate, {
+      workerId,
       leaseToken,
-      leaseExpiresAt: now + args.leaseMs,
-      updatedAt: now,
+      leaseMs: args.leaseMs,
+      now,
     });
-    const claimed = await ctx.db.get("externalReconciliations", candidate._id);
-    if (!claimed) throw new Error("Reconciliation claim failed.");
-    return { reconciliation: claimed, receipt };
   },
 });
 

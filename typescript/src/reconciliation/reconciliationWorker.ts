@@ -93,6 +93,8 @@ export class ReconciliationWorker {
     workerId: string;
     leaseMs: number;
     signal: AbortSignal;
+    /** Claim only this record (commissioning smoke runs); omit to drain the queue. */
+    reconciliationId?: string;
   }): Promise<ReconciliationRunResult> {
     if (input.signal.aborted) return { status: "idle" };
 
@@ -102,6 +104,7 @@ export class ReconciliationWorker {
       workerId: input.workerId,
       leaseToken,
       leaseMs: positiveInteger(input.leaseMs, "Reconciliation lease duration"),
+      ...(input.reconciliationId === undefined ? {} : { reconciliationId: input.reconciliationId }),
     });
     if (!claim) return { status: "idle" };
 
