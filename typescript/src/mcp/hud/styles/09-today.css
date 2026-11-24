@@ -64,6 +64,9 @@
         body[data-console-view="reminders"] .top-actions .source-pill,
         body[data-console-view="reminders"] .top-actions .limits-now { display: none !important; }
         #voice-latency, #voice-output-status:not([data-tone="warn"]) { display: none; }
+        /* The CRT glass is sized for the desktop bezel; on a phone its dark inner
+           edge cuts through the cards and reads as a second window behind them. */
+        .crt-glass { display: none; }
         .today-view { padding: 0 12px 20px; }
         .today-add-actions button { flex: 1 1 140px; }
       }
