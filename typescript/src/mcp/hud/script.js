@@ -592,10 +592,11 @@
           approvals.hidden = waiting === 0;
           text(approvals, waiting === 1 ? "1 thing is waiting for your approval" : waiting + " things are waiting for your approval");
           const parts = [];
-          if (state.tasksLoaded) parts.push(plural(open.length, "task", "tasks"));
+          if (open.length) parts.push(plural(open.length, "task", "tasks"));
           if (overdue) parts.push(plural(overdue, "overdue reminder", "overdue reminders"));
           if (errands && errands.length) parts.push(plural(errands.length, "errand", "errands"));
-          text(byId("today-summary"), parts.length ? parts.join(" · ") : "Loading your day…");
+          const loaded = state.tasksLoaded && state.remindersLoaded;
+          text(byId("today-summary"), parts.length ? parts.join(" · ") : loaded ? "All clear. Nothing needs doing right now." : "Loading your day…");
           const navCount = byId("nav-today-count"); if (navCount) text(navCount, open.length + overdue);
         }
         function render() { renderToday(); renderCounts(); renderFocus(); renderBoard(); renderReminders(); renderSystems(); renderCategories(); renderPriorities(); renderRightReminders(); renderOperations(); renderActivity(); renderInbox(); renderActivityTimeline(); renderLiveWork(); renderGeneral(); renderCredentials();  renderTeamBoard(); hudPanelRegistry.forEach((panel) => { if (typeof panel.render !== "function") return; try { panel.render(state); } catch { /* an extension panel stays fail-closed */ } }); }
