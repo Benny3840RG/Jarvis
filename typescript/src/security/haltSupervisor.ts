@@ -247,18 +247,18 @@ export class HaltSupervisor {
       // this process for this halt. A failed or hung stop then cannot leave a
       // stale VERIFIED STOPPED file, while later healthy ticks do not flap the
       // acknowledgement or repeat an already verified runtime stop.
-      await this.acks.clear();
       this.written = undefined;
-      const stopResults = await Promise.allSettled(
-        (this.options.managedRuntimes ?? []).map(async (runtime) => runtime.stop()),
-      );
-      const failedStop = stopResults.find(
+      const results = await Promise.allSettled([
+        this.acks.clear(),
+        ...(this.options.managedRuntimes ?? []).map(async (runtime) => runtime.stop()),
+      ]);
+      const failed = results.find(
         (result): result is PromiseRejectedResult => result.status === "rejected",
       );
-      if (failedStop) {
+      if (failed) {
         this.current = undefined;
         this.stoppedForHaltRef = undefined;
-        throw failedStop.reason;
+        throw failed.reason;
       }
       this.stoppedForHaltRef = haltRef;
     }

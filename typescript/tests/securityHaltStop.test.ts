@@ -540,6 +540,33 @@ describe("halt supervisor", () => {
     assert.equal(writes, 1);
   });
 
+  it("attempts every runtime stop even when acknowledgement cleanup fails", async () => {
+    let stops = 0;
+    acks.clear = async () => {
+      throw new Error("clear failed");
+    };
+    const supervisor = new HaltSupervisor(halts, acks, new RunningExecutionRegistry(), {
+      managedRuntimes: [
+        {
+          async start() {},
+          async stop() {
+            stops += 1;
+          },
+        },
+        {
+          async start() {},
+          async stop() {
+            stops += 1;
+          },
+        },
+      ],
+    });
+    await halts.halt("owner stop", NOW);
+    await assert.rejects(supervisor.tick(), /clear failed/u);
+    assert.equal(stops, 2);
+    assert.deepEqual(await acks.read(), { kind: "none" });
+  });
+
   it("binds a new acknowledgement to a new halt record and to a fail-closed halt", async () => {
     const supervisor = new HaltSupervisor(halts, acks, new RunningExecutionRegistry());
     await halts.halt("first", NOW);
