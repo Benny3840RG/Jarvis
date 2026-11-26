@@ -1,3 +1,4 @@
+import { rm } from "node:fs/promises";
 import path from "node:path";
 
 import { z } from "zod";
@@ -23,22 +24,27 @@ import {
  *   effect that may still be running. An effect that ignores its abort keeps
  *   this false until it settles.
  *
- * The acknowledgement covers governed tool executions in the one process that
- * runs the supervisor (the HTTP service). It says nothing about other
- * processes or about non-tool background loops.
+ * The acknowledgement covers governed tool executions and each registered
+ * service-controlled runtime in the one process that runs the supervisor (the
+ * HTTP service). It says nothing about other processes or unregistered loops.
  */
 
 export const HALT_ACK_FILE_BASENAME = "jarvis-security-halt-ack.json";
 export const HALT_SUPERVISOR_INTERVAL_MS = 1_000;
 const haltAckSchema = z
   .object({
-    version: z.literal(1),
-    scope: z.literal("governed-tool-executions"),
+    // Version 2 expands the acknowledgement from governed tool executions to
+    // every service-controlled runtime registered with the supervisor. A v1
+    // file is deliberately unreadable after upgrade, so it can never claim a
+    // verified stop before the newly managed runtime has stopped.
+    version: z.literal(2),
+    scope: z.literal("service-controlled-work"),
     haltRef: z.string().min(1).max(200),
     pid: z.number().int().positive(),
     acknowledgedAt: z.string().datetime(),
     cancelledExecutions: z.number().int().nonnegative(),
     unsettledExecutions: z.number().int().nonnegative(),
+    stoppedRuntimes: z.number().int().nonnegative(),
     verifiedStoppedAt: z.string().datetime().nullable(),
     updatedAt: z.string().datetime(),
   })
@@ -156,8 +162,20 @@ export function securityHaltStatusReader(
   };
 }
 
+function processIsAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === "EPERM";
+  }
+}
+
 export class FileHaltAckStore {
-  constructor(private readonly filePath: string) {
+  constructor(
+    private readonly filePath: string,
+    private readonly isProcessAlive: (pid: number) => boolean = processIsAlive,
+  ) {
     if (!path.isAbsolute(filePath)) throw new Error("Halt acknowledgement path must be absolute.");
   }
 
@@ -167,19 +185,40 @@ export class FileHaltAckStore {
     if (file.kind === "unreadable") return { kind: "unreadable", problem: file.problem };
     const parsed = haltAckSchema.safeParse(file.value);
     if (!parsed.success) return { kind: "unreadable", problem: "has an unknown shape" };
+    // A file from an exited service is never current evidence. This also
+    // fails closed when a restarted service cannot remove the old file before
+    // one of its own managed runtimes fails to stop.
+    if (!this.isProcessAlive(parsed.data.pid)) {
+      return {
+        kind: "unreadable",
+        problem: "belongs to a service process that is no longer running",
+      };
+    }
     return { kind: "ack", ack: parsed.data };
   }
 
   async write(ack: HaltAck): Promise<void> {
     await writePrivateJsonAtomic(this.filePath, haltAckSchema.parse(ack));
   }
+
+  async clear(): Promise<void> {
+    await rm(this.filePath, { force: true });
+  }
 }
+
+export type HaltManagedRuntime = {
+  /** May be retried after a partial multi-runtime start and must be idempotent. */
+  start(): Promise<void>;
+  /** May be retried on every halted tick and must be idempotent. */
+  stop(): Promise<void>;
+};
 
 type HaltSupervisorOptions = {
   intervalMs?: number;
   now?: () => Date;
   pid?: number;
   onError?: (error: unknown) => void;
+  managedRuntimes?: readonly HaltManagedRuntime[];
 };
 
 export class HaltSupervisor {
@@ -187,6 +226,9 @@ export class HaltSupervisor {
   private written: string | undefined;
   private timer: NodeJS.Timeout | undefined;
   private ticking: Promise<void> | undefined;
+  private managedRuntimesInitialized = false;
+  private managedRuntimesStopped = false;
+  private stoppedForHaltRef: string | undefined;
 
   constructor(
     private readonly halts: FileHaltStore,
@@ -199,15 +241,50 @@ export class HaltSupervisor {
   async tick(): Promise<void> {
     const reading = await this.halts.read();
     if (!reading.halted) {
+      if (!this.managedRuntimesInitialized || this.managedRuntimesStopped) {
+        // The supervisor owns initial start as well as resume. This closes the
+        // startup race where a runtime could skip start for a halt that was
+        // resumed before the supervisor observed it. A failed start leaves the
+        // state unchanged, so the caller or the next tick can retry.
+        for (const runtime of this.options.managedRuntimes ?? []) await runtime.start();
+        this.managedRuntimesInitialized = true;
+        this.managedRuntimesStopped = false;
+      }
       this.current = undefined;
+      this.stoppedForHaltRef = undefined;
       return;
     }
-    // Every tick while halted, not only the first: an execution that started
-    // in a process-local race, or in a service built without the halt gate,
-    // is still cancelled.
+
+    // Cancellation is synchronous and must not wait behind a runtime that is
+    // slow to honour its abort. Acknowledgement still waits for every runtime
+    // stop to succeed and for every governed effect to settle.
     const cancelled = this.running.cancelAll();
-    const unsettled = this.running.unsettled();
+
     const haltRef = haltRefFor(reading);
+    this.managedRuntimesInitialized = true;
+    this.managedRuntimesStopped = true;
+    if (haltRef === undefined || this.stoppedForHaltRef !== haltRef) {
+      // Invalidate a prior verified result before the one stop attempt owned by
+      // this process for this halt. A failed or hung stop then cannot leave a
+      // stale VERIFIED STOPPED file, while later healthy ticks do not flap the
+      // acknowledgement or repeat an already verified runtime stop.
+      this.written = undefined;
+      const results = await Promise.allSettled([
+        this.acks.clear(),
+        ...(this.options.managedRuntimes ?? []).map(async (runtime) => runtime.stop()),
+      ]);
+      const failed = results.find(
+        (result): result is PromiseRejectedResult => result.status === "rejected",
+      );
+      if (failed) {
+        this.current = undefined;
+        this.stoppedForHaltRef = undefined;
+        throw failed.reason;
+      }
+      this.stoppedForHaltRef = haltRef;
+    }
+
+    const unsettled = this.running.unsettled();
     if (haltRef === undefined) {
       this.current = undefined;
       return;
@@ -215,13 +292,14 @@ export class HaltSupervisor {
     const now = (this.options.now ?? (() => new Date()))().toISOString();
     const previous = this.current?.haltRef === haltRef ? this.current : undefined;
     const next: HaltAck = {
-      version: 1,
-      scope: "governed-tool-executions",
+      version: 2,
+      scope: "service-controlled-work",
       haltRef,
       pid: this.options.pid ?? process.pid,
       acknowledgedAt: previous?.acknowledgedAt ?? now,
       cancelledExecutions: (previous?.cancelledExecutions ?? 0) + cancelled,
       unsettledExecutions: unsettled,
+      stoppedRuntimes: (this.options.managedRuntimes ?? []).length,
       verifiedStoppedAt: unsettled === 0 ? (previous?.verifiedStoppedAt ?? now) : null,
       updatedAt: previous?.updatedAt ?? now,
     };

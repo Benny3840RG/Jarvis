@@ -53,7 +53,7 @@ const openApps: NestFastifyApplication[] = [];
 beforeEach(async () => {
   directory = await mkdtemp(path.join(tmpdir(), "nolan-halt-status-"));
   halts = new FileHaltStore(path.join(directory, HALT_FILE_BASENAME));
-  acks = new FileHaltAckStore(path.join(directory, HALT_ACK_FILE_BASENAME));
+  acks = new FileHaltAckStore(path.join(directory, HALT_ACK_FILE_BASENAME), () => true);
 });
 
 afterEach(async () => {

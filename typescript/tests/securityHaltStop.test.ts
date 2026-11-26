@@ -37,7 +37,7 @@ beforeEach(async () => {
   directory = await mkdtemp(path.join(tmpdir(), "nolan-halt-stop-"));
   halts = new FileHaltStore(path.join(directory, HALT_FILE_BASENAME));
   ackPath = path.join(directory, HALT_ACK_FILE_BASENAME);
-  acks = new FileHaltAckStore(ackPath);
+  acks = new FileHaltAckStore(ackPath, () => true);
 });
 
 afterEach(async () => {
@@ -330,6 +330,283 @@ describe("halt supervisor", () => {
     assert.equal(second.kind === "ack" && second.ack.acknowledgedAt, "2026-11-21T01:00:01.000Z");
     assert.equal(second.kind === "ack" && second.ack.verifiedStoppedAt, "2026-11-21T01:00:02.000Z");
     assert.equal(second.kind === "ack" && second.ack.cancelledExecutions, 1);
+  });
+
+  it("owns initial runtime start, stops before verified stopped and restarts on resume", async () => {
+    let running = false;
+    let starts = 0;
+    let stops = 0;
+    const managed = {
+      async start() {
+        starts += 1;
+        running = true;
+      },
+      async stop() {
+        stops += 1;
+        running = false;
+      },
+    };
+    const supervisor = new HaltSupervisor(halts, acks, new RunningExecutionRegistry(), {
+      managedRuntimes: [managed],
+      pid: 4242,
+      now: () => NOW,
+    });
+
+    await supervisor.tick();
+    assert.equal(running, true);
+    assert.equal(starts, 1);
+
+    await halts.halt("owner stop", NOW);
+    await supervisor.tick();
+    assert.equal(running, false);
+    assert.equal(stops, 1);
+    const halted = await acks.read();
+    assert.equal(halted.kind === "ack" && halted.ack.version, 2);
+    assert.equal(halted.kind === "ack" && halted.ack.scope, "service-controlled-work");
+    assert.equal(halted.kind === "ack" && halted.ack.stoppedRuntimes, 1);
+    assert.equal(halted.kind === "ack" && halted.ack.verifiedStoppedAt, NOW.toISOString());
+
+    await halts.resume("continue", new Date(NOW.getTime() + 1_000));
+    await supervisor.tick();
+    assert.equal(running, true);
+    assert.equal(starts, 2);
+  });
+
+  it("cancels governed executions without waiting for a slow runtime stop", async () => {
+    const registry = new RunningExecutionRegistry();
+    const run = registry.begin();
+    const stop = deferred();
+    let tickSettled = false;
+    const supervisor = new HaltSupervisor(halts, acks, registry, {
+      managedRuntimes: [
+        {
+          async start() {},
+          async stop() {
+            await stop.promise;
+          },
+        },
+      ],
+    });
+
+    await halts.halt("owner stop", NOW);
+    const cancelled = new Promise<void>((resolve) => {
+      run.signal.addEventListener("abort", () => resolve(), { once: true });
+    });
+    const tick = supervisor.tick().finally(() => {
+      tickSettled = true;
+    });
+    await cancelled;
+    assert.equal(tickSettled, false);
+    assert.deepEqual(await acks.read(), { kind: "none" });
+
+    stop.resolve();
+    await tick;
+    assert.equal((await acks.read()).kind, "ack");
+  });
+
+  it("retries a managed runtime restart after a failed resume tick", async () => {
+    let running = false;
+    let starts = 0;
+    const supervisor = new HaltSupervisor(halts, acks, new RunningExecutionRegistry(), {
+      managedRuntimes: [
+        {
+          async start() {
+            starts += 1;
+            if (starts === 2) throw new Error("start failed");
+            running = true;
+          },
+          async stop() {
+            running = false;
+          },
+        },
+      ],
+    });
+
+    await supervisor.tick();
+    await halts.halt("owner stop", NOW);
+    await supervisor.tick();
+    await halts.resume("continue", new Date(NOW.getTime() + 1_000));
+    await assert.rejects(supervisor.tick(), /start failed/u);
+    assert.equal(running, false);
+
+    await supervisor.tick();
+    assert.equal(running, true);
+    assert.equal(starts, 3);
+  });
+
+  it("restarts a runtime after its halt stop partially succeeds and fails", async () => {
+    let running = false;
+    let starts = 0;
+    const supervisor = new HaltSupervisor(halts, acks, new RunningExecutionRegistry(), {
+      managedRuntimes: [
+        {
+          async start() {
+            starts += 1;
+            running = true;
+          },
+          async stop() {
+            running = false;
+            throw new Error("partial stop failed");
+          },
+        },
+      ],
+    });
+
+    await supervisor.tick();
+    await halts.halt("owner stop", NOW);
+    await assert.rejects(supervisor.tick(), /partial stop failed/u);
+    assert.equal(running, false);
+    assert.deepEqual(await acks.read(), { kind: "none" });
+
+    await halts.resume("continue", new Date(NOW.getTime() + 1_000));
+    await supervisor.tick();
+    assert.equal(running, true);
+    assert.equal(starts, 2);
+  });
+
+  it("never acknowledges when a managed runtime cannot be stopped", async () => {
+    const supervisor = new HaltSupervisor(halts, acks, new RunningExecutionRegistry(), {
+      managedRuntimes: [
+        {
+          async start() {},
+          async stop() {
+            throw new Error("stop failed");
+          },
+        },
+      ],
+    });
+    await halts.halt("owner stop", NOW);
+    await assert.rejects(supervisor.tick(), /stop failed/u);
+    assert.deepEqual(await acks.read(), { kind: "none" });
+  });
+
+  it("invalidates a verified acknowledgement before retrying a managed runtime stop", async () => {
+    const runtime = {
+      async start() {},
+      async stop() {},
+    };
+    const firstService = new HaltSupervisor(halts, acks, new RunningExecutionRegistry(), {
+      managedRuntimes: [runtime],
+    });
+    await halts.halt("owner stop", NOW);
+    await firstService.tick();
+    const verified = await acks.read();
+    assert.equal(verified.kind === "ack" && verified.ack.verifiedStoppedAt !== null, true);
+
+    const restartedService = new HaltSupervisor(halts, acks, new RunningExecutionRegistry(), {
+      managedRuntimes: [
+        {
+          async start() {},
+          async stop() {
+            throw new Error("later stop failed");
+          },
+        },
+      ],
+    });
+    await assert.rejects(restartedService.tick(), /later stop failed/u);
+    assert.deepEqual(await acks.read(), { kind: "none" });
+  });
+
+  it("rejects a stale acknowledgement when its service process is no longer running", async () => {
+    let serviceAlive = true;
+    const processAwareAcks = new FileHaltAckStore(ackPath, (pid) => serviceAlive && pid === 4_242);
+    const firstService = new HaltSupervisor(
+      halts,
+      processAwareAcks,
+      new RunningExecutionRegistry(),
+      {
+        managedRuntimes: [{ async start() {}, async stop() {} }],
+        pid: 4_242,
+      },
+    );
+    await halts.halt("owner stop", NOW);
+    await firstService.tick();
+    assert.equal((await processAwareAcks.read()).kind, "ack");
+
+    serviceAlive = false;
+    processAwareAcks.clear = async () => {
+      throw new Error("clear failed");
+    };
+    const restartedService = new HaltSupervisor(
+      halts,
+      processAwareAcks,
+      new RunningExecutionRegistry(),
+      {
+        managedRuntimes: [
+          {
+            async start() {},
+            async stop() {
+              throw new Error("later stop failed");
+            },
+          },
+        ],
+        pid: 4_243,
+      },
+    );
+    await assert.rejects(restartedService.tick());
+    const stale = await processAwareAcks.read();
+    assert.equal(stale.kind, "unreadable");
+    assert.match(stale.kind === "unreadable" ? stale.problem : "", /no longer running/u);
+  });
+
+  it("does not clear, rewrite, or stop runtimes again for the same verified halt", async () => {
+    let clears = 0;
+    let writes = 0;
+    let stops = 0;
+    const clear = acks.clear.bind(acks);
+    const write = acks.write.bind(acks);
+    acks.clear = async () => {
+      clears += 1;
+      await clear();
+    };
+    acks.write = async (ack) => {
+      writes += 1;
+      await write(ack);
+    };
+    const supervisor = new HaltSupervisor(halts, acks, new RunningExecutionRegistry(), {
+      managedRuntimes: [
+        {
+          async start() {},
+          async stop() {
+            stops += 1;
+          },
+        },
+      ],
+    });
+    await halts.halt("owner stop", NOW);
+    await supervisor.tick();
+    await supervisor.tick();
+
+    assert.equal(stops, 1);
+    assert.equal(clears, 1);
+    assert.equal(writes, 1);
+  });
+
+  it("attempts every runtime stop even when acknowledgement cleanup fails", async () => {
+    let stops = 0;
+    acks.clear = async () => {
+      throw new Error("clear failed");
+    };
+    const supervisor = new HaltSupervisor(halts, acks, new RunningExecutionRegistry(), {
+      managedRuntimes: [
+        {
+          async start() {},
+          async stop() {
+            stops += 1;
+          },
+        },
+        {
+          async start() {},
+          async stop() {
+            stops += 1;
+          },
+        },
+      ],
+    });
+    await halts.halt("owner stop", NOW);
+    await assert.rejects(supervisor.tick(), /clear failed/u);
+    assert.equal(stops, 2);
+    assert.deepEqual(await acks.read(), { kind: "none" });
   });
 
   it("binds a new acknowledgement to a new halt record and to a fail-closed halt", async () => {

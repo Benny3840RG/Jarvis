@@ -16,7 +16,8 @@ import {
  * Writes or reads the owner halt record that every governed tool execution
  * checks before dispatch, and reads the running service's acknowledgement.
  * It talks to no service, network, or provider; the service polls the record
- * and cancels its in-flight governed executions, with no restart.
+ * and cancels its in-flight governed executions and registered background
+ * runtimes, with no service restart.
  */
 export const SECURITY_HALT_USAGE = [
   "Usage:",
@@ -67,15 +68,16 @@ function describeAck(reading: HaltReading, ackReading: HaltAckReading): string {
     return "Service: not acknowledged yet. A running NOLAN service acknowledges within a few seconds; if this persists, the service is not running or cannot write its data directory. Not a verified stop.";
   }
   const cancelled = `${ack.cancelledExecutions} governed execution${ack.cancelledExecutions === 1 ? "" : "s"} cancelled`;
+  const runtimes = `${ack.stoppedRuntimes} background runtime${ack.stoppedRuntimes === 1 ? "" : "s"} stopped`;
   if (ack.verifiedStoppedAt === null) {
     return [
-      `Service (pid ${ack.pid}): acknowledged ${ack.acknowledgedAt}; ${cancelled}.`,
+      `Service (pid ${ack.pid}): acknowledged ${ack.acknowledgedAt}; ${cancelled}; ${runtimes}.`,
       `Waiting for ${ack.unsettledExecutions} effect${ack.unsettledExecutions === 1 ? "" : "s"} to settle (last checked ${ack.updatedAt}). Not yet a verified stop.`,
     ].join("\n");
   }
   return [
-    `Service (pid ${ack.pid}): VERIFIED STOPPED ${ack.verifiedStoppedAt} (acknowledged ${ack.acknowledgedAt}; ${cancelled}).`,
-    "Covers governed tool executions in the service process. A cancelled execution ends with an unknown outcome; check its receipt before retrying.",
+    `Service (pid ${ack.pid}): VERIFIED STOPPED ${ack.verifiedStoppedAt} (acknowledged ${ack.acknowledgedAt}; ${cancelled}; ${runtimes}).`,
+    "Covers governed tool executions and registered background runtimes in the service process. A cancelled execution ends with an unknown outcome; check its receipt before retrying.",
   ].join("\n");
 }
 

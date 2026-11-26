@@ -1,5 +1,22 @@
 # Jarvis TypeScript Roadmap
 
+## Security halt stops runtime reconciliation (#839, 2026-11-22)
+
+The service halt now cancels governed executions immediately, then stops the
+runtime reconciliation host before it can report verified stopped. The halt
+supervisor owns initial reconciliation start and restarts it only after the halt
+record reads as running. Halt acknowledgements use contract version 2 and cover
+service-controlled work: governed tool executions plus every registered
+background runtime. A pre-upgrade version 1 acknowledgement is deliberately
+unreadable, so it cannot falsely satisfy the broader stop claim.
+
+Focused tests cover immediate execution cancellation during a slow runtime stop,
+initial start, restart-on-resume, restart retry and a failed runtime stop
+producing no acknowledgement. A leftover acknowledgement is unreadable after
+its writer process exits, so failed cleanup during service restart cannot preserve
+a stale verified-stop claim. Other processes and unregistered loops remain
+outside the claim. No deployment or live halt was performed.
+
 ## PR #806 post-merge owner-decision ledger recovery repair (2026-11-13)
 
 - Local V1 captures require an existing explicit ledger source directory and
