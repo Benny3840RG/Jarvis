@@ -207,6 +207,7 @@ export class HaltSupervisor {
   private ticking: Promise<void> | undefined;
   private managedRuntimesInitialized = false;
   private managedRuntimesStopped = false;
+  private stoppedForHaltRef: string | undefined;
 
   constructor(
     private readonly halts: FileHaltStore,
@@ -229,6 +230,7 @@ export class HaltSupervisor {
         this.managedRuntimesStopped = false;
       }
       this.current = undefined;
+      this.stoppedForHaltRef = undefined;
       return;
     }
 
@@ -237,29 +239,31 @@ export class HaltSupervisor {
     // stop to succeed and for every governed effect to settle.
     const cancelled = this.running.cancelAll();
 
-    // Record the conservative state before stopping. If one stop partially
-    // succeeds and then fails, a later resume retries every idempotent start
-    // instead of silently leaving that runtime down.
+    const haltRef = haltRefFor(reading);
     this.managedRuntimesInitialized = true;
     this.managedRuntimesStopped = true;
-    // A prior verified acknowledgement must stop being observable before a
-    // fresh runtime-stop attempt. If the stop fails or hangs, readers then see
-    // requested rather than falsely carrying the earlier verified result.
-    await this.acks.clear();
-    this.written = undefined;
-    const stopResults = await Promise.allSettled(
-      (this.options.managedRuntimes ?? []).map(async (runtime) => runtime.stop()),
-    );
-    const failedStop = stopResults.find(
-      (result): result is PromiseRejectedResult => result.status === "rejected",
-    );
-    if (failedStop) {
-      this.current = undefined;
-      throw failedStop.reason;
+    if (haltRef === undefined || this.stoppedForHaltRef !== haltRef) {
+      // Invalidate a prior verified result before the one stop attempt owned by
+      // this process for this halt. A failed or hung stop then cannot leave a
+      // stale VERIFIED STOPPED file, while later healthy ticks do not flap the
+      // acknowledgement or repeat an already verified runtime stop.
+      await this.acks.clear();
+      this.written = undefined;
+      const stopResults = await Promise.allSettled(
+        (this.options.managedRuntimes ?? []).map(async (runtime) => runtime.stop()),
+      );
+      const failedStop = stopResults.find(
+        (result): result is PromiseRejectedResult => result.status === "rejected",
+      );
+      if (failedStop) {
+        this.current = undefined;
+        this.stoppedForHaltRef = undefined;
+        throw failedStop.reason;
+      }
+      this.stoppedForHaltRef = haltRef;
     }
 
     const unsettled = this.running.unsettled();
-    const haltRef = haltRefFor(reading);
     if (haltRef === undefined) {
       this.current = undefined;
       return;

@@ -481,25 +481,63 @@ describe("halt supervisor", () => {
   });
 
   it("invalidates a verified acknowledgement before retrying a managed runtime stop", async () => {
-    let failStop = false;
+    const runtime = {
+      async start() {},
+      async stop() {},
+    };
+    const firstService = new HaltSupervisor(halts, acks, new RunningExecutionRegistry(), {
+      managedRuntimes: [runtime],
+    });
+    await halts.halt("owner stop", NOW);
+    await firstService.tick();
+    const verified = await acks.read();
+    assert.equal(verified.kind === "ack" && verified.ack.verifiedStoppedAt !== null, true);
+
+    const restartedService = new HaltSupervisor(halts, acks, new RunningExecutionRegistry(), {
+      managedRuntimes: [
+        {
+          async start() {},
+          async stop() {
+            throw new Error("later stop failed");
+          },
+        },
+      ],
+    });
+    await assert.rejects(restartedService.tick(), /later stop failed/u);
+    assert.deepEqual(await acks.read(), { kind: "none" });
+  });
+
+  it("does not clear, rewrite, or stop runtimes again for the same verified halt", async () => {
+    let clears = 0;
+    let writes = 0;
+    let stops = 0;
+    const clear = acks.clear.bind(acks);
+    const write = acks.write.bind(acks);
+    acks.clear = async () => {
+      clears += 1;
+      await clear();
+    };
+    acks.write = async (ack) => {
+      writes += 1;
+      await write(ack);
+    };
     const supervisor = new HaltSupervisor(halts, acks, new RunningExecutionRegistry(), {
       managedRuntimes: [
         {
           async start() {},
           async stop() {
-            if (failStop) throw new Error("later stop failed");
+            stops += 1;
           },
         },
       ],
     });
     await halts.halt("owner stop", NOW);
     await supervisor.tick();
-    const verified = await acks.read();
-    assert.equal(verified.kind === "ack" && verified.ack.verifiedStoppedAt !== null, true);
+    await supervisor.tick();
 
-    failStop = true;
-    await assert.rejects(supervisor.tick(), /later stop failed/u);
-    assert.deepEqual(await acks.read(), { kind: "none" });
+    assert.equal(stops, 1);
+    assert.equal(clears, 1);
+    assert.equal(writes, 1);
   });
 
   it("binds a new acknowledgement to a new halt record and to a fail-closed halt", async () => {
