@@ -495,10 +495,7 @@ describe("halt supervisor", () => {
     await halts.halt("owner stop", NOW);
     await supervisor.tick();
     const verified = await acks.read();
-    assert.equal(
-      verified.kind === "ack" && verified.ack.verifiedStoppedAt !== null,
-      true,
-    );
+    assert.equal(verified.kind === "ack" && verified.ack.verifiedStoppedAt !== null, true);
 
     failStop = true;
     await assert.rejects(supervisor.tick(), /later stop failed/u);
