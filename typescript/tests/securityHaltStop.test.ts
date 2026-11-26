@@ -480,6 +480,31 @@ describe("halt supervisor", () => {
     assert.deepEqual(await acks.read(), { kind: "none" });
   });
 
+  it("invalidates a verified acknowledgement before retrying a managed runtime stop", async () => {
+    let failStop = false;
+    const supervisor = new HaltSupervisor(halts, acks, new RunningExecutionRegistry(), {
+      managedRuntimes: [
+        {
+          async start() {},
+          async stop() {
+            if (failStop) throw new Error("later stop failed");
+          },
+        },
+      ],
+    });
+    await halts.halt("owner stop", NOW);
+    await supervisor.tick();
+    const verified = await acks.read();
+    assert.equal(
+      verified.kind === "ack" && verified.ack.verifiedStoppedAt !== null,
+      true,
+    );
+
+    failStop = true;
+    await assert.rejects(supervisor.tick(), /later stop failed/u);
+    assert.deepEqual(await acks.read(), { kind: "none" });
+  });
+
   it("binds a new acknowledgement to a new halt record and to a fail-closed halt", async () => {
     const supervisor = new HaltSupervisor(halts, acks, new RunningExecutionRegistry());
     await halts.halt("first", NOW);

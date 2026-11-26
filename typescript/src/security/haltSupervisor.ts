@@ -1,3 +1,4 @@
+import { rm } from "node:fs/promises";
 import path from "node:path";
 
 import { z } from "zod";
@@ -178,6 +179,10 @@ export class FileHaltAckStore {
   async write(ack: HaltAck): Promise<void> {
     await writePrivateJsonAtomic(this.filePath, haltAckSchema.parse(ack));
   }
+
+  async clear(): Promise<void> {
+    await rm(this.filePath, { force: true });
+  }
 }
 
 export type HaltManagedRuntime = {
@@ -237,13 +242,21 @@ export class HaltSupervisor {
     // instead of silently leaving that runtime down.
     this.managedRuntimesInitialized = true;
     this.managedRuntimesStopped = true;
+    // A prior verified acknowledgement must stop being observable before a
+    // fresh runtime-stop attempt. If the stop fails or hangs, readers then see
+    // requested rather than falsely carrying the earlier verified result.
+    await this.acks.clear();
+    this.written = undefined;
     const stopResults = await Promise.allSettled(
       (this.options.managedRuntimes ?? []).map(async (runtime) => runtime.stop()),
     );
     const failedStop = stopResults.find(
       (result): result is PromiseRejectedResult => result.status === "rejected",
     );
-    if (failedStop) throw failedStop.reason;
+    if (failedStop) {
+      this.current = undefined;
+      throw failedStop.reason;
+    }
 
     const unsettled = this.running.unsettled();
     const haltRef = haltRefFor(reading);
