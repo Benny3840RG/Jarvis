@@ -19,7 +19,10 @@ function session() {
     profile: "client",
     provider: new AbsentHardwareProvider(),
     queries: {
-      answer: async () => ({ status: "answered", answer: "No unpaid invoices." }),
+      answer: async () => ({
+        status: "answered",
+        answer: "No unpaid invoices.",
+      }),
     },
   });
 }
@@ -277,7 +280,7 @@ it("one successful query: the exact answer, never the model's wording", async ()
   let answer = "";
   const { ask } = harness({ [UNPAID]: () => ({ status: "answered", answer }) });
   for (const [authoritative, modelText] of [
-    ["No jobs booked for today.", "Jobs booked for today."],
+    ["Nothing's booked in for today.", "Jobs booked for today."],
     ["You owe 3 dollars.", "You owe £3."],
     ["No unpaid invoices.", "No unpaid invoices. The payment is complete."],
     ["You have 3 unpaid invoices.", "Sure thing, Benny."],
@@ -297,7 +300,7 @@ it("an answer over the reply limit is never truncated: reply-too-long", async ()
   const answer = `No jobs booked for today. ${"x".repeat(639 - 26)}`;
   assert.equal(answer.length, 639);
   const { ask, service, s } = harness({ [SCHEDULE]: ok(answer) });
-  assert.deepEqual(await ask("No jobs booked for today.", [SCHEDULE]), {
+  assert.deepEqual(await ask("Nothing's booked in for today.", [SCHEDULE]), {
     status: "unavailable",
     reason: "reply-too-long",
   });
@@ -305,7 +308,10 @@ it("an answer over the reply limit is never truncated: reply-too-long", async ()
 });
 
 it("more than one query attempt fails closed, including a repeated one", async () => {
-  const { ask } = harness({ [UNPAID]: ok("No unpaid invoices."), [SCHEDULE]: ok("No jobs.") });
+  const { ask } = harness({
+    [UNPAID]: ok("No unpaid invoices."),
+    [SCHEDULE]: ok("No jobs."),
+  });
   const unavailable = { status: "unavailable", reason: "tool-limit" };
   assert.deepEqual(await ask("Both clear.", [UNPAID, SCHEDULE]), unavailable);
   assert.deepEqual(await ask("Both clear.", [UNPAID, UNPAID]), unavailable);

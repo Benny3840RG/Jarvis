@@ -637,6 +637,18 @@ async function runScenario(cdp, html, fixtureName, viewport, outputDir) {
       const { data } = await send("Page.captureScreenshot", { format: "png" });
       await writeFile(join(outputDir, `${name}-${suffix}.png`), Buffer.from(data, "base64"));
     };
+    // Today is the home screen. Check it, then open "More" so every rail
+    // button is on screen, and switch to Focus for the Console 02 checks.
+    if ((await evaluate("document.body.dataset.consoleView")) !== "today")
+      throw new Error("The HUD did not open on Today");
+    for (const selector of ["#today-date", "#today-add", "#today-tasks"])
+      await inspect(selector, { text: false });
+    await screenshot("today");
+    await evaluate(`document.querySelector("#rail-more-toggle").click()`);
+    await evaluate(`document.querySelector('[data-view="focus"]').click()`);
+    await evaluate(
+      "new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))",
+    );
     await inspectFocus();
     await screenshot("focus");
     for (const view of ["board", "focus"]) {
@@ -668,13 +680,14 @@ async function runScenario(cdp, html, fixtureName, viewport, outputDir) {
         ))
           await inspect(control, { text: false });
         for (const name of [
-          "focus",
+          "today",
           "board",
           "reminders",
+          "voice",
+          "focus",
           "operations",
           "livework",
           "systems",
-          "voice",
           "settings",
         ])
           await inspect(`[data-view="${name}"]`, { text: false });

@@ -94,13 +94,20 @@ describe("proposal sentences", () => {
   });
 
   it("refuses a due phrase outside the bounded grammar instead of hiding it in the title", () => {
-    for (const due of ["next friday", "in two hours", "the 21st", "later"]) {
+    for (const due of ["next friday", "in a fortnight", "the 21st", "later"]) {
       assert.equal(
         proposalUtterance({ action: "add_reminder", title: "Call Dave", due }, DUE),
         undefined,
         due,
       );
     }
+  });
+
+  it("accepts a relative due phrase the grammar now counts from now", () => {
+    assert.equal(
+      proposalUtterance({ action: "add_reminder", title: "Call Dave", due: "in two hours" }, DUE),
+      "remind me to Call Dave in two hours",
+    );
   });
 
   it("leaves the grammar's guards in charge of the model's text", () => {

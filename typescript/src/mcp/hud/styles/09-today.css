@@ -1,0 +1,72 @@
+      /* Today: the default, readable home screen (owner request, 24 Nov 2026). */
+      .today-view [hidden], .rail-more[hidden] { display: none !important; }
+      .today-view {
+        display: grid; gap: 14px; max-width: 760px; margin: 0 auto; padding: 4px 2px 24px;
+        color: var(--text); font-size: 16px; line-height: 1.4;
+      }
+      .today-head h2 { margin: 0; font-size: 24px; font-weight: 700; letter-spacing: 0; text-transform: none; }
+      .today-head p { margin: 4px 0 0; color: var(--muted); font-size: 16px; }
+      .today-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+      .today-approvals {
+        display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 52px;
+        padding: 12px 16px; border-radius: 14px; border: 1px solid var(--green);
+        background: rgba(215, 161, 95, .16); color: var(--text); font-weight: 600; text-decoration: none;
+      }
+      .today-approvals::after { content: "→"; font-size: 20px; }
+      .today-add, .today-card {
+        display: grid; gap: 10px; padding: 14px 16px; border-radius: 14px;
+        border: 1px solid rgba(196, 181, 165, .22); background: rgba(10, 12, 18, .78);
+      }
+      .today-add input {
+        min-height: 48px; padding: 0 14px; border-radius: 10px; border: 1px solid rgba(196, 181, 165, .35);
+        background: rgba(0, 0, 0, .35); color: var(--text); font: inherit; font-size: 16px;
+      }
+      .today-add-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+      .today-add-actions button, .today-talk, .today-done {
+        min-height: 44px; padding: 0 16px; border-radius: 10px; font: inherit; font-size: 16px; font-weight: 600; cursor: pointer;
+      }
+      .today-primary { border: 0; background: var(--green); color: #120e0a; }
+      .today-secondary, .today-done { border: 1px solid rgba(196, 181, 165, .45); background: transparent; color: var(--text); }
+      .today-card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+      .today-card-head h3 { margin: 0; font-size: 18px; font-weight: 700; letter-spacing: 0; text-transform: none; }
+      .today-card-head span { color: var(--muted); font-size: 14px; }
+      .today-list { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
+      .today-list li {
+        display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 48px;
+        padding: 6px 0; border-top: 1px solid rgba(196, 181, 165, .12);
+      }
+      .today-list li:first-child { border-top: 0; }
+      .today-list .today-item { display: grid; gap: 2px; min-width: 0; }
+      .today-list .today-item b { font-weight: 600; overflow-wrap: anywhere; }
+      .today-list .today-item small { color: var(--muted); font-size: 14px; }
+      .today-list .today-overdue small { color: #ff9c7a; }
+      .today-list .today-empty { color: var(--muted); }
+      .today-talk { justify-self: start; border: 1px solid var(--violet); background: rgba(196, 123, 74, .18); color: var(--text); }
+      .rail-more { display: contents; }
+      .rail-more-toggle[aria-expanded="true"] { border-color: var(--green); }
+      @media (max-width: 760px) {
+        body[data-console-view="today"] .telemetry,
+        body[data-console-view="today"] .top-actions .team-chip,
+        body[data-console-view="today"] .top-actions .source-pill,
+        body[data-console-view="today"] .top-actions .limits-now,
+        body[data-console-view="today"] .left-rail { display: none !important; }
+        /* The everyday views keep the phone screen for the person, not the system. */
+        body[data-console-view="voice"] .telemetry,
+        body[data-console-view="voice"] .top-actions .team-chip,
+        body[data-console-view="voice"] .top-actions .source-pill,
+        body[data-console-view="voice"] .top-actions .limits-now,
+        body[data-console-view="board"] .telemetry,
+        body[data-console-view="board"] .top-actions .team-chip,
+        body[data-console-view="board"] .top-actions .source-pill,
+        body[data-console-view="board"] .top-actions .limits-now,
+        body[data-console-view="reminders"] .telemetry,
+        body[data-console-view="reminders"] .top-actions .team-chip,
+        body[data-console-view="reminders"] .top-actions .source-pill,
+        body[data-console-view="reminders"] .top-actions .limits-now { display: none !important; }
+        #voice-latency, #voice-output-status:not([data-tone="warn"]) { display: none; }
+        /* The CRT glass is sized for the desktop bezel; on a phone its dark inner
+           edge cuts through the cards and reads as a second window behind them. */
+        .crt-glass { display: none; }
+        .today-view { padding: 0 12px 20px; }
+        .today-add-actions button { flex: 1 1 140px; }
+      }

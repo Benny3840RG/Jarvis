@@ -11,7 +11,11 @@ import {
 import { VOICE_COMMANDS } from "../src/voice/voiceCommands.js";
 import { AbsentHardwareProvider } from "../src/voice/voiceHardware.js";
 import { parseVoiceDictation } from "../src/voice/voiceDictation.js";
-import { DAILY_RUNDOWN_COMMAND_ID, matchVoiceRundown } from "../src/voice/voiceRundown.js";
+import {
+  DAILY_RUNDOWN_COMMAND_ID,
+  TOMORROW_RUNDOWN_COMMAND_ID,
+  matchVoiceRundown,
+} from "../src/voice/voiceRundown.js";
 import { VoiceSession } from "../src/voice/voiceSession.js";
 
 // 11:30 am Wednesday 7 October 2026 in Melbourne.
@@ -132,9 +136,9 @@ describe("voice daily rundown answer", () => {
     assert.deepEqual(await rundown(sources(FULL_DAY)), {
       status: "answered",
       answer:
-        "Here's your day. 1 job booked for today. Smith fence. " +
-        "1 reminder due: Call Dave. 1 coming up in the next 24 hours: Order bar oil. " +
-        "1 open task. Quote the deck. 1 open errand. Milk.",
+        "Here's your day. One job booked: Smith fence. " +
+        "One reminder's overdue: Call Dave. Coming up: Order bar oil, today at 1:30 pm. " +
+        "One task on your list: Quote the deck. One errand to run: Milk.",
     });
   });
 
@@ -151,8 +155,7 @@ describe("voice daily rundown answer", () => {
       {
         status: "answered",
         answer:
-          "Here's your day. No jobs booked for today. " +
-          "No reminders due or coming up in the next 24 hours. No open tasks. No open errands.",
+          "You're all clear today. No jobs booked, nothing on your list, no errands and no reminders coming up.",
       },
     );
   });
@@ -164,9 +167,9 @@ describe("voice daily rundown answer", () => {
     assert.equal(result.status, "answered");
     assert.ok(result.status === "answered");
     assert.match(result.answer, /Reminder records are unavailable\./);
-    assert.doesNotMatch(result.answer, /No reminders|0 reminder/);
-    assert.match(result.answer, /1 job booked for today/);
-    assert.match(result.answer, /1 open errand/);
+    assert.doesNotMatch(result.answer, /No reminders|no reminders|0 reminder/);
+    assert.match(result.answer, /One job booked: Smith fence\./);
+    assert.match(result.answer, /One errand to run: Milk\./);
   });
 
   it("is unavailable when nothing can be read or the timezone is invalid", async () => {
@@ -230,5 +233,84 @@ describe("voice daily rundown in the session", () => {
       now: NOW + 2,
     });
     assert.equal(confirm.decision, "confirmation-not-pending");
+  });
+});
+
+describe("voice daily rundown, partly empty", () => {
+  it("names only what is on and rolls the rest into one sentence", async () => {
+    const result = await rundown(
+      sources({
+        ...FULL_DAY,
+        projects: { list: async () => [] },
+        errands: { list: async () => [] },
+      }),
+    );
+    assert.ok(result.status === "answered");
+    assert.match(result.answer, /One task on your list: Quote the deck\. No jobs or errands\.$/);
+  });
+});
+
+describe("voice tomorrow rundown", () => {
+  const tomorrow = (src: AuthoritativeVoiceQuerySources) =>
+    createAuthoritativeVoiceQueries(src).answer({
+      commandId: TOMORROW_RUNDOWN_COMMAND_ID,
+      now: NOW,
+    });
+
+  it("matches tomorrow phrases, distinct from today's rundown", () => {
+    for (const phrase of [
+      "What have I got on tomorrow?",
+      "how's tomorrow looking",
+      "am I busy tomorrow",
+    ]) {
+      assert.equal(matchVoiceRundown(phrase, "client")?.id, TOMORROW_RUNDOWN_COMMAND_ID, phrase);
+    }
+    assert.equal(matchVoiceRundown("give me the rundown", "client")?.id, DAILY_RUNDOWN_COMMAND_ID);
+    assert.equal(matchVoiceRundown("what have I got on tomorrow", "workshop"), undefined);
+  });
+
+  it("reads jobs booked and reminders due tomorrow in the owner's timezone", async () => {
+    // Thursday 8 October 2026 in Melbourne; 9 am local is 22:00 UTC on the 7th.
+    const result = await tomorrow(
+      sources({
+        projects: {
+          list: async () => [
+            project("Smith fence", "2026-10-07"),
+            project("Jones deck", "2026-10-08"),
+            project("Done hedge", "2026-10-08", "done"),
+          ],
+        },
+        reminders: {
+          listReminders: async () => [
+            reminder("Call Dave", Date.parse("2026-10-07T22:00:00.000Z")),
+            reminder("Order bar oil", NOW + 2 * HOUR),
+            reminder("Undated thought"),
+          ],
+        },
+      }),
+    );
+    assert.deepEqual(result, {
+      status: "answered",
+      answer: "Here's tomorrow. One job booked: Jones deck. One reminder: Call Dave at 9 am.",
+    });
+  });
+
+  it("says plainly when tomorrow is empty, and names a source it cannot read", async () => {
+    assert.deepEqual(
+      await tomorrow(
+        sources({
+          projects: { list: async () => [] },
+          reminders: { listReminders: async () => [] },
+        }),
+      ),
+      {
+        status: "answered",
+        answer: "Nothing on for tomorrow yet. No jobs booked and no reminders.",
+      },
+    );
+    const partial = await tomorrow(sources({ projects: { list: async () => [] } }));
+    assert.ok(partial.status === "answered");
+    assert.match(partial.answer, /Reminder records are unavailable\./);
+    assert.match(partial.answer, /No jobs\.$/);
   });
 });

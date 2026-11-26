@@ -16,13 +16,21 @@ import {
 import type { FastifyReply, FastifyRequest } from "fastify";
 
 import type { ToolActionService } from "../actions/toolActions.js";
-import { VOICE_COMMANDS, VOICE_PROFILES } from "../voice/voiceCommands.js";
+import { resolveReminderTimezone } from "../reminders/due.js";
+import { VOICE_COMMANDS, VOICE_PROFILES, type VoiceCommand } from "../voice/voiceCommands.js";
 import { stageVoiceSafeWrite, voiceUtteranceForSession } from "../voice/voiceSafeWrite.js";
+import type { VoiceDispatch } from "../voice/voiceSession.js";
 import type { VoiceSessionRegistry } from "../voice/voiceSessionRegistry.js";
+import { smallTalkReply } from "../voice/voiceSmallTalk.js";
 import {
   dispatchConversationProposal,
   type VoiceConversationService,
 } from "../voice/voiceConversation.js";
+import {
+  isDirectVoiceWrite,
+  isVoiceUndoPhrase,
+  type VoiceDirectWriter,
+} from "../voice/voiceDirectWrite.js";
 import type { VoiceWriteTarget } from "../voice/voiceWriteTarget.js";
 import { LocalLoopbackRoute } from "./localLoopbackRoute.js";
 import { JarvisProblem } from "./problemDetails.js";
@@ -34,6 +42,7 @@ import {
 import {
   HTTP_TOOL_ACTIONS,
   HTTP_VOICE_CONVERSATION,
+  HTTP_VOICE_DIRECT_WRITER,
   HTTP_VOICE_REGISTRY,
   HTTP_VOICE_WRITE_TARGET,
 } from "./tokens.js";
@@ -65,7 +74,22 @@ function sessionNotFound(): JarvisProblem {
  * on the existing service. Voice never approves or executes. Consequential
  * proposals stay intent-only. Approval stays on the existing tool-action route,
  * which alone holds the owner approval token.
+ *
+ * Exception (owner decision, 24 Nov 2026): with a direct writer configured, a
+ * wake-authorised, exactly matched dictation that adds a task, reminder or
+ * errand, or marks a task or errand done, is saved at once on the voice
+ * project and can be reversed with "Nolan undo". Inferred (natural-language)
+ * commands, explicit request targets and every other write still stage.
  */
+/** The server clock in the owner's timezone, or undefined when none is configured. */
+function ownerClock(): { now: number; timezone: string } | undefined {
+  try {
+    return { now: Date.now(), timezone: resolveReminderTimezone() };
+  } catch {
+    return undefined;
+  }
+}
+
 @Controller("api/v1/voice")
 @LocalLoopbackRoute()
 export class VoiceController implements OnModuleDestroy {
@@ -80,6 +104,9 @@ export class VoiceController implements OnModuleDestroy {
     @Optional()
     @Inject(HTTP_VOICE_WRITE_TARGET)
     private readonly voiceTarget?: VoiceWriteTarget | null,
+    @Optional()
+    @Inject(HTTP_VOICE_DIRECT_WRITER)
+    private readonly directWriter?: VoiceDirectWriter | null,
   ) {
     if (this.conversation) this.registry.onRemove((session) => this.conversation?.clear(session));
   }
@@ -133,12 +160,44 @@ export class VoiceController implements OnModuleDestroy {
     if (parsed.isFinal) this.conversation?.interrupt(session);
     const hadPending = session.pending() !== undefined || session.hasPendingClarification();
     const prepared = voiceUtteranceForSession(parsed);
+    if (
+      this.directWriter &&
+      parsed.isFinal &&
+      prepared.wakeAuthorized &&
+      !hadPending &&
+      isVoiceUndoPhrase(prepared.transcript)
+    ) {
+      const undone = await this.directWriter.undo(session);
+      return {
+        dispatch:
+          undone.status === "undone"
+            ? { decision: "undone" as const, command: undone.command, capture: undone.capture }
+            : { decision: "undo-unavailable" as const, reason: undone.reason },
+        pending: session.pending() ?? null,
+      };
+    }
     const dispatch = await session.handle({
       transcript: prepared.transcript,
       isFinal: parsed.isFinal,
       wakeAuthorized: prepared.wakeAuthorized,
       ...(prepared.alternatives ? { alternatives: prepared.alternatives } : {}),
     });
+    if (
+      dispatch.decision === "unrecognized" &&
+      parsed.isFinal &&
+      prepared.wakeAuthorized &&
+      !hadPending &&
+      !session.lastTurnRejectedDictation()
+    ) {
+      // "Thanks mate" gets a friendly fixed reply, not the model and not a refusal.
+      const smallTalk = smallTalkReply(prepared.transcript, ownerClock());
+      if (smallTalk) {
+        return {
+          dispatch: { decision: "conversation" as const, reply: smallTalk },
+          pending: session.pending() ?? null,
+        };
+      }
+    }
     if (
       this.conversation &&
       dispatch.decision === "unrecognized" &&
@@ -170,9 +229,10 @@ export class VoiceController implements OnModuleDestroy {
         if (outcome.status === "proposed") {
           // NOLAN understood a free-form request as one change. Its canonical
           // sentence goes through the ordinary dictation path, so every guard,
-          // record lookup and the full read-back apply and nothing is staged
-          // until "Nolan confirm". A sentence the grammar refuses is reported
-          // as not understood, never guessed.
+          // record lookup and the read-back apply. Low-risk adds and tick-offs
+          // then save at once (below); anything else is staged only on
+          // "Nolan confirm". A sentence the grammar refuses is reported as not
+          // understood, never guessed.
           const proposed = await dispatchConversationProposal(session, outcome.utterance);
           if (!proposed) {
             return {
@@ -183,6 +243,16 @@ export class VoiceController implements OnModuleDestroy {
               pending: session.pending() ?? null,
             };
           }
+          // A low-risk add or tick-off saves at once with "Nolan undo", exactly
+          // like dictating the same sentence (owner decision, 24 Nov 2026).
+          const direct = await this.trySaveDirect(
+            session,
+            sessionId,
+            proposed,
+            prepared.wakeAuthorized,
+            parsed.projectId,
+          );
+          if (direct) return direct;
           return { dispatch: proposed, pending: session.pending() ?? null };
         }
         return {
@@ -200,6 +270,14 @@ export class VoiceController implements OnModuleDestroy {
         request.raw.off("aborted", onClose);
       }
     }
+    const direct = await this.trySaveDirect(
+      session,
+      sessionId,
+      dispatch,
+      prepared.wakeAuthorized,
+      parsed.projectId,
+    );
+    if (direct) return direct;
     if (dispatch.decision !== "proposed") {
       return { dispatch, pending: session.pending() ?? null };
     }
@@ -230,6 +308,74 @@ export class VoiceController implements OnModuleDestroy {
     }
     return {
       dispatch: { ...dispatch, reason: staged.reason },
+      pending: session.pending() ?? null,
+    };
+  }
+
+  /**
+   * Saves a read-back dictation at once when it is one of the low-risk personal
+   * writes, the wake word was heard and no explicit project was named. Returns
+   * null to leave the read-back armed for the confirm-and-approve path.
+   */
+  private async trySaveDirect(
+    session: NonNullable<ReturnType<VoiceSessionRegistry["get"]>>,
+    sessionId: string,
+    dispatch: VoiceDispatch,
+    wakeAuthorized: boolean,
+    projectId: string | undefined,
+  ) {
+    if (
+      !this.directWriter ||
+      !this.voiceTarget ||
+      dispatch.decision !== "awaiting-confirmation" ||
+      dispatch.capture === undefined ||
+      dispatch.inferred === true ||
+      !wakeAuthorized ||
+      projectId !== undefined ||
+      !isDirectVoiceWrite(dispatch.command)
+    ) {
+      return null;
+    }
+    return this.saveDirect(session, sessionId, dispatch.command);
+  }
+
+  private async saveDirect(
+    session: NonNullable<ReturnType<VoiceSessionRegistry["get"]>>,
+    sessionId: string,
+    command: VoiceCommand,
+  ) {
+    const resolved = await (this.voiceTarget as VoiceWriteTarget).resolve();
+    // Not commissioned: leave the read-back armed so the staged path still works.
+    if ("reason" in resolved) return null;
+    const confirmed = await session.confirmPending();
+    if (confirmed.decision !== "proposed" || confirmed.capture === undefined) {
+      return { dispatch: confirmed, pending: session.pending() ?? null };
+    }
+    const saved = await (this.directWriter as VoiceDirectWriter).write({
+      session,
+      sessionId,
+      projectId: resolved.projectId,
+      command,
+      capture: confirmed.capture,
+    });
+    if (saved.status === "refused") {
+      return {
+        dispatch: {
+          decision: "proposed" as const,
+          command,
+          capture: confirmed.capture,
+          reason: saved.reason,
+        },
+        pending: session.pending() ?? null,
+      };
+    }
+    return {
+      dispatch: {
+        decision: "saved" as const,
+        command,
+        capture: confirmed.capture,
+        ...(saved.undoExpiresAt > 0 ? { undoExpiresAt: saved.undoExpiresAt } : {}),
+      },
       pending: session.pending() ?? null,
     };
   }

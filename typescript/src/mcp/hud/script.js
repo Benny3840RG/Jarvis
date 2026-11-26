@@ -92,6 +92,33 @@
         }
         const text = (el, value) => { el.textContent = value == null ? "" : String(value); };
         function notify(method, params) { window.parent.postMessage({ jsonrpc: "2.0", method, params }, "*"); }
+        // On the browser HUD (/hud) these buttons write through the same-origin REST routes.
+        const HUD_HTTP_WRITES = {
+          create_task: (args) => ({ path: "/api/v1/tasks", body: { title: args.title, category: args.category }, idempotent: true }),
+          create_reminder: (args) => ({ path: "/api/v1/reminders", body: Object.assign({ title: args.title }, args.due ? { due: args.due } : {}), idempotent: true }),
+          create_errand: (args) => ({ path: "/api/v1/errands", body: { title: args.title } }),
+          complete_task: (args) => ({ path: "/api/v1/tasks/" + encodeURIComponent(String(args.taskId || "")) + "/complete" }),
+          // The HUD only ever ticks errands off; the tokenless route can do nothing else.
+          update_errand: (args) => { if (args.status !== "done") throw new Error("Only ticking off an errand works here."); return { path: "/api/v1/errands/" + encodeURIComponent(String(args.errandId || "")) + "/complete" }; },
+        };
+        function hudJson(path, init) {
+          return fetch(path, Object.assign({ credentials: "same-origin" }, init)).then((response) => {
+            if (!response.ok) throw new Error("Request failed (" + response.status + ")");
+            return response.status === 204 ? null : response.json();
+          });
+        }
+        function hudIdempotencyKey() {
+          try { if (window.crypto && typeof window.crypto.randomUUID === "function") return "hud-" + window.crypto.randomUUID(); } catch { /* fall through */ }
+          return "hud-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2);
+        }
+        async function hudHttpWrite(name, args) {
+          const call = HUD_HTTP_WRITES[name](args);
+          const headers = { "content-type": "application/json", accept: "application/json" };
+          if (call.idempotent) headers["idempotency-key"] = hudIdempotencyKey();
+          const written = await hudJson(call.path, { method: "POST", headers, body: JSON.stringify(call.body || {}) });
+          const lists = await Promise.all([hudJson("/api/v1/tasks", { headers: { accept: "application/json" } }), hudJson("/api/v1/reminders", { headers: { accept: "application/json" } })]);
+          return { structuredContent: { tasks: (lists[0] && lists[0].data) || [], reminders: (lists[1] && lists[1].data) || [], created: (written && written.data) || null } };
+        }
         function request(method, params, timeoutMs = 0) {
           if (typeof location !== "undefined" && location.pathname === "/hud") {
             if (method === "tools/call" && params && params.name === "show_jarvis_dashboard") {
@@ -100,6 +127,7 @@
                 return response.json().then((data) => ({ structuredContent: data }));
               });
             }
+            if (method === "tools/call" && params && HUD_HTTP_WRITES[params.name]) return hudHttpWrite(params.name, params.arguments || {});
             if (method === "tools/call") return Promise.reject(new Error("This preview is read-only."));
             return Promise.resolve({});
           }
@@ -152,7 +180,7 @@
         function empty(message, className = "empty") { const el = document.createElement("div"); el.className = className; text(el, message); return el; }
         function completeButton(task, compact = false) { const button = document.createElement("button"); button.className = compact ? "ghost" : "primary-button"; button.type = "button"; text(button, compact ? "CLEAR" : "✓ CLEAR TASK"); button.addEventListener("click", async () => { button.disabled = true; try { await callTool("complete_task", { taskId: task.id }); activity("Task cleared", task.title); toast(`Completed ${task.title}`); } catch { toast("Could not complete that task.", true); } finally { button.disabled = false; } }); return button; }
         function taskRow(task, compact = false, allowComplete = true) { const row = document.createElement(compact ? "li" : "div"); row.className = compact ? "priority-row" : `board-row${task.completed ? " done" : ""}`; const copy = document.createElement("div"); const title = document.createElement("strong"); const meta = document.createElement("small"); text(title, task.title); text(meta, subtitle(task)); copy.append(title, meta); row.append(copy); if (allowComplete && !task.completed) row.append(completeButton(task, true)); return row; }
-        function reminderRow(reminder) { const row = document.createElement("div"); row.className = "reminder-row"; const copy = document.createElement("div"); const title = document.createElement("strong"); const meta = document.createElement("small"); text(title, reminder.title); text(meta, reminderTime(reminder)); copy.append(title, meta); const chip = document.createElement("span"); chip.className = "chip"; text(chip, reminder.dueAt != null ? "TIMED" : "OPEN"); row.append(copy, chip); return row; }
+        function reminderRow(reminder) { const row = document.createElement("div"); row.className = "reminder-row"; const copy = document.createElement("div"); const title = document.createElement("strong"); const meta = document.createElement("small"); text(title, reminder.title); text(meta, reminderTime(reminder)); copy.append(title, meta); const chip = document.createElement("span"); chip.className = "chip"; text(chip, reminder.dueAt == null ? "NO TIME" : reminder.dueAt < Date.now() ? "OVERDUE" : "SET"); row.append(copy, chip); return row; }
         function fillList(el, items, renderer, message) { el.replaceChildren(); if (!items.length) { el.append(empty(message)); return; } items.forEach((item) => el.append(renderer(item))); }
         function layerEntries() { return Object.entries(state.status?.layers || {}); }
         function layerWeight(status) { return status === "ready" ? 1 : status === "partial" ? 0.68 : status === "inactive" ? 0.34 : 0.08; }
@@ -532,7 +560,52 @@
         async function runPersistence(action, fields, resultId) { try { const result = await request("tools/call", { name: "run_persistence_settings_action", arguments: Object.assign({ action }, fields) }, 10000); const data = structured(result); const outcome = data && data.result; if (!outcome) throw new Error("missing"); text(byId(resultId), outcome.detail); return outcome; } catch { text(byId(resultId), "Action failed."); return null; } }
         
 
-        function render() { renderCounts(); renderFocus(); renderBoard(); renderReminders(); renderSystems(); renderCategories(); renderPriorities(); renderRightReminders(); renderOperations(); renderActivity(); renderInbox(); renderActivityTimeline(); renderLiveWork(); renderGeneral(); renderCredentials();  renderTeamBoard(); hudPanelRegistry.forEach((panel) => { if (typeof panel.render !== "function") return; try { panel.render(state); } catch { /* an extension panel stays fail-closed */ } }); }
+        function todayItem(title, detail, extraClass) { const li = document.createElement("li"); if (extraClass) li.className = extraClass; const item = document.createElement("div"); item.className = "today-item"; const strong = document.createElement("b"); text(strong, title); item.appendChild(strong); if (detail) { const small = document.createElement("small"); text(small, detail); item.appendChild(small); } li.appendChild(item); return li; }
+        function todayEmpty(list, message) { const li = document.createElement("li"); li.className = "today-empty"; text(li, message); list.appendChild(li); }
+        function todayDue(reminder) { if (typeof reminder.dueAt === "number") { try { return new Intl.DateTimeFormat("en-AU", { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit", hour12: true }).format(new Date(reminder.dueAt)); } catch { /* fall through */ } } return reminder.dueRaw ? String(reminder.dueRaw) : "No time set"; }
+        function plural(count, one, many) { return count + " " + (count === 1 ? one : many); }
+        // BEGIN today-summary
+        function todaySummaryText(taskCount, overdueCount, errandCount, loaded) {
+          var parts = [];
+          var count = function (n, one, many) { return n + " " + (n === 1 ? one : many); };
+          if (taskCount > 0) parts.push(count(taskCount, "task", "tasks"));
+          if (overdueCount > 0) parts.push(count(overdueCount, "overdue reminder", "overdue reminders"));
+          if (errandCount > 0) parts.push(count(errandCount, "errand", "errands"));
+          if (parts.length) return parts.join(" · ");
+          return loaded ? "All clear. Nothing needs doing right now." : "Loading your day…";
+        }
+        // END today-summary
+        function renderToday() {
+          const tasksEl = byId("today-tasks"); if (!tasksEl) return;
+          const now = Date.now();
+          try { text(byId("today-date"), new Intl.DateTimeFormat("en-AU", { weekday: "long", day: "numeric", month: "long" }).format(new Date(now))); } catch { text(byId("today-date"), "Today"); }
+          const open = activeTasks();
+          tasksEl.replaceChildren();
+          if (!state.tasksLoaded) todayEmpty(tasksEl, "Loading…");
+          else if (!open.length) todayEmpty(tasksEl, "Nothing on your list. Nice.");
+          open.forEach((task) => { const li = todayItem(task.title, task.category && task.category !== "personal" ? task.category : ""); const done = document.createElement("button"); done.type = "button"; done.className = "today-done"; text(done, "Done"); done.setAttribute("aria-label", "Mark " + task.title + " done"); done.addEventListener("click", async () => { done.disabled = true; try { await callTool("complete_task", { taskId: task.id }); toast("Nice. " + task.title + " is done."); } catch { toast("Could not mark that done.", true); done.disabled = false; } }); li.appendChild(done); tasksEl.appendChild(li); });
+          text(byId("today-task-count"), state.tasksLoaded ? plural(open.length, "open", "open") : "");
+          const reminders = state.reminders.slice().sort((a, b) => (typeof a.dueAt === "number" ? a.dueAt : Infinity) - (typeof b.dueAt === "number" ? b.dueAt : Infinity));
+          const remindersEl = byId("today-reminders"); remindersEl.replaceChildren();
+          if (!state.remindersLoaded) todayEmpty(remindersEl, "Loading…");
+          else if (!reminders.length) todayEmpty(remindersEl, "No reminders.");
+          let overdue = 0;
+          reminders.forEach((reminder) => { const late = typeof reminder.dueAt === "number" && reminder.dueAt < now; if (late) overdue += 1; remindersEl.appendChild(todayItem(reminder.title, (late ? "Overdue · " : "") + todayDue(reminder), late ? "today-overdue" : "")); });
+          text(byId("today-reminder-count"), state.remindersLoaded ? plural(reminders.length, "reminder", "reminders") : "");
+          const errandsEl = byId("today-errands"); errandsEl.replaceChildren();
+          const errands = state.brief && state.brief.errands && Array.isArray(state.brief.errands.open) ? state.brief.errands.open : null;
+          if (!errands) todayEmpty(errandsEl, "Loading…");
+          else if (!errands.length) todayEmpty(errandsEl, "No errands to run.");
+          else errands.forEach((errand) => { const li = todayItem(errand.title, errand.quantity ? "× " + errand.quantity : (errand.location && errand.location.label) || ""); const done = document.createElement("button"); done.type = "button"; done.className = "today-done"; text(done, "Done"); done.setAttribute("aria-label", "Tick off " + errand.title); done.addEventListener("click", async () => { done.disabled = true; try { await callTool("update_errand", { errandId: errand.id, status: "done" }); const brief = state.brief && state.brief.errands; if (brief && Array.isArray(brief.open)) { brief.open = brief.open.filter((item) => item.id !== errand.id); brief.openCount = Math.max(0, (brief.openCount || 1) - 1); } render(); toast("Ticked off " + errand.title + "."); callTool("show_jarvis_dashboard").catch(() => { /* the next poll catches up */ }); } catch { toast("Could not tick that off.", true); done.disabled = false; } }); li.appendChild(done); errandsEl.appendChild(li); });
+          text(byId("today-errand-count"), errands ? plural(errands.length, "to run", "to run") : "");
+          const waiting = state.approvals && state.approvals.status === "ready" ? Number(state.approvals.proposedCount) || 0 : 0;
+          const approvals = byId("today-approvals");
+          approvals.hidden = waiting === 0;
+          text(approvals, waiting === 1 ? "1 thing is waiting for your approval" : waiting + " things are waiting for your approval");
+          text(byId("today-summary"), todaySummaryText(open.length, overdue, errands ? errands.length : 0, state.tasksLoaded && state.remindersLoaded));
+          const navCount = byId("nav-today-count"); if (navCount) text(navCount, open.length + overdue);
+        }
+        function render() { renderToday(); renderCounts(); renderFocus(); renderBoard(); renderReminders(); renderSystems(); renderCategories(); renderPriorities(); renderRightReminders(); renderOperations(); renderActivity(); renderInbox(); renderActivityTimeline(); renderLiveWork(); renderGeneral(); renderCredentials();  renderTeamBoard(); hudPanelRegistry.forEach((panel) => { if (typeof panel.render !== "function") return; try { panel.render(state); } catch { /* an extension panel stays fail-closed */ } }); }
 
         // BEGIN hud-team-board
         const BACKDROP_RANK = { STOPPED: 4, UNKNOWN: 3, WARN: 2, OK: 1, "NO LIMIT": 0 };
@@ -866,7 +939,7 @@
         // the server's order. It holds no choice, sends nothing and grants nothing —
         // the reply is an ordinary utterance that the server session resolves.
         function describeVoiceClarification(candidates, catalog, profile) {
-          var generic = { label: "Ambiguous — ignored for safety.", tone: "warn" };
+          var generic = { label: "Sorry, I wasn't sure what you meant, so I didn't do anything.", tone: "warn" };
           var MAX_CANDIDATES = 64, MAX_CHOICES = 4, MAX_SUMMARY = 80;
           if (!Array.isArray(candidates) || !candidates.length || candidates.length > MAX_CANDIDATES) return generic;
           var commands = Array.isArray(catalog) ? catalog : [];
@@ -892,7 +965,7 @@
           var more = candidates.length > MAX_CHOICES ? "; and " + (candidates.length - MAX_CHOICES) + " more" : "";
           if (!allKnown) {
             return {
-              label: "Ambiguous — nothing was done. Conflicting: " + labels.join("; ") + more + ". Repeat the full command.",
+              label: "Sorry, I wasn't sure which you meant, so I didn't do anything. Can you say it again?",
               tone: "warn",
             };
           }
@@ -900,8 +973,8 @@
             ? labels[0]
             : labels.map(function (label, index) { return (index + 1) + ". " + label; }).join("; ");
           return {
-            label: "Ambiguous — nothing was done. Did you mean: " + choices + more +
-              "? Reply once with “Nolan” and your choice, or repeat the full command.",
+            label: "Did you mean " + choices + more +
+              "? Say “Nolan” and your choice. I haven't done anything yet.",
             tone: "warn",
           };
         }
@@ -941,18 +1014,53 @@
           else what = "reminder “" + capture.title + "”" + voiceCaptureDue(capture);
           return { ask: "Add " + what, staged: what, pending: "add " + what, effect: "is created" };
         }
+        function voiceSpokenDue(capture) {
+          if (!capture || typeof capture.dueAt !== "number" || typeof capture.dueTimezone !== "string") return "";
+          try {
+            return " " + new Intl.DateTimeFormat("en-AU", { timeZone: capture.dueTimezone, weekday: "long", hour: "numeric", minute: "2-digit", hour12: true }).format(new Date(capture.dueAt)).replace(",", " at");
+          } catch (error) {
+            return "";
+          }
+        }
+        // Owner-approved direct writes (#voice-direct): short, human replies with no read-back.
+        function describeVoiceDirect(dispatch, capture) {
+          var proposes = dispatch.command && dispatch.command.proposes ? dispatch.command.proposes : {};
+          var key = proposes.tool + ":" + proposes.operation;
+          var title = capture.title;
+          if (dispatch.decision === "undone") {
+            var reopened = key === "tasks:complete" || key === "errands:complete";
+            var undone = reopened ? "Okay, " + title + " is back on the list." : "Okay, I've taken " + title + " off.";
+            return { label: undone, tone: "muted" };
+          }
+          var spoken;
+          if (key === "tasks:create") spoken = "Done. " + title + " is on your list.";
+          else if (key === "reminders:create") spoken = "Okay, I'll remind you: " + title + voiceSpokenDue(capture) + ".";
+          else if (key === "errands:create") spoken = "Got it. " + title + " is on your errands.";
+          else if (key === "tasks:complete") spoken = "Nice. " + title + " is done.";
+          else if (key === "errands:complete") spoken = "Ticked off " + title + ".";
+          else spoken = "Done.";
+          var undoHint = typeof dispatch.undoExpiresAt === "number" && dispatch.undoExpiresAt > 0 ? " Say “Nolan undo” to reverse it." : "";
+          return { label: spoken + undoHint, speech: spoken, tone: "ok" };
+        }
         function describeVoiceDispatch(dispatch, catalog, profile) {
+          if (dispatch && dispatch.decision === "undo-unavailable") {
+            var why = typeof dispatch.reason === "string" && dispatch.reason.trim() ? dispatch.reason.trim() : "There's nothing to undo.";
+            return { label: why, tone: "muted" };
+          }
           if (dispatch && dispatch.decision === "ambiguous") {
             return describeVoiceClarification(dispatch.candidates, catalog, profile);
           }
           var capture = dispatch && dispatch.capture && typeof dispatch.capture.title === "string" ? dispatch.capture : null;
+          if (capture && (dispatch.decision === "saved" || dispatch.decision === "undone")) {
+            return describeVoiceDirect(dispatch, capture);
+          }
           if (capture) {
             var what = voiceCaptureWhat(dispatch.command, capture);
             if (dispatch.decision === "awaiting-confirmation") {
-              return { label: what.ask + "? Say “Nolan confirm” to stage it for your approval, or “Nolan cancel”.", tone: "pending" };
+              return { label: what.ask + "? Say “Nolan confirm” or “Nolan cancel”.", speech: what.ask + "? Say confirm or cancel.", tone: "pending" };
             }
             if (dispatch.decision === "proposed" && typeof dispatch.toolActionId === "string" && dispatch.toolActionId) {
-              return { label: "Staged " + what.staged + " for your approval. Nothing " + what.effect + " until you approve it.", tone: "ok" };
+              return { label: "Okay. I've asked for your approval to " + what.pending + ". Nothing " + what.effect + " until you approve it.", speech: "Okay. That's waiting for your approval.", tone: "ok" };
             }
           }
           if (dispatch && dispatch.decision === "completion-unresolved") {
@@ -965,41 +1073,41 @@
             var answer = typeof dispatch.answer === "string" ? dispatch.answer.trim() : "";
             return answer
               ? { label: answer, tone: "ok" }
-              : { label: "Query unavailable — no authoritative answer was returned.", tone: "warn" };
+              : { label: "Sorry, I couldn't get an answer for that just now.", tone: "warn" };
           }
           if (dispatch && dispatch.decision === "conversation") {
             var reply = typeof dispatch.reply === "string" ? dispatch.reply : "";
             return reply.trim()
               ? { label: reply, tone: "ok" }
-              : { label: "Conversation unavailable.", tone: "warn", notice: true };
+              : { label: "Sorry, I couldn't answer that just now.", tone: "warn", notice: true };
           }
           if (dispatch && dispatch.decision === "conversation-unavailable") {
             var notices = {
-              "provider-error": "Conversation unavailable. The provider did not return a usable reply.",
-              refused: "Conversation unavailable. The provider declined to answer.",
-              "rate-limited": "Conversation limit reached. Try again later.",
-              "too-long": "Conversation request is too long. Please shorten it.",
-              "reply-too-long": "Conversation unavailable. The answer is too long to speak in full.",
-              unavailable: "Conversation unavailable. Please try again.",
-              timeout: "Conversation timed out. Please try again.",
-              "tool-limit": "Conversation reached its query limit. Please ask a shorter question.",
-              ungrounded: "Conversation unavailable. The reply quoted figures no record supplied.",
+              "provider-error": "Sorry, I couldn't think that through just now. Try again?",
+              refused: "Sorry, I can't help with that one.",
+              "rate-limited": "I've hit my limit for a bit. Try again a little later.",
+              "too-long": "That's a bit long for me. Can you say it shorter?",
+              "reply-too-long": "That answer's too long to read out. Try asking for a bit less.",
+              unavailable: "Sorry, I can't check that right now.",
+              timeout: "Sorry, that took too long. Try again?",
+              "tool-limit": "That's a few questions at once. Try one at a time.",
+              ungrounded: "Sorry, I didn't quite get that. Can you say it another way?",
             };
-            return { label: notices[dispatch.conversationReason] || "Conversation unavailable.", tone: "warn", notice: true };
+            return { label: notices[dispatch.conversationReason] || "Sorry, I couldn't answer that just now.", tone: "warn", notice: true };
           }
           var map = {
             "ignored-interim": { label: "Listening…", tone: "muted" },
-            empty: { label: "No command heard.", tone: "muted" },
-            unrecognized: { label: "Command not recognised.", tone: "warn" },
-            "query-unavailable": { label: "Query unavailable — no data provider connected.", tone: "warn" },
-            "awaiting-confirmation": { label: "Awaiting spoken “confirm”.", tone: "pending" },
-            "confirmation-not-pending": { label: "Nothing to confirm.", tone: "muted" },
-            "confirmation-expired": { label: "Confirmation expired.", tone: "warn" },
-            cancelled: { label: "Cancelled.", tone: "muted" },
-            proposed: { label: "Proposed for governed approval.", tone: "ok" },
-            "actuation-unavailable": { label: "Hardware unavailable — failed closed.", tone: "warn" },
-            actuated: { label: "Actuated.", tone: "ok" },
-            "actuation-failed": { label: "Actuation failed.", tone: "warn" },
+            empty: { label: "I didn't hear anything.", tone: "muted" },
+            unrecognized: { label: "Sorry, I didn't catch that.", tone: "warn" },
+            "query-unavailable": { label: "Sorry, I can't check that right now.", tone: "warn" },
+            "awaiting-confirmation": { label: "Shall I go ahead? Say “Nolan confirm” or “Nolan cancel”.", speech: "Shall I go ahead? Say confirm or cancel.", tone: "pending" },
+            "confirmation-not-pending": { label: "There's nothing waiting to confirm.", tone: "muted" },
+            "confirmation-expired": { label: "That took too long, so I dropped it. Say it again?", tone: "warn" },
+            cancelled: { label: "Okay, cancelled.", tone: "muted" },
+            proposed: { label: "Okay. That's waiting for your approval.", tone: "ok" },
+            "actuation-unavailable": { label: "I can't reach that device right now, so I didn't do anything.", tone: "warn" },
+            actuated: { label: "Done.", tone: "ok" },
+            "actuation-failed": { label: "That didn't work, so nothing changed.", tone: "warn" },
           };
           if (dispatch && dispatch.decision === "query-unavailable") {
             var reason = typeof dispatch.reason === "string" ? dispatch.reason.trim() : "";
@@ -1011,7 +1119,12 @@
             var proposedReason = typeof dispatch.reason === "string" ? dispatch.reason.trim() : "";
             if (proposedReason) return { label: proposedReason, tone: "warn" };
           }
-          return map[dispatch && dispatch.decision] || { label: "Unknown result.", tone: "muted" };
+          if (dispatch && dispatch.decision === "awaiting-confirmation" && dispatch.command && typeof dispatch.command.summary === "string" && dispatch.command.summary.trim()) {
+            var askWhat = dispatch.command.summary.trim().replace(/[.!?]+$/, "");
+            askWhat = askWhat.charAt(0).toLowerCase() + askWhat.slice(1);
+            return { label: "Do you want me to " + askWhat + "? Say “Nolan confirm” or “Nolan cancel”.", speech: "Do you want me to " + askWhat + "? Say confirm or cancel.", tone: "pending" };
+          }
+          return map[dispatch && dispatch.decision] || { label: "Hmm, something odd happened there.", tone: "muted" };
         }
         function voiceLatencyMs(startedAt, endedAt) {
           var start = Number(startedAt);
@@ -1072,7 +1185,29 @@
           var speechInFlight = false;
           function speechStatus(message) {
             var el = document.getElementById("voice-output-status");
-            if (el) el.textContent = message;
+            if (!el) return;
+            el.textContent = message;
+            // On a phone only a problem with the spoken reply is worth the space.
+            if (el.dataset) el.dataset.tone = /fail|cannot|unavailable|not supported/i.test(message) ? "warn" : "info";
+          }
+          // Prefer a natural-sounding English voice (Australian first) over the browser default.
+          function pickSpeechVoice(voices) {
+            if (!voices || !voices.length) return null;
+            var best = null;
+            var bestScore = -1;
+            for (var i = 0; i < voices.length; i++) {
+              var voice = voices[i];
+              var lang = String(voice.lang || "").toLowerCase();
+              if (lang.indexOf("en") !== 0) continue;
+              var name = String(voice.name || "");
+              var score = 0;
+              if (lang === "en-au") score += 4; else if (lang === "en-gb") score += 3; else if (lang === "en-us") score += 2; else score += 1;
+              if (/(natural|neural|premium|enhanced|siri)/i.test(name)) score += 6;
+              else if (/google/i.test(name)) score += 3;
+              if (voice.localService === false) score += 1;
+              if (score > bestScore) { best = voice; bestScore = score; }
+            }
+            return best;
           }
           function speak(label) {
             var generation = ++speechGeneration;
@@ -1084,6 +1219,9 @@
             try {
               window.speechSynthesis.cancel();
               var utterance = new window.SpeechSynthesisUtterance(label);
+              var preferred = pickSpeechVoice(typeof window.speechSynthesis.getVoices === "function" ? window.speechSynthesis.getVoices() : null);
+              if (preferred) { utterance.voice = preferred; utterance.lang = preferred.lang; }
+              utterance.rate = 1.05;
               utterance.onstart = function () {
                 if (generation === speechGeneration) speechStatus("Browser speech started; audibility cannot be confirmed.");
               };
@@ -1127,7 +1265,7 @@
               el.textContent = info.label;
               el.setAttribute("data-tone", info.tone);
             }
-            if (!info.notice) speak(info.label);
+            if (!info.notice) speak(info.speech || info.label);
           }
           function renderLatency(startedAt, endedAt, failed) {
             var elapsed = voiceLatencyMs(startedAt, endedAt);
@@ -1215,6 +1353,8 @@
                   renderLatency(startedAt, voiceClock(), false);
                   renderResult(payload.dispatch);
                   renderPending(payload.pending);
+                  var written = payload.dispatch && (payload.dispatch.decision === "saved" || payload.dispatch.decision === "undone");
+                  if (written && typeof callTool === "function") callTool("show_jarvis_dashboard").catch(function () { /* the next poll catches up */ });
                 })
                 .catch(function (error) {
                   if (generation !== state.generation) return;
@@ -1606,6 +1746,36 @@
         document.querySelectorAll("[data-view]").forEach((button) => button.addEventListener("click",() => { document.querySelectorAll("[data-view]").forEach((candidate) => candidate.classList.toggle("active",candidate === button)); document.body.dataset.consoleView = button.dataset.view || "focus"; document.querySelectorAll(".view").forEach((view) => view.classList.toggle("active",view.id === `view-${button.dataset.view}`)); }));
         const settingsTabByHash = { "view-general": "general", "view-credentials": "credentials", "view-persistence": "persistence", "view-limits": "limits", "view-danger": "danger" };
         function showSettingsTab(tab) { document.querySelectorAll("[data-settings-tab]").forEach((candidate) => { const selected = candidate.dataset.settingsTab === tab; candidate.classList.toggle("active", selected); if (selected) candidate.setAttribute("aria-current", "page"); else candidate.removeAttribute("aria-current"); }); document.querySelectorAll("[data-settings-panel]").forEach((panel) => panel.classList.toggle("active", panel.dataset.settingsPanel === tab)); if (tab === "persistence") void loadPersistence(); }
+        (function wireToday() {
+          const more = byId("rail-more"); const toggle = byId("rail-more-toggle");
+          const setMore = (open) => { if (!more || !toggle) return; more.hidden = !open; toggle.setAttribute("aria-expanded", open ? "true" : "false"); };
+          if (toggle) toggle.addEventListener("click", () => setMore(more.hidden));
+          if (more && [...more.querySelectorAll("[data-view]")].some((button) => button.dataset.view === document.body.dataset.consoleView)) setMore(true);
+          const talk = byId("today-talk"); if (talk) talk.addEventListener("click", () => { const voice = document.querySelector("[data-view=voice]"); if (voice) voice.click(); });
+          const form = byId("today-add"); if (!form) return;
+          const submit = async (kind) => {
+            const titleEl = byId("today-add-title"); const whenEl = byId("today-add-when");
+            const title = titleEl.value.trim(); const when = whenEl.value.trim();
+            if (!title) { titleEl.focus(); return; }
+            const buttons = form.querySelectorAll("button"); buttons.forEach((button) => { button.disabled = true; });
+            try {
+              if (kind === "reminder") {
+                const result = await callTool("create_reminder", Object.assign({ title }, when ? { due: { text: when } } : {}));
+                const data = structured(result) || {};
+                const created = data.created || data.reminder || null;
+                if (when && created && typeof created.dueAt !== "number") toast("Saved " + title + ", but I couldn't work out when “" + when + "” is, so it won't go off. Try something like “tomorrow 3pm” or “in 2 hours”.", true);
+                else toast("Okay, I'll remind you: " + title + (created && typeof created.dueAt === "number" ? ", " + todayDue(created) : "") + ".");
+              }
+              else if (kind === "errand") { await callTool("create_errand", { title }); toast("Got it. " + title + " is on your errands."); callTool("show_jarvis_dashboard").catch(() => { /* the next poll catches up */ }); }
+              else { await callTool("create_task", { title, category: "personal" }); toast("Done. " + title + " is on your list."); }
+              titleEl.value = ""; whenEl.value = "";
+            } catch { toast("Sorry, I couldn't add that " + kind + ".", true); }
+            finally { buttons.forEach((button) => { button.disabled = false; }); }
+          };
+          form.addEventListener("submit", (event) => { event.preventDefault(); void submit(byId("today-add-when").value.trim() ? "reminder" : "task"); });
+          form.querySelector('[data-today-add="reminder"]').addEventListener("click", () => { void submit("reminder"); });
+          form.querySelector('[data-today-add="errand"]').addEventListener("click", () => { void submit("errand"); });
+        })();
         function activateNamedView(name) { document.body.dataset.consoleView = name; document.querySelectorAll("[data-view]").forEach((candidate) => candidate.classList.toggle("active", candidate.dataset.view === name)); document.querySelectorAll(".view").forEach((view) => view.classList.toggle("active", view.id === `view-${name}`)); }
         function applySettingsHash() { const tab = settingsTabByHash[location.hash.slice(1)]; if (!tab) return; activateNamedView("settings"); showSettingsTab(tab); }
         window.addEventListener("hashchange", applySettingsHash);

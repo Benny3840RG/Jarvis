@@ -5,8 +5,9 @@
  * exact no-match, and these tests prove the wiring never weakens the guarded
  * boundary:
  *   - interpretation only runs when enabled AND wake-authorised;
- *   - an inferred command is NEVER dispatched directly — it arms a single-use
- *     confirmation and waits, whatever its own criticality;
+ *   - an inferred command with any effect is NEVER dispatched directly — it
+ *     arms a single-use confirmation and waits, whatever its own criticality;
+ *     only a read-only question is answered at once (24 Nov 2026);
  *   - the exact parser path and the default (interpretation off) behave exactly
  *     as before.
  */
@@ -211,7 +212,7 @@ describe("voice session — natural-language interpretation behind confirmation"
     assert.equal(s.pending(), undefined, "confirmation is consumed single-use");
   });
 
-  it("answers an inferred query only after confirmation", async () => {
+  it("answers an inferred read-only query at once and arms nothing", async () => {
     const s = make({ profile: "client", queries: stubQueries });
     const first = await s.handle({
       transcript: "what's on today",
@@ -219,12 +220,15 @@ describe("voice session — natural-language interpretation behind confirmation"
       wakeAuthorized: true,
       now: 1,
     });
-    assert.equal(first.decision, "awaiting-confirmation");
-    if (first.decision === "awaiting-confirmation")
+    assert.equal(first.decision, "answered");
+    if (first.decision === "answered") {
       assert.equal(first.command.id, "client.todays-schedule");
+      assert.equal(first.answer, "Two jobs today.");
+    }
+    assert.equal(s.pending(), undefined);
 
     const confirmed = await s.handle({ transcript: "confirm", isFinal: true, now: 2 });
-    assert.equal(confirmed.decision, "answered");
+    assert.equal(confirmed.decision, "confirmation-not-pending");
   });
 
   it("stays unrecognized when the call is not wake-authorised", async () => {
@@ -299,8 +303,14 @@ describe("voice session — natural-language interpretation behind confirmation"
   });
 
   it("an inferred confirmation still expires (single-use TTL reused)", async () => {
-    const s = make({ profile: "client", queries: stubQueries, confirmationTtlMs: 5_000 });
-    await s.handle({ transcript: "what's on today", isFinal: true, wakeAuthorized: true, now: 1 });
+    const s = make({ profile: "trailer", confirmationTtlMs: 5_000 });
+    const armed = await s.handle({
+      transcript: "raise the winch",
+      isFinal: true,
+      wakeAuthorized: true,
+      now: 1,
+    });
+    assert.equal(armed.decision, "awaiting-confirmation");
     const expired = await s.handle({ transcript: "confirm", isFinal: true, now: 10_000 });
     assert.equal(expired.decision, "confirmation-expired");
   });

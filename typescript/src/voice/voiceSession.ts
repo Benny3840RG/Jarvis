@@ -201,6 +201,11 @@ type PendingClarification = Readonly<{
   expiresAt: number;
 }>;
 
+/** A question that only reads records: never actuates, proposes or writes. */
+function isReadOnlyQuery(command: VoiceCommand): boolean {
+  return command.kind === "query" && !command.requiresSpokenConfirmation && !command.proposes;
+}
+
 export type VoiceDispatch =
   | Readonly<{ decision: "ignored-interim" }>
   | Readonly<{ decision: "empty" }>
@@ -214,9 +219,10 @@ export type VoiceDispatch =
       expiresAt: number;
       /**
        * True when the command was inferred from natural language by the intent
-       * interpreter rather than matched exactly. An inferred command is NEVER
-       * dispatched directly: it always waits here for an explicit spoken
-       * confirmation, so natural-language confidence can never actuate on its own.
+       * interpreter rather than matched exactly. An inferred command with any
+       * effect is NEVER dispatched directly: it always waits here for an explicit
+       * spoken confirmation, so natural-language confidence can never actuate on
+       * its own. (An inferred read-only question is simply answered.)
        */
       inferred?: true;
       /** Interpreter confidence (0..1) for an inferred command. */
@@ -399,6 +405,16 @@ export class VoiceSession {
     return this.#lastTurnRejectedDictation;
   }
 
+  /**
+   * Consume the armed dictation as if the owner had said "confirm". Used only
+   * for the owner-approved direct voice writes (see voiceDirectWrite.ts): the
+   * capture is still the exact read-back the session armed, still single-use
+   * and still TTL-bound.
+   */
+  confirmPending(now: number = this.#clock()): VoiceDispatch | Promise<VoiceDispatch> {
+    return this.#handleConfirm(now, "confirm");
+  }
+
   async handle(input: VoiceSessionInput): Promise<VoiceDispatch> {
     this.#lastTurnRejectedDictation = false;
     const now = input.now ?? this.#clock();
@@ -546,9 +562,10 @@ export class VoiceSession {
             clarification.candidates.includes(command.id) &&
             command.profile === this.#profile
           ) {
+            this.#record(now, normalizedTranscript, "clarified", command.id);
+            if (isReadOnlyQuery(command)) return this.#dispatch(command, now);
             const expiresAt = now + this.#confirmationTtlMs;
             this.#pending = { command, issuedAt: now, expiresAt };
-            this.#record(now, normalizedTranscript, "clarified", command.id);
             return {
               decision: "awaiting-confirmation",
               command,
@@ -593,10 +610,13 @@ export class VoiceSession {
             this.#record(now, normalizedTranscript, "ambiguous");
             return { decision: "ambiguous", candidates };
           }
-          // Inferred intent always waits for an explicit confirmation — it is
-          // never dispatched here, whatever the command's own criticality.
+          // A read-only question is simply answered: asking "shall I?" before
+          // reading the owner their own list is the parroting he asked us to
+          // remove (24 Nov 2026). Anything with an effect still waits for an
+          // explicit confirmation, whatever its own criticality.
           this.#invalidatePending();
           this.#record(now, normalizedTranscript, "interpreted", command.id);
+          if (isReadOnlyQuery(command)) return this.#dispatch(command, now);
           const expiresAt = now + this.#confirmationTtlMs;
           this.#pending = { command, issuedAt: now, expiresAt };
           return {

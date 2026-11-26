@@ -318,7 +318,7 @@
       "post": {
         "operationId": "dispatchVoiceUtterance",
         "summary": "Dispatch a voice utterance",
-        "description": "Submits a recognised utterance to the session and returns the authoritative dispatch decision. Final-only dispatch and whole-utterance matching apply. Wake-authorised natural-language inference fails closed on compound requests even when only one action is recognised, conflicting or negated recogniser alternatives, explicit out-of-profile targets including possessive or plural forms, and non-request actuator reports or questions. An inferred command requires single-use spoken confirmation before dispatch; a propose decision never approves a governed action, and safe-write staging remains on the governed tool-actions path. Authentication is deployment-conditional: a local-serve loopback bind may omit Bearer authentication for same-origin HUD use; non-loopback binds retain the configured service-token/OIDC requirement.",
+        "description": "Submits a recognised utterance to the session and returns the authoritative dispatch decision. Final-only dispatch and whole-utterance matching apply. Wake-authorised natural-language inference fails closed on compound requests even when only one action is recognised, conflicting or negated recogniser alternatives, explicit out-of-profile targets including possessive or plural forms, and non-request actuator reports or questions. An inferred command with any effect requires single-use spoken confirmation before dispatch, while an inferred read-only question is answered at once; a whole small-talk phrase such as \"thanks mate\" gets a fixed conversation reply; a propose decision never approves a governed action, and safe-write staging remains on the governed tool-actions path. Authentication is deployment-conditional: a local-serve loopback bind may omit Bearer authentication for same-origin HUD use; non-loopback binds retain the configured service-token/OIDC requirement.",
         "tags": ["Voice"],
         "security": [{ "serviceToken": [] }, {}],
         "x-jarvis-auth": {
@@ -1151,6 +1151,11 @@
     "/api/v1/tasks": {
       "get": {
         "operationId": "listTasks",
+        "security": [{ "serviceToken": [] }, {}],
+        "x-jarvis-auth": {
+          "mode": "service-token-or-local-loopback",
+          "anonymousScope": "local-serve-loopback-only"
+        },
         "summary": "List durable tasks",
         "description": "Returns the authoritative task list from the configured persistence provider.",
         "tags": ["Tasks"],
@@ -1194,6 +1199,11 @@
       },
       "post": {
         "operationId": "createTask",
+        "security": [{ "serviceToken": [] }, {}],
+        "x-jarvis-auth": {
+          "mode": "service-token-or-local-loopback",
+          "anonymousScope": "local-serve-loopback-only"
+        },
         "summary": "Create a durable task",
         "description": "Creates one task after explicit user intent. Reusing an Idempotency-Key replays the original result while that task still exists. Replaying the key after the task was deleted is a 409 conflict, not a new task and not a retryable failure.",
         "tags": ["Tasks"],
@@ -1445,6 +1455,11 @@
       ],
       "post": {
         "operationId": "completeTask",
+        "security": [{ "serviceToken": [] }, {}],
+        "x-jarvis-auth": {
+          "mode": "service-token-or-local-loopback",
+          "anonymousScope": "local-serve-loopback-only"
+        },
         "summary": "Complete a durable task",
         "description": "Sets the task completed flag to true. Repeated calls leave the task completed.",
         "tags": ["Tasks"],
@@ -1496,6 +1511,11 @@
     "/api/v1/reminders": {
       "get": {
         "operationId": "listReminders",
+        "security": [{ "serviceToken": [] }, {}],
+        "x-jarvis-auth": {
+          "mode": "service-token-or-local-loopback",
+          "anonymousScope": "local-serve-loopback-only"
+        },
         "summary": "List durable reminders",
         "description": "Returns the authoritative reminder list from the configured persistence provider.",
         "tags": ["Reminders"],
@@ -1539,6 +1559,11 @@
       },
       "post": {
         "operationId": "createReminder",
+        "security": [{ "serviceToken": [] }, {}],
+        "x-jarvis-auth": {
+          "mode": "service-token-or-local-loopback",
+          "anonymousScope": "local-serve-loopback-only"
+        },
         "summary": "Create a durable reminder",
         "description": "Creates one reminder and preserves its exact due text. Jarvis only adds a timestamp when the due value is unambiguous in the supplied timezone. Reusing an Idempotency-Key replays the original result while that reminder still exists. Replaying the key after the reminder was deleted is a 409 conflict, not a new reminder and not a retryable failure.",
         "tags": ["Reminders"],
@@ -4584,6 +4609,11 @@
       },
       "post": {
         "operationId": "createErrand",
+        "security": [{ "serviceToken": [] }, {}],
+        "x-jarvis-auth": {
+          "mode": "service-token-or-local-loopback",
+          "anonymousScope": "local-serve-loopback-only"
+        },
         "summary": "Create an errand",
         "description": "Creates one pick-up-on-the-way item, optionally tagged with a structured location resolved at the conversation layer. The server stores locations; it never geocodes.",
         "tags": ["Errands"],
@@ -4627,6 +4657,62 @@
           },
           "422": {
             "$ref": "#/components/responses/UnprocessableEntity"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/errands/{errandId}/complete": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ErrandId"
+        }
+      ],
+      "post": {
+        "operationId": "completeErrand",
+        "security": [{ "serviceToken": [] }, {}],
+        "x-jarvis-auth": {
+          "mode": "service-token-or-local-loopback",
+          "anonymousScope": "local-serve-loopback-only"
+        },
+        "summary": "Complete an errand",
+        "description": "Sets the errand status to done and stamps the completion time. Repeated calls leave the errand done. The browser HUD uses this route; MCP clients use updateErrand.",
+        "tags": ["Errands"],
+        "x-mcp-tool": {
+          "exposed": false,
+          "annotations": {
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "openWorldHint": false,
+            "idempotentHint": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Errand completed.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrandResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
@@ -8847,7 +8933,7 @@
         "properties": {
           "decision": {
             "type": "string",
-            "description": "The outcome of handling the utterance.",
+            "description": "The outcome of handling the utterance. saved: an owner-approved direct voice write (add a task, reminder or errand; mark a task or errand done) was written at once on the voice project, whether dictated or understood from plain speech. undone: \"Nolan undo\" reversed the session's last direct write. undo-unavailable: nothing was reversed; reason says why.",
             "enum": [
               "ignored-interim",
               "empty",
@@ -8865,7 +8951,10 @@
               "completion-unresolved",
               "actuation-unavailable",
               "actuated",
-              "actuation-failed"
+              "actuation-failed",
+              "saved",
+              "undone",
+              "undo-unavailable"
             ]
           },
           "command": {
@@ -8928,7 +9017,7 @@
           "inferred": {
             "type": "boolean",
             "enum": [true],
-            "description": "Present and true only on an awaiting-confirmation decision whose command was inferred from natural language by the intent interpreter rather than matched as an exact phrase. An inferred command is never dispatched directly: it always waits for an explicit spoken confirmation."
+            "description": "Present and true only on an awaiting-confirmation decision whose command was inferred from natural language by the intent interpreter rather than matched as an exact phrase. An inferred command with any effect is never dispatched directly: it always waits for an explicit spoken confirmation. An inferred read-only question is answered at once and never carries this flag."
           },
           "confidence": {
             "type": "number",
@@ -8938,10 +9027,59 @@
           },
           "capture": {
             "$ref": "#/components/schemas/VoiceWriteCapture",
-            "description": "Dictated safe-write fields. Present on awaiting-confirmation for a dictation (the read-back) and on the proposed decision that follows its confirmation. A request-body capture never replaces it."
+            "description": "Dictated safe-write fields. Present on awaiting-confirmation for a dictation (the read-back), on the proposed decision that follows its confirmation, and on saved and undone. A request-body capture never replaces it."
+          },
+          "undoExpiresAt": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Present only on saved: when (ms since epoch) a spoken \"Nolan undo\" stops reversing this write."
           }
         },
         "allOf": [
+          {
+            "if": {
+              "properties": { "decision": { "enum": ["saved", "undone"] } },
+              "required": ["decision"]
+            },
+            "then": {
+              "required": ["command", "capture"],
+              "properties": {
+                "command": {
+                  "properties": {
+                    "id": {
+                      "enum": [
+                        "client.capture-task",
+                        "client.follow-up-reminder",
+                        "client.capture-errand",
+                        "client.complete-task",
+                        "client.complete-errand"
+                      ]
+                    }
+                  },
+                  "required": ["id"]
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": { "decision": { "const": "undo-unavailable" } },
+              "required": ["decision"]
+            },
+            "then": {
+              "required": ["reason"],
+              "not": { "anyOf": [{ "required": ["command"] }, { "required": ["capture"] }] }
+            }
+          },
+          {
+            "if": {
+              "not": {
+                "properties": { "decision": { "const": "saved" } },
+                "required": ["decision"]
+              }
+            },
+            "then": { "not": { "required": ["undoExpiresAt"] } }
+          },
           {
             "if": {
               "properties": { "decision": { "const": "completion-unresolved" } },

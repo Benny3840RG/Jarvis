@@ -15,8 +15,9 @@
     <style id="console-02-declutter"><!--hud:include styles/06-console-02-declutter.css--></style>
     <style id="console-02-legibility"><!--hud:include styles/07-console-02-legibility.css--></style>
     <style><!--hud:include styles/08-extra.css--></style>
+    <style><!--hud:include styles/09-today.css--></style>
 </head>
-  <body data-backdrop-severity="UNKNOWN" data-console-view="focus"><!-- JARVIS // OPERATOR CONSOLE · LANDSCAPE COMMAND CENTRE -->
+  <body data-backdrop-severity="UNKNOWN" data-console-view="today"><!-- JARVIS // OPERATOR CONSOLE · LANDSCAPE COMMAND CENTRE -->
     <canvas id="hud-backdrop" class="hud-backdrop" aria-hidden="true"></canvas>
     <div class="hud-vignette" aria-hidden="true"></div>
     <div class="bezel" aria-hidden="true"></div>
@@ -101,13 +102,17 @@
           </div>
             <nav class="panel green team-nav" aria-label="Command centre sections">
               <div class="panel-content nav-stack">
-                <button class="rail-button active" type="button" data-view="focus"><span class="rail-icon">◎</span><span><strong>Focus</strong><small>Current mission</small></span><span class="rail-count" id="nav-focus-count">0</span></button>
+                <button class="rail-button active" type="button" data-view="today"><span class="rail-icon">☀</span><span><strong>Today</strong><small>Your day</small></span><span class="rail-count" id="nav-today-count">0</span></button>
                 <button class="rail-button" type="button" data-view="board"><span class="rail-icon">▦</span><span><strong>Task Board</strong><small>Durable queue</small></span><span class="rail-count" id="nav-board-count">0</span></button>
                 <button class="rail-button" type="button" data-view="reminders"><span class="rail-icon">◷</span><span><strong>Reminders</strong><small>Time contacts</small></span><span class="rail-count" id="nav-reminder-count">0</span></button>
-                <button class="rail-button" type="button" data-view="operations"><span class="rail-icon">⌁</span><span><strong>Operations</strong><small>Daily brief</small></span><span class="rail-count" id="nav-operations-count">0</span></button>
-                <button class="rail-button" type="button" data-view="livework"><span class="rail-icon">⛭</span><span><strong>Live Work</strong><small>Mission pipeline</small></span><span class="rail-count" id="nav-livework-count">0</span></button>
-                <button class="rail-button" type="button" data-view="systems"><span class="rail-icon">◇</span><span><strong>Systems</strong><small>Runtime layers</small></span><span class="rail-count" id="nav-system-count">0</span></button>
                 <button class="rail-button" type="button" data-view="voice"><span class="rail-icon">⌨</span><span><strong>Voice</strong><small>Guarded speech</small></span><span class="rail-count" id="nav-voice-count">0</span></button>
+                <button class="rail-button rail-more-toggle" type="button" id="rail-more-toggle" aria-expanded="false" aria-controls="rail-more"><span class="rail-icon">⋯</span><span><strong>More</strong><small>Business &amp; system views</small></span></button>
+                <div class="rail-more" id="rail-more" hidden>
+                  <button class="rail-button" type="button" data-view="focus"><span class="rail-icon">◎</span><span><strong>Focus</strong><small>Current mission</small></span><span class="rail-count" id="nav-focus-count">0</span></button>
+                  <button class="rail-button" type="button" data-view="operations"><span class="rail-icon">⌁</span><span><strong>Operations</strong><small>Daily brief</small></span><span class="rail-count" id="nav-operations-count">0</span></button>
+                  <button class="rail-button" type="button" data-view="livework"><span class="rail-icon">⛭</span><span><strong>Live Work</strong><small>Mission pipeline</small></span><span class="rail-count" id="nav-livework-count">0</span></button>
+                  <button class="rail-button" type="button" data-view="systems"><span class="rail-icon">◇</span><span><strong>Systems</strong><small>Runtime layers</small></span><span class="rail-count" id="nav-system-count">0</span></button>
+                </div>
                 <button class="rail-button" type="button" data-view="settings"><span class="rail-icon">⚙</span><span><strong>Settings</strong><small>General, credentials, persistence, limits, danger</small></span><span class="rail-count" id="nav-settings-count">0</span></button>
               </div>
             </nav>
@@ -165,7 +170,40 @@
           </aside>
           <section class="panel violet workspace">
             <div class="panel-content">
-              <section class="view active" id="view-focus">
+              <section class="view active" id="view-today" aria-labelledby="today-date">
+                <div class="today-view">
+                  <header class="today-head">
+                    <h2 id="today-date">Today</h2>
+                    <p id="today-summary">Loading your day…</p>
+                  </header>
+                  <a class="today-approvals" id="today-approvals" href="/settings/approvals" hidden></a>
+                  <form class="today-add" id="today-add" autocomplete="off">
+                    <label class="today-sr" for="today-add-title">Add something</label>
+                    <input id="today-add-title" name="title" maxlength="200" placeholder="Add a task, reminder or errand…" required />
+                    <label class="today-sr" for="today-add-when">When (reminders)</label>
+                    <input id="today-add-when" name="when" maxlength="120" placeholder="When? e.g. tomorrow 9am" />
+                    <div class="today-add-actions">
+                      <button type="submit" class="today-primary" data-today-add="task">Add task</button>
+                      <button type="button" class="today-secondary" data-today-add="reminder">Add reminder</button>
+                      <button type="button" class="today-secondary" data-today-add="errand">Add errand</button>
+                    </div>
+                  </form>
+                  <article class="today-card">
+                    <div class="today-card-head"><h3>Tasks</h3><span id="today-task-count"></span></div>
+                    <ul class="today-list" id="today-tasks"></ul>
+                  </article>
+                  <article class="today-card">
+                    <div class="today-card-head"><h3>Reminders</h3><span id="today-reminder-count"></span></div>
+                    <ul class="today-list" id="today-reminders"></ul>
+                  </article>
+                  <article class="today-card">
+                    <div class="today-card-head"><h3>Errands</h3><span id="today-errand-count"></span></div>
+                    <ul class="today-list" id="today-errands"></ul>
+                  </article>
+                  <button type="button" class="today-talk" id="today-talk">🎙 Talk to Nolan</button>
+                </div>
+              </section>
+              <section class="view" id="view-focus">
                 <div class="console-deck">
                   <div class="console-col col-left">
                     <section class="plate">
@@ -398,14 +436,14 @@
                   <article class="panel list-panel violet"><div class="panel-header"><h2>Active tasks</h2><span id="board-active-count"></span></div><div class="scroll-list" id="active-list"></div></article>
                   <article class="panel list-panel green"><div class="panel-header"><h2>Completed</h2><span id="board-done-count"></span></div><div class="scroll-list" id="done-list"></div></article>
                       <article class="panel violet board-load-panel">
-                        <div class="panel-content"><div class="panel-header"><h2>Task load by domain</h2><span>LIVE DURABLE STATE</span></div><div class="category-content"><div class="category-bars" id="category-bars"></div><div class="completion-card"><div class="completion-ring"><svg viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r="49" fill="none" stroke="var(--line)" stroke-width="8" /><circle id="completion-ring" cx="60" cy="60" r="49" pathLength="100" fill="none" stroke="var(--green)" stroke-width="8" stroke-linecap="round" stroke-dasharray="0 100" transform="rotate(-90 60 60)" /></svg><div class="completion-copy"><b id="completion-percent">0%</b><span>Complete</span></div></div></div></div></div>
+                        <div class="panel-content"><div class="panel-header"><h2>Tasks by type</h2><span>LIVE</span></div><div class="category-content"><div class="category-bars" id="category-bars"></div><div class="completion-card"><div class="completion-ring"><svg viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r="49" fill="none" stroke="var(--line)" stroke-width="8" /><circle id="completion-ring" cx="60" cy="60" r="49" pathLength="100" fill="none" stroke="var(--green)" stroke-width="8" stroke-linecap="round" stroke-dasharray="0 100" transform="rotate(-90 60 60)" /></svg><div class="completion-copy"><b id="completion-percent">0%</b><span>Complete</span></div></div></div></div></div>
                       </article>
                 </div>
               </section>
               <section class="view" id="view-reminders">
                 <div class="two-column-view">
-                  <article class="panel list-panel violet"><div class="panel-header"><h2>Reminder contacts</h2><span id="reminders-total"></span></div><div class="scroll-list" id="reminder-list"></div></article>
-                  <article class="panel green"><div class="panel-header"><h2>Reminder timing distribution</h2><span>REAL DUE STATE</span></div><div class="chart-wrap"><svg viewBox="0 0 420 300" role="img" aria-label="Reminder timing distribution"><g stroke="var(--line)"><path d="M35 40H395 M35 100H395 M35 160H395 M35 220H395 M35 270H395" /></g><g id="reminder-chart-bars"></g><g fill="var(--muted)" font-size="11" text-anchor="middle"><text x="75" y="289">DUE</text><text x="165" y="289">24H</text><text x="255" y="289">LATER</text><text x="347" y="289">OPEN</text></g></svg></div></article>
+                  <article class="panel list-panel violet"><div class="panel-header"><h2>All reminders</h2><span id="reminders-total"></span></div><div class="scroll-list" id="reminder-list"></div></article>
+                  <article class="panel green"><div class="panel-header"><h2>When they’re due</h2><span>LIVE</span></div><div class="chart-wrap"><svg viewBox="0 0 420 300" role="img" aria-label="Reminder timing distribution"><g stroke="var(--line)"><path d="M35 40H395 M35 100H395 M35 160H395 M35 220H395 M35 270H395" /></g><g id="reminder-chart-bars"></g><g fill="var(--muted)" font-size="11" text-anchor="middle"><text x="75" y="289">OVERDUE</text><text x="165" y="289">NEXT 24H</text><text x="255" y="289">LATER</text><text x="347" y="289">NO TIME</text></g></svg></div></article>
                 </div>
               </section>
               <section class="view" id="view-voice">
@@ -419,10 +457,10 @@
                         <button type="button" class="voice-btn" id="voice-stop">Stop</button>
                         <button type="button" class="voice-btn" id="voice-test-output">Test spoken output</button>
                       </div>
-                      <p class="voice-hint">Say “<strong>Nolan</strong>” then a command. Partial speech never acts; critical commands need “Nolan confirm”. Equipment with no adapter fails closed.</p>
+                      <p class="voice-hint">Say “<strong>Nolan</strong>” then what you want, like “Nolan, add milk to the shopping list” or “Nolan, what’s on today?”. If I get it wrong, say “Nolan undo”.</p>
                       <div class="voice-live"><small>HEARD</small><p id="voice-transcript">—</p></div>
                       <div class="voice-pending" id="voice-pending" hidden></div>
-                      <div class="voice-result" id="voice-result" data-tone="muted">Idle.</div>
+                      <div class="voice-result" id="voice-result" data-tone="muted">Ready when you are.</div>
                       <p class="voice-hint" id="voice-output-status" role="status" aria-live="polite">Spoken output has not been tested.</p>
                       <p class="voice-hint" id="voice-latency">Dispatch latency: no sample yet.</p>
                       <form id="voice-typed" class="voice-typed">

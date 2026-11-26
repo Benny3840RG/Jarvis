@@ -238,7 +238,10 @@ it("grounds a reply through the existing spoken query answer", async () => {
       client: client(
         [
           { stop_reason: "tool_use", content: [thinking, preamble, tool] },
-          { stop_reason: "end_turn", content: [{ type: "text", text: "No unpaid invoices." }] },
+          {
+            stop_reason: "end_turn",
+            content: [{ type: "text", text: "No unpaid invoices." }],
+          },
         ],
         calls,
       ),
@@ -255,7 +258,13 @@ it("grounds a reply through the existing spoken query answer", async () => {
   assert.deepEqual(messages.at(-2), { role: "assistant", content: [thinking, preamble, tool] });
   assert.deepEqual(messages.at(-1), {
     role: "user",
-    content: [{ type: "tool_result", tool_use_id: "t1", content: "No unpaid invoices." }],
+    content: [
+      {
+        type: "tool_result",
+        tool_use_id: "t1",
+        content: "No unpaid invoices.",
+      },
+    ],
   });
 });
 

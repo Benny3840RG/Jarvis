@@ -20,6 +20,24 @@ function parseBearerToken(header: string | string[] | undefined): string | undef
   return match?.[1];
 }
 
+/**
+ * True for a same-origin browser request (Sec-Fetch-Site same-origin/none, or
+ * an Origin that matches Host when the browser sends no fetch metadata) and
+ * for a non-browser local client that sends neither header.
+ */
+export function isSameOriginOrLocalTool(request: FastifyRequest): boolean {
+  const site = request.headers["sec-fetch-site"];
+  if (typeof site === "string") return site === "same-origin" || site === "none";
+  const origin = request.headers.origin;
+  if (origin === undefined) return true;
+  if (typeof origin !== "string") return false;
+  try {
+    return new URL(origin).host === request.headers.host;
+  } catch {
+    return false;
+  }
+}
+
 function digest(value: string): Buffer {
   return createHash("sha256").update(value, "utf8").digest();
 }
@@ -73,9 +91,14 @@ export class ServiceTokenGuard implements CanActivate {
       context.getHandler(),
       context.getClass(),
     ]);
-    if (localLoopback && this.credentials?.serveLocalPage) return true;
-
     const request = context.switchToHttp().getRequest<FastifyRequest>();
+    // The bypass is for the same-origin HUD page and local tools only. A
+    // browser request from another site (a page the owner happens to have
+    // open) never gets it and must present a token like any other client.
+    if (localLoopback && this.credentials?.serveLocalPage && isSameOriginOrLocalTool(request)) {
+      return true;
+    }
+
     const candidate = parseBearerToken(request.headers.authorization);
 
     if (this.config.authMode === "oidc") {

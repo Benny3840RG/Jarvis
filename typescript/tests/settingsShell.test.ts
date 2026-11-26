@@ -10,14 +10,16 @@ const widget = bundleHud();
 describe("settings shell", () => {
   it("keeps one Settings rail and puts Limits before Danger", () => {
     const rails = [...widget.matchAll(/data-view="([^"]+)"/g)].map((match) => match[1]);
+    // Today is the home screen; the business and system views sit under "More".
     assert.deepEqual(rails, [
-      "focus",
+      "today",
       "board",
       "reminders",
+      "voice",
+      "focus",
       "operations",
       "livework",
       "systems",
-      "voice",
       "settings",
     ]);
     assert.equal(rails.filter((rail) => rail === "settings").length, 1);

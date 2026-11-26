@@ -4,6 +4,7 @@ import { afterEach, describe, it } from "node:test";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 
 import type { ToolActionService } from "../src/actions/toolActions.js";
+import { InMemoryErrandStore } from "../src/errands/inMemoryErrandStore.js";
 import { createJarvisHttpApp } from "../src/http/app.js";
 import type { HttpAppConfig } from "../src/http/config.js";
 import type {
@@ -280,5 +281,162 @@ describe("loopback Console 02 HUD", () => {
     const snapshot = await app.inject({ method: "GET", url: "/api/v1/hud/snapshot" });
     assert.equal(page.statusCode, 404);
     assert.equal(snapshot.statusCode, 404);
+  });
+});
+
+describe("browser HUD task and reminder buttons", () => {
+  const sameOrigin = { "sec-fetch-site": "same-origin", "content-type": "application/json" };
+
+  it("adds a task, clears a task and adds a reminder without a token from the HUD page", async () => {
+    const app = await open("127.0.0.1");
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/v1/tasks",
+      headers: { ...sameOrigin, "idempotency-key": "hud-test-1" },
+      payload: { title: "Order bar oil", category: "work" },
+    });
+    assert.equal(created.statusCode, 201, created.body);
+    const listed = await app.inject({
+      method: "GET",
+      url: "/api/v1/tasks",
+      headers: { "sec-fetch-site": "same-origin" },
+    });
+    assert.equal(listed.statusCode, 200);
+    const completed = await app.inject({
+      method: "POST",
+      url: "/api/v1/tasks/task-1/complete",
+      headers: sameOrigin,
+      payload: {},
+    });
+    assert.notEqual(completed.statusCode, 401);
+    const reminder = await app.inject({
+      method: "POST",
+      url: "/api/v1/reminders",
+      headers: { ...sameOrigin, "idempotency-key": "hud-test-2" },
+      payload: { title: "Call Dave" },
+    });
+    assert.equal(reminder.statusCode, 201, reminder.body);
+  });
+
+  it("refuses a tokenless write from another website open in the browser", async () => {
+    const app = await open("127.0.0.1");
+    for (const headers of [
+      { "sec-fetch-site": "cross-site" },
+      { "sec-fetch-site": "same-site" },
+      { origin: "https://evil.example" },
+    ]) {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/v1/tasks",
+        headers: {
+          ...headers,
+          "content-type": "application/json",
+          "idempotency-key": "hud-test-cross",
+        },
+        payload: { title: "Nope", category: "work" },
+      });
+      assert.equal(response.statusCode, 401, JSON.stringify(headers));
+    }
+    // The same request with the service token still works for any client.
+    const withToken = await app.inject({
+      method: "POST",
+      url: "/api/v1/tasks",
+      headers: {
+        "sec-fetch-site": "cross-site",
+        authorization: `Bearer ${SERVICE_TOKEN}`,
+        "content-type": "application/json",
+        "idempotency-key": "hud-test-token",
+      },
+      payload: { title: "Fine", category: "work" },
+    });
+    assert.equal(withToken.statusCode, 201);
+  });
+
+  it("keeps the token requirement off loopback", async () => {
+    const app = await open("10.1.1.1");
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/v1/tasks",
+      headers: { ...sameOrigin, "idempotency-key": "hud-test-remote" },
+      payload: { title: "Nope", category: "work" },
+    });
+    assert.equal(response.statusCode, 401);
+  });
+
+  it("still requires a token for other task routes", async () => {
+    const app = await open("127.0.0.1");
+    const removed = await app.inject({
+      method: "DELETE",
+      url: "/api/v1/tasks/task-1",
+      headers: { "sec-fetch-site": "same-origin" },
+    });
+    assert.equal(removed.statusCode, 401);
+  });
+});
+
+describe("browser HUD errand Done button", () => {
+  const sameOrigin = { "sec-fetch-site": "same-origin", "content-type": "application/json" };
+
+  it("ticks an errand off without a token from the HUD page, and only that", async () => {
+    const errands = new InMemoryErrandStore();
+    const errand = await errands.add({ title: "Bar oil" });
+    const app = await createJarvisHttpApp({
+      config: config(),
+      credentialsRuntime: credentials("127.0.0.1"),
+      persistence: persistence(),
+      providerName: "json",
+      logger: false,
+      errandStore: errands,
+    });
+    openApps.push(app);
+
+    const done = await app.inject({
+      method: "POST",
+      url: `/api/v1/errands/${errand.id}/complete`,
+      headers: sameOrigin,
+      payload: {},
+    });
+    assert.equal(done.statusCode, 200, done.body);
+    assert.equal((done.json() as { data: { status: string } }).data.status, "done");
+
+    const added = await app.inject({
+      method: "POST",
+      url: "/api/v1/errands",
+      headers: sameOrigin,
+      payload: { title: "Silicone" },
+    });
+    assert.equal(added.statusCode, 201, added.body);
+    const addedCrossSite = await app.inject({
+      method: "POST",
+      url: "/api/v1/errands",
+      headers: { "sec-fetch-site": "cross-site", "content-type": "application/json" },
+      payload: { title: "Nope" },
+    });
+    assert.equal(addedCrossSite.statusCode, 401);
+
+    const missing = await app.inject({
+      method: "POST",
+      url: "/api/v1/errands/nope/complete",
+      headers: sameOrigin,
+      payload: {},
+    });
+    assert.equal(missing.statusCode, 404);
+
+    const crossSite = await app.inject({
+      method: "POST",
+      url: `/api/v1/errands/${errand.id}/complete`,
+      headers: { "sec-fetch-site": "cross-site", "content-type": "application/json" },
+      payload: {},
+    });
+    assert.equal(crossSite.statusCode, 401);
+
+    for (const [method, url] of [
+      ["PATCH", `/api/v1/errands/${errand.id}`],
+      ["DELETE", `/api/v1/errands/${errand.id}`],
+      ["GET", "/api/v1/errands"],
+    ] as const) {
+      const response = await app.inject({ method, url, headers: sameOrigin, payload: {} });
+      assert.equal(response.statusCode, 401, `${method} ${url}`);
+    }
   });
 });

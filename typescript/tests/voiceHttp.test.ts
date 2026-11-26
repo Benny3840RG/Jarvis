@@ -120,6 +120,20 @@ describe("voice HTTP boundary", () => {
       pending: null,
     });
   });
+  it("answers small talk with a fixed friendly reply, with or without a model", async () => {
+    const app = await makeApp();
+    const sessionId = await openSession(app, "client");
+    const thanks = (
+      await utter(app, sessionId, { transcript: "Nolan thanks mate", isFinal: true })
+    ).json();
+    assert.deepEqual(thanks.dispatch, { decision: "conversation", reply: "No worries." });
+    assert.equal(thanks.pending, null);
+    const unwoken = (
+      await utter(app, sessionId, { transcript: "thanks mate", isFinal: true })
+    ).json();
+    assert.equal(unwoken.dispatch.decision, "unrecognized");
+  });
+
   it("hands only final wake-authorised unrecognised speech to conversation", async () => {
     const calls: string[] = [];
     const reasoner: VoiceConversationReasoner = {
@@ -436,7 +450,7 @@ describe("voice HTTP boundary", () => {
       isFinal: true,
     });
     assert.equal(response.json().dispatch.decision, "answered");
-    assert.equal(response.json().dispatch.answer, "1 unpaid invoice, balance due 40.00. INV-9.");
+    assert.equal(response.json().dispatch.answer, "One unpaid invoice, $40.00 owing: INV-9.");
   });
 
   it("names invoice records when the store fails instead of inventing a count", async () => {
