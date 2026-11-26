@@ -162,8 +162,20 @@ export function securityHaltStatusReader(
   };
 }
 
+function processIsAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === "EPERM";
+  }
+}
+
 export class FileHaltAckStore {
-  constructor(private readonly filePath: string) {
+  constructor(
+    private readonly filePath: string,
+    private readonly isProcessAlive: (pid: number) => boolean = processIsAlive,
+  ) {
     if (!path.isAbsolute(filePath)) throw new Error("Halt acknowledgement path must be absolute.");
   }
 
@@ -173,6 +185,15 @@ export class FileHaltAckStore {
     if (file.kind === "unreadable") return { kind: "unreadable", problem: file.problem };
     const parsed = haltAckSchema.safeParse(file.value);
     if (!parsed.success) return { kind: "unreadable", problem: "has an unknown shape" };
+    // A file from an exited service is never current evidence. This also
+    // fails closed when a restarted service cannot remove the old file before
+    // one of its own managed runtimes fails to stop.
+    if (!this.isProcessAlive(parsed.data.pid)) {
+      return {
+        kind: "unreadable",
+        problem: "belongs to a service process that is no longer running",
+      };
+    }
     return { kind: "ack", ack: parsed.data };
   }
 

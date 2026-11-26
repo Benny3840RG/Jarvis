@@ -12,8 +12,10 @@ unreadable, so it cannot falsely satisfy the broader stop claim.
 
 Focused tests cover immediate execution cancellation during a slow runtime stop,
 initial start, restart-on-resume, restart retry and a failed runtime stop
-producing no acknowledgement. Other processes and unregistered
-loops remain outside the claim. No deployment or live halt was performed.
+producing no acknowledgement. A leftover acknowledgement is unreadable after
+its writer process exits, so failed cleanup during service restart cannot preserve
+a stale verified-stop claim. Other processes and unregistered loops remain
+outside the claim. No deployment or live halt was performed.
 
 ## PR #806 post-merge owner-decision ledger recovery repair (2026-11-13)
 

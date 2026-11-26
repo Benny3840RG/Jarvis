@@ -14,7 +14,7 @@ While halted, the running service refuses new governed tool executions, cancels 
 - **acknowledged**: the service saw this halt, stopped its registered background runtimes and cancelled its running executions, but at least one provider call hasn't finished yet.
 - **verified stopped**: no governed effect is unsettled and every registered background runtime has stopped.
 
-Cancelling sends the provider an abort. A provider that ignores aborts can't be forced to stop, so it keeps the state at acknowledged until it finishes. A cancelled execution ends with an unknown outcome (`indeterminate`), so check what it did before retrying it. A single-use approval cancelled after it was claimed stays used up and needs approving again. The states cover governed tool executions and the runtime reconciliation loop inside the HTTP service process; they do not claim that another process or an unregistered loop stopped.
+Cancelling sends the provider an abort. A provider that ignores aborts can't be forced to stop, so it keeps the state at acknowledged until it finishes. A cancelled execution ends with an unknown outcome (`indeterminate`), so check what it did before retrying it. A single-use approval cancelled after it was claimed stays used up and needs approving again. The states cover governed tool executions and the runtime reconciliation loop inside the HTTP service process; they do not claim that another process or an unregistered loop stopped. An acknowledgement is trusted only while the service process that wrote it is still running, so a stale file left behind by a restart cannot report a verified stop.
 
 `GET /api/v1/status` reports the same state as `securityHalt`, without your reason text. The overall status is `degraded` while dispatch is refused.
 

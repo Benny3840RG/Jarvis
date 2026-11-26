@@ -37,7 +37,7 @@ beforeEach(async () => {
   directory = await mkdtemp(path.join(tmpdir(), "nolan-halt-stop-"));
   halts = new FileHaltStore(path.join(directory, HALT_FILE_BASENAME));
   ackPath = path.join(directory, HALT_ACK_FILE_BASENAME);
-  acks = new FileHaltAckStore(ackPath);
+  acks = new FileHaltAckStore(ackPath, () => true);
 });
 
 afterEach(async () => {
@@ -505,6 +505,48 @@ describe("halt supervisor", () => {
     });
     await assert.rejects(restartedService.tick(), /later stop failed/u);
     assert.deepEqual(await acks.read(), { kind: "none" });
+  });
+
+  it("rejects a stale acknowledgement when its service process is no longer running", async () => {
+    let serviceAlive = true;
+    const processAwareAcks = new FileHaltAckStore(ackPath, (pid) => serviceAlive && pid === 4_242);
+    const firstService = new HaltSupervisor(
+      halts,
+      processAwareAcks,
+      new RunningExecutionRegistry(),
+      {
+        managedRuntimes: [{ async start() {}, async stop() {} }],
+        pid: 4_242,
+      },
+    );
+    await halts.halt("owner stop", NOW);
+    await firstService.tick();
+    assert.equal((await processAwareAcks.read()).kind, "ack");
+
+    serviceAlive = false;
+    processAwareAcks.clear = async () => {
+      throw new Error("clear failed");
+    };
+    const restartedService = new HaltSupervisor(
+      halts,
+      processAwareAcks,
+      new RunningExecutionRegistry(),
+      {
+        managedRuntimes: [
+          {
+            async start() {},
+            async stop() {
+              throw new Error("later stop failed");
+            },
+          },
+        ],
+        pid: 4_243,
+      },
+    );
+    await assert.rejects(restartedService.tick());
+    const stale = await processAwareAcks.read();
+    assert.equal(stale.kind, "unreadable");
+    assert.match(stale.kind === "unreadable" ? stale.problem : "", /no longer running/u);
   });
 
   it("does not clear, rewrite, or stop runtimes again for the same verified halt", async () => {
