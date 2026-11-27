@@ -440,10 +440,32 @@ describe("interactive CLI persistence wiring", () => {
     });
 
     assert.equal(persistence.listTasksCalled, 3);
-    assert.equal(persistence.listRemindersCalled, 2);
+    // summary reads reminders too, for proactive nudges
+    assert.equal(persistence.listRemindersCalled, 3);
     assert(logs.output.some((line) => line.includes("Added by another process")));
     assert(logs.output.some((line) => line.includes("Added before summary")));
     assert(logs.output.some((line) => line.includes("External reminder")));
+  });
+
+  it("summary adds proactive nudges about overdue and untimed reminders", async () => {
+    const persistence = new MockPersistence();
+    persistence.reminders.push(
+      { id: "rem-overdue", title: "Pay the scaffolder", dueAt: 1, createdAt: 1 },
+      { id: "rem-vague", title: "Order skip", dueRaw: "soonish", createdAt: 1 },
+    );
+    const logs = capture();
+
+    await runCli({
+      persistence,
+      readline: new ScriptedReadline(["summary", "exit"]),
+      stdout: logs.stdout,
+      stderr: logs.stderr,
+    });
+
+    assert(logs.output.some((line) => line.includes("2 things need your attention")));
+    assert(logs.output.some((line) => /Pay the scaffolder" was due .* ago/.test(line)));
+    assert(logs.output.some((line) => line.includes('"Order skip" has no exact time')));
+    assert.equal(persistence.reminders.length, 2, "nudges must not change reminders");
   });
 
   it("requires explicit reminder syntax and preserves raw due text", async () => {
