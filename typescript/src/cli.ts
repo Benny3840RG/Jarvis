@@ -19,6 +19,7 @@ import { LearningEngine } from "./adaptive/learningEngine.js";
 import { ReminderService } from "./runtime/reminderService.js";
 import { TaskService } from "./runtime/taskService.js";
 import { ProactiveAssistant } from "./runtime/proactiveAssistant.js";
+import { computeNudges, formatNudges } from "./runtime/proactiveNudges.js";
 import { ContextMemory } from "./runtime/contextMemory.js";
 import { PersonalTraitsService } from "./runtime/personalTraitsService.js";
 import { parseReminderDue } from "./reminders/due.js";
@@ -465,9 +466,19 @@ export async function runCli(deps: RunCliDependencies = {}): Promise<void> {
         const reply = responseFormatter.format(intent, inputText);
 
         if (lower.includes("summary")) {
-          const summary = proactiveAssistant.summarize(await refreshTasks());
+          const [summaryTasks, summaryReminders] = await Promise.all([
+            refreshTasks(),
+            refreshReminders(),
+          ]);
+          const summary = proactiveAssistant.summarize(summaryTasks);
+          const nudges = computeNudges({
+            tasks: summaryTasks,
+            reminders: summaryReminders,
+            now: Date.now(),
+          });
           write("NOLAN:", summary);
-          write(JSON.stringify({ intent, summary }, null, 2));
+          write("NOLAN:", formatNudges(nudges));
+          write(JSON.stringify({ intent, summary, nudges }, null, 2));
         } else if (lower.includes("remember")) {
           const keyword = lower.replace(/^.*?remember\s+/, "").trim() || "milk";
           const recall = contextMemory.recall(keyword);

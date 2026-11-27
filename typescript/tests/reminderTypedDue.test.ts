@@ -24,7 +24,11 @@ function local(at: number) {
 }
 
 describe("typed reminder times", () => {
-  it("works out the everyday ways people type a time", () => {
+  it("works out the everyday ways people type a time", (t) => {
+    // Pin the clock: on the real clock "tonight at 7" is already past every
+    // evening from 19:00 to midnight Melbourne time, and is rightly refused.
+    // Wednesday 25 November 2026, 10:00 in Melbourne (UTC+11).
+    t.mock.timers.enable({ apis: ["Date"], now: Date.UTC(2026, 10, 24, 23, 0, 0) });
     for (const [text, expected] of [
       ["friday at 9am", /^Friday 0?9:00$/],
       ["Friday 9am", /^Friday 0?9:00$/],

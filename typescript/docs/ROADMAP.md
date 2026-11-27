@@ -1,5 +1,24 @@
 # Jarvis TypeScript Roadmap
 
+## Proactive nudges in the CLI summary (2026-11-27)
+
+`summary` now lists what needs attention: overdue reminders, reminders less
+than 15 minutes apart, reminders with due text but no exact time, and pending
+tasks untouched for 7 days. Read-only: it suggests and never acts. See
+`docs/architecture/proactive-nudges.md`.
+
+Decision: thresholds are fixed constants for now, not settings.
+
+Next:
+
+1. Add a `nudges` field to `GET /api/v1/status` or a new endpoint, OpenAPI first.
+2. Show nudges on the HUD Today screen (needs Benny's spoken check).
+3. Let voice answer "anything I should know about?" from the same function.
+
+Also fixed: `tests/reminderTypedDue.test.ts` "tonight at 7" failed every
+evening from 19:00 to midnight Melbourne time, because it used the real clock
+and the parser correctly refuses a past "tonight". The test now pins the clock.
+
 ## PR #806 post-merge owner-decision ledger recovery repair (2026-11-13)
 
 - Local V1 captures require an existing explicit ledger source directory and
