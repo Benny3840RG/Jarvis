@@ -15,10 +15,9 @@ Next:
 2. Show nudges on the HUD Today screen (needs Benny's spoken check).
 3. Let voice answer "anything I should know about?" from the same function.
 
-Known flaky (pre-existing, not touched here): `tests/reminderTypedDue.test.ts`
-"tonight at 7" fails every evening from 19:00 to midnight Melbourne time,
-because the test uses the real clock and the parser correctly refuses a past
-"tonight". Fix: inject `now` into the test.
+Also fixed: `tests/reminderTypedDue.test.ts` "tonight at 7" failed every
+evening from 19:00 to midnight Melbourne time, because it used the real clock
+and the parser correctly refuses a past "tonight". The test now pins the clock.
 
 ## PR #806 post-merge owner-decision ledger recovery repair (2026-11-13)
 
